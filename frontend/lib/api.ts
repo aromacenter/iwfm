@@ -95,6 +95,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   "settings.ai_not_configured": "Előbb mentsd el az API kulcsot ehhez a szolgáltatóhoz.",
   "settings.ai_test_failed": "A szolgáltató nem válaszolt — ellenőrizd a kulcsot és a modellnevet.",
   "settings.ai_bad_provider": "Ismeretlen AI szolgáltató.",
+  "tasks.no_candidates": "Nincs aktív dolgozó, akire a feladat kiosztható lenne.",
+  "tasks.ai_suggest_failed": "Az AI javaslat nem sikerült — próbáld újra, vagy válassz kézzel.",
   "skills.name_taken": "Ilyen nevű skill már létezik.",
 };
 

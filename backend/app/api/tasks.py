@@ -24,6 +24,7 @@ from app.api.deps import (
 )
 from app.db import get_db
 from app.models import Employee, Skill, Task, TaskComment, User
+from app.services.wfm.ai_assign import suggest_assignee
 
 router = APIRouter()
 me_router = APIRouter()  # /api/me/tasks alá kerül
@@ -272,6 +273,41 @@ async def manager_comment(
     db.add(TaskComment(task_id=task.id, author_user_id=actor.id, text=body.text.strip()))
     await db.commit()
     return (await _tasks_out(db, [task]))[0]
+
+
+class SuggestBody(BaseModel):
+    title: str = Field(min_length=1, max_length=256)
+    description: str | None = Field(default=None, max_length=4000)
+    due_date: date
+    required_skill_id: int | None = None
+
+
+@router.post("/suggest-assignee")
+async def ai_suggest_assignee(
+    body: SuggestBody,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("manager")),
+):
+    """AI-javaslat a legalkalmasabb dolgozóra (skill + szabadság + terhelés)."""
+    try:
+        return await suggest_assignee(
+            db,
+            title=body.title.strip(),
+            description=body.description,
+            due_date=body.due_date,
+            required_skill_id=body.required_skill_id,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        if code == "ai_not_configured":
+            raise HTTPException(status_code=422, detail={"code": "settings.ai_not_configured"})
+        if code == "no_candidates":
+            raise HTTPException(status_code=422, detail={"code": "tasks.no_candidates"})
+        raise HTTPException(status_code=502, detail={"code": "tasks.ai_suggest_failed"})
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "tasks.ai_suggest_failed"})
 
 
 # ─── Employee (self-service) endpoints — /api/me/tasks ──────────────────────

@@ -67,6 +67,12 @@ export default function FeladatokPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    employee_name: string;
+    reason: string;
+    open_tasks: number;
+  } | null>(null);
 
   const load = useCallback(() => {
     api
@@ -92,6 +98,39 @@ export default function FeladatokPage() {
       }))
       .sort((a, b) => Number(b.hasSkill) - Number(a.hasSkill));
   }, [employees, form.required_skill_id]);
+
+  async function askAi() {
+    if (!form.title.trim()) {
+      setError("Előbb add meg a feladat címét — abból dolgozik az AI.");
+      return;
+    }
+    setAiBusy(true);
+    setError(null);
+    setAiSuggestion(null);
+    try {
+      const res = await api.post<{
+        employee_id: string;
+        employee_name: string;
+        reason: string;
+        open_tasks: number;
+      }>("/api/tasks/suggest-assignee", {
+        title: form.title,
+        description: form.description || null,
+        due_date: form.due_date,
+        required_skill_id: form.required_skill_id || null,
+      });
+      setForm((f) => ({ ...f, employee_id: res.employee_id }));
+      setAiSuggestion({
+        employee_name: res.employee_name,
+        reason: res.reason,
+        open_tasks: res.open_tasks,
+      });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -262,6 +301,32 @@ export default function FeladatokPage() {
                 ))}
               </select>
             </label>
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={askAi}
+                disabled={aiBusy}
+                className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+              >
+                {aiBusy ? "AI gondolkodik…" : "✨ AI javaslat: kit bízzunk meg?"}
+              </button>
+            </div>
+            {aiSuggestion && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm">
+                <p className="font-medium text-violet-900">
+                  ✨ Javaslat: {aiSuggestion.employee_name}
+                  <span className="ml-2 font-normal text-violet-600">
+                    ({aiSuggestion.open_tasks} nyitott feladata van)
+                  </span>
+                </p>
+                {aiSuggestion.reason && (
+                  <p className="mt-1 text-violet-800">{aiSuggestion.reason}</p>
+                )}
+                <p className="mt-1 text-xs text-violet-500">
+                  A dolgozó-mezőt beállítottam — szabadon átírhatod.
+                </p>
+              </div>
+            )}
             <label className="block text-sm">
               Dolgozó *
               <select
