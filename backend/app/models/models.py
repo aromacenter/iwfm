@@ -249,6 +249,51 @@ class TimeEntry(Base):
     )
 
 
+class Skill(Base):
+    """Képesítés / készség (pl. targoncavezető, pénztár, elsősegély)."""
+
+    __tablename__ = "skills"
+    __table_args__ = (UniqueConstraint("name", name="uq_skills_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class EmployeeSkill(Base):
+    """Dolgozó ↔ skill összerendelés."""
+
+    __tablename__ = "employee_skills"
+
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
+    skill_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class EmailSettings(Base):
+    """SMTP beállítások az értesítésekhez — egyetlen sor (id=1).
+    A jelszó Fernet-titkosítva tárolódik, a GET sosem adja vissza."""
+
+    __tablename__ = "email_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    host: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    port: Mapped[int] = mapped_column(Integer, nullable=False, default=587)
+    username: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    password_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    from_address: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    use_tls: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class AuditEvent(Base):
     """Append-only audit trail. Sensitive-data reveals, publishes, exports,
     and every mutation of employee PII are recorded here (GDPR accountability)."""

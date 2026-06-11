@@ -90,30 +90,18 @@ async def test_edit_entry_audited(client, manager):
     assert "timeclock.manual_edit" in actions
 
 
-async def test_self_clock_in_out_flow(client, employee_user):
+async def test_mobile_clocking_removed_kiosk_only(client, employee_user):
+    """Telefonról nem lehet blokkolni (csalás-védelem) — csak a kiosk terminál.
+    A GET /me/clock státusz-olvasás megmaradt."""
     _, headers, emp = employee_user
 
     status0 = await client.get("/api/me/clock", headers=headers)
+    assert status0.status_code == 200
     assert status0.json()["open"] is None
 
-    res = await client.post("/api/me/clock-in", json={}, headers=headers)
-    assert res.status_code == 201
-    assert res.json()["source"] == "self"
-
-    # dupla clock-in tiltva
-    dup = await client.post("/api/me/clock-in", json={}, headers=headers)
-    assert dup.status_code == 409
-
-    status1 = await client.get("/api/me/clock", headers=headers)
-    assert status1.json()["open"] is not None
-
-    out = await client.post("/api/me/clock-out", json={"note": "kész"}, headers=headers)
-    assert out.status_code == 200
-    assert out.json()["clock_out"] is not None
-
-    # nincs nyitott bejegyzés → 409
-    out2 = await client.post("/api/me/clock-out", json={}, headers=headers)
-    assert out2.status_code == 409
+    # a régi végpontok megszűntek
+    assert (await client.post("/api/me/clock-in", json={}, headers=headers)).status_code in (404, 405)
+    assert (await client.post("/api/me/clock-out", json={}, headers=headers)).status_code in (404, 405)
 
 
 async def test_employee_cannot_touch_manager_timeclock(client, employee_user):

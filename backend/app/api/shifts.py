@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,7 @@ from app.services.wfm.compliance import (
     check_modify_notice,
     check_schedule,
 )
+from app.services.wfm.email_service import load_smtp_config, send_many
 
 router = APIRouter()
 
@@ -289,6 +290,7 @@ async def update_shift(
     shift_id: str,
     body: ShiftPatch,
     request: Request,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_role("manager")),
 ):
@@ -322,6 +324,17 @@ async def update_shift(
         entity_id=str(shift.id), detail={"fields": sorted(data)}, request=request,
     )
     await db.commit()
+
+    # Közölt műszak változásáról emailes értesítés (best-effort).
+    if shift.status == "published" and data:
+        smtp = await load_smtp_config(db)
+        if smtp is not None:
+            messages = await _schedule_emails(
+                db, [shift], subject_prefix="Beosztás módosult"
+            )
+            if messages:
+                background.add_task(send_many, smtp, messages)
+
     return _shift_out(shift)
 
 
@@ -377,10 +390,41 @@ async def preview_compliance(
     return [_violation_out(v) for v in violations]
 
 
+async def _schedule_emails(
+    db: AsyncSession, shifts_to_send: list[Shift], *, subject_prefix: str
+) -> list[tuple[str, str, str]]:
+    """(to, subject, body) üzenetek a beosztásról, dolgozónként csoportosítva."""
+    by_emp: dict[uuid.UUID, list[Shift]] = {}
+    for s in shifts_to_send:
+        by_emp.setdefault(s.employee_id, []).append(s)
+    rows = (
+        await db.execute(
+            select(Employee.id, Employee.first_name, User.email)
+            .join(User, User.id == Employee.user_id)
+            .where(Employee.id.in_(by_emp.keys()))
+        )
+    ).all()
+    messages = []
+    for emp_id, first_name, email in rows:
+        lines = [
+            f"  • {s.work_date.isoformat()}: {s.start_time.strftime('%H:%M')}–{s.end_time.strftime('%H:%M')}"
+            + (f" ({s.location})" if s.location else "")
+            for s in sorted(by_emp[emp_id], key=lambda x: x.work_date)
+        ]
+        body_text = (
+            f"Szia {first_name}!\n\n{subject_prefix}:\n\n"
+            + "\n".join(lines)
+            + "\n\nRészletek az alkalmazásban: a beosztásod a telefonodon is megnézheted.\n\nIwfm"
+        )
+        messages.append((email, f"Iwfm — {subject_prefix}", body_text))
+    return messages
+
+
 @router.post("/publish")
 async def publish_week(
     body: PublishBody,
     request: Request,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_role("manager")),
 ):
@@ -428,4 +472,21 @@ async def publish_week(
         request=request,
     )
     await db.commit()
-    return {"ok": True, "published": len(week_drafts), "warnings": len(warnings)}
+
+    # Email értesítés az érintett dolgozóknak (best-effort, háttérben).
+    emails_queued = 0
+    smtp = await load_smtp_config(db)
+    if smtp is not None:
+        messages = await _schedule_emails(
+            db, week_drafts, subject_prefix=f"Új beosztás ({monday.isoformat()} hét)"
+        )
+        if messages:
+            background.add_task(send_many, smtp, messages)
+            emails_queued = len(messages)
+
+    return {
+        "ok": True,
+        "published": len(week_drafts),
+        "warnings": len(warnings),
+        "emails_queued": emails_queued,
+    }

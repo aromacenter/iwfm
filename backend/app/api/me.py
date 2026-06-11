@@ -7,16 +7,19 @@ by construction).
 * GET  /me/schedule    — saját PUBLIKÁLT műszakok (a draft nem látszik!)
 * GET  /me/time-off    — saját kérelmek
 * POST /me/time-off    — új kérelem
-* POST /me/clock-in    — bejelentkezés (egy nyitott bejegyzés lehet)
-* POST /me/clock-out   — kijelentkezés
-* GET  /me/clock       — nyitott bejegyzés állapota
+* GET  /me/clock       — nyitott bejegyzés állapota (CSAK olvasás)
+* GET  /me/profile     — név + törzsszám
+
+Be-/kiblokkolás telefonról szándékosan NEM lehetséges (visszaélés-veszély):
+a munkaidő rögzítése kizárólag a helyszíni blokkoló-terminálon történik
+(/api/kiosk/clock, törzsszámmal).
 """
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,10 +39,6 @@ class MyTimeOffCreate(BaseModel):
     start_date: date
     end_date: date
     reason: str | None = Field(default=None, max_length=512)
-
-
-class ClockBody(BaseModel):
-    note: str | None = Field(default=None, max_length=512)
 
 
 @router.get("/profile")
@@ -140,50 +139,6 @@ async def clock_status(
     return {"open": entry_out(entry).model_dump(mode="json") if entry else None}
 
 
-@router.post("/clock-in", response_model=EntryOut, status_code=201)
-async def clock_in(
-    body: ClockBody,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    emp: Employee = Depends(get_own_employee),
-    user: User = Depends(get_current_user),
-):
-    if await _open_entry(db, emp) is not None:
-        raise HTTPException(status_code=409, detail={"code": "timeclock.already_open"})
-    entry = TimeEntry(
-        employee_id=emp.id,
-        clock_in=datetime.now(UTC),
-        note=body.note,
-        source="self",
-        created_by=user.id,
-    )
-    db.add(entry)
-    await db.flush()
-    await record_audit(
-        db, actor=user, action="timeclock.clock_in", entity_type="time_entry",
-        entity_id=str(entry.id), request=request,
-    )
-    await db.commit()
-    return entry_out(entry)
-
-
-@router.post("/clock-out", response_model=EntryOut)
-async def clock_out(
-    body: ClockBody,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    emp: Employee = Depends(get_own_employee),
-    user: User = Depends(get_current_user),
-):
-    entry = await _open_entry(db, emp)
-    if entry is None:
-        raise HTTPException(status_code=409, detail={"code": "timeclock.not_open"})
-    entry.clock_out = datetime.now(UTC)
-    if body.note:
-        entry.note = (entry.note + " | " if entry.note else "") + body.note
-    await record_audit(
-        db, actor=user, action="timeclock.clock_out", entity_type="time_entry",
-        entity_id=str(entry.id), request=request,
-    )
-    await db.commit()
-    return entry_out(entry)
+# A korábbi POST /me/clock-in és /me/clock-out végpontok szándékosan
+# megszűntek: a blokkolás kizárólag a helyszíni terminálon (kiosk) lehetséges,
+# mert a telefonos blokkolás visszaélésre adhat lehetőséget.

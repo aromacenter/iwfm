@@ -16,14 +16,14 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_role
 from app.core.crypto import decrypt_pii, encrypt_pii, mask_tail
 from app.core.security import hash_password
 from app.db import get_db
-from app.models import Employee, User
+from app.models import Employee, EmployeeSkill, Skill, User
 from app.services.wfm.codes import generate_unique_employee_code
 from app.services.wfm.validators import (
     is_valid_bank_account,
@@ -94,6 +94,7 @@ class SensitiveFields(BaseModel):
 class EmployeeCreate(EmployeeBase, SensitiveFields):
     email: EmailStr  # login fiók email
     initial_password: str | None = Field(default=None, min_length=10, max_length=128)
+    skill_ids: list[int] = Field(default_factory=list)
 
 
 class EmployeeUpdate(BaseModel):
@@ -124,6 +125,7 @@ class EmployeeUpdate(BaseModel):
     taj: str | None = None
     bank_account: str | None = None
     wage_amount: str | None = None
+    skill_ids: list[int] | None = None  # ha megadod, lecseréli a teljes listát
 
 
 class EmployeeOut(EmployeeBase):
@@ -136,6 +138,7 @@ class EmployeeOut(EmployeeBase):
     bank_account_masked: str | None = None
     has_wage: bool = False
     employee_code: str | None = None  # 6 jegyű törzsszám (blokkoló-terminál)
+    skills: list[dict] = Field(default_factory=list)  # [{id, name}]
     # Csak létrehozáskor, és csak ha a jelszót a rendszer generálta — az admin
     # ekkor látja egyetlen egyszer, hogy átadhassa a dolgozónak.
     generated_password: str | None = None
@@ -189,6 +192,36 @@ def _apply_sensitive(emp: Employee, values: dict[str, str | None]) -> None:
         emp.bank_account_masked = mask_tail(values["bank_account"])
     if "wage_amount" in values:
         emp.wage_encrypted = encrypt_pii(values["wage_amount"])
+
+
+async def _load_skills_map(
+    db: AsyncSession, employee_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[dict]]:
+    """{employee_id: [{id, name}, …]} — egy lekérdezésből."""
+    if not employee_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(EmployeeSkill.employee_id, Skill.id, Skill.name)
+            .join(Skill, Skill.id == EmployeeSkill.skill_id)
+            .where(EmployeeSkill.employee_id.in_(employee_ids))
+            .order_by(Skill.name)
+        )
+    ).all()
+    out: dict[uuid.UUID, list[dict]] = {}
+    for emp_id, skill_id, name in rows:
+        out.setdefault(emp_id, []).append({"id": skill_id, "name": name})
+    return out
+
+
+async def _set_skills(db: AsyncSession, emp: Employee, skill_ids: list[int]) -> None:
+    """A dolgozó skill-listájának teljes cseréje (csak létező skillekkel)."""
+    valid_ids = set(
+        (await db.execute(select(Skill.id).where(Skill.id.in_(skill_ids)))).scalars()
+    )
+    await db.execute(delete(EmployeeSkill).where(EmployeeSkill.employee_id == emp.id))
+    for sid in valid_ids:
+        db.add(EmployeeSkill(employee_id=emp.id, skill_id=sid))
 
 
 def _employee_out(emp: Employee, email: str | None = None) -> EmployeeOut:
@@ -251,7 +284,13 @@ async def list_employees(
             .order_by(Employee.last_name, Employee.first_name)
         )
     ).all()
-    return [_employee_out(emp, email) for emp, email in rows]
+    skills_map = await _load_skills_map(db, [emp.id for emp, _ in rows])
+    out = []
+    for emp, email in rows:
+        item = _employee_out(emp, email)
+        item.skills = skills_map.get(emp.id, [])
+        out.append(item)
+    return out
 
 
 @router.post("", response_model=EmployeeOut, status_code=201)
@@ -283,12 +322,17 @@ async def create_employee(
         user_id=user.id,
         employee_code=await generate_unique_employee_code(db),
         **body.model_dump(
-            exclude={"email", "initial_password", "tax_id", "taj", "bank_account", "wage_amount"}
+            exclude={
+                "email", "initial_password", "tax_id", "taj",
+                "bank_account", "wage_amount", "skill_ids",
+            }
         ),
     )
     _apply_sensitive(emp, sensitive)
     db.add(emp)
     await db.flush()
+    if body.skill_ids:
+        await _set_skills(db, emp, body.skill_ids)
 
     await record_audit(
         db, actor=actor, action="employee.create", entity_type="employee",
@@ -296,6 +340,7 @@ async def create_employee(
     )
     await db.commit()
     out = _employee_out(emp, user.email)
+    out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
     if body.initial_password is None:
         out.generated_password = password  # egyszeri megjelenítés az adminnak
     return out
@@ -309,7 +354,9 @@ async def get_employee(
 ):
     emp = await _get_or_404(db, employee_id)
     user = (await db.execute(select(User).where(User.id == emp.user_id))).scalar_one_or_none()
-    return _employee_out(emp, user.email if user else None)
+    out = _employee_out(emp, user.email if user else None)
+    out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
+    return out
 
 
 @router.patch("/{employee_id}", response_model=EmployeeOut)
@@ -323,6 +370,7 @@ async def update_employee(
     emp = await _get_or_404(db, employee_id)
     data = body.model_dump(exclude_unset=True)
 
+    skill_ids = data.pop("skill_ids", None)
     sensitive_in = SensitiveFields(
         **{k: data.pop(k) for k in ("tax_id", "taj", "bank_account", "wage_amount") if k in data}
     )
@@ -331,10 +379,12 @@ async def update_employee(
     if "status" in data and data["status"] not in ("active", "inactive"):
         raise HTTPException(status_code=422, detail={"code": "employee.bad_status"})
 
-    changed = sorted(set(data) | set(sensitive))
+    changed = sorted(set(data) | set(sensitive) | ({"skills"} if skill_ids is not None else set()))
     for key, value in data.items():
         setattr(emp, key, value)
     _apply_sensitive(emp, sensitive)
+    if skill_ids is not None:
+        await _set_skills(db, emp, skill_ids)
 
     await record_audit(
         db, actor=actor, action="employee.update", entity_type="employee",
@@ -342,7 +392,9 @@ async def update_employee(
     )
     await db.commit()
     user = (await db.execute(select(User).where(User.id == emp.user_id))).scalar_one_or_none()
-    return _employee_out(emp, user.email if user else None)
+    out = _employee_out(emp, user.email if user else None)
+    out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
+    return out
 
 
 @router.get("/{employee_id}/reveal", response_model=RevealOut)

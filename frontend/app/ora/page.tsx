@@ -69,7 +69,9 @@ export default function OraPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-900 px-4 text-white">
-      <h1 className="mb-1 text-2xl font-bold text-indigo-300">Iwfm — Munkaidő-terminál</h1>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo.svg" alt="iwfm" className="mb-2 h-16 w-auto rounded-xl bg-white/95 px-3 py-1" />
+      <h1 className="mb-1 text-xl font-bold text-indigo-300">Munkaidő-terminál</h1>
       <p className="mb-6 text-sm text-slate-400">Üsd be a 6 jegyű törzsszámodat</p>
 
       {/* Kód kijelző */}

@@ -29,7 +29,7 @@ export default function LoginPage() {
               password,
               display_name: displayName,
             });
-      router.replace(user.role === "employee" ? "/beosztasom" : "/beosztas");
+      router.replace(user.role === "employee" ? "/beosztasom" : "/vezerlopult");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -40,10 +40,12 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="mb-1 text-center text-2xl font-bold text-indigo-700">Iwfm</h1>
-        <p className="mb-6 text-center text-sm text-slate-500">
-          Munkaerő-kezelés — beosztás, jelenlét, bérexport
-        </p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo.svg"
+          alt="iwfm — Intelligence Workforce Management"
+          className="mx-auto mb-6 h-24 w-auto"
+        />
         <form onSubmit={submit} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold">
             {mode === "login" ? "Bejelentkezés" : "Első admin létrehozása"}

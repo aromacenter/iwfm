@@ -48,18 +48,6 @@ export default function BeosztasomPage() {
 
   useEffect(load, [load]);
 
-  async function clock(direction: "in" | "out") {
-    setBusy(true);
-    try {
-      await api.post(`/api/me/clock-${direction}`, {});
-      load();
-    } catch (err) {
-      alert(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function requestTimeOff(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -102,37 +90,26 @@ export default function BeosztasomPage() {
             </span>
           </p>
         )}
-        {/* Óra */}
+        {/* Munkaidő — csak állapot; blokkolni kizárólag a helyszíni terminálon lehet */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 font-semibold">Munkaidő</h2>
+          <h2 className="mb-2 font-semibold">Munkaidő</h2>
           {openEntry ? (
-            <div className="flex items-center justify-between">
-              <div className="text-sm">
-                <span className="font-medium text-emerald-700">Bejelentkezve</span>
-                <div className="text-slate-500">
-                  {new Date(openEntry.clock_in).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" })} óta
-                </div>
-              </div>
-              <button
-                onClick={() => clock("out")}
-                disabled={busy}
-                className="rounded-xl bg-red-600 px-6 py-3 font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                Kijelentkezés
-              </button>
-            </div>
+            <p className="text-sm">
+              <span className="font-medium text-emerald-700">● Beblokkolva</span>{" "}
+              <span className="text-slate-500">
+                {new Date(openEntry.clock_in).toLocaleTimeString("hu-HU", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}{" "}
+                óta
+              </span>
+            </p>
           ) : (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">Most nem vagy bejelentkezve.</span>
-              <button
-                onClick={() => clock("in")}
-                disabled={busy}
-                className="rounded-xl bg-emerald-600 px-6 py-3 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                Bejelentkezés
-              </button>
-            </div>
+            <p className="text-sm text-slate-500">Most nem vagy beblokkolva.</p>
           )}
+          <p className="mt-2 text-xs text-slate-400">
+            Be- és kiblokkolni a munkahelyi terminálon tudsz, a törzsszámoddal.
+          </p>
         </section>
 
         {/* Beosztás */}

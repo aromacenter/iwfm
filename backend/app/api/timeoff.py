@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import record_audit, require_role
 from app.db import get_db
 from app.models import Employee, TimeOffRequest, User
+from app.services.wfm.email_service import load_smtp_config, send_many
 
 router = APIRouter()
 
@@ -130,6 +131,7 @@ async def decide_time_off(
     request_id: str,
     body: DecideBody,
     request: Request,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_role("manager")),
 ):
@@ -156,4 +158,28 @@ async def decide_time_off(
         entity_id=str(req.id), request=request,
     )
     await db.commit()
+
+    # Email a dolgozónak a döntésről (best-effort).
+    smtp = await load_smtp_config(db)
+    if smtp is not None:
+        row = (
+            await db.execute(
+                select(Employee.first_name, User.email)
+                .join(User, User.id == Employee.user_id)
+                .where(Employee.id == req.employee_id)
+            )
+        ).first()
+        if row is not None:
+            first_name, email = row
+            decision_hu = "JÓVÁHAGYVA ✓" if body.status == "approved" else "elutasítva"
+            text = (
+                f"Szia {first_name}!\n\n"
+                f"A távollét-kérelmed ({req.start_date} → {req.end_date}) {decision_hu}."
+                + (f"\nMegjegyzés: {body.note}" if body.note else "")
+                + "\n\nIwfm"
+            )
+            background.add_task(
+                send_many, smtp, [(email, "Iwfm — távollét-kérelem elbírálva", text)]
+            )
+
     return to_out(req)

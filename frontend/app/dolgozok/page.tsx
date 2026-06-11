@@ -14,6 +14,11 @@ interface RevealOut {
   wage_amount: string | null;
 }
 
+interface Skill {
+  id: number;
+  name: string;
+}
+
 const EMPTY_FORM = {
   email: "",
   last_name: "",
@@ -70,6 +75,8 @@ export default function DolgozokPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [revealed, setRevealed] = useState<Record<string, RevealOut>>({});
+  const [allSkills, setAllSkills] = useState<Skill[]>([]);
+  const [skillIds, setSkillIds] = useState<number[]>([]);
 
   const load = useCallback(() => {
     api.get<EmployeeOut[]>("/api/employees").then(setEmployees).catch(() => {});
@@ -77,6 +84,7 @@ export default function DolgozokPage() {
 
   useEffect(() => {
     api.get<AuthUser>("/api/auth/me").then(setMe).catch(() => {});
+    api.get<Skill[]>("/api/settings/skills").then(setAllSkills).catch(() => {});
     load();
   }, [load]);
 
@@ -104,6 +112,7 @@ export default function DolgozokPage() {
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setSkillIds([]);
     setError(null);
     setShowForm(true);
   }
@@ -132,6 +141,7 @@ export default function DolgozokPage() {
       wage_type: emp.wage_type,
       annual_leave_days: emp.annual_leave_days,
     });
+    setSkillIds((emp.skills ?? []).map((s) => s.id));
     setError(null);
     setShowForm(true);
   }
@@ -163,6 +173,7 @@ export default function DolgozokPage() {
           weekly_hours: form.weekly_hours,
           wage_type: form.wage_type,
           annual_leave_days: form.annual_leave_days,
+          skill_ids: skillIds,
         };
         // érzékeny mezők csak akkor, ha kitöltötték
         for (const k of ["tax_id", "taj", "bank_account", "wage_amount"] as const) {
@@ -172,6 +183,7 @@ export default function DolgozokPage() {
       } else {
         const created = await api.post<EmployeeOut & { generated_password?: string }>("/api/employees", {
           ...form,
+          skill_ids: skillIds,
           birth_name: clean(form.birth_name),
           mother_name: clean(form.mother_name),
           birth_place: clean(form.birth_place),
@@ -242,6 +254,7 @@ export default function DolgozokPage() {
               <th className="px-4 py-3">Név</th>
               <th className="px-4 py-3">Törzsszám</th>
               <th className="px-4 py-3">Munkakör</th>
+              <th className="px-4 py-3">Skillek</th>
               <th className="px-4 py-3">Belépés</th>
               <th className="px-4 py-3">Heti óra</th>
               <th className="px-4 py-3">Adóazonosító</th>
@@ -268,6 +281,19 @@ export default function DolgozokPage() {
                     {emp.employee_code ?? "—"}
                   </td>
                   <td className="px-4 py-3">{emp.job_title ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    {(emp.skills ?? []).length === 0 ? (
+                      <span className="text-slate-300">—</span>
+                    ) : (
+                      <div className="flex max-w-44 flex-wrap gap-1">
+                        {emp.skills.map((s) => (
+                          <span key={s.id} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">
+                            {s.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">{emp.hire_date}</td>
                   <td className="px-4 py-3">{emp.weekly_hours}h</td>
                   <td className="px-4 py-3 font-mono text-xs">{rev?.tax_id ?? emp.tax_id_masked ?? "—"}</td>
@@ -299,7 +325,7 @@ export default function DolgozokPage() {
             })}
             {employees.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                   Még nincs dolgozó felvéve.
                 </td>
               </tr>
@@ -422,6 +448,42 @@ export default function DolgozokPage() {
                   className={inputCls}
                 />
               </Field>
+            </fieldset>
+
+            <fieldset>
+              <legend className="mb-1 text-sm font-semibold text-slate-700">
+                Skillek / képesítések
+              </legend>
+              {allSkills.length === 0 ? (
+                <p className="text-xs text-slate-400">
+                  Még nincs skill — a Beállítások menüben hozhatsz létre.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {allSkills.map((s) => {
+                    const active = skillIds.includes(s.id);
+                    return (
+                      <button
+                        type="button"
+                        key={s.id}
+                        onClick={() =>
+                          setSkillIds((ids) =>
+                            active ? ids.filter((i) => i !== s.id) : [...ids, s.id]
+                          )
+                        }
+                        className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                          active
+                            ? "bg-indigo-600 text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {active ? "✓ " : ""}
+                        {s.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </fieldset>
 
             {!editing && (

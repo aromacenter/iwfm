@@ -13,7 +13,7 @@ export default function Home() {
     api
       .get<AuthUser>("/api/auth/me")
       .then((user) =>
-        router.replace(user.role === "employee" ? "/beosztasom" : "/beosztas")
+        router.replace(user.role === "employee" ? "/beosztasom" : "/vezerlopult")
       )
       .catch(() => router.replace("/login"));
   }, [router]);
