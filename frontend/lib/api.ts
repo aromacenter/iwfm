@@ -1,6 +1,9 @@
-/** API kliens — httpOnly cookie alapú session, hibakód-továbbítással. */
+/** API kliens — httpOnly cookie alapú session, hibakód-továbbítással.
+ *
+ * Minden kérés RELATÍV (/api/...) — a Next.js rewrite proxyzza a backendhez
+ * (lásd next.config.ts). Így a süti first-party, és nincs cross-site CORS. */
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_URL = "";
 
 export class ApiError extends Error {
   status: number;
