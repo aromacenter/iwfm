@@ -249,6 +249,60 @@ class TimeEntry(Base):
     )
 
 
+class Task(Base):
+    """Kiosztott feladat. A required_skill a későbbi AI-alapú, skill szerinti
+    kiosztást készíti elő; most a kiosztó felületen segít szűrni."""
+
+    __tablename__ = "tasks"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('open','done','needs_more_work')", name="ck_tasks_status"
+        ),
+        Index("ix_tasks_employee_due", "employee_id", "due_date"),
+        Index("ix_tasks_due", "due_date"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
+    )
+    due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    required_skill_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("skills.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class TaskComment(Base):
+    """A dolgozó (vagy vezető) megjegyzése a feladathoz."""
+
+    __tablename__ = "task_comments"
+    __table_args__ = (Index("ix_task_comments_task", "task_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    author_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    text: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Skill(Base):
     """Képesítés / készség (pl. targoncavezető, pénztár, elsősegély)."""
 

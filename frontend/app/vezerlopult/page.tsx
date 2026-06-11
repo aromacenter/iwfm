@@ -10,6 +10,7 @@ import { api, errorMessage } from "@/lib/api";
 import { TIME_OFF_LABELS } from "@/lib/types";
 
 interface DashboardData {
+  todays_tasks: { id: string; title: string; employee_name: string; status: string }[];
   pending_time_off: {
     id: string;
     employee_name: string;
@@ -95,6 +96,52 @@ export default function VezerlopultPage() {
                       Elutasít
                     </button>
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Mai feladatok */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <h2 className="mb-3 font-semibold">
+            Mai feladatok{" "}
+            {data.todays_tasks.length > 0 && (
+              <span className="ml-1 rounded-full bg-sky-100 px-2 py-0.5 text-sm font-bold text-sky-800">
+                {data.todays_tasks.length}
+              </span>
+            )}
+          </h2>
+          {data.todays_tasks.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              Mára nincs kiosztott feladat.{" "}
+              <Link href="/feladatok" className="font-medium text-indigo-600 underline">
+                Új feladat kiosztása →
+              </Link>
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100 text-sm">
+              {data.todays_tasks.map((t) => (
+                <li key={t.id} className="flex items-center justify-between gap-3 py-2">
+                  <span>
+                    <span className="font-medium">{t.title}</span>
+                    <span className="text-slate-500"> — {t.employee_name}</span>
+                  </span>
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-medium ${
+                      t.status === "done"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : t.status === "needs_more_work"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-sky-100 text-sky-800"
+                    }`}
+                  >
+                    {t.status === "done"
+                      ? "Befejezett"
+                      : t.status === "needs_more_work"
+                        ? "További munkát igényel"
+                        : "Nyitott"}
+                  </span>
                 </li>
               ))}
             </ul>

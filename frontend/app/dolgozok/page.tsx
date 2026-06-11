@@ -276,15 +276,24 @@ export default function DolgozokPage() {
                       )}
                     </div>
                     {(emp.skills ?? []).length > 0 && (
-                      <div className="mt-1 flex max-w-56 flex-wrap gap-1">
-                        {emp.skills.map((s) => (
-                          <span
-                            key={s.id}
-                            className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700"
-                          >
-                            {s.name}
-                          </span>
-                        ))}
+                      <div className="group relative mt-0.5 inline-flex w-fit cursor-default items-center gap-1 text-xs text-slate-400">
+                        Skillek
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-semibold text-slate-400 group-hover:border-indigo-400 group-hover:text-indigo-600">
+                          i
+                        </span>
+                        {/* buborék */}
+                        <div className="invisible absolute left-0 top-5 z-20 w-max max-w-64 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100">
+                          <div className="flex flex-wrap gap-1">
+                            {emp.skills.map((s) => (
+                              <span
+                                key={s.id}
+                                className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700"
+                              >
+                                {s.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </td>

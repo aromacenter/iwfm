@@ -6,6 +6,8 @@ from app.models.models import (  # noqa: F401
     EmployeeSkill,
     Shift,
     Skill,
+    Task,
+    TaskComment,
     TimeEntry,
     TimeOffRequest,
     User,

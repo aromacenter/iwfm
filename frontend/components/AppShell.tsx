@@ -10,12 +10,14 @@ import type { AuthUser } from "@/lib/types";
 
 const NAV = [
   { href: "/vezerlopult", label: "Vezérlőpult", roles: ["admin", "manager"] },
+  { href: "/feladatok", label: "Feladatok", roles: ["admin", "manager"] },
   { href: "/dolgozok", label: "Dolgozók", roles: ["admin", "manager"] },
   { href: "/beosztas", label: "Beosztás", roles: ["admin", "manager"] },
   { href: "/tavollet", label: "Távollét", roles: ["admin", "manager"] },
   { href: "/jelenlet", label: "Jelenlét", roles: ["admin", "manager"] },
   { href: "/beallitasok", label: "Beállítások", roles: ["admin"] },
   { href: "/beosztasom", label: "Saját beosztásom", roles: ["employee"] },
+  { href: "/feladataim", label: "Feladatok", roles: ["employee"] },
 ] as const;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {

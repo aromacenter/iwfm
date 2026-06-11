@@ -17,6 +17,7 @@ from app.api import (
     payroll,
     settings as settings_api,
     shifts,
+    tasks,
     timeclock,
     timeoff,
 )
@@ -109,6 +110,8 @@ def create_app() -> FastAPI:
     app.include_router(kiosk.router, prefix="/api/kiosk", tags=["kiosk"])
     app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
     app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
+    app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+    app.include_router(tasks.me_router, prefix="/api/me/tasks", tags=["self-service"])
 
     @app.get("/api/health")
     async def health():

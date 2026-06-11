@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
 from app.db import get_db
-from app.models import Employee, Shift, TimeEntry, TimeOffRequest, User
+from app.models import Employee, Shift, Task, TimeEntry, TimeOffRequest, User
 
 router = APIRouter()
 
@@ -78,7 +78,25 @@ async def dashboard(
         )
     ).scalar_one()
 
+    todays_tasks = (
+        await db.execute(
+            select(Task, Employee.last_name, Employee.first_name)
+            .join(Employee, Employee.id == Task.employee_id)
+            .where(Task.due_date == today)
+            .order_by(Task.status, Task.created_at)
+        )
+    ).all()
+
     return {
+        "todays_tasks": [
+            {
+                "id": str(t.id),
+                "title": t.title,
+                "employee_name": f"{ln} {fn}",
+                "status": t.status,
+            }
+            for t, ln, fn in todays_tasks
+        ],
         "pending_time_off": [
             {
                 "id": str(t.id),
