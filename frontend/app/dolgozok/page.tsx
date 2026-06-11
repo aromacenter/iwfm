@@ -254,7 +254,7 @@ export default function DolgozokPage() {
               <th className="px-4 py-3">Név</th>
               <th className="px-4 py-3">Törzsszám</th>
               <th className="px-4 py-3">Munkakör</th>
-              <th className="px-4 py-3">Skillek</th>
+              <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Belépés</th>
               <th className="px-4 py-3">Heti óra</th>
               <th className="px-4 py-3">Adóazonosító</th>
@@ -275,25 +275,24 @@ export default function DolgozokPage() {
                         <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs">inaktív</span>
                       )}
                     </div>
-                    <div className="text-xs text-slate-500">{emp.email}</div>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-sm font-semibold text-indigo-700">
-                    {emp.employee_code ?? "—"}
-                  </td>
-                  <td className="px-4 py-3">{emp.job_title ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    {(emp.skills ?? []).length === 0 ? (
-                      <span className="text-slate-300">—</span>
-                    ) : (
-                      <div className="flex max-w-44 flex-wrap gap-1">
+                    {(emp.skills ?? []).length > 0 && (
+                      <div className="mt-1 flex max-w-56 flex-wrap gap-1">
                         {emp.skills.map((s) => (
-                          <span key={s.id} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">
+                          <span
+                            key={s.id}
+                            className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700"
+                          >
                             {s.name}
                           </span>
                         ))}
                       </div>
                     )}
                   </td>
+                  <td className="px-4 py-3 font-mono text-sm font-semibold text-indigo-700">
+                    {emp.employee_code ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">{emp.job_title ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-500">{emp.email ?? "—"}</td>
                   <td className="px-4 py-3">{emp.hire_date}</td>
                   <td className="px-4 py-3">{emp.weekly_hours}h</td>
                   <td className="px-4 py-3 font-mono text-xs">{rev?.tax_id ?? emp.tax_id_masked ?? "—"}</td>
