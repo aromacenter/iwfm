@@ -21,6 +21,14 @@ interface Skill {
   name: string;
 }
 
+interface AISettings {
+  active_provider: "none" | "anthropic" | "gemini";
+  has_anthropic_key: boolean;
+  anthropic_model: string;
+  has_gemini_key: boolean;
+  gemini_model: string;
+}
+
 const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 
 export default function BeallitasokPage() {
@@ -44,6 +52,18 @@ export default function BeallitasokPage() {
   const [newSkill, setNewSkill] = useState("");
   const [skillMsg, setSkillMsg] = useState<string | null>(null);
 
+  // --- AI ---
+  const [ai, setAi] = useState({
+    active_provider: "none" as "none" | "anthropic" | "gemini",
+    anthropic_key: "",
+    anthropic_model: "claude-opus-4-8",
+    gemini_key: "",
+    gemini_model: "gemini-3.5-flash",
+  });
+  const [aiHasKeys, setAiHasKeys] = useState({ anthropic: false, gemini: false });
+  const [aiMsg, setAiMsg] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+
   const load = useCallback(() => {
     api
       .get<EmailSettings>("/api/settings/email")
@@ -61,8 +81,55 @@ export default function BeallitasokPage() {
       })
       .catch(() => {});
     api.get<Skill[]>("/api/settings/skills").then(setSkills).catch(() => {});
+    api
+      .get<AISettings>("/api/settings/ai")
+      .then((s) => {
+        setAi((prev) => ({
+          ...prev,
+          active_provider: s.active_provider,
+          anthropic_model: s.anthropic_model,
+          gemini_model: s.gemini_model,
+          anthropic_key: "",
+          gemini_key: "",
+        }));
+        setAiHasKeys({ anthropic: s.has_anthropic_key, gemini: s.has_gemini_key });
+      })
+      .catch(() => {});
   }, []);
   useEffect(load, [load]);
+
+  async function saveAi() {
+    setAiBusy(true);
+    setAiMsg(null);
+    try {
+      await api.put("/api/settings/ai", {
+        active_provider: ai.active_provider,
+        anthropic_key: ai.anthropic_key || null,
+        anthropic_model: ai.anthropic_model,
+        gemini_key: ai.gemini_key || null,
+        gemini_model: ai.gemini_model,
+      });
+      setAiMsg("✓ Mentve.");
+      load();
+    } catch (err) {
+      setAiMsg(errorMessage(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function testAi(provider: "anthropic" | "gemini") {
+    setAiBusy(true);
+    setAiMsg(null);
+    try {
+      const res = await api.post<{ reply: string }>("/api/settings/ai/test", { provider });
+      setAiMsg(`✓ ${provider === "anthropic" ? "Claude" : "Gemini"} válaszolt: „${res.reply.trim()}"`);
+    } catch (err) {
+      setAiMsg(errorMessage(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   async function saveEmail(e: React.FormEvent) {
     e.preventDefault();
@@ -280,6 +347,125 @@ export default function BeallitasokPage() {
               ))}
             </ul>
           )}
+        </div>
+
+        {/* AI integráció */}
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <h2 className="font-semibold">AI integráció</h2>
+          <p className="text-xs text-slate-500">
+            Köss be egy AI szolgáltatót — ez fogja hajtani a későbbi intelligens funkciókat
+            (pl. feladatok automatikus kiosztása a megfelelő skillű kollégára). A kulcsok
+            titkosítva tárolódnak és soha nem kérdezhetők vissza.
+          </p>
+
+          <div className="flex flex-wrap gap-4 text-sm">
+            {([
+              ["none", "Nincs"],
+              ["anthropic", "Anthropic (Claude)"],
+              ["gemini", "Google Gemini"],
+            ] as const).map(([value, label]) => (
+              <label key={value} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="ai-provider"
+                  checked={ai.active_provider === value}
+                  onChange={() => setAi({ ...ai, active_provider: value })}
+                  className="h-4 w-4"
+                />
+                <span className={ai.active_provider === value ? "font-medium" : ""}>{label}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Anthropic */}
+            <div className="space-y-2 rounded-xl border border-slate-200 p-4">
+              <h3 className="text-sm font-semibold">Anthropic Claude</h3>
+              <label className="block text-sm">
+                API kulcs{" "}
+                {aiHasKeys.anthropic && (
+                  <span className="text-slate-400">(mentve — üresen hagyva nem változik)</span>
+                )}
+                <input
+                  type="password"
+                  value={ai.anthropic_key}
+                  onChange={(e) => setAi({ ...ai, anthropic_key: e.target.value })}
+                  placeholder={aiHasKeys.anthropic ? "••••••••" : "sk-ant-…"}
+                  className={inputCls}
+                />
+              </label>
+              <label className="block text-sm">
+                Modell
+                <input
+                  value={ai.anthropic_model}
+                  onChange={(e) => setAi({ ...ai, anthropic_model: e.target.value })}
+                  className={inputCls}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => testAi("anthropic")}
+                disabled={aiBusy || !aiHasKeys.anthropic}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-40"
+              >
+                Kapcsolat tesztelése
+              </button>
+              <p className="text-xs text-slate-400">
+                Kulcs: console.anthropic.com → API Keys
+              </p>
+            </div>
+
+            {/* Gemini */}
+            <div className="space-y-2 rounded-xl border border-slate-200 p-4">
+              <h3 className="text-sm font-semibold">Google Gemini</h3>
+              <label className="block text-sm">
+                API kulcs{" "}
+                {aiHasKeys.gemini && (
+                  <span className="text-slate-400">(mentve — üresen hagyva nem változik)</span>
+                )}
+                <input
+                  type="password"
+                  value={ai.gemini_key}
+                  onChange={(e) => setAi({ ...ai, gemini_key: e.target.value })}
+                  placeholder={aiHasKeys.gemini ? "••••••••" : "AIza…"}
+                  className={inputCls}
+                />
+              </label>
+              <label className="block text-sm">
+                Modell
+                <input
+                  value={ai.gemini_model}
+                  onChange={(e) => setAi({ ...ai, gemini_model: e.target.value })}
+                  className={inputCls}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => testAi("gemini")}
+                disabled={aiBusy || !aiHasKeys.gemini}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-40"
+              >
+                Kapcsolat tesztelése
+              </button>
+              <p className="text-xs text-slate-400">
+                Kulcs: aistudio.google.com → Get API key
+              </p>
+            </div>
+          </div>
+
+          {aiMsg && (
+            <p className={`text-sm ${aiMsg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>
+              {aiMsg}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={saveAi}
+            disabled={aiBusy}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            AI beállítások mentése
+          </button>
         </div>
       </div>
     </AppShell>

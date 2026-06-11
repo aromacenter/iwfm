@@ -63,6 +63,76 @@ async def test_email_settings_admin_only(client, manager):
     assert (await client.get("/api/settings/email", headers=headers)).status_code == 403
 
 
+async def test_ai_settings_roundtrip_keys_never_returned(client, admin):
+    _, headers = admin
+    res = await client.put(
+        "/api/settings/ai",
+        json={
+            "active_provider": "anthropic",
+            "anthropic_key": "sk-ant-titkos-kulcs-123",
+            "anthropic_model": "claude-opus-4-8",
+            "gemini_key": "AIza-titkos-gemini-456",
+            "gemini_model": "gemini-3.5-flash",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["active_provider"] == "anthropic"
+    assert body["has_anthropic_key"] is True
+    assert body["has_gemini_key"] is True
+    # kulcs SOSEM megy vissza
+    assert "anthropic_key" not in body and "gemini_key" not in body
+
+    # titkosítva tárolódik
+    from sqlalchemy import select
+
+    from app.models import AISettings
+
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        row = (await session.execute(select(AISettings))).scalar_one()
+        assert b"sk-ant-titkos-kulcs-123" not in (row.anthropic_key_encrypted or b"")
+        assert b"AIza-titkos-gemini-456" not in (row.gemini_key_encrypted or b"")
+
+    # üres kulccsal mentve a régi megmarad
+    res2 = await client.put(
+        "/api/settings/ai",
+        json={"active_provider": "gemini", "anthropic_model": "claude-opus-4-8", "gemini_model": "gemini-3.5-flash"},
+        headers=headers,
+    )
+    assert res2.json()["has_anthropic_key"] is True
+    assert res2.json()["active_provider"] == "gemini"
+
+
+async def test_ai_test_requires_config(client, admin):
+    _, headers = admin
+    res = await client.post(
+        "/api/settings/ai/test", json={"provider": "anthropic"}, headers=headers
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "settings.ai_not_configured"
+
+
+async def test_ai_bad_provider_rejected(client, admin):
+    _, headers = admin
+    assert (
+        await client.put(
+            "/api/settings/ai",
+            json={"active_provider": "openai"},
+            headers=headers,
+        )
+    ).status_code == 422
+    assert (
+        await client.post("/api/settings/ai/test", json={"provider": "chatgpt"}, headers=headers)
+    ).status_code == 422
+
+
+async def test_ai_settings_admin_only(client, manager):
+    _, headers = manager
+    assert (await client.get("/api/settings/ai", headers=headers)).status_code == 403
+
+
 async def test_skills_crud_and_assignment(client, admin):
     _, headers = admin
     # létrehozás

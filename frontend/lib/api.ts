@@ -90,6 +90,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   "timeclock.bad_range": "A kijelentkezés nem lehet a bejelentkezés előtt.",
   "payroll.bad_range": "Hibás időszak.",
   "payroll.range_too_long": "Az időszak legfeljebb 3 hónap lehet.",
+  "settings.email_not_configured": "Előbb mentsd el az email-beállításokat (bekapcsolva).",
+  "settings.email_send_failed": "Az email küldése nem sikerült — ellenőrizd az SMTP adatokat.",
+  "settings.ai_not_configured": "Előbb mentsd el az API kulcsot ehhez a szolgáltatóhoz.",
+  "settings.ai_test_failed": "A szolgáltató nem válaszolt — ellenőrizd a kulcsot és a modellnevet.",
+  "settings.ai_bad_provider": "Ismeretlen AI szolgáltató.",
+  "skills.name_taken": "Ilyen nevű skill már létezik.",
 };
 
 export function errorMessage(err: unknown): string {

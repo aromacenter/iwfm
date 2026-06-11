@@ -11,6 +11,11 @@ from app.api.deps import record_audit, require_role
 from app.core.crypto import encrypt_pii
 from app.db import get_db
 from app.models import EmailSettings, EmployeeSkill, Skill, User
+from app.services.wfm.ai_service import (
+    PROVIDERS as AI_PROVIDERS,
+    get_or_create_settings as get_ai_settings_row,
+    test_provider,
+)
 from app.services.wfm.email_service import load_smtp_config, send_email
 
 router = APIRouter()
@@ -117,6 +122,89 @@ async def test_email(
     if not ok:
         raise HTTPException(status_code=502, detail={"code": "settings.email_send_failed"})
     return {"ok": True}
+
+
+# ─── AI szolgáltatók (Anthropic Claude / Google Gemini) ─────────────────────
+
+
+class AISettingsBody(BaseModel):
+    active_provider: str = "none"  # none | anthropic | gemini
+    anthropic_key: str | None = Field(default=None, max_length=256)  # üresen: marad
+    anthropic_model: str = Field(default="claude-opus-4-8", max_length=64)
+    gemini_key: str | None = Field(default=None, max_length=256)  # üresen: marad
+    gemini_model: str = Field(default="gemini-3.5-flash", max_length=64)
+
+
+class AISettingsOut(BaseModel):
+    active_provider: str
+    has_anthropic_key: bool
+    anthropic_model: str
+    has_gemini_key: bool
+    gemini_model: str
+
+
+def _ai_out(row) -> AISettingsOut:
+    return AISettingsOut(
+        active_provider=row.active_provider,
+        has_anthropic_key=row.anthropic_key_encrypted is not None,
+        anthropic_model=row.anthropic_model,
+        has_gemini_key=row.gemini_key_encrypted is not None,
+        gemini_model=row.gemini_model,
+    )
+
+
+@router.get("/ai", response_model=AISettingsOut)
+async def get_ai_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    return _ai_out(await get_ai_settings_row(db))
+
+
+@router.put("/ai", response_model=AISettingsOut)
+async def update_ai_settings(
+    body: AISettingsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    if body.active_provider not in ("none", *AI_PROVIDERS):
+        raise HTTPException(status_code=422, detail={"code": "settings.ai_bad_provider"})
+    row = await get_ai_settings_row(db)
+    row.active_provider = body.active_provider
+    row.anthropic_model = body.anthropic_model.strip() or "claude-opus-4-8"
+    row.gemini_model = body.gemini_model.strip() or "gemini-3.5-flash"
+    if body.anthropic_key:  # üres = nem változik
+        row.anthropic_key_encrypted = encrypt_pii(body.anthropic_key.strip())
+    if body.gemini_key:
+        row.gemini_key_encrypted = encrypt_pii(body.gemini_key.strip())
+    await record_audit(
+        db, actor=actor, action="settings.ai_update", entity_type="settings",
+        entity_id="ai", detail={"active_provider": body.active_provider}, request=request,
+    )
+    await db.commit()
+    return _ai_out(row)
+
+
+class AITestBody(BaseModel):
+    provider: str  # anthropic | gemini
+
+
+@router.post("/ai/test")
+async def test_ai_provider(
+    body: AITestBody,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    if body.provider not in AI_PROVIDERS:
+        raise HTTPException(status_code=422, detail={"code": "settings.ai_bad_provider"})
+    try:
+        reply = await test_provider(db, body.provider)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settings.ai_not_configured"})
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "settings.ai_test_failed"})
+    return {"ok": True, "reply": reply[:200]}
 
 
 # ─── Skillek ─────────────────────────────────────────────────────────────────

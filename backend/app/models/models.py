@@ -348,6 +348,32 @@ class EmailSettings(Base):
     )
 
 
+class AISettings(Base):
+    """AI szolgáltatók (Anthropic Claude / Google Gemini) — egyetlen sor (id=1).
+    Az API kulcsok Fernet-titkosítva tárolódnak, a GET sosem adja vissza őket."""
+
+    __tablename__ = "ai_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "active_provider IN ('none','anthropic','gemini')", name="ck_ai_provider"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    active_provider: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    anthropic_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    anthropic_model: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="claude-opus-4-8"
+    )
+    gemini_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    gemini_model: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="gemini-3.5-flash"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class AuditEvent(Base):
     """Append-only audit trail. Sensitive-data reveals, publishes, exports,
     and every mutation of employee PII are recorded here (GDPR accountability)."""
