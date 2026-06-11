@@ -1,0 +1,13 @@
+# Runtime dependencies — Iwfm backend (FastAPI)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy[asyncio]>=2.0.44
+aiosqlite>=0.20
+asyncpg>=0.31; sys_platform != "win32"
+alembic>=1.13
+pydantic[email]>=2.9
+pydantic-settings>=2.4
+argon2-cffi>=23.1
+PyJWT>=2.9
+cryptography>=43
+openpyxl>=3.1
