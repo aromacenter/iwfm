@@ -24,6 +24,7 @@ from app.core.crypto import decrypt_pii, encrypt_pii, mask_tail
 from app.core.security import hash_password
 from app.db import get_db
 from app.models import Employee, User
+from app.services.wfm.codes import generate_unique_employee_code
 from app.services.wfm.validators import (
     is_valid_bank_account,
     is_valid_tax_id,
@@ -134,6 +135,7 @@ class EmployeeOut(EmployeeBase):
     taj_masked: str | None = None
     bank_account_masked: str | None = None
     has_wage: bool = False
+    employee_code: str | None = None  # 6 jegyű törzsszám (blokkoló-terminál)
     # Csak létrehozáskor, és csak ha a jelszót a rendszer generálta — az admin
     # ekkor látja egyetlen egyszer, hogy átadhassa a dolgozónak.
     generated_password: str | None = None
@@ -219,6 +221,7 @@ def _employee_out(emp: Employee, email: str | None = None) -> EmployeeOut:
         taj_masked=emp.taj_masked,
         bank_account_masked=emp.bank_account_masked,
         has_wage=emp.wage_encrypted is not None,
+        employee_code=emp.employee_code,
     )
 
 
@@ -278,6 +281,7 @@ async def create_employee(
 
     emp = Employee(
         user_id=user.id,
+        employee_code=await generate_unique_employee_code(db),
         **body.model_dump(
             exclude={"email", "initial_password", "tax_id", "taj", "bank_account", "wage_amount"}
         ),

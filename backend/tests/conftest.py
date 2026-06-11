@@ -32,6 +32,13 @@ async def client(tmp_path, monkeypatch):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Process-szintű throttle állapotok nullázása tesztek között.
+    from app.api import auth as auth_module
+    from app.api import kiosk as kiosk_module
+
+    auth_module._failed_logins.clear()
+    kiosk_module._failed.clear()
+
     from app.main import create_app
 
     app = create_app()

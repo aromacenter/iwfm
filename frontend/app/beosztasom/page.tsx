@@ -24,6 +24,7 @@ export default function BeosztasomPage() {
   const [shifts, setShifts] = useState<ShiftOut[]>([]);
   const [openEntry, setOpenEntry] = useState<EntryOut | null>(null);
   const [timeOff, setTimeOff] = useState<TimeOffOut[]>([]);
+  const [profile, setProfile] = useState<{ name: string; employee_code: string | null } | null>(null);
   const [showRequest, setShowRequest] = useState(false);
   const [form, setForm] = useState({ type: "annual", start_date: "", end_date: "", reason: "" });
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +40,10 @@ export default function BeosztasomPage() {
       });
     api.get<{ open: EntryOut | null }>("/api/me/clock").then((r) => setOpenEntry(r.open)).catch(() => {});
     api.get<TimeOffOut[]>("/api/me/time-off").then(setTimeOff).catch(() => {});
+    api
+      .get<{ name: string; employee_code: string | null }>("/api/me/profile")
+      .then(setProfile)
+      .catch(() => {});
   }, []);
 
   useEffect(load, [load]);
@@ -89,6 +94,14 @@ export default function BeosztasomPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-lg space-y-6">
+        {profile?.employee_code && (
+          <p className="text-center text-sm text-slate-500">
+            Törzsszámod a blokkoló-terminálhoz:{" "}
+            <span className="font-mono text-base font-bold text-indigo-700">
+              {profile.employee_code}
+            </span>
+          </p>
+        )}
         {/* Óra */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 font-semibold">Munkaidő</h2>

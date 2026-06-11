@@ -77,6 +77,7 @@ class Employee(Base):
     __tablename__ = "employees"
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_employees_user"),
+        Index("uq_employees_code", "employee_code", unique=True),
         CheckConstraint(
             "employment_type IN ('full_time','part_time')", name="ck_employees_emp_type"
         ),
@@ -91,6 +92,9 @@ class Employee(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
+    # 6 jegyű törzsszám — a blokkoló-terminál (kiosk) azonosítója.
+    # Nullable a meglévő sorok migrációja miatt; induláskor backfill tölti.
+    employee_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
 
     # --- személyes adatok ---
     last_name: Mapped[str] = mapped_column(String(128), nullable=False)

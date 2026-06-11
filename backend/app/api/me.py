@@ -42,6 +42,16 @@ class ClockBody(BaseModel):
     note: str | None = Field(default=None, max_length=512)
 
 
+@router.get("/profile")
+async def my_profile(emp: Employee = Depends(get_own_employee)):
+    """Saját alapadatok az önkiszolgáló fejléchez (név + törzsszám)."""
+    return {
+        "name": f"{emp.last_name} {emp.first_name}",
+        "employee_code": emp.employee_code,
+        "job_title": emp.job_title,
+    }
+
+
 @router.get("/schedule", response_model=list[ShiftOut])
 async def my_schedule(
     week_start: date | None = Query(default=None),

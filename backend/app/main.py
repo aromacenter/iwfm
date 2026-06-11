@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, employees, me, payroll, shifts, timeclock, timeoff
+from app.api import auth, employees, kiosk, me, payroll, shifts, timeclock, timeoff
 from app.core.config import get_settings
 from app.db import get_engine
 from app.models import Base
@@ -17,14 +17,43 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _ensure_employee_code_column(sync_conn) -> None:
+    """v0.2 mini-migráció: employees.employee_code oszlop + unique index.
+
+    A create_all meglévő táblát nem módosít, ezért a már futó adatbázisokon
+    kézzel adjuk hozzá. SQLite-on és PostgreSQL-en is működik.
+    """
+    from sqlalchemy import inspect, text as sql_text
+
+    inspector = inspect(sync_conn)
+    if "employees" in inspector.get_table_names():
+        cols = [c["name"] for c in inspector.get_columns("employees")]
+        if "employee_code" not in cols:
+            sync_conn.execute(sql_text("ALTER TABLE employees ADD COLUMN employee_code VARCHAR(6)"))
+        sync_conn.execute(
+            sql_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_employees_code ON employees (employee_code)"
+            )
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # v1 schema management: tables are created on boot (idempotent). Alembic
-    # gets introduced with the first schema *change* — for the initial release
-    # create_all is the entire migration story, locally and on Railway alike.
+    # v1 schema management: tables are created on boot (idempotent), plus
+    # small targeted column migrations below for already-deployed databases.
     engine = get_engine()
     async with engine.begin() as conn:
+        await conn.run_sync(_ensure_employee_code_column)
         await conn.run_sync(Base.metadata.create_all)
+
+    # Meglévő dolgozók törzsszám-backfillje (idempotens).
+    from app.db import get_session_factory
+    from app.services.wfm.codes import backfill_employee_codes
+
+    async with get_session_factory()() as session:
+        filled = await backfill_employee_codes(session)
+        if filled:
+            logger.info("Backfilled %d employee codes", filled)
     yield
     await engine.dispose()
 
@@ -66,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(timeclock.router, prefix="/api/time-entries", tags=["time-entries"])
     app.include_router(payroll.router, prefix="/api/payroll", tags=["payroll"])
     app.include_router(me.router, prefix="/api/me", tags=["self-service"])
+    app.include_router(kiosk.router, prefix="/api/kiosk", tags=["kiosk"])
 
     @app.get("/api/health")
     async def health():

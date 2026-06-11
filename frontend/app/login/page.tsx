@@ -100,6 +100,12 @@ export default function LoginPage() {
               : "Vissza a bejelentkezéshez"}
           </button>
         </form>
+        <a
+          href="/ora"
+          className="mt-4 block text-center text-sm text-slate-500 hover:text-indigo-600"
+        >
+          ⏱ Munkaidő-terminál (blokkolás törzsszámmal) →
+        </a>
       </div>
     </div>
   );

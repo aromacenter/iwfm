@@ -36,6 +36,7 @@ export interface EmployeeOut {
   taj_masked: string | null;
   bank_account_masked: string | null;
   has_wage: boolean;
+  employee_code: string | null;
 }
 
 export interface ShiftOut {

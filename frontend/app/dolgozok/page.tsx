@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { api, errorMessage } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import type { AuthUser, EmployeeOut } from "@/lib/types";
 
 interface RevealOut {
@@ -67,6 +67,7 @@ export default function DolgozokPage() {
   const [editing, setEditing] = useState<EmployeeOut | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [revealed, setRevealed] = useState<Record<string, RevealOut>>({});
 
@@ -83,6 +84,21 @@ export default function DolgozokPage() {
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+    // gépelésre tűnjön el a mező hibajelzése
+    if (typeof key === "string" && fieldErrors[key]) {
+      setFieldErrors((fe) => {
+        const next = { ...fe };
+        delete next[key];
+        return next;
+      });
+    }
+  }
+
+  /** Hibás mezőhöz piros keret. */
+  function fieldCls(key: string): string {
+    return fieldErrors[key]
+      ? "mt-1 w-full rounded-lg border-2 border-red-500 bg-red-50 px-3 py-2 text-sm"
+      : inputCls;
   }
 
   function openCreate() {
@@ -124,6 +140,7 @@ export default function DolgozokPage() {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setFieldErrors({});
     try {
       const clean = (v: string) => (v.trim() === "" ? undefined : v.trim());
       if (editing) {
@@ -170,16 +187,26 @@ export default function DolgozokPage() {
           wage_amount: clean(form.wage_amount),
           initial_password: clean(form.initial_password),
         });
-        if (created.generated_password) {
-          alert(
-            `A dolgozó belépési jelszava (csak most jelenik meg, add át neki):\n\n${created.generated_password}`
-          );
+        const info = [
+          created.employee_code ? `Törzsszám (blokkoláshoz): ${created.employee_code}` : null,
+          created.generated_password
+            ? `Belépési jelszó (csak most jelenik meg): ${created.generated_password}`
+            : null,
+        ].filter(Boolean);
+        if (info.length > 0) {
+          alert(`Dolgozó létrehozva — add át neki:\n\n${info.join("\n")}`);
         }
       }
       setShowForm(false);
       load();
     } catch (err) {
-      setError(errorMessage(err));
+      if (err instanceof ApiError && err.code === "employee.invalid_ids") {
+        const detail = err.detail as { fields?: Record<string, string> };
+        setFieldErrors(detail.fields ?? {});
+        setError("Javítsd a pirossal jelölt mezőket.");
+      } else {
+        setError(errorMessage(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -213,6 +240,7 @@ export default function DolgozokPage() {
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
               <th className="px-4 py-3">Név</th>
+              <th className="px-4 py-3">Törzsszám</th>
               <th className="px-4 py-3">Munkakör</th>
               <th className="px-4 py-3">Belépés</th>
               <th className="px-4 py-3">Heti óra</th>
@@ -235,6 +263,9 @@ export default function DolgozokPage() {
                       )}
                     </div>
                     <div className="text-xs text-slate-500">{emp.email}</div>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-sm font-semibold text-indigo-700">
+                    {emp.employee_code ?? "—"}
                   </td>
                   <td className="px-4 py-3">{emp.job_title ?? "—"}</td>
                   <td className="px-4 py-3">{emp.hire_date}</td>
@@ -268,7 +299,7 @@ export default function DolgozokPage() {
             })}
             {employees.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
                   Még nincs dolgozó felvéve.
                 </td>
               </tr>
@@ -326,13 +357,16 @@ export default function DolgozokPage() {
                 Azonosítók (titkosítva tárolva)
               </legend>
               <Field label={editing ? "Adóazonosító jel (csak ha módosul)" : "Adóazonosító jel"}>
-                <input value={form.tax_id} onChange={(e) => set("tax_id", e.target.value)} placeholder="8xxxxxxxxx" className={inputCls} />
+                <input value={form.tax_id} onChange={(e) => set("tax_id", e.target.value)} placeholder="8xxxxxxxxx" className={fieldCls("tax_id")} />
+                {fieldErrors.tax_id && <p className="mt-1 text-xs text-red-600">{fieldErrors.tax_id}</p>}
               </Field>
               <Field label={editing ? "TAJ szám (csak ha módosul)" : "TAJ szám"}>
-                <input value={form.taj} onChange={(e) => set("taj", e.target.value)} placeholder="xxx xxx xxx" className={inputCls} />
+                <input value={form.taj} onChange={(e) => set("taj", e.target.value)} placeholder="xxx xxx xxx" className={fieldCls("taj")} />
+                {fieldErrors.taj && <p className="mt-1 text-xs text-red-600">{fieldErrors.taj}</p>}
               </Field>
               <Field label={editing ? "Bankszámlaszám (csak ha módosul)" : "Bankszámlaszám"}>
-                <input value={form.bank_account} onChange={(e) => set("bank_account", e.target.value)} placeholder="xxxxxxxx-xxxxxxxx" className={inputCls} />
+                <input value={form.bank_account} onChange={(e) => set("bank_account", e.target.value)} placeholder="xxxxxxxx-xxxxxxxx" className={fieldCls("bank_account")} />
+                {fieldErrors.bank_account && <p className="mt-1 text-xs text-red-600">{fieldErrors.bank_account}</p>}
               </Field>
               <Field label="Bér">
                 <input value={form.wage_amount} onChange={(e) => set("wage_amount", e.target.value)} placeholder="pl. 650000 HUF/hó" className={inputCls} />
