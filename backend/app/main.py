@@ -47,6 +47,18 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
 
+    @app.middleware("http")
+    async def security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if settings.is_production:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+            )
+        return response
+
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     app.include_router(employees.router, prefix="/api/employees", tags=["employees"])
     app.include_router(shifts.router, prefix="/api/shifts", tags=["shifts"])

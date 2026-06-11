@@ -134,6 +134,9 @@ class EmployeeOut(EmployeeBase):
     taj_masked: str | None = None
     bank_account_masked: str | None = None
     has_wage: bool = False
+    # Csak létrehozáskor, és csak ha a jelszót a rendszer generálta — az admin
+    # ekkor látja egyetlen egyszer, hogy átadhassa a dolgozónak.
+    generated_password: str | None = None
 
 
 class RevealOut(BaseModel):
@@ -288,7 +291,10 @@ async def create_employee(
         entity_id=str(emp.id), request=request,
     )
     await db.commit()
-    return _employee_out(emp, user.email)
+    out = _employee_out(emp, user.email)
+    if body.initial_password is None:
+        out.generated_password = password  # egyszeri megjelenítés az adminnak
+    return out
 
 
 @router.get("/{employee_id}", response_model=EmployeeOut)
