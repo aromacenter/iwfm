@@ -30,18 +30,24 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_employee_code_column(sync_conn) -> None:
-    """v0.2 mini-migráció: employees.employee_code oszlop + unique index.
-
-    A create_all meglévő táblát nem módosít, ezért a már futó adatbázisokon
-    kézzel adjuk hozzá. SQLite-on és PostgreSQL-en is működik.
-    """
+    """Mini-migrációk: a create_all meglévő táblát nem módosít, ezért a már
+    futó adatbázisokon az új oszlopokat kézzel adjuk hozzá (SQLite + PG)."""
     from sqlalchemy import inspect, text as sql_text
 
     inspector = inspect(sync_conn)
-    if "employees" in inspector.get_table_names():
-        cols = [c["name"] for c in inspector.get_columns("employees")]
-        if "employee_code" not in cols:
-            sync_conn.execute(sql_text("ALTER TABLE employees ADD COLUMN employee_code VARCHAR(6)"))
+    tables = inspector.get_table_names()
+
+    def ensure_column(table: str, column: str, ddl_type: str) -> None:
+        if table in tables:
+            cols = [c["name"] for c in inspector.get_columns(table)]
+            if column not in cols:
+                sync_conn.execute(
+                    sql_text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
+                )
+
+    ensure_column("employees", "employee_code", "VARCHAR(6)")  # v0.2
+    ensure_column("ai_settings", "assign_prompt", "TEXT")  # v0.4
+    if "employees" in tables:
         sync_conn.execute(
             sql_text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_employees_code ON employees (employee_code)"

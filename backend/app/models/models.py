@@ -405,6 +405,8 @@ class AISettings(Base):
     gemini_model: Mapped[str] = mapped_column(
         String(64), nullable=False, default="gemini-3.5-flash"
     )
+    # Szerkeszthető feladat-kiosztási prompt-sablon (None = beépített alapértelmezés)
+    assign_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

@@ -28,6 +28,9 @@ interface AISettings {
   anthropic_model: string;
   has_gemini_key: boolean;
   gemini_model: string;
+  assign_prompt: string;
+  assign_prompt_is_custom: boolean;
+  default_assign_prompt: string;
 }
 
 const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
@@ -66,6 +69,9 @@ export default function BeallitasokPage() {
   const [aiHasKeys, setAiHasKeys] = useState({ anthropic: false, gemini: false });
   const [aiMsg, setAiMsg] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  const [assignPrompt, setAssignPrompt] = useState("");
+  const [promptIsCustom, setPromptIsCustom] = useState(false);
+  const [defaultPrompt, setDefaultPrompt] = useState("");
 
   const load = useCallback(() => {
     api
@@ -96,6 +102,9 @@ export default function BeallitasokPage() {
           gemini_key: "",
         }));
         setAiHasKeys({ anthropic: s.has_anthropic_key, gemini: s.has_gemini_key });
+        setAssignPrompt(s.assign_prompt);
+        setPromptIsCustom(s.assign_prompt_is_custom);
+        setDefaultPrompt(s.default_assign_prompt);
       })
       .catch(() => {});
   }, []);
@@ -170,6 +179,7 @@ export default function BeallitasokPage() {
         anthropic_model: ai.anthropic_model,
         gemini_key: ai.gemini_key || null,
         gemini_model: ai.gemini_model,
+        assign_prompt: assignPrompt || null,
       });
       setAiMsg(t("common.saved"));
       load();
@@ -438,6 +448,36 @@ export default function BeallitasokPage() {
               </button>
               <p className="text-xs text-slate-400">{t("settings.geminiKeyHint")}</p>
             </div>
+          </div>
+
+          {/* Kiosztási prompt — szerkeszthető */}
+          <div className="rounded-xl border border-slate-200 p-4">
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">
+                {t("settings.promptTitle")}{" "}
+                <span
+                  className={`ml-1 rounded px-1.5 py-0.5 text-xs font-normal ${
+                    promptIsCustom ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {promptIsCustom ? t("settings.promptCustom") : t("settings.promptDefault")}
+                </span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAssignPrompt(defaultPrompt)}
+                className="text-xs text-slate-500 hover:text-indigo-600"
+              >
+                {t("settings.promptReset")}
+              </button>
+            </div>
+            <p className="mb-2 text-xs text-slate-500">{t("settings.promptHint")}</p>
+            <textarea
+              value={assignPrompt}
+              onChange={(e) => setAssignPrompt(e.target.value)}
+              rows={8}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs"
+            />
           </div>
 
           {aiMsg && (

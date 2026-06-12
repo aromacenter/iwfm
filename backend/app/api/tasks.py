@@ -40,7 +40,8 @@ ALL_STATUSES = ("open", "done", "needs_more_work")
 class TaskCreateBody(BaseModel):
     title: str = Field(min_length=1, max_length=256)
     description: str | None = Field(default=None, max_length=4000)
-    employee_id: str
+    # None = az AI automatikusan jelöli ki a legalkalmasabb dolgozót
+    employee_id: str | None = None
     due_date: date
     required_skill_id: int | None = None
     # Online munkalap fejléc-adatai — a feladattal együtt áll ki a munkalap.
@@ -87,6 +88,7 @@ class TaskOut(BaseModel):
     created_at: datetime
     worksheet_serial: str | None = None  # ML-2026-0001, ha van munkalap
     worksheet_completed: bool = False  # kitöltötte-e már a dolgozó
+    ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
 
 
 MAX_SIGNATURE_BYTES = 300_000  # ~300KB data URL-enként
@@ -303,8 +305,36 @@ async def create_task(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_role("manager")),
 ):
+    ai_reason: str | None = None
+    employee_id_str = body.employee_id
+
+    # Dolgozó nélkül érkező feladat: az AI jelöli ki a legalkalmasabbat
+    # (skill + aznapi beosztás + szabadság + terhelés alapján).
+    if employee_id_str is None:
+        try:
+            suggestion = await suggest_assignee(
+                db,
+                title=body.title.strip(),
+                description=body.description,
+                due_date=body.due_date,
+                required_skill_id=body.required_skill_id,
+            )
+        except ValueError as exc:
+            code = str(exc)
+            if code == "ai_not_configured":
+                raise HTTPException(
+                    status_code=422, detail={"code": "settings.ai_not_configured"}
+                )
+            if code == "no_candidates":
+                raise HTTPException(status_code=422, detail={"code": "tasks.no_candidates"})
+            raise HTTPException(status_code=502, detail={"code": "tasks.ai_suggest_failed"})
+        except Exception:
+            raise HTTPException(status_code=502, detail={"code": "tasks.ai_suggest_failed"})
+        employee_id_str = suggestion["employee_id"]
+        ai_reason = suggestion["reason"]
+
     try:
-        emp_id = uuid.UUID(body.employee_id)
+        emp_id = uuid.UUID(employee_id_str)
     except ValueError:
         raise HTTPException(status_code=422, detail={"code": "tasks.bad_employee"})
     emp = (
@@ -342,10 +372,14 @@ async def create_task(
 
     await record_audit(
         db, actor=actor, action="task.create", entity_type="task",
-        entity_id=str(task.id), detail={"worksheet": ws.serial}, request=request,
+        entity_id=str(task.id),
+        detail={"worksheet": ws.serial, "ai_assigned": ai_reason is not None},
+        request=request,
     )
     await db.commit()
-    return (await _tasks_out(db, [task]))[0]
+    out = (await _tasks_out(db, [task]))[0]
+    out.ai_reason = ai_reason
+    return out
 
 
 @router.patch("/{task_id}", response_model=TaskOut)

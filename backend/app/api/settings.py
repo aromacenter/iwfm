@@ -11,6 +11,7 @@ from app.api.deps import record_audit, require_role
 from app.core.crypto import encrypt_pii
 from app.db import get_db
 from app.models import EmailSettings, EmployeeSkill, Skill, User
+from app.services.wfm.ai_assign import DEFAULT_ASSIGN_PROMPT
 from app.services.wfm.ai_service import (
     PROVIDERS as AI_PROVIDERS,
     get_or_create_settings as get_ai_settings_row,
@@ -133,6 +134,8 @@ class AISettingsBody(BaseModel):
     anthropic_model: str = Field(default="claude-opus-4-8", max_length=64)
     gemini_key: str | None = Field(default=None, max_length=256)  # üresen: marad
     gemini_model: str = Field(default="gemini-3.5-flash", max_length=64)
+    # None vagy üres = beépített alapértelmezett sablon
+    assign_prompt: str | None = Field(default=None, max_length=8000)
 
 
 class AISettingsOut(BaseModel):
@@ -141,6 +144,9 @@ class AISettingsOut(BaseModel):
     anthropic_model: str
     has_gemini_key: bool
     gemini_model: str
+    assign_prompt: str  # a ténylegesen használt sablon (egyedi vagy default)
+    assign_prompt_is_custom: bool
+    default_assign_prompt: str  # a "visszaállítás" gombhoz
 
 
 def _ai_out(row) -> AISettingsOut:
@@ -150,6 +156,9 @@ def _ai_out(row) -> AISettingsOut:
         anthropic_model=row.anthropic_model,
         has_gemini_key=row.gemini_key_encrypted is not None,
         gemini_model=row.gemini_model,
+        assign_prompt=row.assign_prompt or DEFAULT_ASSIGN_PROMPT,
+        assign_prompt_is_custom=bool(row.assign_prompt),
+        default_assign_prompt=DEFAULT_ASSIGN_PROMPT,
     )
 
 
@@ -178,6 +187,9 @@ async def update_ai_settings(
         row.anthropic_key_encrypted = encrypt_pii(body.anthropic_key.strip())
     if body.gemini_key:
         row.gemini_key_encrypted = encrypt_pii(body.gemini_key.strip())
+    # Prompt-sablon: üres vagy a defaulttal azonos → beépített sablon (None)
+    prompt = (body.assign_prompt or "").strip()
+    row.assign_prompt = prompt if prompt and prompt != DEFAULT_ASSIGN_PROMPT else None
     await record_audit(
         db, actor=actor, action="settings.ai_update", entity_type="settings",
         entity_id="ai", detail={"active_provider": body.active_provider}, request=request,

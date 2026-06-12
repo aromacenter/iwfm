@@ -155,7 +155,15 @@
     "publishBlocked": "A közzétételt munkajogi HIBA akadályozza:",
     "modifyConfirm": "A közölt beosztás módosítása 96 órán belül csak a dolgozó kérésére vagy előre nem látható okból megengedett (Mt. 97.§ (5)). Megerősíted? A művelet auditálásra kerül.",
     "deleteConfirm": "96 órán belüli törlés — megerősíted? (Mt. 97.§ (5), auditálva)",
-    "days": ["Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek", "Szombat", "Vasárnap"]
+    "days": [
+      "Hétfő",
+      "Kedd",
+      "Szerda",
+      "Csütörtök",
+      "Péntek",
+      "Szombat",
+      "Vasárnap"
+    ]
   },
   "leave": {
     "title": "Távollét",
@@ -207,7 +215,12 @@
     "day": "Nap",
     "in": "Be",
     "out": "Ki",
-    "breakMin": "Szünet (p)"
+    "breakMin": "Szünet (p)",
+    "viewList": "Lista",
+    "viewTimecard": "Heti timecard",
+    "weekTotal": "Heti összes",
+    "dayTotal": "{hours} h",
+    "noEntries": "—"
   },
   "tasks": {
     "title": "Feladatok",
@@ -251,7 +264,9 @@
       "open": "Nyitott",
       "done": "Befejezett",
       "needs_more_work": "További munkát igényel"
-    }
+    },
+    "autoAssign": "🤖 Az AI válassza ki automatikusan",
+    "aiAssignedAlert": "Az AI {name} dolgozót jelölte ki a feladatra.\nIndoklás: {reason}"
   },
   "myTasks": {
     "title": "Feladataim",
@@ -297,7 +312,15 @@
     "noRequests": "Nincs kérelmed.",
     "requestTitle": "Távollét kérése",
     "noEmployeeCard": "Ehhez a fiókhoz még nem tartozik dolgozói adatlap — szólj a vezetődnek.",
-    "dayNames": ["hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat", "vasárnap"]
+    "dayNames": [
+      "hétfő",
+      "kedd",
+      "szerda",
+      "csütörtök",
+      "péntek",
+      "szombat",
+      "vasárnap"
+    ]
   },
   "settings": {
     "title": "Beállítások",
@@ -334,7 +357,12 @@
     "aiReplied": "✓ {provider} válaszolt: „{reply}\"",
     "anthropicKeyHint": "Kulcs: console.anthropic.com → API Keys",
     "geminiKeyHint": "Kulcs: aistudio.google.com → Get API key",
-    "saveAi": "AI beállítások mentése"
+    "saveAi": "AI beállítások mentése",
+    "promptTitle": "Feladat-kiosztási prompt",
+    "promptHint": "Ezzel az utasítással dolgozik az AI a dolgozó kiválasztásakor. Használható helyettesítők: {title}, {description}, {due_date}, {required_skill}, {candidates}. A gépi feldolgozáshoz szükséges válaszformátum-utasítás automatikusan a végére kerül.",
+    "promptCustom": "egyedi",
+    "promptDefault": "alapértelmezett",
+    "promptReset": "Alapértelmezett visszaállítása"
   },
   "kiosk": {
     "title": "Munkaidő-terminál",

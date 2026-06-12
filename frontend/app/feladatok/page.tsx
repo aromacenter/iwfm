@@ -137,10 +137,11 @@ export default function FeladatokPage() {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.post<TaskOut>("/api/tasks", {
+      const created = await api.post<TaskOut & { ai_reason?: string | null }>("/api/tasks", {
         title: form.title,
         description: form.description || null,
-        employee_id: form.employee_id,
+        // "auto" = az AI jelöli ki a legalkalmasabb dolgozót a szerveren
+        employee_id: form.employee_id === "auto" ? null : form.employee_id,
         due_date: form.due_date,
         required_skill_id: form.required_skill_id || null,
         client_name: form.client_name || null,
@@ -151,9 +152,19 @@ export default function FeladatokPage() {
         title: "", description: "", employee_id: "", due_date: todayIso(),
         required_skill_id: 0, client_name: "", client_location: "",
       });
-      if (created.worksheet_serial) {
-        alert(t("tasks.issuedAlert", { serial: created.worksheet_serial }));
+      const messages: string[] = [];
+      if (created.ai_reason) {
+        messages.push(
+          t("tasks.aiAssignedAlert", {
+            name: created.employee_name ?? "?",
+            reason: created.ai_reason,
+          })
+        );
       }
+      if (created.worksheet_serial) {
+        messages.push(t("tasks.issuedAlert", { serial: created.worksheet_serial }));
+      }
+      if (messages.length > 0) alert(messages.join("\n\n"));
       load();
     } catch (err) {
       setError(errorMessage(err));
@@ -374,6 +385,7 @@ export default function FeladatokPage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               >
                 <option value="">{t("tasks.choose")}</option>
+                <option value="auto">{t("tasks.autoAssign")}</option>
                 {assignableEmployees.map(({ emp, hasSkill }) => (
                   <option key={emp.id} value={emp.id}>
                     {emp.last_name} {emp.first_name}

@@ -8,17 +8,35 @@ import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import type { EmployeeOut, EntryOut } from "@/lib/types";
 
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function monthBounds(): { from: string; to: string } {
   const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return { from: iso(from), to: iso(to) };
+  return {
+    from: isoDate(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: isoDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
+}
+
+function mondayOf(d: Date): Date {
+  const copy = new Date(d);
+  copy.setDate(copy.getDate() - ((copy.getDay() + 6) % 7));
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function addDays(d: Date, n: number): Date {
+  const copy = new Date(d);
+  copy.setDate(copy.getDate() + n);
+  return copy;
 }
 
 export default function JelenletPage() {
+  const [view, setView] = useState<"list" | "timecard">("list");
   const [{ from, to }, setRange] = useState(monthBounds());
+  const [weekStart, setWeekStart] = useState<Date>(() => mondayOf(new Date()));
   const [entries, setEntries] = useState<EntryOut[]>([]);
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -32,18 +50,42 @@ export default function JelenletPage() {
       dateStyle: "short",
       timeStyle: "short",
     });
+  const fmtTime = (dt: string) =>
+    new Date(dt).toLocaleTimeString(lang === "hu" ? "hu-HU" : "en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  // Az aktív nézet időszaka: lista = választott tartomány; timecard = a hét.
+  const effFrom = view === "list" ? from : isoDate(weekStart);
+  const effTo = view === "list" ? to : isoDate(addDays(weekStart, 6));
 
   const load = useCallback(() => {
     api
-      .get<EntryOut[]>(`/api/time-entries?date_from=${from}&date_to=${to}`)
+      .get<EntryOut[]>(`/api/time-entries?date_from=${effFrom}&date_to=${effTo}`)
       .then(setEntries)
       .catch(() => {});
-  }, [from, to]);
+  }, [effFrom, effTo]);
 
   useEffect(() => {
     api.get<EmployeeOut[]>("/api/employees").then(setEmployees).catch(() => {});
   }, []);
   useEffect(load, [load]);
+
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  /** Timecard rács: dolgozó × nap → bejegyzések (helyi nap szerint). */
+  const entriesByCell = new Map<string, EntryOut[]>();
+  for (const entry of entries) {
+    const day = isoDate(new Date(entry.clock_in));
+    const key = `${entry.employee_id}|${day}`;
+    entriesByCell.set(key, [...(entriesByCell.get(key) ?? []), entry]);
+  }
+  const dayMinutes = (empId: string, day: string) =>
+    (entriesByCell.get(`${empId}|${day}`) ?? []).reduce(
+      (sum, e) => sum + (e.worked_minutes ?? 0),
+      0
+    );
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,8 +111,8 @@ export default function JelenletPage() {
   async function exportPayroll(format: "csv" | "xlsx") {
     try {
       await downloadFile(
-        `/api/payroll/export?period_start=${from}&period_end=${to}&format=${format}`,
-        `berexport_${from}_${to}.${format}`
+        `/api/payroll/export?period_start=${effFrom}&period_end=${effTo}&format=${format}`,
+        `berexport_${effFrom}_${effTo}.${format}`
       );
     } catch (err) {
       alert(errorMessage(err));
@@ -83,9 +125,34 @@ export default function JelenletPage() {
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">{t("att.title")}</h1>
-        <input type="date" value={from} onChange={(e) => setRange({ from: e.target.value, to })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-        <span className="text-slate-400">→</span>
-        <input type="date" value={to} onChange={(e) => setRange({ from, to: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+        <div className="flex overflow-hidden rounded-lg border border-slate-300 text-sm">
+          {(["list", "timecard"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setView(mode)}
+              className={`px-3 py-1.5 ${
+                view === mode ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {mode === "list" ? t("att.viewList") : t("att.viewTimecard")}
+            </button>
+          ))}
+        </div>
+        {view === "list" ? (
+          <>
+            <input type="date" value={from} onChange={(e) => setRange({ from: e.target.value, to })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+            <span className="text-slate-400">→</span>
+            <input type="date" value={to} onChange={(e) => setRange({ from, to: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+          </>
+        ) : (
+          <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white">
+            <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="px-3 py-1.5 hover:bg-slate-100">←</button>
+            <span className="px-2 text-sm font-medium">
+              {isoDate(weekStart)} – {isoDate(addDays(weekStart, 6))}
+            </span>
+            <button onClick={() => setWeekStart(addDays(weekStart, 7))} className="px-3 py-1.5 hover:bg-slate-100">→</button>
+          </div>
+        )}
         <div className="ml-auto flex gap-2">
           <button onClick={() => setShowForm(true)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">
             {t("att.manualEntry")}
@@ -104,6 +171,84 @@ export default function JelenletPage() {
         <span className="font-semibold">{t("att.totalHours", { hours: totalHours.toFixed(1) })}</span>
       </p>
 
+      {view === "timecard" && (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                <th className="w-44 px-3 py-2">{t("att.employee")}</th>
+                {weekDays.map((d, i) => (
+                  <th key={i} className="px-2 py-2 text-center">
+                    {t(`sched.days.${i}`)}
+                    <div className="font-normal normal-case text-slate-400">{isoDate(d).slice(5)}</div>
+                  </th>
+                ))}
+                <th className="px-3 py-2 text-right">{t("att.weekTotal")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees
+                .filter((e) => e.status === "active")
+                .map((emp) => {
+                  const weekTotal = weekDays.reduce(
+                    (sum, d) => sum + dayMinutes(emp.id, isoDate(d)),
+                    0
+                  );
+                  return (
+                    <tr key={emp.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-2 font-medium">
+                        {emp.last_name} {emp.first_name}
+                        <div className="font-mono text-xs font-normal text-indigo-600">
+                          {emp.employee_code ?? ""}
+                        </div>
+                      </td>
+                      {weekDays.map((d) => {
+                        const day = isoDate(d);
+                        const cellEntries = entriesByCell.get(`${emp.id}|${day}`) ?? [];
+                        const minutes = dayMinutes(emp.id, day);
+                        return (
+                          <td key={day} className="border-l border-slate-100 px-1 py-1 text-center align-top">
+                            {cellEntries.length === 0 ? (
+                              <span className="text-slate-300">{t("att.noEntries")}</span>
+                            ) : (
+                              <>
+                                {cellEntries.map((entry) => (
+                                  <div key={entry.id} className="text-xs text-slate-600">
+                                    {fmtTime(entry.clock_in)}–
+                                    {entry.clock_out ? (
+                                      fmtTime(entry.clock_out)
+                                    ) : (
+                                      <span className="font-medium text-emerald-600">{t("att.open")}</span>
+                                    )}
+                                  </div>
+                                ))}
+                                {minutes > 0 && (
+                                  <div className="mt-0.5 text-xs font-semibold text-slate-800">
+                                    {t("att.dayTotal", { hours: (minutes / 60).toFixed(1) })}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-right font-semibold">
+                        {(weekTotal / 60).toFixed(1)} h
+                      </td>
+                    </tr>
+                  );
+                })}
+              {employees.filter((e) => e.status === "active").length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">{t("att.empty")}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {view === "list" && (
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
@@ -145,6 +290,7 @@ export default function JelenletPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

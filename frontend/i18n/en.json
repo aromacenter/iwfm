@@ -155,7 +155,15 @@
     "publishBlocked": "Publishing is blocked by a labour-law ERROR:",
     "modifyConfirm": "Modifying a published schedule within 96 hours is only allowed at the employee's request or for unforeseen reasons (Labour Code 97.§ (5)). Confirm? The action is audited.",
     "deleteConfirm": "Deleting within 96 hours — confirm? (Labour Code 97.§ (5), audited)",
-    "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    "days": [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday"
+    ]
   },
   "leave": {
     "title": "Time off",
@@ -207,7 +215,12 @@
     "day": "Day",
     "in": "In",
     "out": "Out",
-    "breakMin": "Break (min)"
+    "breakMin": "Break (min)",
+    "viewList": "List",
+    "viewTimecard": "Weekly timecard",
+    "weekTotal": "Week total",
+    "dayTotal": "{hours} h",
+    "noEntries": "—"
   },
   "tasks": {
     "title": "Tasks",
@@ -251,7 +264,9 @@
       "open": "Open",
       "done": "Done",
       "needs_more_work": "Needs more work"
-    }
+    },
+    "autoAssign": "🤖 Let the AI choose automatically",
+    "aiAssignedAlert": "The AI assigned {name} to the task.\nReason: {reason}"
   },
   "myTasks": {
     "title": "My tasks",
@@ -297,7 +312,15 @@
     "noRequests": "You have no requests.",
     "requestTitle": "Request time off",
     "noEmployeeCard": "No employee record is linked to this account yet — ask your manager.",
-    "dayNames": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    "dayNames": [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday"
+    ]
   },
   "settings": {
     "title": "Settings",
@@ -334,7 +357,12 @@
     "aiReplied": "✓ {provider} replied: \"{reply}\"",
     "anthropicKeyHint": "Key: console.anthropic.com → API Keys",
     "geminiKeyHint": "Key: aistudio.google.com → Get API key",
-    "saveAi": "Save AI settings"
+    "saveAi": "Save AI settings",
+    "promptTitle": "Task assignment prompt",
+    "promptHint": "The AI uses this instruction when choosing an employee. Available placeholders: {title}, {description}, {due_date}, {required_skill}, {candidates}. The machine-readable response-format instruction is always appended automatically.",
+    "promptCustom": "custom",
+    "promptDefault": "default",
+    "promptReset": "Restore default"
   },
   "kiosk": {
     "title": "Time clock terminal",

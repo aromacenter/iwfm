@@ -146,6 +146,111 @@ async def test_suggest_no_candidates(client, manager):
     assert res.json()["detail"]["code"] == "tasks.no_candidates"
 
 
+def test_custom_template_used():
+    """A szerkeszthető sablon helyettesítői kitöltődnek, a JSON-utasítás mindig ott van."""
+    candidates = [
+        Candidate(id="id-1", name="Kovács Anna", job_title=None, scheduled_that_day=True)
+    ]
+    prompt = build_prompt(
+        candidates,
+        title="Leltár",
+        description=None,
+        due_date=date(2026, 8, 1),
+        required_skill_name=None,
+        template="EGYEDI SABLON — feladat: {title}, határidő: {due_date}\n{candidates}",
+    )
+    assert prompt.startswith("EGYEDI SABLON — feladat: Leltár, határidő: 2026-08-01")
+    assert "Kovács Anna" in prompt
+    assert "aznapra BE VAN OSZTVA" in prompt
+    assert '"employee_id"' in prompt  # a JSON-utasítás a sablontól függetlenül kötelező
+
+
+def test_prompt_includes_schedule_flag():
+    candidates = [
+        Candidate(id="a", name="Beosztott Béla", job_title=None, scheduled_that_day=True),
+        Candidate(id="b", name="Szabad Sára", job_title=None, scheduled_that_day=False),
+    ]
+    prompt = build_prompt(
+        candidates, title="X", description=None, due_date=date(2026, 8, 1),
+        required_skill_name=None,
+    )
+    assert "aznapra BE VAN OSZTVA" in prompt
+    assert "aznapra nincs beosztva" in prompt
+
+
+async def test_auto_assign_task_requires_ai(client, manager):
+    """employee_id nélküli feladat AI nélkül: érthető hiba, nem jön létre feladat."""
+    _, mgr = manager
+    user, _ = await make_user(email="auto1@example.com", role="employee")
+    await make_employee_record(user)
+    res = await client.post(
+        "/api/tasks",
+        json={"title": "Automata teszt", "due_date": date.today().isoformat()},
+        headers=mgr,
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "settings.ai_not_configured"
+    assert (await client.get("/api/tasks", headers=mgr)).json() == []
+
+
+async def test_assign_prompt_settings_roundtrip(client, admin):
+    _, adm = admin
+    base = (await client.get("/api/settings/ai", headers=adm)).json()
+    assert base["assign_prompt_is_custom"] is False
+    assert "{candidates}" in base["default_assign_prompt"]
+
+    custom = "Saját kiosztási logika: {title} / {due_date}\n{candidates}"
+    saved = (
+        await client.put(
+            "/api/settings/ai",
+            json={
+                "active_provider": "none",
+                "anthropic_model": "claude-opus-4-8",
+                "gemini_model": "gemini-3.5-flash",
+                "assign_prompt": custom,
+            },
+            headers=adm,
+        )
+    ).json()
+    assert saved["assign_prompt"] == custom
+    assert saved["assign_prompt_is_custom"] is True
+
+    # a defaulttal azonos szöveg mentése visszaáll beépítettre
+    reset = (
+        await client.put(
+            "/api/settings/ai",
+            json={
+                "active_provider": "none",
+                "anthropic_model": "claude-opus-4-8",
+                "gemini_model": "gemini-3.5-flash",
+                "assign_prompt": base["default_assign_prompt"],
+            },
+            headers=adm,
+        )
+    ).json()
+    assert reset["assign_prompt_is_custom"] is False
+
+
+async def test_collect_candidates_schedule_flag(client, admin, manager):
+    _, adm = admin
+    _, mgr = manager
+    user, _ = await make_user(email="muszakos@example.com", role="employee")
+    emp = await make_employee_record(user)
+    due = date.today() + timedelta(days=14)
+    await client.post(
+        "/api/shifts",
+        json={
+            "employee_id": str(emp.id), "work_date": due.isoformat(),
+            "start_time": "08:00:00", "end_time": "16:00:00",
+        },
+        headers=mgr,
+    )
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        candidates = await collect_candidates(session, due_date=due, required_skill_id=None)
+    assert candidates[0].scheduled_that_day is True
+
+
 async def test_suggest_manager_only(client, employee_user):
     _, emp_headers, _ = employee_user
     res = await client.post(

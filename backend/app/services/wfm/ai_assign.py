@@ -21,8 +21,32 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Employee, EmployeeSkill, Skill, Task, TimeOffRequest
-from app.services.wfm.ai_service import generate
+from app.models import Employee, EmployeeSkill, Shift, Skill, Task, TimeOffRequest
+from app.services.wfm.ai_service import generate, get_or_create_settings
+
+# A Beállításokban szerkeszthető sablon alapértelmezése. Helyettesítők:
+# {title} {description} {due_date} {required_skill} {candidates}
+# A szigorú JSON-formátum utasítása mindig automatikusan a végére kerül.
+DEFAULT_ASSIGN_PROMPT = (
+    "Munkahelyi feladat-kiosztásban segítesz. Válaszd ki az alábbi dolgozók "
+    "közül a LEGALKALMASABBAT a feladatra.\n\n"
+    "Feladat: {title}\n"
+    "Leírás: {description}\n"
+    "Határidő: {due_date}\n"
+    "Szükséges skill: {required_skill}\n\n"
+    "Dolgozók:\n{candidates}\n\n"
+    "Szempontok fontossági sorrendben: 1) aki aznap szabadságon van, azt NE "
+    "válaszd; 2) a szükséges skillel rendelkezőt részesítsd előnyben; 3) aki "
+    "aznapra be van osztva (műszakja van), azt részesítsd előnyben; 4) az "
+    "alacsonyabb terhelésűt (kevesebb nyitott feladat) részesítsd előnyben; "
+    "5) a munkakör illeszkedése."
+)
+
+_JSON_INSTRUCTION = (
+    '\n\nKIZÁRÓLAG ezzel a JSON-nal válaszolj, más szöveg nélkül: '
+    '{"employee_id": "<a kiválasztott dolgozó id-ja>", '
+    '"reason": "<1-2 mondatos magyar indoklás>"}'
+)
 
 
 @dataclass
@@ -33,6 +57,7 @@ class Candidate:
     skills: list[str] = field(default_factory=list)
     has_required_skill: bool = False
     on_leave: bool = False
+    scheduled_that_day: bool = False
     open_tasks: int = 0
 
 
@@ -85,6 +110,14 @@ async def collect_candidates(
         ).all()
     )
 
+    scheduled_ids = set(
+        (
+            await db.execute(
+                select(Shift.employee_id).where(Shift.work_date == due_date)
+            )
+        ).scalars()
+    )
+
     out = []
     for emp in employees:
         emp_skills = skills_by_emp.get(emp.id, [])
@@ -99,10 +132,36 @@ async def collect_candidates(
                     or any(sid == required_skill_id for sid, _ in emp_skills)
                 ),
                 on_leave=emp.id in on_leave_ids,
+                scheduled_that_day=emp.id in scheduled_ids,
                 open_tasks=int(task_counts.get(emp.id, 0)),
             )
         )
     return out
+
+
+def candidates_block(candidates: list[Candidate], required: bool) -> str:
+    lines = []
+    for c in candidates:
+        flags = []
+        if required:
+            flags.append(
+                "RENDELKEZIK a szükséges skillel"
+                if c.has_required_skill
+                else "NEM rendelkezik a szükséges skillel"
+            )
+        if c.on_leave:
+            flags.append("AZNAP SZABADSÁGON VAN")
+        flags.append(
+            "aznapra BE VAN OSZTVA" if c.scheduled_that_day else "aznapra nincs beosztva"
+        )
+        flags.append(f"nyitott feladatai: {c.open_tasks}")
+        skills = ", ".join(c.skills) if c.skills else "nincs rögzített skill"
+        lines.append(
+            f"- id: {c.id} | {c.name}"
+            + (f" ({c.job_title})" if c.job_title else "")
+            + f" | skillek: {skills} | {' | '.join(flags)}"
+        )
+    return "\n".join(lines)
 
 
 def build_prompt(
@@ -112,43 +171,19 @@ def build_prompt(
     description: str | None,
     due_date: date,
     required_skill_name: str | None,
+    template: str | None = None,
 ) -> str:
-    lines = []
-    for c in candidates:
-        flags = []
-        if required_skill_name:
-            flags.append(
-                "RENDELKEZIK a szükséges skillel"
-                if c.has_required_skill
-                else "NEM rendelkezik a szükséges skillel"
-            )
-        if c.on_leave:
-            flags.append("AZNAP SZABADSÁGON VAN")
-        flags.append(f"nyitott feladatai: {c.open_tasks}")
-        skills = ", ".join(c.skills) if c.skills else "nincs rögzített skill"
-        lines.append(
-            f"- id: {c.id} | {c.name}"
-            + (f" ({c.job_title})" if c.job_title else "")
-            + f" | skillek: {skills} | {' | '.join(flags)}"
-        )
-
-    return (
-        "Munkahelyi feladat-kiosztásban segítesz. Válaszd ki az alábbi dolgozók "
-        "közül a LEGALKALMASABBAT a feladatra.\n\n"
-        f"Feladat: {title}\n"
-        + (f"Leírás: {description}\n" if description else "")
-        + f"Határidő: {due_date.isoformat()}\n"
-        + (f"Szükséges skill: {required_skill_name}\n" if required_skill_name else "")
-        + "\nDolgozók:\n"
-        + "\n".join(lines)
-        + "\n\nSzempontok fontossági sorrendben: 1) aki aznap szabadságon van, "
-        "azt NE válaszd; 2) a szükséges skillel rendelkezőt részesítsd előnyben; "
-        "3) az alacsonyabb terhelésűt (kevesebb nyitott feladat) részesítsd "
-        "előnyben; 4) a munkakör illeszkedése.\n\n"
-        'KIZÁRÓLAG ezzel a JSON-nal válaszolj, más szöveg nélkül: '
-        '{"employee_id": "<a kiválasztott dolgozó id-ja>", '
-        '"reason": "<1-2 mondatos magyar indoklás>"}'
+    """A (szerkeszthető) sablon kitöltése. A JSON-formátum utasítása mindig a
+    végére kerül, hogy a válasz géppel értelmezhető maradjon."""
+    base = (template or DEFAULT_ASSIGN_PROMPT)
+    filled = (
+        base.replace("{title}", title)
+        .replace("{description}", description or "—")
+        .replace("{due_date}", due_date.isoformat())
+        .replace("{required_skill}", required_skill_name or "—")
+        .replace("{candidates}", candidates_block(candidates, bool(required_skill_name)))
     )
+    return filled + _JSON_INSTRUCTION
 
 
 def parse_suggestion(text: str, valid_ids: set[str]) -> dict | None:
@@ -189,12 +224,14 @@ async def suggest_assignee(
             await db.execute(select(Skill.name).where(Skill.id == required_skill_id))
         ).scalar_one_or_none()
 
+    settings_row = await get_or_create_settings(db)
     prompt = build_prompt(
         candidates,
         title=title,
         description=description,
         due_date=due_date,
         required_skill_name=required_skill_name,
+        template=settings_row.assign_prompt,
     )
     reply = await generate(db, prompt, max_tokens=400)  # ValueError: ai_not_configured
 
