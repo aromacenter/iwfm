@@ -18,6 +18,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -300,6 +301,41 @@ class TaskComment(Base):
     text: Mapped[str] = mapped_column(String(1000), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Worksheet(Base):
+    """Munkalap — egy feladathoz egy. A dolgozó tölti ki a telefonján
+    (elvégzett munka, anyagok, óra, aláírások), a vezető PDF-ben letölti."""
+
+    __tablename__ = "worksheets"
+    __table_args__ = (
+        UniqueConstraint("task_id", name="uq_worksheets_task"),
+        UniqueConstraint("serial", name="uq_worksheets_serial"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    serial: Mapped[str] = mapped_column(String(20), nullable=False)  # ML-2026-0001
+    work_description: Mapped[str] = mapped_column(Text, nullable=False)
+    # [{"name": "...", "qty": "...", "unit": "db"}, ...]
+    materials: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    hours_spent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    client_location: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # PNG data URL-ek a képernyős aláírásról (max ~200KB, szerveroldalon ellenőrizve)
+    employee_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 

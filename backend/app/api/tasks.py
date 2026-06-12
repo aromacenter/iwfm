@@ -9,11 +9,11 @@ komment írása, státusz: 'done' (befejezett) / 'needs_more_work'
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -23,8 +23,9 @@ from app.api.deps import (
     require_role,
 )
 from app.db import get_db
-from app.models import Employee, Skill, Task, TaskComment, User
+from app.models import Employee, Skill, Task, TaskComment, User, Worksheet
 from app.services.wfm.ai_assign import suggest_assignee
+from app.services.wfm.worksheet_pdf import build_worksheet_pdf
 
 router = APIRouter()
 me_router = APIRouter()  # /api/me/tasks alá kerül
@@ -81,6 +82,105 @@ class TaskOut(BaseModel):
     status: str
     comments: list[CommentOut]
     created_at: datetime
+    worksheet_serial: str | None = None  # ML-2026-0001, ha van munkalap
+
+
+MAX_SIGNATURE_BYTES = 300_000  # ~300KB data URL-enként
+
+
+class MaterialItem(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    qty: str = Field(default="", max_length=32)
+    unit: str = Field(default="db", max_length=16)
+
+
+class WorksheetBody(BaseModel):
+    work_description: str = Field(min_length=1, max_length=8000)
+    materials: list[MaterialItem] = Field(default_factory=list, max_length=25)
+    hours_spent: float | None = Field(default=None, ge=0, le=1000)
+    client_name: str | None = Field(default=None, max_length=256)
+    client_location: str | None = Field(default=None, max_length=512)
+    employee_signature: str | None = None
+    client_signature: str | None = None
+
+
+class WorksheetOut(BaseModel):
+    serial: str
+    work_description: str
+    materials: list[MaterialItem]
+    hours_spent: float | None
+    client_name: str | None
+    client_location: str | None
+    has_employee_signature: bool
+    has_client_signature: bool
+    updated_at: datetime
+
+
+def _validate_signature(value: str | None) -> str | None:
+    if not value:
+        return None
+    if not value.startswith("data:image/png;base64,") or len(value) > MAX_SIGNATURE_BYTES:
+        raise HTTPException(status_code=422, detail={"code": "worksheet.bad_signature"})
+    return value
+
+
+def _worksheet_out(ws: Worksheet) -> WorksheetOut:
+    return WorksheetOut(
+        serial=ws.serial,
+        work_description=ws.work_description,
+        materials=[MaterialItem(**m) for m in (ws.materials or [])],
+        hours_spent=ws.hours_spent,
+        client_name=ws.client_name,
+        client_location=ws.client_location,
+        has_employee_signature=ws.employee_signature is not None,
+        has_client_signature=ws.client_signature is not None,
+        updated_at=ws.updated_at,
+    )
+
+
+async def _next_worksheet_serial(db: AsyncSession) -> str:
+    year = datetime.now(UTC).year
+    count = (
+        await db.execute(
+            select(sa_func.count()).select_from(Worksheet).where(
+                Worksheet.serial.like(f"ML-{year}-%")
+            )
+        )
+    ).scalar_one()
+    return f"ML-{year}-{count + 1:04d}"
+
+
+async def _get_worksheet(db: AsyncSession, task_id: uuid.UUID) -> Worksheet | None:
+    return (
+        await db.execute(select(Worksheet).where(Worksheet.task_id == task_id))
+    ).scalar_one_or_none()
+
+
+async def _upsert_worksheet(
+    db: AsyncSession, task: Task, body: WorksheetBody, actor: User, request: Request
+) -> Worksheet:
+    ws = await _get_worksheet(db, task.id)
+    created = ws is None
+    if ws is None:
+        ws = Worksheet(task_id=task.id, serial=await _next_worksheet_serial(db), created_by=actor.id)
+        db.add(ws)
+    ws.work_description = body.work_description.strip()
+    ws.materials = [m.model_dump() for m in body.materials]
+    ws.hours_spent = body.hours_spent
+    ws.client_name = (body.client_name or "").strip() or None
+    ws.client_location = (body.client_location or "").strip() or None
+    if body.employee_signature is not None:
+        ws.employee_signature = _validate_signature(body.employee_signature)
+    if body.client_signature is not None:
+        ws.client_signature = _validate_signature(body.client_signature)
+    await db.flush()
+    await record_audit(
+        db, actor=actor, action="worksheet.create" if created else "worksheet.update",
+        entity_type="worksheet", entity_id=ws.serial, request=request,
+    )
+    await db.commit()
+    await db.refresh(ws)  # az onupdate-es updated_at lejárt attribútum lenne
+    return ws
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -125,6 +225,14 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
     ).all()
     skills = {sid: name for sid, name in skill_rows}
     comments = await _comments_map(db, [t.id for t in tasks])
+    ws_rows = (
+        await db.execute(
+            select(Worksheet.task_id, Worksheet.serial).where(
+                Worksheet.task_id.in_([t.id for t in tasks])
+            )
+        )
+    ).all()
+    worksheet_serials = {tid: serial for tid, serial in ws_rows}
     return [
         TaskOut(
             id=str(t.id),
@@ -141,6 +249,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             status=t.status,
             comments=comments.get(t.id, []),
             created_at=t.created_at,
+            worksheet_serial=worksheet_serials.get(t.id),
         )
         for t in tasks
     ]
@@ -275,6 +384,91 @@ async def manager_comment(
     return (await _tasks_out(db, [task]))[0]
 
 
+STATUS_LABELS_HU = {
+    "open": "Nyitott",
+    "done": "Befejezett",
+    "needs_more_work": "További munkát igényel",
+}
+
+
+@router.get("/{task_id}/worksheet", response_model=WorksheetOut)
+async def get_task_worksheet(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("manager")),
+):
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    return _worksheet_out(ws)
+
+
+@router.put("/{task_id}/worksheet", response_model=WorksheetOut)
+async def manager_upsert_worksheet(
+    task_id: str,
+    body: WorksheetBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    """Vezetői kitöltés/javítás — ugyanaz a folyamat, mint a dolgozói."""
+    task = await _get_task_or_404(db, task_id)
+    return _worksheet_out(await _upsert_worksheet(db, task, body, actor, request))
+
+
+@router.get("/{task_id}/worksheet/pdf")
+async def worksheet_pdf(
+    task_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+
+    emp = (
+        await db.execute(select(Employee).where(Employee.id == task.employee_id))
+    ).scalar_one_or_none()
+    comments = (await _comments_map(db, [task.id])).get(task.id, [])
+
+    pdf = build_worksheet_pdf(
+        {
+            "serial": ws.serial,
+            "task_title": task.title,
+            "task_description": task.description,
+            "due_date": task.due_date.isoformat(),
+            "status_label": STATUS_LABELS_HU.get(task.status, task.status),
+            "employee_name": f"{emp.last_name} {emp.first_name}" if emp else "—",
+            "employee_code": emp.employee_code if emp else None,
+            "job_title": emp.job_title if emp else None,
+            "work_description": ws.work_description,
+            "materials": ws.materials or [],
+            "hours_spent": ws.hours_spent,
+            "client_name": ws.client_name,
+            "client_location": ws.client_location,
+            "employee_signature": ws.employee_signature,
+            "client_signature": ws.client_signature,
+            "comments": [
+                {"author": c.author_name, "text": c.text} for c in comments
+            ],
+            "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
+        }
+    )
+    await record_audit(
+        db, actor=actor, action="worksheet.pdf", entity_type="worksheet",
+        entity_id=ws.serial, request=request,
+    )
+    await db.commit()
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{ws.serial}.pdf"'},
+    )
+
+
 class SuggestBody(BaseModel):
     title: str = Field(min_length=1, max_length=256)
     description: str | None = Field(default=None, max_length=4000)
@@ -355,6 +549,33 @@ async def my_comment(
     )
     await db.commit()
     return (await _tasks_out(db, [task]))[0]
+
+
+@me_router.get("/{task_id}/worksheet", response_model=WorksheetOut)
+async def my_worksheet(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+):
+    task = await _own_task_or_404(db, emp, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    return _worksheet_out(ws)
+
+
+@me_router.put("/{task_id}/worksheet", response_model=WorksheetOut)
+async def my_upsert_worksheet(
+    task_id: str,
+    body: WorksheetBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """A dolgozó kitölti (vagy frissíti) a saját feladatának munkalapját."""
+    task = await _own_task_or_404(db, emp, task_id)
+    return _worksheet_out(await _upsert_worksheet(db, task, body, user, request))
 
 
 @me_router.post("/{task_id}/status", response_model=TaskOut)

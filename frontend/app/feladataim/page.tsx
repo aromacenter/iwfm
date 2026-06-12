@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, errorMessage } from "@/lib/api";
 
 interface CommentOut {
@@ -23,7 +24,34 @@ interface TaskOut {
   required_skill: { id: number; name: string } | null;
   status: "open" | "done" | "needs_more_work";
   comments: CommentOut[];
+  worksheet_serial: string | null;
 }
+
+interface MaterialRow {
+  name: string;
+  qty: string;
+  unit: string;
+}
+
+interface WorksheetForm {
+  work_description: string;
+  hours_spent: string;
+  materials: MaterialRow[];
+  client_name: string;
+  client_location: string;
+  employee_signature: string | null;
+  client_signature: string | null;
+}
+
+const EMPTY_WS: WorksheetForm = {
+  work_description: "",
+  hours_spent: "",
+  materials: [],
+  client_name: "",
+  client_location: "",
+  employee_signature: null,
+  client_signature: null,
+};
 
 const STATUS_LABELS: Record<string, string> = {
   open: "Nyitott",
@@ -42,6 +70,10 @@ export default function FeladataimPage() {
   const [comments, setComments] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [noEmployee, setNoEmployee] = useState(false);
+  const [wsTask, setWsTask] = useState<TaskOut | null>(null);
+  const [ws, setWs] = useState<WorksheetForm>(EMPTY_WS);
+  const [wsError, setWsError] = useState<string | null>(null);
+  const [wsBusy, setWsBusy] = useState(false);
 
   const load = useCallback(() => {
     api
@@ -82,6 +114,61 @@ export default function FeladataimPage() {
       alert(errorMessage(err));
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function openWorksheet(task: TaskOut) {
+    setWsError(null);
+    setWs(EMPTY_WS);
+    setWsTask(task);
+    if (task.worksheet_serial) {
+      try {
+        const existing = await api.get<{
+          work_description: string;
+          materials: MaterialRow[];
+          hours_spent: number | null;
+          client_name: string | null;
+          client_location: string | null;
+        }>(`/api/me/tasks/${task.id}/worksheet`);
+        setWs({
+          work_description: existing.work_description,
+          hours_spent: existing.hours_spent != null ? String(existing.hours_spent) : "",
+          materials: existing.materials ?? [],
+          client_name: existing.client_name ?? "",
+          client_location: existing.client_location ?? "",
+          employee_signature: null, // új aláírás csak ha újra rajzolják
+          client_signature: null,
+        });
+      } catch {
+        /* friss űrlap marad */
+      }
+    }
+  }
+
+  async function saveWorksheet() {
+    if (!wsTask) return;
+    if (!ws.work_description.trim()) {
+      setWsError("Az elvégzett munka leírása kötelező.");
+      return;
+    }
+    setWsBusy(true);
+    setWsError(null);
+    try {
+      await api.put(`/api/me/tasks/${wsTask.id}/worksheet`, {
+        work_description: ws.work_description,
+        hours_spent: ws.hours_spent ? Number(ws.hours_spent) : null,
+        materials: ws.materials.filter((m) => m.name.trim()),
+        client_name: ws.client_name || null,
+        client_location: ws.client_location || null,
+        employee_signature: ws.employee_signature,
+        client_signature: ws.client_signature,
+      });
+      setWsTask(null);
+      load();
+    } catch (err) {
+      setWsError(errorMessage(err));
+    } finally {
+      setWsBusy(false);
     }
   }
 
@@ -129,6 +216,18 @@ export default function FeladataimPage() {
             )}
 
             <div className="mt-3 space-y-2">
+              <button
+                onClick={() => openWorksheet(t)}
+                className={`w-full rounded-xl border px-4 py-2.5 text-sm font-medium ${
+                  t.worksheet_serial
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                    : "border-indigo-300 bg-indigo-50 text-indigo-800 hover:bg-indigo-100"
+                }`}
+              >
+                {t.worksheet_serial
+                  ? `📝 Munkalap kész (${t.worksheet_serial}) — szerkesztés`
+                  : "📝 Munkalap kitöltése"}
+              </button>
               <div className="flex gap-2">
                 <input
                   value={comments[t.id] ?? ""}
@@ -166,6 +265,149 @@ export default function FeladataimPage() {
           </section>
         ))}
       </div>
+
+      {wsTask && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+          <div className="my-6 w-full max-w-lg space-y-3 rounded-2xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold">📝 Munkalap — {wsTask.title}</h2>
+            {wsTask.worksheet_serial && (
+              <p className="text-xs text-slate-500">Sorszám: {wsTask.worksheet_serial}</p>
+            )}
+            <label className="block text-sm">
+              Elvégzett munka leírása *
+              <textarea
+                value={ws.work_description}
+                onChange={(e) => setWs({ ...ws, work_description: e.target.value })}
+                rows={4}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                placeholder="Mit végeztél el pontosan?"
+              />
+            </label>
+            <label className="block text-sm">
+              Ráfordított idő (óra)
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                value={ws.hours_spent}
+                onChange={(e) => setWs({ ...ws, hours_spent: e.target.value })}
+                className="mt-1 w-32 rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-sm text-slate-600">Felhasznált anyagok</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setWs({ ...ws, materials: [...ws.materials, { name: "", qty: "1", unit: "db" }] })
+                  }
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                >
+                  + Tétel
+                </button>
+              </div>
+              {ws.materials.map((m, i) => (
+                <div key={i} className="mb-1 flex gap-1">
+                  <input
+                    value={m.name}
+                    onChange={(e) => {
+                      const next = [...ws.materials];
+                      next[i] = { ...m, name: e.target.value };
+                      setWs({ ...ws, materials: next });
+                    }}
+                    placeholder="Megnevezés"
+                    className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    value={m.qty}
+                    onChange={(e) => {
+                      const next = [...ws.materials];
+                      next[i] = { ...m, qty: e.target.value };
+                      setWs({ ...ws, materials: next });
+                    }}
+                    placeholder="Menny."
+                    className="w-16 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    value={m.unit}
+                    onChange={(e) => {
+                      const next = [...ws.materials];
+                      next[i] = { ...m, unit: e.target.value };
+                      setWs({ ...ws, materials: next });
+                    }}
+                    placeholder="db"
+                    className="w-14 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setWs({ ...ws, materials: ws.materials.filter((_, idx) => idx !== i) })
+                    }
+                    className="px-1 text-slate-400 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block text-sm">
+                Ügyfél (opcionális)
+                <input
+                  value={ws.client_name}
+                  onChange={(e) => setWs({ ...ws, client_name: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </label>
+              <label className="block text-sm">
+                Helyszín (opcionális)
+                <input
+                  value={ws.client_location}
+                  onChange={(e) => setWs({ ...ws, client_location: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </label>
+            </div>
+
+            <SignatureCanvas
+              label={
+                wsTask.worksheet_serial
+                  ? "Munkavégző aláírása (üresen: a korábbi marad)"
+                  : "Munkavégző aláírása"
+              }
+              onChange={(d) => setWs((w) => ({ ...w, employee_signature: d }))}
+            />
+            <SignatureCanvas
+              label={
+                wsTask.worksheet_serial
+                  ? "Ügyfél / átvevő aláírása (üresen: a korábbi marad)"
+                  : "Ügyfél / átvevő aláírása (opcionális)"
+              }
+              onChange={(d) => setWs((w) => ({ ...w, client_signature: d }))}
+            />
+
+            {wsError && <p className="text-sm text-red-600">{wsError}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setWsTask(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+              >
+                Mégsem
+              </button>
+              <button
+                onClick={saveWorksheet}
+                disabled={wsBusy}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {wsBusy ? "Mentés…" : "Munkalap mentése"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

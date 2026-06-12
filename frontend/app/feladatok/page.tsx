@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { api, errorMessage } from "@/lib/api";
+import { api, downloadFile, errorMessage } from "@/lib/api";
 import type { EmployeeOut } from "@/lib/types";
 
 interface Skill {
@@ -32,6 +32,7 @@ interface TaskOut {
   status: "open" | "done" | "needs_more_work";
   comments: CommentOut[];
   created_at: string;
+  worksheet_serial: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -163,6 +164,17 @@ export default function FeladatokPage() {
     }
   }
 
+  async function downloadWorksheet(task: TaskOut) {
+    try {
+      await downloadFile(
+        `/api/tasks/${task.id}/worksheet/pdf`,
+        `${task.worksheet_serial ?? "munkalap"}.pdf`
+      );
+    } catch (err) {
+      alert(errorMessage(err));
+    }
+  }
+
   async function remove(task: TaskOut) {
     if (!confirm(`Törlöd a(z) „${task.title}" feladatot?`)) return;
     try {
@@ -210,6 +222,11 @@ export default function FeladatokPage() {
                       {t.required_skill.name}
                     </span>
                   )}
+                  {t.worksheet_serial && (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                      📝 {t.worksheet_serial}
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-slate-500">
                   {t.employee_name} · {t.due_date}
@@ -217,6 +234,14 @@ export default function FeladatokPage() {
                 </p>
               </div>
               <div className="flex gap-2">
+                {t.worksheet_serial && (
+                  <button
+                    onClick={() => downloadWorksheet(t)}
+                    className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                  >
+                    Munkalap PDF
+                  </button>
+                )}
                 {t.status !== "open" && (
                   <button
                     onClick={() => setStatus(t, "open")}
