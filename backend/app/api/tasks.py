@@ -43,6 +43,9 @@ class TaskCreateBody(BaseModel):
     employee_id: str
     due_date: date
     required_skill_id: int | None = None
+    # Online munkalap fejléc-adatai — a feladattal együtt áll ki a munkalap.
+    client_name: str | None = Field(default=None, max_length=256)
+    client_location: str | None = Field(default=None, max_length=512)
 
 
 class TaskPatchBody(BaseModel):
@@ -83,6 +86,7 @@ class TaskOut(BaseModel):
     comments: list[CommentOut]
     created_at: datetime
     worksheet_serial: str | None = None  # ML-2026-0001, ha van munkalap
+    worksheet_completed: bool = False  # kitöltötte-e már a dolgozó
 
 
 MAX_SIGNATURE_BYTES = 300_000  # ~300KB data URL-enként
@@ -227,12 +231,13 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
     comments = await _comments_map(db, [t.id for t in tasks])
     ws_rows = (
         await db.execute(
-            select(Worksheet.task_id, Worksheet.serial).where(
+            select(Worksheet.task_id, Worksheet.serial, Worksheet.work_description).where(
                 Worksheet.task_id.in_([t.id for t in tasks])
             )
         )
     ).all()
-    worksheet_serials = {tid: serial for tid, serial in ws_rows}
+    worksheet_serials = {tid: serial for tid, serial, _ in ws_rows}
+    worksheet_done = {tid: bool((desc or "").strip()) for tid, _, desc in ws_rows}
     return [
         TaskOut(
             id=str(t.id),
@@ -250,6 +255,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             comments=comments.get(t.id, []),
             created_at=t.created_at,
             worksheet_serial=worksheet_serials.get(t.id),
+            worksheet_completed=worksheet_done.get(t.id, False),
         )
         for t in tasks
     ]
@@ -319,9 +325,24 @@ async def create_task(
     )
     db.add(task)
     await db.flush()
+
+    # A feladattal együtt azonnal kiáll az online munkalap (ML-sorszámmal);
+    # az elvégzett munkát/anyagokat/aláírást a dolgozó tölti ki később.
+    ws = Worksheet(
+        task_id=task.id,
+        serial=await _next_worksheet_serial(db),
+        work_description="",
+        materials=[],
+        client_name=(body.client_name or "").strip() or None,
+        client_location=(body.client_location or "").strip() or None,
+        created_by=actor.id,
+    )
+    db.add(ws)
+    await db.flush()
+
     await record_audit(
         db, actor=actor, action="task.create", entity_type="task",
-        entity_id=str(task.id), request=request,
+        entity_id=str(task.id), detail={"worksheet": ws.serial}, request=request,
     )
     await db.commit()
     return (await _tasks_out(db, [task]))[0]

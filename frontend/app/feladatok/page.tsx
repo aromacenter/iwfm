@@ -33,6 +33,7 @@ interface TaskOut {
   comments: CommentOut[];
   created_at: string;
   worksheet_serial: string | null;
+  worksheet_completed: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -64,6 +65,8 @@ export default function FeladatokPage() {
     employee_id: "",
     due_date: todayIso(),
     required_skill_id: 0,
+    client_name: "",
+    client_location: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -138,15 +141,23 @@ export default function FeladatokPage() {
     setBusy(true);
     setError(null);
     try {
-      await api.post("/api/tasks", {
+      const created = await api.post<TaskOut>("/api/tasks", {
         title: form.title,
         description: form.description || null,
         employee_id: form.employee_id,
         due_date: form.due_date,
         required_skill_id: form.required_skill_id || null,
+        client_name: form.client_name || null,
+        client_location: form.client_location || null,
       });
       setShowForm(false);
-      setForm({ title: "", description: "", employee_id: "", due_date: todayIso(), required_skill_id: 0 });
+      setForm({
+        title: "", description: "", employee_id: "", due_date: todayIso(),
+        required_skill_id: 0, client_name: "", client_location: "",
+      });
+      if (created.worksheet_serial) {
+        alert(`Munkalap kiállítva: ${created.worksheet_serial}\nA dolgozó a telefonján tölti ki a munkavégzés után.`);
+      }
       load();
     } catch (err) {
       setError(errorMessage(err));
@@ -203,7 +214,7 @@ export default function FeladatokPage() {
           onClick={() => setShowForm(true)}
           className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
         >
-          + Új feladat
+          + Új munkalap / feladat
         </button>
       </div>
 
@@ -223,8 +234,15 @@ export default function FeladatokPage() {
                     </span>
                   )}
                   {t.worksheet_serial && (
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
-                      📝 {t.worksheet_serial}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs ${
+                        t.worksheet_completed
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                      }`}
+                      title={t.worksheet_completed ? "A dolgozó kitöltötte" : "Kiállítva — kitöltésre vár"}
+                    >
+                      📝 {t.worksheet_serial} · {t.worksheet_completed ? "kitöltve" : "kiállítva"}
                     </span>
                   )}
                 </div>
@@ -304,7 +322,11 @@ export default function FeladatokPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <form onSubmit={submit} className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">Új feladat</h2>
+            <h2 className="text-lg font-semibold">📝 Új munkalap kiállítása</h2>
+            <p className="text-xs text-slate-500">
+              A feladat online munkalapként áll ki (automatikus ML-sorszámmal) — az elvégzett
+              munkát, anyagokat és aláírásokat a dolgozó tölti ki a telefonján.
+            </p>
             <label className="block text-sm">
               Feladat címe *
               <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
@@ -373,6 +395,16 @@ export default function FeladatokPage() {
               Határidő (nap) *
               <input required type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-sm">
+                Ügyfél (opcionális)
+                <input value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} placeholder="pl. Minta Kft." className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+              <label className="block text-sm">
+                Helyszín (opcionális)
+                <input value={form.client_location} onChange={(e) => setForm({ ...form, client_location: e.target.value })} placeholder="cím / telephely" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+            </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">Mégsem</button>

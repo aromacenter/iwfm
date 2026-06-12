@@ -25,6 +25,7 @@ interface TaskOut {
   status: "open" | "done" | "needs_more_work";
   comments: CommentOut[];
   worksheet_serial: string | null;
+  worksheet_completed: boolean;
 }
 
 interface MaterialRow {
@@ -219,14 +220,14 @@ export default function FeladataimPage() {
               <button
                 onClick={() => openWorksheet(t)}
                 className={`w-full rounded-xl border px-4 py-2.5 text-sm font-medium ${
-                  t.worksheet_serial
+                  t.worksheet_completed
                     ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                     : "border-indigo-300 bg-indigo-50 text-indigo-800 hover:bg-indigo-100"
                 }`}
               >
-                {t.worksheet_serial
+                {t.worksheet_completed
                   ? `📝 Munkalap kész (${t.worksheet_serial}) — szerkesztés`
-                  : "📝 Munkalap kitöltése"}
+                  : `📝 Munkalap kitöltése${t.worksheet_serial ? ` (${t.worksheet_serial})` : ""}`}
               </button>
               <div className="flex gap-2">
                 <input

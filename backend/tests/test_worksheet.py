@@ -121,13 +121,45 @@ async def test_manager_pdf_download(client, manager):
     assert "ML-" in res.headers["content-disposition"]
 
 
-async def test_pdf_404_without_worksheet(client, manager):
+async def test_task_creation_issues_worksheet(client, manager):
+    """A feladat létrehozása eleve online munkalapot állít ki."""
     _, mgr = manager
-    emp, _ = await make_emp()
+    emp, _ = await make_emp(email="kiallit@example.com")
+    res = await client.post(
+        "/api/tasks",
+        json={
+            "title": "Kazáncsere",
+            "employee_id": str(emp.id),
+            "due_date": date.today().isoformat(),
+            "client_name": "Minta Bt.",
+            "client_location": "Győr, Ipar u. 3.",
+        },
+        headers=mgr,
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["worksheet_serial"].startswith("ML-")
+    assert body["worksheet_completed"] is False  # még üres — a dolgozó tölti ki
+
+    ws = (await client.get(f"/api/tasks/{body['id']}/worksheet", headers=mgr)).json()
+    assert ws["client_name"] == "Minta Bt."
+    assert ws["client_location"] == "Győr, Ipar u. 3."
+    assert ws["work_description"] == ""
+
+    # a kiállított (üres) munkalap is nyomtatható
+    pdf = await client.get(f"/api/tasks/{body['id']}/worksheet/pdf", headers=mgr)
+    assert pdf.status_code == 200
+    assert pdf.content[:5] == b"%PDF-"
+
+
+async def test_worksheet_completed_after_employee_fill(client, manager):
+    _, mgr = manager
+    emp, emp_h = await make_emp(email="kitolt@example.com")
     task = await task_for(client, mgr, emp)
-    assert (
-        await client.get(f"/api/tasks/{task['id']}/worksheet/pdf", headers=mgr)
-    ).status_code == 404
+    assert task["worksheet_completed"] is False
+    await client.put(f"/api/me/tasks/{task['id']}/worksheet", json=ws_payload(), headers=emp_h)
+    listed = (await client.get("/api/tasks", headers=mgr)).json()
+    assert listed[0]["worksheet_completed"] is True
 
 
 async def test_manager_can_edit_worksheet(client, manager):
