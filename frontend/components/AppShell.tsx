@@ -6,18 +6,19 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { LanguageSwitcher, useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
 
 const NAV = [
-  { href: "/vezerlopult", label: "Vezérlőpult", roles: ["admin", "manager"] },
-  { href: "/feladatok", label: "Feladatok", roles: ["admin", "manager"] },
-  { href: "/dolgozok", label: "Dolgozók", roles: ["admin", "manager"] },
-  { href: "/beosztas", label: "Beosztás", roles: ["admin", "manager"] },
-  { href: "/tavollet", label: "Távollét", roles: ["admin", "manager"] },
-  { href: "/jelenlet", label: "Jelenlét", roles: ["admin", "manager"] },
-  { href: "/beallitasok", label: "Beállítások", roles: ["admin"] },
-  { href: "/beosztasom", label: "Saját beosztásom", roles: ["employee"] },
-  { href: "/feladataim", label: "Feladatok", roles: ["employee"] },
+  { href: "/vezerlopult", key: "nav.dashboard", roles: ["admin", "manager"] },
+  { href: "/feladatok", key: "nav.tasks", roles: ["admin", "manager"] },
+  { href: "/dolgozok", key: "nav.employees", roles: ["admin", "manager"] },
+  { href: "/beosztas", key: "nav.schedule", roles: ["admin", "manager"] },
+  { href: "/tavollet", key: "nav.timeOff", roles: ["admin", "manager"] },
+  { href: "/jelenlet", key: "nav.attendance", roles: ["admin", "manager"] },
+  { href: "/beallitasok", key: "nav.settings", roles: ["admin"] },
+  { href: "/beosztasom", key: "nav.mySchedule", roles: ["employee"] },
+  { href: "/feladataim", key: "nav.myTasks", roles: ["employee"] },
 ] as const;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -25,6 +26,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useT();
 
   useEffect(() => {
     api
@@ -40,7 +42,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (loading) {
-    return <div className="p-10 text-slate-500">Betöltés…</div>;
+    return <div className="p-10 text-slate-500">{t("common.loading")}</div>;
   }
   if (!user) return null;
 
@@ -63,17 +65,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                {item.label}
+                {t(item.key)}
               </Link>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
+            <LanguageSwitcher />
             <span className="text-slate-500">{user.display_name}</span>
             <button
               onClick={logout}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-600 hover:bg-slate-100"
             >
-              Kijelentkezés
+              {t("common.logout")}
             </button>
           </div>
         </div>

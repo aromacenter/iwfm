@@ -1,10 +1,11 @@
 "use client";
 
-/** Beállítások (admin): email-fiók az értesítésekhez + skillek kezelése. */
+/** Beállítások (admin): email-fiók az értesítésekhez + skillek + AI integráció. */
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 interface EmailSettings {
   enabled: boolean;
@@ -32,6 +33,8 @@ interface AISettings {
 const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 
 export default function BeallitasokPage() {
+  const { t } = useT();
+
   // --- Email ---
   const [email, setEmail] = useState({
     enabled: false,
@@ -98,39 +101,6 @@ export default function BeallitasokPage() {
   }, []);
   useEffect(load, [load]);
 
-  async function saveAi() {
-    setAiBusy(true);
-    setAiMsg(null);
-    try {
-      await api.put("/api/settings/ai", {
-        active_provider: ai.active_provider,
-        anthropic_key: ai.anthropic_key || null,
-        anthropic_model: ai.anthropic_model,
-        gemini_key: ai.gemini_key || null,
-        gemini_model: ai.gemini_model,
-      });
-      setAiMsg("✓ Mentve.");
-      load();
-    } catch (err) {
-      setAiMsg(errorMessage(err));
-    } finally {
-      setAiBusy(false);
-    }
-  }
-
-  async function testAi(provider: "anthropic" | "gemini") {
-    setAiBusy(true);
-    setAiMsg(null);
-    try {
-      const res = await api.post<{ reply: string }>("/api/settings/ai/test", { provider });
-      setAiMsg(`✓ ${provider === "anthropic" ? "Claude" : "Gemini"} válaszolt: „${res.reply.trim()}"`);
-    } catch (err) {
-      setAiMsg(errorMessage(err));
-    } finally {
-      setAiBusy(false);
-    }
-  }
-
   async function saveEmail(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -143,7 +113,7 @@ export default function BeallitasokPage() {
         password: email.password || null,
         from_address: email.from_address || null,
       });
-      setEmailMsg("✓ Mentve.");
+      setEmailMsg(t("common.saved"));
       setEmail((s) => ({ ...s, password: "" }));
       load();
     } catch (err) {
@@ -159,7 +129,7 @@ export default function BeallitasokPage() {
     setEmailMsg(null);
     try {
       await api.post("/api/settings/email/test", { to: testTo });
-      setEmailMsg(`✓ Teszt email elküldve: ${testTo}`);
+      setEmailMsg(t("settings.testSent", { to: testTo }));
     } catch (err) {
       setEmailMsg(errorMessage(err));
     } finally {
@@ -181,7 +151,7 @@ export default function BeallitasokPage() {
   }
 
   async function removeSkill(skill: Skill) {
-    if (!confirm(`Törlöd a(z) „${skill.name}" skillt? A dolgozókról is lekerül.`)) return;
+    if (!confirm(t("settings.deleteSkillConfirm", { name: skill.name }))) return;
     try {
       await api.delete(`/api/settings/skills/${skill.id}`);
       load();
@@ -190,9 +160,47 @@ export default function BeallitasokPage() {
     }
   }
 
+  async function saveAi() {
+    setAiBusy(true);
+    setAiMsg(null);
+    try {
+      await api.put("/api/settings/ai", {
+        active_provider: ai.active_provider,
+        anthropic_key: ai.anthropic_key || null,
+        anthropic_model: ai.anthropic_model,
+        gemini_key: ai.gemini_key || null,
+        gemini_model: ai.gemini_model,
+      });
+      setAiMsg(t("common.saved"));
+      load();
+    } catch (err) {
+      setAiMsg(errorMessage(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function testAi(provider: "anthropic" | "gemini") {
+    setAiBusy(true);
+    setAiMsg(null);
+    try {
+      const res = await api.post<{ reply: string }>("/api/settings/ai/test", { provider });
+      setAiMsg(
+        t("settings.aiReplied", {
+          provider: provider === "anthropic" ? "Claude" : "Gemini",
+          reply: res.reply.trim(),
+        })
+      );
+    } catch (err) {
+      setAiMsg(errorMessage(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   return (
     <AppShell>
-      <h1 className="mb-4 text-xl font-bold">Beállítások</h1>
+      <h1 className="mb-4 text-xl font-bold">{t("settings.title")}</h1>
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {/* Email értesítések */}
@@ -200,11 +208,8 @@ export default function BeallitasokPage() {
           onSubmit={saveEmail}
           className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
         >
-          <h2 className="font-semibold">Email-fiók (értesítések)</h2>
-          <p className="text-xs text-slate-500">
-            Ha bekapcsolod, a rendszer emailt küld a dolgozóknak az új beosztásról, a közölt
-            beosztás módosulásáról és a távollét-kérelmük elbírálásáról.
-          </p>
+          <h2 className="font-semibold">{t("settings.emailTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.emailHint")}</p>
           <label className="flex items-center gap-2 text-sm font-medium">
             <input
               type="checkbox"
@@ -212,20 +217,20 @@ export default function BeallitasokPage() {
               onChange={(e) => setEmail({ ...email, enabled: e.target.checked })}
               className="h-4 w-4"
             />
-            Értesítések bekapcsolva
+            {t("settings.emailEnabled")}
           </label>
           <div className="grid grid-cols-3 gap-3">
             <label className="col-span-2 block text-sm">
-              SMTP szerver
+              {t("settings.smtpHost")}
               <input
                 value={email.host}
                 onChange={(e) => setEmail({ ...email, host: e.target.value })}
-                placeholder="pl. smtp.gmail.com"
+                placeholder={t("settings.smtpHostPlaceholder")}
                 className={inputCls}
               />
             </label>
             <label className="block text-sm">
-              Port
+              {t("settings.port")}
               <input
                 type="number"
                 value={email.port}
@@ -235,32 +240,32 @@ export default function BeallitasokPage() {
             </label>
           </div>
           <label className="block text-sm">
-            Felhasználónév
+            {t("settings.username")}
             <input
               value={email.username}
               onChange={(e) => setEmail({ ...email, username: e.target.value })}
-              placeholder="pl. ertesites@cegem.hu"
+              placeholder={t("settings.usernamePlaceholder")}
               className={inputCls}
             />
           </label>
           <label className="block text-sm">
-            Jelszó{" "}
-            {hasPassword && <span className="text-slate-400">(mentve — üresen hagyva nem változik)</span>}
+            {t("settings.passwordLabel")}{" "}
+            {hasPassword && <span className="text-slate-400">{t("settings.passwordSaved")}</span>}
             <input
               type="password"
               value={email.password}
               onChange={(e) => setEmail({ ...email, password: e.target.value })}
-              placeholder={hasPassword ? "••••••••" : "SMTP / alkalmazás-jelszó"}
+              placeholder={hasPassword ? "••••••••" : t("settings.passwordPlaceholder")}
               className={inputCls}
             />
           </label>
           <label className="block text-sm">
-            Feladó cím
+            {t("settings.fromAddress")}
             <input
               type="email"
               value={email.from_address}
               onChange={(e) => setEmail({ ...email, from_address: e.target.value })}
-              placeholder="pl. ertesites@cegem.hu"
+              placeholder={t("settings.usernamePlaceholder")}
               className={inputCls}
             />
           </label>
@@ -271,12 +276,9 @@ export default function BeallitasokPage() {
               onChange={(e) => setEmail({ ...email, use_tls: e.target.checked })}
               className="h-4 w-4"
             />
-            TLS titkosítás (STARTTLS — 587-es porthoz)
+            {t("settings.tls")}
           </label>
-          <p className="text-xs text-slate-400">
-            Gmail esetén: smtp.gmail.com, 587-es port, és a Google-fiókban generált
-            <em> alkalmazásjelszó</em> kell (nem a sima jelszó).
-          </p>
+          <p className="text-xs text-slate-400">{t("settings.gmailHint")}</p>
           {emailMsg && (
             <p className={`text-sm ${emailMsg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>
               {emailMsg}
@@ -287,13 +289,13 @@ export default function BeallitasokPage() {
               disabled={busy}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >
-              Mentés
+              {t("common.save")}
             </button>
             <input
               type="email"
               value={testTo}
               onChange={(e) => setTestTo(e.target.value)}
-              placeholder="teszt címzett"
+              placeholder={t("settings.testRecipient")}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
             <button
@@ -302,32 +304,29 @@ export default function BeallitasokPage() {
               disabled={busy || !testTo}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50"
             >
-              Teszt küldése
+              {t("settings.sendTest")}
             </button>
           </div>
         </form>
 
         {/* Skillek */}
         <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-semibold">Skillek / képesítések</h2>
-          <p className="text-xs text-slate-500">
-            Hozz létre skilleket (pl. targoncavezető, pénztár, elsősegély), majd a Dolgozók
-            oldalon rendeld hozzájuk. Később a beosztás-tervezésben is használható lesz.
-          </p>
+          <h2 className="font-semibold">{t("settings.skillsTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.skillsHint")}</p>
           <form onSubmit={addSkill} className="flex gap-2">
             <input
               value={newSkill}
               onChange={(e) => setNewSkill(e.target.value)}
-              placeholder="Új skill neve"
+              placeholder={t("settings.newSkillPlaceholder")}
               className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
             <button className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-              + Hozzáad
+              {t("settings.addSkill")}
             </button>
           </form>
           {skillMsg && <p className="text-sm text-red-600">{skillMsg}</p>}
           {skills.length === 0 ? (
-            <p className="text-sm text-slate-400">Még nincs skill létrehozva.</p>
+            <p className="text-sm text-slate-400">{t("settings.noSkills")}</p>
           ) : (
             <ul className="flex flex-wrap gap-2">
               {skills.map((s) => (
@@ -339,7 +338,7 @@ export default function BeallitasokPage() {
                   <button
                     onClick={() => removeSkill(s)}
                     className="rounded-full px-1.5 text-indigo-400 hover:bg-indigo-100 hover:text-red-600"
-                    title="Törlés"
+                    title={t("common.delete")}
                   >
                     ✕
                   </button>
@@ -351,16 +350,12 @@ export default function BeallitasokPage() {
 
         {/* AI integráció */}
         <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="font-semibold">AI integráció</h2>
-          <p className="text-xs text-slate-500">
-            Köss be egy AI szolgáltatót — ez fogja hajtani a későbbi intelligens funkciókat
-            (pl. feladatok automatikus kiosztása a megfelelő skillű kollégára). A kulcsok
-            titkosítva tárolódnak és soha nem kérdezhetők vissza.
-          </p>
+          <h2 className="font-semibold">{t("settings.aiTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.aiHint")}</p>
 
           <div className="flex flex-wrap gap-4 text-sm">
             {([
-              ["none", "Nincs"],
+              ["none", t("settings.aiNone")],
               ["anthropic", "Anthropic (Claude)"],
               ["gemini", "Google Gemini"],
             ] as const).map(([value, label]) => (
@@ -382,10 +377,8 @@ export default function BeallitasokPage() {
             <div className="space-y-2 rounded-xl border border-slate-200 p-4">
               <h3 className="text-sm font-semibold">Anthropic Claude</h3>
               <label className="block text-sm">
-                API kulcs{" "}
-                {aiHasKeys.anthropic && (
-                  <span className="text-slate-400">(mentve — üresen hagyva nem változik)</span>
-                )}
+                {t("settings.apiKey")}{" "}
+                {aiHasKeys.anthropic && <span className="text-slate-400">{t("settings.keySaved")}</span>}
                 <input
                   type="password"
                   value={ai.anthropic_key}
@@ -395,7 +388,7 @@ export default function BeallitasokPage() {
                 />
               </label>
               <label className="block text-sm">
-                Modell
+                {t("settings.model")}
                 <input
                   value={ai.anthropic_model}
                   onChange={(e) => setAi({ ...ai, anthropic_model: e.target.value })}
@@ -408,21 +401,17 @@ export default function BeallitasokPage() {
                 disabled={aiBusy || !aiHasKeys.anthropic}
                 className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-40"
               >
-                Kapcsolat tesztelése
+                {t("settings.testConnection")}
               </button>
-              <p className="text-xs text-slate-400">
-                Kulcs: console.anthropic.com → API Keys
-              </p>
+              <p className="text-xs text-slate-400">{t("settings.anthropicKeyHint")}</p>
             </div>
 
             {/* Gemini */}
             <div className="space-y-2 rounded-xl border border-slate-200 p-4">
               <h3 className="text-sm font-semibold">Google Gemini</h3>
               <label className="block text-sm">
-                API kulcs{" "}
-                {aiHasKeys.gemini && (
-                  <span className="text-slate-400">(mentve — üresen hagyva nem változik)</span>
-                )}
+                {t("settings.apiKey")}{" "}
+                {aiHasKeys.gemini && <span className="text-slate-400">{t("settings.keySaved")}</span>}
                 <input
                   type="password"
                   value={ai.gemini_key}
@@ -432,7 +421,7 @@ export default function BeallitasokPage() {
                 />
               </label>
               <label className="block text-sm">
-                Modell
+                {t("settings.model")}
                 <input
                   value={ai.gemini_model}
                   onChange={(e) => setAi({ ...ai, gemini_model: e.target.value })}
@@ -445,11 +434,9 @@ export default function BeallitasokPage() {
                 disabled={aiBusy || !aiHasKeys.gemini}
                 className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-40"
               >
-                Kapcsolat tesztelése
+                {t("settings.testConnection")}
               </button>
-              <p className="text-xs text-slate-400">
-                Kulcs: aistudio.google.com → Get API key
-              </p>
+              <p className="text-xs text-slate-400">{t("settings.geminiKeyHint")}</p>
             </div>
           </div>
 
@@ -464,7 +451,7 @@ export default function BeallitasokPage() {
             disabled={aiBusy}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            AI beállítások mentése
+            {t("settings.saveAi")}
           </button>
         </div>
       </div>

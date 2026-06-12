@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, errorMessage } from "@/lib/api";
+import { LanguageSwitcher, useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
 
 export default function LoginPage() {
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
+  const { t } = useT();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +42,9 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
+        <div className="mb-2 flex justify-end">
+          <LanguageSwitcher />
+        </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/logo.svg"
@@ -48,11 +53,11 @@ export default function LoginPage() {
         />
         <form onSubmit={submit} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold">
-            {mode === "login" ? "Bejelentkezés" : "Első admin létrehozása"}
+            {mode === "login" ? t("login.title") : t("login.bootstrapTitle")}
           </h2>
           {mode === "bootstrap" && (
             <label className="block text-sm">
-              Megjelenített név
+              {t("login.displayName")}
               <input
                 required
                 value={displayName}
@@ -62,7 +67,7 @@ export default function LoginPage() {
             </label>
           )}
           <label className="block text-sm">
-            Email
+            {t("login.email")}
             <input
               required
               type="email"
@@ -72,7 +77,8 @@ export default function LoginPage() {
             />
           </label>
           <label className="block text-sm">
-            Jelszó {mode === "bootstrap" && <span className="text-slate-400">(min. 10 karakter)</span>}
+            {t("login.password")}{" "}
+            {mode === "bootstrap" && <span className="text-slate-400">{t("login.passwordHint")}</span>}
             <input
               required
               type="password"
@@ -87,7 +93,7 @@ export default function LoginPage() {
             disabled={busy}
             className="w-full rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            {busy ? "…" : mode === "login" ? "Belépés" : "Létrehozás"}
+            {busy ? "…" : mode === "login" ? t("login.signIn") : t("login.create")}
           </button>
           <button
             type="button"
@@ -97,16 +103,14 @@ export default function LoginPage() {
             }}
             className="w-full text-center text-xs text-slate-500 hover:text-indigo-600"
           >
-            {mode === "login"
-              ? "Első indítás? Admin fiók létrehozása"
-              : "Vissza a bejelentkezéshez"}
+            {mode === "login" ? t("login.toBootstrap") : t("login.toLogin")}
           </button>
         </form>
         <a
           href="/ora"
           className="mt-4 block text-center text-sm text-slate-500 hover:text-indigo-600"
         >
-          ⏱ Munkaidő-terminál (blokkolás törzsszámmal) →
+          {t("login.kioskLink")}
         </a>
       </div>
     </div>

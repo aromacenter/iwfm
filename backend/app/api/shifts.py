@@ -77,6 +77,7 @@ class ViolationOut(BaseModel):
     code: str
     severity: str
     message: str
+    params: dict = {}
     employee_id: str | None
     shift_ids: list[str]
 
@@ -117,6 +118,7 @@ def _violation_out(v: Violation) -> ViolationOut:
         code=v.code,
         severity=v.severity,
         message=v.message,
+        params=v.params,
         employee_id=str(v.employee_id) if v.employee_id else None,
         shift_ids=[str(i) for i in v.shift_ids],
     )

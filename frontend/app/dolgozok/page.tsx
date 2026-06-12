@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import type { AuthUser, EmployeeOut } from "@/lib/types";
 
 interface RevealOut {
@@ -48,13 +49,7 @@ const EMPTY_FORM = {
 
 type FormState = typeof EMPTY_FORM;
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block text-sm">
       <span className="text-slate-600">{label}</span>
@@ -77,6 +72,7 @@ export default function DolgozokPage() {
   const [revealed, setRevealed] = useState<Record<string, RevealOut>>({});
   const [allSkills, setAllSkills] = useState<Skill[]>([]);
   const [skillIds, setSkillIds] = useState<number[]>([]);
+  const { t } = useT();
 
   const load = useCallback(() => {
     api.get<EmployeeOut[]>("/api/employees").then(setEmployees).catch(() => {});
@@ -92,7 +88,6 @@ export default function DolgozokPage() {
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
-    // gépelésre tűnjön el a mező hibajelzése
     if (typeof key === "string" && fieldErrors[key]) {
       setFieldErrors((fe) => {
         const next = { ...fe };
@@ -102,7 +97,6 @@ export default function DolgozokPage() {
     }
   }
 
-  /** Hibás mezőhöz piros keret. */
   function fieldCls(key: string): string {
     return fieldErrors[key]
       ? "mt-1 w-full rounded-lg border-2 border-red-500 bg-red-50 px-3 py-2 text-sm"
@@ -175,7 +169,6 @@ export default function DolgozokPage() {
           annual_leave_days: form.annual_leave_days,
           skill_ids: skillIds,
         };
-        // érzékeny mezők csak akkor, ha kitöltötték
         for (const k of ["tax_id", "taj", "bank_account", "wage_amount"] as const) {
           if (form[k].trim() !== "") body[k] = form[k].trim();
         }
@@ -200,13 +193,13 @@ export default function DolgozokPage() {
           initial_password: clean(form.initial_password),
         });
         const info = [
-          created.employee_code ? `Törzsszám (blokkoláshoz): ${created.employee_code}` : null,
+          created.employee_code ? t("emp.createdCode", { code: created.employee_code }) : null,
           created.generated_password
-            ? `Belépési jelszó (csak most jelenik meg): ${created.generated_password}`
+            ? t("emp.createdPassword", { password: created.generated_password })
             : null,
         ].filter(Boolean);
         if (info.length > 0) {
-          alert(`Dolgozó létrehozva — add át neki:\n\n${info.join("\n")}`);
+          alert(`${t("emp.createdInfo")}\n\n${info.join("\n")}`);
         }
       }
       setShowForm(false);
@@ -215,7 +208,7 @@ export default function DolgozokPage() {
       if (err instanceof ApiError && err.code === "employee.invalid_ids") {
         const detail = err.detail as { fields?: Record<string, string> };
         setFieldErrors(detail.fields ?? {});
-        setError("Javítsd a pirossal jelölt mezőket.");
+        setError(t("emp.fixMarked"));
       } else {
         setError(errorMessage(err));
       }
@@ -236,13 +229,13 @@ export default function DolgozokPage() {
   return (
     <AppShell>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold">Dolgozók</h1>
+        <h1 className="text-xl font-bold">{t("emp.title")}</h1>
         {isAdmin && (
           <button
             onClick={openCreate}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
           >
-            + Új dolgozó
+            {t("emp.new")}
           </button>
         )}
       </div>
@@ -251,15 +244,15 @@ export default function DolgozokPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-              <th className="px-4 py-3">Név</th>
-              <th className="px-4 py-3">Törzsszám</th>
-              <th className="px-4 py-3">Munkakör</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Belépés</th>
-              <th className="px-4 py-3">Heti óra</th>
-              <th className="px-4 py-3">Adóazonosító</th>
-              <th className="px-4 py-3">TAJ</th>
-              <th className="px-4 py-3">Bankszámla</th>
+              <th className="px-4 py-3">{t("emp.name")}</th>
+              <th className="px-4 py-3">{t("emp.code")}</th>
+              <th className="px-4 py-3">{t("emp.jobTitle")}</th>
+              <th className="px-4 py-3">{t("emp.email")}</th>
+              <th className="px-4 py-3">{t("emp.hireDate")}</th>
+              <th className="px-4 py-3">{t("emp.weeklyHours")}</th>
+              <th className="px-4 py-3">{t("emp.taxId")}</th>
+              <th className="px-4 py-3">{t("emp.taj")}</th>
+              <th className="px-4 py-3">{t("emp.bankAccount")}</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -272,16 +265,15 @@ export default function DolgozokPage() {
                     <div className="font-medium">
                       {emp.last_name} {emp.first_name}
                       {emp.status === "inactive" && (
-                        <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs">inaktív</span>
+                        <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs">{t("emp.inactive")}</span>
                       )}
                     </div>
                     {(emp.skills ?? []).length > 0 && (
                       <div className="group relative mt-0.5 inline-flex w-fit cursor-default items-center gap-1 text-xs text-slate-400">
-                        Skillek
+                        {t("emp.skills")}
                         <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-semibold text-slate-400 group-hover:border-indigo-400 group-hover:text-indigo-600">
                           i
                         </span>
-                        {/* buborék */}
                         <div className="invisible absolute left-0 top-5 z-20 w-max max-w-64 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100">
                           <div className="flex flex-wrap gap-1">
                             {emp.skills.map((s) => (
@@ -314,16 +306,16 @@ export default function DolgozokPage() {
                           <button
                             onClick={() => reveal(emp.id)}
                             className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
-                            title="Érzékeny adatok megjelenítése (auditálva)"
+                            title={t("emp.revealTitle")}
                           >
-                            Felfedés
+                            {t("emp.reveal")}
                           </button>
                         )}
                         <button
                           onClick={() => openEdit(emp)}
                           className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
                         >
-                          Szerkesztés
+                          {t("common.edit")}
                         </button>
                       </div>
                     )}
@@ -334,7 +326,7 @@ export default function DolgozokPage() {
             {employees.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
-                  Még nincs dolgozó felvéve.
+                  {t("emp.empty")}
                 </td>
               </tr>
             )}
@@ -349,76 +341,76 @@ export default function DolgozokPage() {
             className="my-8 w-full max-w-2xl space-y-4 rounded-2xl bg-white p-6 shadow-xl"
           >
             <h2 className="text-lg font-semibold">
-              {editing ? `${editing.last_name} ${editing.first_name} szerkesztése` : "Új dolgozó"}
+              {editing
+                ? t("emp.editTitle", { name: `${editing.last_name} ${editing.first_name}` })
+                : t("emp.newTitle")}
             </h2>
 
             <fieldset className="grid grid-cols-2 gap-3">
-              <legend className="mb-1 text-sm font-semibold text-slate-700">Személyes adatok</legend>
-              <Field label="Vezetéknév *">
+              <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.personalSection")}</legend>
+              <Field label={t("emp.lastName")}>
                 <input required value={form.last_name} onChange={(e) => set("last_name", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Keresztnév *">
+              <Field label={t("emp.firstName")}>
                 <input required value={form.first_name} onChange={(e) => set("first_name", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Születési név">
+              <Field label={t("emp.birthName")}>
                 <input value={form.birth_name} onChange={(e) => set("birth_name", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Anyja neve">
+              <Field label={t("emp.motherName")}>
                 <input value={form.mother_name} onChange={(e) => set("mother_name", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Születési hely">
+              <Field label={t("emp.birthPlace")}>
                 <input value={form.birth_place} onChange={(e) => set("birth_place", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Születési idő">
+              <Field label={t("emp.birthDate")}>
                 <input type="date" value={form.birth_date} onChange={(e) => set("birth_date", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Állampolgárság">
+              <Field label={t("emp.citizenship")}>
                 <input value={form.citizenship} onChange={(e) => set("citizenship", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Telefonszám">
+              <Field label={t("emp.phone")}>
                 <input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+36 30 123 4567" className={inputCls} />
               </Field>
-              <Field label="Állandó lakcím">
+              <Field label={t("emp.address")}>
                 <input value={form.address} onChange={(e) => set("address", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Tartózkodási cím">
+              <Field label={t("emp.residenceAddress")}>
                 <input value={form.residence_address} onChange={(e) => set("residence_address", e.target.value)} className={inputCls} />
               </Field>
             </fieldset>
 
             <fieldset className="grid grid-cols-2 gap-3">
-              <legend className="mb-1 text-sm font-semibold text-slate-700">
-                Azonosítók (titkosítva tárolva)
-              </legend>
-              <Field label={editing ? "Adóazonosító jel (csak ha módosul)" : "Adóazonosító jel"}>
+              <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.idsSection")}</legend>
+              <Field label={editing ? t("emp.taxIdLabelEdit") : t("emp.taxIdLabel")}>
                 <input value={form.tax_id} onChange={(e) => set("tax_id", e.target.value)} placeholder="8xxxxxxxxx" className={fieldCls("tax_id")} />
                 {fieldErrors.tax_id && <p className="mt-1 text-xs text-red-600">{fieldErrors.tax_id}</p>}
               </Field>
-              <Field label={editing ? "TAJ szám (csak ha módosul)" : "TAJ szám"}>
+              <Field label={editing ? t("emp.tajLabelEdit") : t("emp.tajLabel")}>
                 <input value={form.taj} onChange={(e) => set("taj", e.target.value)} placeholder="xxx xxx xxx" className={fieldCls("taj")} />
                 {fieldErrors.taj && <p className="mt-1 text-xs text-red-600">{fieldErrors.taj}</p>}
               </Field>
-              <Field label={editing ? "Bankszámlaszám (csak ha módosul)" : "Bankszámlaszám"}>
+              <Field label={editing ? t("emp.bankLabelEdit") : t("emp.bankLabel")}>
                 <input value={form.bank_account} onChange={(e) => set("bank_account", e.target.value)} placeholder="xxxxxxxx-xxxxxxxx" className={fieldCls("bank_account")} />
                 {fieldErrors.bank_account && <p className="mt-1 text-xs text-red-600">{fieldErrors.bank_account}</p>}
               </Field>
-              <Field label="Bér">
-                <input value={form.wage_amount} onChange={(e) => set("wage_amount", e.target.value)} placeholder="pl. 650000 HUF/hó" className={inputCls} />
+              <Field label={t("emp.wage")}>
+                <input value={form.wage_amount} onChange={(e) => set("wage_amount", e.target.value)} placeholder={t("emp.wagePlaceholder")} className={inputCls} />
               </Field>
             </fieldset>
 
             <fieldset className="grid grid-cols-2 gap-3">
-              <legend className="mb-1 text-sm font-semibold text-slate-700">Munkaviszony</legend>
-              <Field label="Belépés dátuma *">
+              <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.employmentSection")}</legend>
+              <Field label={t("emp.hireDateLabel")}>
                 <input required type="date" value={form.hire_date} onChange={(e) => set("hire_date", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Munkakör">
+              <Field label={t("emp.jobTitleLabel")}>
                 <input value={form.job_title} onChange={(e) => set("job_title", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="FEOR-08 kód">
-                <input value={form.feor_code} onChange={(e) => set("feor_code", e.target.value)} placeholder="pl. 9223" className={inputCls} />
+              <Field label={t("emp.feor")}>
+                <input value={form.feor_code} onChange={(e) => set("feor_code", e.target.value)} placeholder="9223" className={inputCls} />
               </Field>
-              <Field label="Heti óraszám">
+              <Field label={t("emp.weeklyHoursLabel")}>
                 <input
                   type="number"
                   min={1}
@@ -428,25 +420,25 @@ export default function DolgozokPage() {
                   className={inputCls}
                 />
               </Field>
-              <Field label="Foglalkoztatás">
+              <Field label={t("emp.employmentType")}>
                 <select value={form.employment_type} onChange={(e) => set("employment_type", e.target.value)} className={inputCls}>
-                  <option value="full_time">Teljes munkaidő</option>
-                  <option value="part_time">Részmunkaidő</option>
+                  <option value="full_time">{t("emp.fullTime")}</option>
+                  <option value="part_time">{t("emp.partTime")}</option>
                 </select>
               </Field>
-              <Field label="Szerződés">
+              <Field label={t("emp.contractType")}>
                 <select value={form.contract_type} onChange={(e) => set("contract_type", e.target.value)} className={inputCls}>
-                  <option value="indefinite">Határozatlan idejű</option>
-                  <option value="fixed_term">Határozott idejű</option>
+                  <option value="indefinite">{t("emp.indefinite")}</option>
+                  <option value="fixed_term">{t("emp.fixedTerm")}</option>
                 </select>
               </Field>
-              <Field label="Bérezés típusa">
+              <Field label={t("emp.wageType")}>
                 <select value={form.wage_type} onChange={(e) => set("wage_type", e.target.value)} className={inputCls}>
-                  <option value="monthly">Havibér</option>
-                  <option value="hourly">Órabér</option>
+                  <option value="monthly">{t("emp.monthly")}</option>
+                  <option value="hourly">{t("emp.hourly")}</option>
                 </select>
               </Field>
-              <Field label="Éves szabadság (nap)">
+              <Field label={t("emp.leaveDays")}>
                 <input
                   type="number"
                   min={0}
@@ -459,13 +451,9 @@ export default function DolgozokPage() {
             </fieldset>
 
             <fieldset>
-              <legend className="mb-1 text-sm font-semibold text-slate-700">
-                Skillek / képesítések
-              </legend>
+              <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.skillsSection")}</legend>
               {allSkills.length === 0 ? (
-                <p className="text-xs text-slate-400">
-                  Még nincs skill — a Beállítások menüben hozhatsz létre.
-                </p>
+                <p className="text-xs text-slate-400">{t("emp.noSkillsYet")}</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {allSkills.map((s) => {
@@ -496,11 +484,11 @@ export default function DolgozokPage() {
 
             {!editing && (
               <fieldset className="grid grid-cols-2 gap-3">
-                <legend className="mb-1 text-sm font-semibold text-slate-700">Belépési fiók</legend>
-                <Field label="Email (bejelentkezéshez) *">
+                <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.accountSection")}</legend>
+                <Field label={t("emp.loginEmail")}>
                   <input required type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inputCls} />
                 </Field>
-                <Field label="Kezdeti jelszó (üresen: generált)">
+                <Field label={t("emp.initialPassword")}>
                   <input value={form.initial_password} onChange={(e) => set("initial_password", e.target.value)} minLength={form.initial_password ? 10 : undefined} className={inputCls} />
                 </Field>
               </fieldset>
@@ -513,13 +501,13 @@ export default function DolgozokPage() {
                 onClick={() => setShowForm(false)}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
               >
-                Mégsem
+                {t("common.cancel")}
               </button>
               <button
                 disabled={busy}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                {busy ? "Mentés…" : "Mentés"}
+                {busy ? t("common.saving") : t("common.save")}
               </button>
             </div>
           </form>

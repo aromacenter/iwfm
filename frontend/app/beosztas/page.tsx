@@ -6,10 +6,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import { useT, translate } from "@/lib/i18n";
 import type { EmployeeOut, ShiftOut, ViolationOut, WeekOut } from "@/lib/types";
-import { TIME_OFF_LABELS } from "@/lib/types";
-
-const DAY_NAMES = ["Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek", "Szombat", "Vasárnap"];
 
 function mondayOf(d: Date): Date {
   const copy = new Date(d);
@@ -33,6 +31,16 @@ function hhmm(t: string): string {
   return t.slice(0, 5);
 }
 
+/** Szabálysértés szövege: kód+paraméterek a nyelvi fájlból; ha nincs param,
+ * a szerver (magyar) szövege a tartalék. */
+export function violationText(v: ViolationOut): string {
+  if (v.params && Object.keys(v.params).length > 0) {
+    const localized = translate(`violations.${v.code}`, v.params);
+    if (localized !== `violations.${v.code}`) return localized;
+  }
+  return v.message;
+}
+
 interface ShiftForm {
   id: string | null;
   employee_id: string;
@@ -53,6 +61,7 @@ export default function BeosztasPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [publishWarnings, setPublishWarnings] = useState<ViolationOut[] | null>(null);
+  const { t } = useT();
 
   const weekIso = iso(weekStart);
 
@@ -80,24 +89,17 @@ export default function BeosztasPage() {
   }, [week]);
 
   const timeOffByCell = useMemo(() => {
-    const set = new Set<string>();
-    for (const t of week?.time_off ?? []) {
+    const map = new Map<string, string>();
+    for (const item of week?.time_off ?? []) {
       for (const day of days) {
         const dayIso = iso(day);
-        if (t.start_date <= dayIso && dayIso <= t.end_date) {
-          set.add(`${t.employee_id}|${dayIso}|${t.type}`);
+        if (item.start_date <= dayIso && dayIso <= item.end_date) {
+          map.set(`${item.employee_id}|${dayIso}`, item.type);
         }
       }
     }
-    return set;
+    return map;
   }, [week, days]);
-
-  function cellTimeOff(empId: string, dayIso: string): string | null {
-    for (const type of Object.keys(TIME_OFF_LABELS)) {
-      if (timeOffByCell.has(`${empId}|${dayIso}|${type}`)) return TIME_OFF_LABELS[type];
-    }
-    return null;
-  }
 
   function openCreate(empId: string, dayIso: string) {
     setError(null);
@@ -153,11 +155,7 @@ export default function BeosztasPage() {
       load();
     } catch (err) {
       if (err instanceof ApiError && err.code === "shift.modify_notice") {
-        if (
-          confirm(
-            "A közölt beosztás módosítása 96 órán belül csak a dolgozó kérésére vagy előre nem látható okból megengedett (Mt. 97.§ (5)). Megerősíted? A művelet auditálásra kerül."
-          )
-        ) {
+        if (confirm(t("sched.modifyConfirm"))) {
           await saveShift(e, true);
           return;
         }
@@ -177,7 +175,7 @@ export default function BeosztasPage() {
       load();
     } catch (err) {
       if (err instanceof ApiError && err.code === "shift.modify_notice") {
-        if (confirm("96 órán belüli törlés — megerősíted? (Mt. 97.§ (5), auditálva)")) {
+        if (confirm(t("sched.deleteConfirm"))) {
           await deleteShift(true);
           return;
         }
@@ -196,7 +194,7 @@ export default function BeosztasPage() {
         week_start: weekIso,
         force,
       });
-      alert(`${res.published} műszak közzétéve — a dolgozók mostantól látják.`);
+      alert(t("sched.publishedOk", { count: res.published }));
       load();
     } catch (err) {
       if (err instanceof ApiError && err.code === "publish.needs_confirmation") {
@@ -205,8 +203,8 @@ export default function BeosztasPage() {
       } else if (err instanceof ApiError && err.code === "publish.blocked") {
         const detail = err.detail as { violations: ViolationOut[] };
         alert(
-          "A közzétételt munkajogi HIBA akadályozza:\n\n" +
-            detail.violations.map((v) => `• ${v.message}`).join("\n")
+          `${t("sched.publishBlocked")}\n\n` +
+            detail.violations.map((v) => `• ${violationText(v)}`).join("\n")
         );
       } else {
         alert(errorMessage(err));
@@ -228,7 +226,7 @@ export default function BeosztasPage() {
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold">Beosztás</h1>
+        <h1 className="text-xl font-bold">{t("sched.title")}</h1>
         <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white">
           <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="px-3 py-1.5 hover:bg-slate-100">←</button>
           <span className="px-2 text-sm font-medium">
@@ -240,19 +238,19 @@ export default function BeosztasPage() {
           onClick={() => setWeekStart(addDays(mondayOf(new Date()), 7))}
           className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-100"
         >
-          Következő hét
+          {t("sched.nextWeekBtn")}
         </button>
         <div className="ml-auto flex items-center gap-2">
           {draftCount > 0 && (
-            <span className="text-sm text-slate-500">{draftCount} piszkozat</span>
+            <span className="text-sm text-slate-500">{t("sched.drafts", { count: draftCount })}</span>
           )}
           <button
             onClick={() => publish(false)}
             disabled={busy || draftCount === 0}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
-            title="Mt. 97.§ (4): a beosztást legalább 7 nappal korábban kell közölni"
+            title={t("sched.publishHint")}
           >
-            Hét közzététele
+            {t("sched.publish")}
           </button>
         </div>
       </div>
@@ -261,10 +259,10 @@ export default function BeosztasPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-              <th className="w-44 px-3 py-2">Dolgozó</th>
+              <th className="w-44 px-3 py-2">{t("sched.employee")}</th>
               {days.map((d, i) => (
                 <th key={i} className="px-2 py-2 text-center">
-                  {DAY_NAMES[i]}
+                  {t(`sched.days.${i}`)}
                   <div className="font-normal normal-case text-slate-400">{iso(d).slice(5)}</div>
                 </th>
               ))}
@@ -280,12 +278,12 @@ export default function BeosztasPage() {
                 {days.map((d) => {
                   const dayIso = iso(d);
                   const cellShifts = shiftsByCell.get(`${emp.id}|${dayIso}`) ?? [];
-                  const off = cellTimeOff(emp.id, dayIso);
+                  const offType = timeOffByCell.get(`${emp.id}|${dayIso}`);
                   return (
                     <td key={dayIso} className="h-16 border-l border-slate-100 px-1 py-1 align-top">
-                      {off && (
+                      {offType && (
                         <div className="mb-1 rounded bg-amber-100 px-1.5 py-0.5 text-center text-xs text-amber-800">
-                          {off}
+                          {t(`leave.types.${offType}`)}
                         </div>
                       )}
                       {cellShifts.map((s) => (
@@ -297,13 +295,13 @@ export default function BeosztasPage() {
                               ? "bg-emerald-100 text-emerald-900 hover:bg-emerald-200"
                               : "bg-indigo-100 text-indigo-900 hover:bg-indigo-200"
                           }`}
-                          title={s.status === "published" ? "Közölt műszak" : "Piszkozat"}
+                          title={s.status === "published" ? t("sched.publishedTitle") : t("sched.draftTitle")}
                         >
                           {hhmm(s.start_time)}–{hhmm(s.end_time)}
                           {s.role_label && <span className="block text-[10px] opacity-70">{s.role_label}</span>}
                         </button>
                       ))}
-                      {!off && (
+                      {!offType && (
                         <button
                           onClick={() => openCreate(emp.id, dayIso)}
                           className="block w-full rounded border border-dashed border-slate-200 px-1 py-0.5 text-center text-xs text-slate-300 hover:border-indigo-300 hover:text-indigo-500"
@@ -319,7 +317,7 @@ export default function BeosztasPage() {
             {activeEmployees.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
-                  Előbb vegyél fel dolgozókat a Dolgozók menüben.
+                  {t("sched.noEmployees")}
                 </td>
               </tr>
             )}
@@ -330,9 +328,12 @@ export default function BeosztasPage() {
       {(week?.violations.length ?? 0) > 0 && (
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-2 font-semibold">
-            Munkajogi ellenőrzés{" "}
+            {t("sched.complianceTitle")}{" "}
             <span className="text-sm font-normal text-slate-500">
-              ({errors.length} hiba, {(week?.violations.length ?? 0) - errors.length} figyelmeztetés)
+              {t("sched.complianceCount", {
+                errors: errors.length,
+                warnings: (week?.violations.length ?? 0) - errors.length,
+              })}
             </span>
           </h2>
           <ul className="space-y-1 text-sm">
@@ -340,7 +341,7 @@ export default function BeosztasPage() {
               <li key={i} className={v.severity === "error" ? "text-red-700" : "text-amber-700"}>
                 {v.severity === "error" ? "⛔" : "⚠️"}{" "}
                 <span className="font-medium">{v.employee_id ? employeeName(v.employee_id) : ""}</span>{" "}
-                — {v.message}
+                — {violationText(v)}
               </li>
             ))}
           </ul>
@@ -351,53 +352,51 @@ export default function BeosztasPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <form onSubmit={(e) => saveShift(e)} className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold">
-              {form.id ? "Műszak szerkesztése" : "Új műszak"} — {employeeName(form.employee_id)}
+              {form.id ? t("sched.editShift") : t("sched.newShift")} — {employeeName(form.employee_id)}
             </h2>
             <p className="text-sm text-slate-500">{form.work_date}</p>
             <div className="grid grid-cols-3 gap-3">
               <label className="block text-sm">
-                Kezdés
+                {t("sched.start")}
                 <input type="time" required value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
               </label>
               <label className="block text-sm">
-                Vége
+                {t("sched.end")}
                 <input type="time" required value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
               </label>
               <label className="block text-sm">
-                Szünet (perc)
+                {t("sched.breakMin")}
                 <input type="number" min={0} max={240} value={form.break_minutes} onChange={(e) => setForm({ ...form, break_minutes: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
               </label>
             </div>
             <label className="block text-sm">
-              Szerep / pozíció
-              <input value={form.role_label} onChange={(e) => setForm({ ...form, role_label: e.target.value })} placeholder="pl. pénztár, raktár" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              {t("sched.roleLabel")}
+              <input value={form.role_label} onChange={(e) => setForm({ ...form, role_label: e.target.value })} placeholder={t("sched.rolePlaceholder")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
             <label className="block text-sm">
-              Helyszín
+              {t("sched.location")}
               <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
             <label className="block text-sm">
-              Megjegyzés
+              {t("sched.note")}
               <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
-            <p className="text-xs text-slate-400">
-              Az éjfélen átnyúló műszaknál a vége a következő napra esik (pl. 22:00–06:00).
-            </p>
+            <p className="text-xs text-slate-400">{t("sched.overnightHint")}</p>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-between gap-2 pt-2">
               {form.id ? (
                 <button type="button" onClick={() => deleteShift()} disabled={busy} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50">
-                  Törlés
+                  {t("common.delete")}
                 </button>
               ) : (
                 <span />
               )}
               <div className="flex gap-2">
                 <button type="button" onClick={() => setForm(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
-                  Mégsem
+                  {t("common.cancel")}
                 </button>
                 <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                  Mentés
+                  {t("common.save")}
                 </button>
               </div>
             </div>
@@ -408,19 +407,16 @@ export default function BeosztasPage() {
       {publishWarnings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-amber-700">Figyelmeztetések a közzététel előtt</h2>
+            <h2 className="text-lg font-semibold text-amber-700">{t("sched.publishWarningsTitle")}</h2>
             <ul className="space-y-1 text-sm text-amber-800">
               {publishWarnings.map((v, i) => (
-                <li key={i}>⚠️ {v.message}</li>
+                <li key={i}>⚠️ {violationText(v)}</li>
               ))}
             </ul>
-            <p className="text-xs text-slate-500">
-              A megerősítéssel történő közzététel auditálásra kerül. A 168 órás közlési szabálytól
-              eltérni csak a munkavállaló kérésére vagy előre nem látható körülmény esetén jogszerű.
-            </p>
+            <p className="text-xs text-slate-500">{t("sched.publishWarningsHint")}</p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setPublishWarnings(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
-                Mégsem
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => {
@@ -429,7 +425,7 @@ export default function BeosztasPage() {
                 }}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
               >
-                Közzététel megerősítéssel
+                {t("sched.publishForce")}
               </button>
             </div>
           </div>

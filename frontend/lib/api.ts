@@ -65,7 +65,9 @@ export async function downloadFile(path: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-/** Emberi hibaüzenetek a backend hibakódjaihoz. */
+/** Emberi hibaüzenetek a backend hibakódjaihoz — a nyelvi fájlokból
+ * (i18n/hu.json, i18n/en.json → "errors" szakasz). A lenti táblázat már csak
+ * tartalék, ha egy kód hiányozna a szótárból. */
 const ERROR_MESSAGES: Record<string, string> = {
   "auth.bad_credentials": "Hibás email vagy jelszó.",
   "auth.rate_limited": "Túl sok próbálkozás — várj 15 percet.",
@@ -103,8 +105,13 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export function errorMessage(err: unknown): string {
+  // Lusta import, hogy ne legyen körkörös függés a modulok között.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { translate } = require("@/lib/i18n") as typeof import("@/lib/i18n");
   if (err instanceof ApiError) {
-    return ERROR_MESSAGES[err.code] ?? `Hiba történt (${err.code}).`;
+    const localized = translate(`errors.${err.code}`);
+    if (localized !== `errors.${err.code}`) return localized;
+    return ERROR_MESSAGES[err.code] ?? translate("errors.unknown", { code: err.code });
   }
-  return "Hálózati hiba — fut a backend?";
+  return translate("errors.network");
 }

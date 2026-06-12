@@ -1,13 +1,13 @@
 "use client";
 
-/** Feladataim (dolgozói, mobilra optimalizálva): a kiosztott feladatok,
- * komment a munkával kapcsolatban, és két státuszgomb:
- * Befejezett / További munkát igényel. */
+/** Feladataim (dolgozói, mobilra optimalizálva): kiosztott feladatok,
+ * komment, státuszgombok, munkalap kitöltése aláírással. */
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 interface CommentOut {
   id: string;
@@ -54,12 +54,6 @@ const EMPTY_WS: WorksheetForm = {
   client_signature: null,
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  open: "Nyitott",
-  done: "Befejezett",
-  needs_more_work: "További munkát igényel",
-};
-
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-sky-100 text-sky-800",
   done: "bg-emerald-100 text-emerald-800",
@@ -75,6 +69,7 @@ export default function FeladataimPage() {
   const [ws, setWs] = useState<WorksheetForm>(EMPTY_WS);
   const [wsError, setWsError] = useState<string | null>(null);
   const [wsBusy, setWsBusy] = useState(false);
+  const { t } = useT();
 
   const load = useCallback(() => {
     api
@@ -137,7 +132,7 @@ export default function FeladataimPage() {
           materials: existing.materials ?? [],
           client_name: existing.client_name ?? "",
           client_location: existing.client_location ?? "",
-          employee_signature: null, // új aláírás csak ha újra rajzolják
+          employee_signature: null,
           client_signature: null,
         });
       } catch {
@@ -149,7 +144,7 @@ export default function FeladataimPage() {
   async function saveWorksheet() {
     if (!wsTask) return;
     if (!ws.work_description.trim()) {
-      setWsError("Az elvégzett munka leírása kötelező.");
+      setWsError(t("myTasks.wsWorkRequired"));
       return;
     }
     setWsBusy(true);
@@ -177,7 +172,7 @@ export default function FeladataimPage() {
     return (
       <AppShell>
         <p className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-800">
-          Ehhez a fiókhoz még nem tartozik dolgozói adatlap — szólj a vezetődnek.
+          {t("mySched.noEmployeeCard")}
         </p>
       </AppShell>
     );
@@ -186,28 +181,28 @@ export default function FeladataimPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-lg space-y-4">
-        <h1 className="text-xl font-bold">Feladataim</h1>
+        <h1 className="text-xl font-bold">{t("myTasks.title")}</h1>
         {tasks.length === 0 && (
           <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
-            Most nincs kiosztott feladatod. 🎉
+            {t("myTasks.empty")}
           </p>
         )}
-        {tasks.map((t) => (
-          <section key={t.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        {tasks.map((task) => (
+          <section key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-1 flex flex-wrap items-center gap-2">
-              <h2 className="font-semibold">{t.title}</h2>
-              <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[t.status]}`}>
-                {STATUS_LABELS[t.status]}
+              <h2 className="font-semibold">{task.title}</h2>
+              <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[task.status]}`}>
+                {t(`tasks.statuses.${task.status}`)}
               </span>
             </div>
-            <p className="text-xs text-slate-400">Határidő: {t.due_date}</p>
-            {t.description && (
-              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{t.description}</p>
+            <p className="text-xs text-slate-400">{t("myTasks.due", { date: task.due_date })}</p>
+            {task.description && (
+              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{task.description}</p>
             )}
 
-            {t.comments.length > 0 && (
+            {task.comments.length > 0 && (
               <ul className="mt-3 space-y-1 border-t border-slate-100 pt-2 text-sm">
-                {t.comments.map((c) => (
+                {task.comments.map((c) => (
                   <li key={c.id}>
                     <span className="font-medium">{c.author_name ?? "?"}:</span>{" "}
                     <span className="text-slate-600">{c.text}</span>
@@ -218,47 +213,49 @@ export default function FeladataimPage() {
 
             <div className="mt-3 space-y-2">
               <button
-                onClick={() => openWorksheet(t)}
+                onClick={() => openWorksheet(task)}
                 className={`w-full rounded-xl border px-4 py-2.5 text-sm font-medium ${
-                  t.worksheet_completed
+                  task.worksheet_completed
                     ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                     : "border-indigo-300 bg-indigo-50 text-indigo-800 hover:bg-indigo-100"
                 }`}
               >
-                {t.worksheet_completed
-                  ? `📝 Munkalap kész (${t.worksheet_serial}) — szerkesztés`
-                  : `📝 Munkalap kitöltése${t.worksheet_serial ? ` (${t.worksheet_serial})` : ""}`}
+                {task.worksheet_completed
+                  ? t("myTasks.worksheetDone", { serial: task.worksheet_serial ?? "" })
+                  : task.worksheet_serial
+                    ? t("myTasks.fillWorksheetSerial", { serial: task.worksheet_serial })
+                    : t("myTasks.fillWorksheet")}
               </button>
               <div className="flex gap-2">
                 <input
-                  value={comments[t.id] ?? ""}
-                  onChange={(e) => setComments((c) => ({ ...c, [t.id]: e.target.value }))}
-                  placeholder="Komment a munkáról…"
+                  value={comments[task.id] ?? ""}
+                  onChange={(e) => setComments((c) => ({ ...c, [task.id]: e.target.value }))}
+                  placeholder={t("myTasks.commentPlaceholder")}
                   className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
                 <button
-                  onClick={() => sendComment(t)}
-                  disabled={busy === t.id || !(comments[t.id] ?? "").trim()}
+                  onClick={() => sendComment(task)}
+                  disabled={busy === task.id || !(comments[task.id] ?? "").trim()}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-40"
                 >
-                  Küldés
+                  {t("common.send")}
                 </button>
               </div>
-              {t.status !== "done" && (
+              {task.status !== "done" && (
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setStatus(t, "done")}
-                    disabled={busy === t.id}
+                    onClick={() => setStatus(task, "done")}
+                    disabled={busy === task.id}
                     className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                   >
-                    ✓ Befejezett
+                    {t("myTasks.done")}
                   </button>
                   <button
-                    onClick={() => setStatus(t, "needs_more_work")}
-                    disabled={busy === t.id}
+                    onClick={() => setStatus(task, "needs_more_work")}
+                    disabled={busy === task.id}
                     className="flex-1 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50"
                   >
-                    További munkát igényel
+                    {t("myTasks.needsMoreWork")}
                   </button>
                 </div>
               )}
@@ -270,22 +267,22 @@ export default function FeladataimPage() {
       {wsTask && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
           <div className="my-6 w-full max-w-lg space-y-3 rounded-2xl bg-white p-5 shadow-xl">
-            <h2 className="text-lg font-semibold">📝 Munkalap — {wsTask.title}</h2>
+            <h2 className="text-lg font-semibold">{t("myTasks.wsTitle", { title: wsTask.title })}</h2>
             {wsTask.worksheet_serial && (
-              <p className="text-xs text-slate-500">Sorszám: {wsTask.worksheet_serial}</p>
+              <p className="text-xs text-slate-500">{t("myTasks.wsSerial", { serial: wsTask.worksheet_serial })}</p>
             )}
             <label className="block text-sm">
-              Elvégzett munka leírása *
+              {t("myTasks.wsWork")}
               <textarea
                 value={ws.work_description}
                 onChange={(e) => setWs({ ...ws, work_description: e.target.value })}
                 rows={4}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                placeholder="Mit végeztél el pontosan?"
+                placeholder={t("myTasks.wsWorkPlaceholder")}
               />
             </label>
             <label className="block text-sm">
-              Ráfordított idő (óra)
+              {t("myTasks.wsHours")}
               <input
                 type="number"
                 min={0}
@@ -298,15 +295,15 @@ export default function FeladataimPage() {
 
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-sm text-slate-600">Felhasznált anyagok</span>
+                <span className="text-sm text-slate-600">{t("myTasks.wsMaterials")}</span>
                 <button
                   type="button"
                   onClick={() =>
-                    setWs({ ...ws, materials: [...ws.materials, { name: "", qty: "1", unit: "db" }] })
+                    setWs({ ...ws, materials: [...ws.materials, { name: "", qty: "1", unit: t("myTasks.wsUnit") }] })
                   }
                   className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
                 >
-                  + Tétel
+                  {t("myTasks.wsAddItem")}
                 </button>
               </div>
               {ws.materials.map((m, i) => (
@@ -318,7 +315,7 @@ export default function FeladataimPage() {
                       next[i] = { ...m, name: e.target.value };
                       setWs({ ...ws, materials: next });
                     }}
-                    placeholder="Megnevezés"
+                    placeholder={t("myTasks.wsItemName")}
                     className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                   />
                   <input
@@ -328,7 +325,7 @@ export default function FeladataimPage() {
                       next[i] = { ...m, qty: e.target.value };
                       setWs({ ...ws, materials: next });
                     }}
-                    placeholder="Menny."
+                    placeholder={t("myTasks.wsQty")}
                     className="w-16 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                   />
                   <input
@@ -338,7 +335,7 @@ export default function FeladataimPage() {
                       next[i] = { ...m, unit: e.target.value };
                       setWs({ ...ws, materials: next });
                     }}
-                    placeholder="db"
+                    placeholder={t("myTasks.wsUnit")}
                     className="w-14 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                   />
                   <button
@@ -356,7 +353,7 @@ export default function FeladataimPage() {
 
             <div className="grid grid-cols-2 gap-2">
               <label className="block text-sm">
-                Ügyfél (opcionális)
+                {t("myTasks.wsClient")}
                 <input
                   value={ws.client_name}
                   onChange={(e) => setWs({ ...ws, client_name: e.target.value })}
@@ -364,7 +361,7 @@ export default function FeladataimPage() {
                 />
               </label>
               <label className="block text-sm">
-                Helyszín (opcionális)
+                {t("myTasks.wsLocation")}
                 <input
                   value={ws.client_location}
                   onChange={(e) => setWs({ ...ws, client_location: e.target.value })}
@@ -374,19 +371,11 @@ export default function FeladataimPage() {
             </div>
 
             <SignatureCanvas
-              label={
-                wsTask.worksheet_serial
-                  ? "Munkavégző aláírása (üresen: a korábbi marad)"
-                  : "Munkavégző aláírása"
-              }
+              label={wsTask.worksheet_completed ? t("myTasks.wsEmpSigKeep") : t("myTasks.wsEmpSig")}
               onChange={(d) => setWs((w) => ({ ...w, employee_signature: d }))}
             />
             <SignatureCanvas
-              label={
-                wsTask.worksheet_serial
-                  ? "Ügyfél / átvevő aláírása (üresen: a korábbi marad)"
-                  : "Ügyfél / átvevő aláírása (opcionális)"
-              }
+              label={wsTask.worksheet_completed ? t("myTasks.wsClientSigKeep") : t("myTasks.wsClientSig")}
               onChange={(d) => setWs((w) => ({ ...w, client_signature: d }))}
             />
 
@@ -396,14 +385,14 @@ export default function FeladataimPage() {
                 onClick={() => setWsTask(null)}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
               >
-                Mégsem
+                {t("common.cancel")}
               </button>
               <button
                 onClick={saveWorksheet}
                 disabled={wsBusy}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                {wsBusy ? "Mentés…" : "Munkalap mentése"}
+                {wsBusy ? t("common.saving") : t("myTasks.wsSave")}
               </button>
             </div>
           </div>

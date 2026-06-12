@@ -3,6 +3,7 @@
 /** Egyszerű aláírás-vászon (ujjal/egérrel rajzolás, törlés, PNG data URL). */
 
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n";
 
 export default function SignatureCanvas({
   label,
@@ -14,6 +15,7 @@ export default function SignatureCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const [hasInk, setHasInk] = useState(false);
+  const { t } = useT();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -80,7 +82,7 @@ export default function SignatureCanvas({
             onClick={clear}
             className="text-xs text-slate-400 hover:text-red-600"
           >
-            Törlés
+            {t("myTasks.sigClear")}
           </button>
         )}
       </div>

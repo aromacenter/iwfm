@@ -1,12 +1,12 @@
 "use client";
 
-/** Feladatok (vezetői): kiosztás dolgozóra (opcionális skill-szűréssel),
- * státuszok követése, kommentek. A skill-mező a későbbi AI-alapú
- * kiosztás előkészítése. */
+/** Feladatok (vezetői): online munkalap kiállítása dolgozóra
+ * (opcionális skill-szűréssel + AI javaslattal), státuszok, kommentek, PDF. */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, downloadFile, errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import type { EmployeeOut } from "@/lib/types";
 
 interface Skill {
@@ -36,17 +36,13 @@ interface TaskOut {
   worksheet_completed: boolean;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  open: "Nyitott",
-  done: "Befejezett",
-  needs_more_work: "További munkát igényel",
-};
-
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-sky-100 text-sky-800",
   done: "bg-emerald-100 text-emerald-800",
   needs_more_work: "bg-amber-100 text-amber-800",
 };
+
+const STATUSES = ["open", "done", "needs_more_work"] as const;
 
 function todayIso(): string {
   const d = new Date();
@@ -77,6 +73,7 @@ export default function FeladatokPage() {
     reason: string;
     open_tasks: number;
   } | null>(null);
+  const { t, lang } = useT();
 
   const load = useCallback(() => {
     api
@@ -91,7 +88,6 @@ export default function FeladatokPage() {
   }, []);
   useEffect(load, [load]);
 
-  // Ha skill van választva, a hozzáértő dolgozók előre sorolva
   const assignableEmployees = useMemo(() => {
     const active = employees.filter((e) => e.status === "active");
     if (!form.required_skill_id) return active.map((e) => ({ emp: e, hasSkill: true }));
@@ -105,7 +101,7 @@ export default function FeladatokPage() {
 
   async function askAi() {
     if (!form.title.trim()) {
-      setError("Előbb add meg a feladat címét — abból dolgozik az AI.");
+      setError(t("tasks.aiNeedTitle"));
       return;
     }
     setAiBusy(true);
@@ -156,7 +152,7 @@ export default function FeladatokPage() {
         required_skill_id: 0, client_name: "", client_location: "",
       });
       if (created.worksheet_serial) {
-        alert(`Munkalap kiállítva: ${created.worksheet_serial}\nA dolgozó a telefonján tölti ki a munkavégzés után.`);
+        alert(t("tasks.issuedAlert", { serial: created.worksheet_serial }));
       }
       load();
     } catch (err) {
@@ -187,7 +183,7 @@ export default function FeladatokPage() {
   }
 
   async function remove(task: TaskOut) {
-    if (!confirm(`Törlöd a(z) „${task.title}" feladatot?`)) return;
+    if (!confirm(t("tasks.deleteConfirm", { title: task.title }))) return;
     try {
       await api.delete(`/api/tasks/${task.id}`);
       load();
@@ -199,110 +195,110 @@ export default function FeladatokPage() {
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold">Feladatok</h1>
+        <h1 className="text-xl font-bold">{t("tasks.title")}</h1>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
         >
-          <option value="">Minden státusz</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
+          <option value="">{t("tasks.allStatuses")}</option>
+          {STATUSES.map((status) => (
+            <option key={status} value={status}>{t(`tasks.statuses.${status}`)}</option>
           ))}
         </select>
         <button
           onClick={() => setShowForm(true)}
           className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
         >
-          + Új munkalap / feladat
+          {t("tasks.new")}
         </button>
       </div>
 
       <div className="space-y-3">
-        {tasks.map((t) => (
-          <div key={t.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        {tasks.map((task) => (
+          <div key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">{t.title}</span>
-                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[t.status]}`}>
-                    {STATUS_LABELS[t.status]}
+                  <span className="font-semibold">{task.title}</span>
+                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[task.status]}`}>
+                    {t(`tasks.statuses.${task.status}`)}
                   </span>
-                  {t.required_skill && (
+                  {task.required_skill && (
                     <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">
-                      {t.required_skill.name}
+                      {task.required_skill.name}
                     </span>
                   )}
-                  {t.worksheet_serial && (
+                  {task.worksheet_serial && (
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs ${
-                        t.worksheet_completed
+                        task.worksheet_completed
                           ? "bg-emerald-50 text-emerald-700"
                           : "bg-amber-50 text-amber-700"
                       }`}
-                      title={t.worksheet_completed ? "A dolgozó kitöltötte" : "Kiállítva — kitöltésre vár"}
+                      title={task.worksheet_completed ? t("tasks.worksheetDoneTitle") : t("tasks.worksheetIssuedTitle")}
                     >
-                      📝 {t.worksheet_serial} · {t.worksheet_completed ? "kitöltve" : "kiállítva"}
+                      📝 {task.worksheet_serial} · {task.worksheet_completed ? t("tasks.worksheetDone") : t("tasks.worksheetIssued")}
                     </span>
                   )}
                 </div>
                 <p className="text-sm text-slate-500">
-                  {t.employee_name} · {t.due_date}
-                  {t.comments.length > 0 && ` · ${t.comments.length} komment`}
+                  {task.employee_name} · {task.due_date}
+                  {task.comments.length > 0 && ` · ${t("tasks.comments", { count: task.comments.length })}`}
                 </p>
               </div>
               <div className="flex gap-2">
-                {t.worksheet_serial && (
+                {task.worksheet_serial && (
                   <button
-                    onClick={() => downloadWorksheet(t)}
+                    onClick={() => downloadWorksheet(task)}
                     className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
                   >
-                    Munkalap PDF
+                    {t("tasks.worksheetPdf")}
                   </button>
                 )}
-                {t.status !== "open" && (
+                {task.status !== "open" && (
                   <button
-                    onClick={() => setStatus(t, "open")}
+                    onClick={() => setStatus(task, "open")}
                     className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-100"
                   >
-                    Újranyitás
+                    {t("tasks.reopen")}
                   </button>
                 )}
-                {t.status !== "done" && (
+                {task.status !== "done" && (
                   <button
-                    onClick={() => setStatus(t, "done")}
+                    onClick={() => setStatus(task, "done")}
                     className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
                   >
-                    Lezárás
+                    {t("tasks.closeTask")}
                   </button>
                 )}
                 <button
-                  onClick={() => setExpanded(expanded === t.id ? null : t.id)}
+                  onClick={() => setExpanded(expanded === task.id ? null : task.id)}
                   className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-100"
                 >
-                  {expanded === t.id ? "Bezár" : "Részletek"}
+                  {expanded === task.id ? t("common.close") : t("common.details")}
                 </button>
                 <button
-                  onClick={() => remove(t)}
+                  onClick={() => remove(task)}
                   className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
                 >
-                  Törlés
+                  {t("common.delete")}
                 </button>
               </div>
             </div>
-            {expanded === t.id && (
+            {expanded === task.id && (
               <div className="mt-3 border-t border-slate-100 pt-3 text-sm">
-                {t.description && <p className="mb-2 whitespace-pre-wrap text-slate-600">{t.description}</p>}
-                {t.comments.length === 0 ? (
-                  <p className="text-slate-400">Nincs komment.</p>
+                {task.description && <p className="mb-2 whitespace-pre-wrap text-slate-600">{task.description}</p>}
+                {task.comments.length === 0 ? (
+                  <p className="text-slate-400">{t("tasks.noComments")}</p>
                 ) : (
                   <ul className="space-y-1">
-                    {t.comments.map((c) => (
+                    {task.comments.map((c) => (
                       <li key={c.id}>
                         <span className="font-medium">{c.author_name ?? "?"}:</span>{" "}
                         <span className="text-slate-600">{c.text}</span>{" "}
                         <span className="text-xs text-slate-400">
-                          {new Date(c.created_at).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" })}
+                          {new Date(c.created_at).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "short" })}
                         </span>
                       </li>
                     ))}
@@ -314,7 +310,7 @@ export default function FeladatokPage() {
         ))}
         {tasks.length === 0 && (
           <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
-            Nincs feladat.
+            {t("tasks.empty")}
           </p>
         )}
       </div>
@@ -322,27 +318,24 @@ export default function FeladatokPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <form onSubmit={submit} className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">📝 Új munkalap kiállítása</h2>
-            <p className="text-xs text-slate-500">
-              A feladat online munkalapként áll ki (automatikus ML-sorszámmal) — az elvégzett
-              munkát, anyagokat és aláírásokat a dolgozó tölti ki a telefonján.
-            </p>
+            <h2 className="text-lg font-semibold">{t("tasks.newTitle")}</h2>
+            <p className="text-xs text-slate-500">{t("tasks.newHint")}</p>
             <label className="block text-sm">
-              Feladat címe *
+              {t("tasks.taskTitle")}
               <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
             <label className="block text-sm">
-              Leírás
+              {t("tasks.description")}
               <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
             <label className="block text-sm">
-              Szükséges skill (opcionális)
+              {t("tasks.requiredSkill")}
               <select
                 value={form.required_skill_id}
                 onChange={(e) => setForm({ ...form, required_skill_id: Number(e.target.value) })}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               >
-                <option value={0}>— nincs —</option>
+                <option value={0}>{t("tasks.noSkill")}</option>
                 {skills.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
@@ -355,60 +348,58 @@ export default function FeladatokPage() {
                 disabled={aiBusy}
                 className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
               >
-                {aiBusy ? "AI gondolkodik…" : "✨ AI javaslat: kit bízzunk meg?"}
+                {aiBusy ? t("tasks.aiThinking") : t("tasks.aiButton")}
               </button>
             </div>
             {aiSuggestion && (
               <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm">
                 <p className="font-medium text-violet-900">
-                  ✨ Javaslat: {aiSuggestion.employee_name}
+                  {t("tasks.aiSuggestion", { name: aiSuggestion.employee_name })}
                   <span className="ml-2 font-normal text-violet-600">
-                    ({aiSuggestion.open_tasks} nyitott feladata van)
+                    {t("tasks.aiOpenTasks", { count: aiSuggestion.open_tasks })}
                   </span>
                 </p>
                 {aiSuggestion.reason && (
                   <p className="mt-1 text-violet-800">{aiSuggestion.reason}</p>
                 )}
-                <p className="mt-1 text-xs text-violet-500">
-                  A dolgozó-mezőt beállítottam — szabadon átírhatod.
-                </p>
+                <p className="mt-1 text-xs text-violet-500">{t("tasks.aiFieldSet")}</p>
               </div>
             )}
             <label className="block text-sm">
-              Dolgozó *
+              {t("tasks.employee")}
               <select
                 required
                 value={form.employee_id}
                 onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               >
-                <option value="">Válassz…</option>
+                <option value="">{t("tasks.choose")}</option>
                 {assignableEmployees.map(({ emp, hasSkill }) => (
                   <option key={emp.id} value={emp.id}>
                     {emp.last_name} {emp.first_name}
-                    {form.required_skill_id ? (hasSkill ? " ✓ (van skillje)" : " — nincs skillje") : ""}
+                    {form.required_skill_id ? (hasSkill ? t("tasks.hasSkill") : t("tasks.noSkillSuffix")) : ""}
                   </option>
                 ))}
               </select>
             </label>
             <label className="block text-sm">
-              Határidő (nap) *
+              {t("tasks.dueDate")}
               <input required type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm">
-                Ügyfél (opcionális)
-                <input value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} placeholder="pl. Minta Kft." className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                {t("tasks.client")}
+                <input value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} placeholder={t("tasks.clientPlaceholder")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
               <label className="block text-sm">
-                Helyszín (opcionális)
-                <input value={form.client_location} onChange={(e) => setForm({ ...form, client_location: e.target.value })} placeholder="cím / telephely" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                {t("tasks.location")}
+                <input value={form.client_location} onChange={(e) => setForm({ ...form, client_location: e.target.value })} placeholder={t("tasks.locationPlaceholder")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">Mégsem</button>
-              <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">Kiosztás</button>
+              <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{t("tasks.assign")}</button>
             </div>
           </form>
         </div>

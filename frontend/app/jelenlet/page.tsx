@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, downloadFile, errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import type { EmployeeOut, EntryOut } from "@/lib/types";
 
 function monthBounds(): { from: string; to: string } {
@@ -16,10 +17,6 @@ function monthBounds(): { from: string; to: string } {
   return { from: iso(from), to: iso(to) };
 }
 
-function fmt(dt: string): string {
-  return new Date(dt).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" });
-}
-
 export default function JelenletPage() {
   const [{ from, to }, setRange] = useState(monthBounds());
   const [entries, setEntries] = useState<EntryOut[]>([]);
@@ -28,6 +25,13 @@ export default function JelenletPage() {
   const [form, setForm] = useState({ employee_id: "", date: "", in_time: "08:00", out_time: "16:30", break_minutes: 30, note: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { t, lang } = useT();
+
+  const fmt = (dt: string) =>
+    new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
 
   const load = useCallback(() => {
     api
@@ -78,61 +82,64 @@ export default function JelenletPage() {
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold">Jelenlét</h1>
+        <h1 className="text-xl font-bold">{t("att.title")}</h1>
         <input type="date" value={from} onChange={(e) => setRange({ from: e.target.value, to })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
         <span className="text-slate-400">→</span>
         <input type="date" value={to} onChange={(e) => setRange({ from, to: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
         <div className="ml-auto flex gap-2">
           <button onClick={() => setShowForm(true)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">
-            + Kézi bejegyzés
+            {t("att.manualEntry")}
           </button>
           <button onClick={() => exportPayroll("csv")} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-            Bérexport CSV
+            {t("att.exportCsv")}
           </button>
           <button onClick={() => exportPayroll("xlsx")} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-            Bérexport XLSX
+            {t("att.exportXlsx")}
           </button>
         </div>
       </div>
 
       <p className="mb-3 text-sm text-slate-500">
-        Összes ledolgozott idő az időszakban: <span className="font-semibold">{totalHours.toFixed(1)} óra</span>
+        {t("att.totalWorked")}{" "}
+        <span className="font-semibold">{t("att.totalHours", { hours: totalHours.toFixed(1) })}</span>
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-              <th className="px-4 py-3">Dolgozó</th>
-              <th className="px-4 py-3">Bejelentkezés</th>
-              <th className="px-4 py-3">Kijelentkezés</th>
-              <th className="px-4 py-3">Szünet</th>
-              <th className="px-4 py-3">Ledolgozott</th>
-              <th className="px-4 py-3">Forrás</th>
-              <th className="px-4 py-3">Megjegyzés</th>
+              <th className="px-4 py-3">{t("att.employee")}</th>
+              <th className="px-4 py-3">{t("att.clockIn")}</th>
+              <th className="px-4 py-3">{t("att.clockOut")}</th>
+              <th className="px-4 py-3">{t("att.break")}</th>
+              <th className="px-4 py-3">{t("att.worked")}</th>
+              <th className="px-4 py-3">{t("att.source")}</th>
+              <th className="px-4 py-3">{t("att.note")}</th>
             </tr>
           </thead>
           <tbody>
-            {entries.map((e) => (
-              <tr key={e.id} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-3 font-medium">{e.employee_name ?? "—"}</td>
-                <td className="px-4 py-3">{fmt(e.clock_in)}</td>
-                <td className="px-4 py-3">{e.clock_out ? fmt(e.clock_out) : <span className="text-emerald-600">nyitva</span>}</td>
-                <td className="px-4 py-3">{e.break_minutes} p</td>
+            {entries.map((entry) => (
+              <tr key={entry.id} className="border-b border-slate-100 last:border-0">
+                <td className="px-4 py-3 font-medium">{entry.employee_name ?? "—"}</td>
+                <td className="px-4 py-3">{fmt(entry.clock_in)}</td>
+                <td className="px-4 py-3">
+                  {entry.clock_out ? fmt(entry.clock_out) : <span className="text-emerald-600">{t("att.open")}</span>}
+                </td>
+                <td className="px-4 py-3">{entry.break_minutes} p</td>
                 <td className="px-4 py-3 font-medium">
-                  {e.worked_minutes !== null ? `${(e.worked_minutes / 60).toFixed(1)} h` : "—"}
+                  {entry.worked_minutes !== null ? `${(entry.worked_minutes / 60).toFixed(1)} h` : "—"}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`rounded px-2 py-0.5 text-xs ${e.source === "self" ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-600"}`}>
-                    {e.source === "self" ? "saját" : "kézi"}
+                  <span className={`rounded px-2 py-0.5 text-xs ${entry.source === "self" ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-600"}`}>
+                    {entry.source === "self" ? t("att.self") : t("att.manual")}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-slate-500">{e.note ?? "—"}</td>
+                <td className="px-4 py-3 text-slate-500">{entry.note ?? "—"}</td>
               </tr>
             ))}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">Nincs bejegyzés az időszakban.</td>
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("att.empty")}</td>
               </tr>
             )}
           </tbody>
@@ -142,43 +149,43 @@ export default function JelenletPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <form onSubmit={submit} className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">Kézi jelenléti bejegyzés</h2>
-            <p className="text-xs text-slate-500">Minden kézi bejegyzés auditálásra kerül.</p>
+            <h2 className="text-lg font-semibold">{t("att.manualTitle")}</h2>
+            <p className="text-xs text-slate-500">{t("att.manualHint")}</p>
             <label className="block text-sm">
-              Dolgozó
+              {t("att.employee")}
               <select required value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
-                <option value="">Válassz…</option>
+                <option value="">{t("leave.choose")}</option>
                 {employees.filter((e) => e.status === "active").map((emp) => (
                   <option key={emp.id} value={emp.id}>{emp.last_name} {emp.first_name}</option>
                 ))}
               </select>
             </label>
             <label className="block text-sm">
-              Nap
+              {t("att.day")}
               <input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
             <div className="grid grid-cols-3 gap-3">
               <label className="block text-sm">
-                Be
+                {t("att.in")}
                 <input required type="time" value={form.in_time} onChange={(e) => setForm({ ...form, in_time: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
               </label>
               <label className="block text-sm">
-                Ki
+                {t("att.out")}
                 <input required type="time" value={form.out_time} onChange={(e) => setForm({ ...form, out_time: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
               </label>
               <label className="block text-sm">
-                Szünet (p)
+                {t("att.breakMin")}
                 <input type="number" min={0} max={240} value={form.break_minutes} onChange={(e) => setForm({ ...form, break_minutes: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
               </label>
             </div>
             <label className="block text-sm">
-              Megjegyzés
+              {t("att.note")}
               <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">Mégsem</button>
-              <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">Mentés</button>
+              <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{t("common.save")}</button>
             </div>
           </form>
         </div>

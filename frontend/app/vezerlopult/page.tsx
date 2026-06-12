@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
-import { TIME_OFF_LABELS } from "@/lib/types";
+import { useT } from "@/lib/i18n";
 
 interface DashboardData {
   todays_tasks: { id: string; title: string; employee_name: string; status: string }[];
@@ -28,6 +28,7 @@ interface DashboardData {
 
 export default function VezerlopultPage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const { t, lang } = useT();
 
   const load = useCallback(() => {
     api.get<DashboardData>("/api/dashboard").then(setData).catch(() => {});
@@ -46,20 +47,20 @@ export default function VezerlopultPage() {
   if (!data) {
     return (
       <AppShell>
-        <p className="text-slate-500">Betöltés…</p>
+        <p className="text-slate-500">{t("common.loading")}</p>
       </AppShell>
     );
   }
 
   return (
     <AppShell>
-      <h1 className="mb-4 text-xl font-bold">Vezérlőpult</h1>
+      <h1 className="mb-4 text-xl font-bold">{t("dash.title")}</h1>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Függő kérelmek — a legfontosabb rendszerüzenetek */}
+        {/* Függő kérelmek */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
           <h2 className="mb-3 font-semibold">
-            Elbírálásra váró kérelmek{" "}
+            {t("dash.pendingRequests")}{" "}
             {data.pending_time_off.length > 0 && (
               <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-bold text-amber-800">
                 {data.pending_time_off.length}
@@ -67,33 +68,33 @@ export default function VezerlopultPage() {
             )}
           </h2>
           {data.pending_time_off.length === 0 ? (
-            <p className="text-sm text-slate-400">Nincs függő kérelem. ✓</p>
+            <p className="text-sm text-slate-400">{t("dash.noPending")}</p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {data.pending_time_off.map((t) => (
-                <li key={t.id} className="flex flex-wrap items-center gap-3 py-3">
+              {data.pending_time_off.map((item) => (
+                <li key={item.id} className="flex flex-wrap items-center gap-3 py-3">
                   <div className="min-w-0 flex-1">
-                    <span className="font-medium">{t.employee_name}</span>{" "}
+                    <span className="font-medium">{item.employee_name}</span>{" "}
                     <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">
-                      {TIME_OFF_LABELS[t.type] ?? t.type}
+                      {t(`leave.types.${item.type}`)}
                     </span>
                     <div className="text-sm text-slate-500">
-                      {t.start_date} → {t.end_date}
-                      {t.reason && <span className="text-slate-400"> · {t.reason}</span>}
+                      {item.start_date} → {item.end_date}
+                      {item.reason && <span className="text-slate-400"> · {item.reason}</span>}
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => decide(t.id, "approved")}
+                      onClick={() => decide(item.id, "approved")}
                       className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
                     >
-                      Jóváhagy
+                      {t("dash.approve")}
                     </button>
                     <button
-                      onClick={() => decide(t.id, "rejected")}
+                      onClick={() => decide(item.id, "rejected")}
                       className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
                     >
-                      Elutasít
+                      {t("dash.reject")}
                     </button>
                   </div>
                 </li>
@@ -105,7 +106,7 @@ export default function VezerlopultPage() {
         {/* Mai feladatok */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
           <h2 className="mb-3 font-semibold">
-            Mai feladatok{" "}
+            {t("dash.todaysTasks")}{" "}
             {data.todays_tasks.length > 0 && (
               <span className="ml-1 rounded-full bg-sky-100 px-2 py-0.5 text-sm font-bold text-sky-800">
                 {data.todays_tasks.length}
@@ -114,33 +115,29 @@ export default function VezerlopultPage() {
           </h2>
           {data.todays_tasks.length === 0 ? (
             <p className="text-sm text-slate-400">
-              Mára nincs kiosztott feladat.{" "}
+              {t("dash.noTasksToday")}{" "}
               <Link href="/feladatok" className="font-medium text-indigo-600 underline">
-                Új feladat kiosztása →
+                {t("dash.newTaskLink")}
               </Link>
             </p>
           ) : (
             <ul className="divide-y divide-slate-100 text-sm">
-              {data.todays_tasks.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-3 py-2">
+              {data.todays_tasks.map((task) => (
+                <li key={task.id} className="flex items-center justify-between gap-3 py-2">
                   <span>
-                    <span className="font-medium">{t.title}</span>
-                    <span className="text-slate-500"> — {t.employee_name}</span>
+                    <span className="font-medium">{task.title}</span>
+                    <span className="text-slate-500"> — {task.employee_name}</span>
                   </span>
                   <span
                     className={`rounded px-2 py-0.5 text-xs font-medium ${
-                      t.status === "done"
+                      task.status === "done"
                         ? "bg-emerald-100 text-emerald-800"
-                        : t.status === "needs_more_work"
+                        : task.status === "needs_more_work"
                           ? "bg-amber-100 text-amber-800"
                           : "bg-sky-100 text-sky-800"
                     }`}
                   >
-                    {t.status === "done"
-                      ? "Befejezett"
-                      : t.status === "needs_more_work"
-                        ? "További munkát igényel"
-                        : "Nyitott"}
+                    {t(`tasks.statuses.${task.status}`)}
                   </span>
                 </li>
               ))}
@@ -150,16 +147,16 @@ export default function VezerlopultPage() {
 
         {/* Ma távol */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 font-semibold">Ma távol</h2>
+          <h2 className="mb-3 font-semibold">{t("dash.onLeaveToday")}</h2>
           {data.on_leave_today.length === 0 ? (
-            <p className="text-sm text-slate-400">Ma mindenki elérhető.</p>
+            <p className="text-sm text-slate-400">{t("dash.everyoneAvailable")}</p>
           ) : (
             <ul className="space-y-2 text-sm">
-              {data.on_leave_today.map((t, i) => (
+              {data.on_leave_today.map((item, i) => (
                 <li key={i} className="flex items-center justify-between">
-                  <span className="font-medium">{t.employee_name}</span>
+                  <span className="font-medium">{item.employee_name}</span>
                   <span className="text-slate-500">
-                    {TIME_OFF_LABELS[t.type] ?? t.type} · {t.until}-ig
+                    {t(`leave.types.${item.type}`)} · {t("dash.until", { date: item.until })}
                   </span>
                 </li>
               ))}
@@ -170,24 +167,25 @@ export default function VezerlopultPage() {
         {/* Éppen bent */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 font-semibold">
-            Éppen dolgozik{" "}
+            {t("dash.workingNow")}{" "}
             <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-sm font-bold text-emerald-800">
               {data.clocked_in_now.length}
             </span>
           </h2>
           {data.clocked_in_now.length === 0 ? (
-            <p className="text-sm text-slate-400">Most senki sincs beblokkolva.</p>
+            <p className="text-sm text-slate-400">{t("dash.nobodyClockedIn")}</p>
           ) : (
             <ul className="space-y-2 text-sm">
-              {data.clocked_in_now.map((c, i) => (
+              {data.clocked_in_now.map((item, i) => (
                 <li key={i} className="flex items-center justify-between">
-                  <span className="font-medium">{c.employee_name}</span>
+                  <span className="font-medium">{item.employee_name}</span>
                   <span className="text-slate-500">
-                    {new Date(c.since).toLocaleTimeString("hu-HU", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}{" "}
-                    óta
+                    {t("dash.since", {
+                      time: new Date(item.since).toLocaleTimeString(
+                        lang === "hu" ? "hu-HU" : "en-GB",
+                        { hour: "2-digit", minute: "2-digit" }
+                      ),
+                    })}
                   </span>
                 </li>
               ))}
@@ -197,20 +195,21 @@ export default function VezerlopultPage() {
 
         {/* Jövő hét */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="mb-2 font-semibold">Jövő heti beosztás ({data.next_week.week_start})</h2>
+          <h2 className="mb-2 font-semibold">
+            {t("dash.nextWeek", { date: data.next_week.week_start })}
+          </h2>
           {data.next_week.draft_shifts > 0 ? (
             <p className="text-sm text-amber-700">
-              ⚠️ {data.next_week.draft_shifts} műszak még piszkozatban — a beosztást legkésőbb 7
-              nappal a hét kezdete előtt közölni kell (Mt. 97.§ (4)).{" "}
+              {t("dash.draftWarning", { count: data.next_week.draft_shifts })}{" "}
               <Link href="/beosztas" className="font-medium text-indigo-600 underline">
-                Ugrás a beosztáshoz →
+                {t("dash.goToSchedule")}
               </Link>
             </p>
           ) : (
             <p className="text-sm text-slate-500">
-              Nincs közlésre váró piszkozat. Aktív dolgozók: {data.active_employees}.{" "}
+              {t("dash.noDrafts", { count: data.active_employees })}{" "}
               <Link href="/beosztas" className="font-medium text-indigo-600 underline">
-                Beosztás szerkesztése →
+                {t("dash.editSchedule")}
               </Link>
             </p>
           )}

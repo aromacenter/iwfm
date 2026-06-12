@@ -66,9 +66,10 @@ class ShiftSpan:
 class Violation:
     code: str
     severity: str  # 'error' | 'warning'
-    message: str  # magyar nyelvű, UI-ban közvetlenül megjeleníthető
+    message: str  # magyar tartalék-szöveg; a kliens a code+params alapján fordít
     employee_id: UUID | None = None
     shift_ids: list[UUID] = field(default_factory=list)
+    params: dict = field(default_factory=dict)  # i18n interpolációhoz
 
 
 def _sorted(shifts: Iterable[ShiftSpan]) -> list[ShiftSpan]:
@@ -91,6 +92,7 @@ def check_max_daily(shifts: Iterable[ShiftSpan]) -> list[Violation]:
                     ),
                     employee_id=s.employee_id,
                     shift_ids=[s.id] if s.id else [],
+                    params={"date": s.work_date.isoformat(), "hours": f"{s.worked_hours:.1f}"},
                 )
             )
     return out
@@ -116,6 +118,7 @@ def check_max_weekly(shifts: Iterable[ShiftSpan]) -> list[Violation]:
                     ),
                     employee_id=members[0].employee_id,
                     shift_ids=[m.id for m in members if m.id],
+                    params={"year": year, "week": week, "hours": f"{total:.1f}"},
                 )
             )
     return out
@@ -139,6 +142,7 @@ def check_daily_rest(shifts: Iterable[ShiftSpan]) -> list[Violation]:
                     ),
                     employee_id=prev.employee_id,
                     shift_ids=[i for i in (prev.id, nxt.id) if i],
+                    params={"from": prev.work_date.isoformat(), "to": nxt.work_date.isoformat()},
                 )
             )
         elif rest < HOURS_DAILY_REST:
@@ -153,6 +157,11 @@ def check_daily_rest(shifts: Iterable[ShiftSpan]) -> list[Violation]:
                     ),
                     employee_id=prev.employee_id,
                     shift_ids=[i for i in (prev.id, nxt.id) if i],
+                    params={
+                        "from": prev.work_date.isoformat(),
+                        "to": nxt.work_date.isoformat(),
+                        "hours": f"{rest:.1f}",
+                    },
                 )
             )
     return out
@@ -207,6 +216,7 @@ def check_weekly_rest(shifts: Iterable[ShiftSpan]) -> list[Violation]:
                     ),
                     employee_id=members[0].employee_id,
                     shift_ids=[m.id for m in members if m.id],
+                    params={"year": year, "week": week},
                 )
             )
     return out
@@ -241,6 +251,11 @@ def check_six_consecutive_days(shifts: Iterable[ShiftSpan]) -> list[Violation]:
                     ),
                     employee_id=emp,
                     shift_ids=ids,
+                    params={
+                        "from": run[0].isoformat(),
+                        "to": run[-1].isoformat(),
+                        "count": len(run),
+                    },
                 )
             )
         if d is not None:
@@ -274,6 +289,7 @@ def check_publish_notice(
                     ),
                     employee_id=s.employee_id,
                     shift_ids=[s.id] if s.id else [],
+                    params={"date": s.work_date.isoformat(), "hours": f"{max(notice, 0):.0f}"},
                 )
             )
     return out
@@ -296,6 +312,7 @@ def check_modify_notice(shift: ShiftSpan, *, now: datetime) -> list[Violation]:
                 ),
                 employee_id=shift.employee_id,
                 shift_ids=[shift.id] if shift.id else [],
+                params={"date": shift.work_date.isoformat(), "hours": f"{max(notice, 0):.0f}"},
             )
         ]
     return []

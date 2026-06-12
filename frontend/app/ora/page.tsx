@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage, ApiError } from "@/lib/api";
+import { LanguageSwitcher, useT } from "@/lib/i18n";
 
 interface KioskResult {
   action: "in" | "out";
@@ -19,6 +20,7 @@ export default function OraPage() {
   const [result, setResult] = useState<KioskResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { t, lang } = useT();
 
   const submit = useCallback(
     async (fullCode: string) => {
@@ -32,7 +34,7 @@ export default function OraPage() {
         setTimeout(() => setResult(null), 6000);
       } catch (err) {
         if (err instanceof ApiError && err.code === "kiosk.unknown_code") {
-          setError("Ismeretlen törzsszám — próbáld újra.");
+          setError(t("kiosk.unknownCode"));
         } else {
           setError(errorMessage(err));
         }
@@ -42,6 +44,7 @@ export default function OraPage() {
         setBusy(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
@@ -69,10 +72,13 @@ export default function OraPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-900 px-4 text-white">
+      <div className="mb-3 self-end pr-2">
+        <LanguageSwitcher dark />
+      </div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/logo.svg" alt="iwfm" className="mb-2 h-16 w-auto rounded-xl bg-white/95 px-3 py-1" />
-      <h1 className="mb-1 text-xl font-bold text-indigo-300">Munkaidő-terminál</h1>
-      <p className="mb-6 text-sm text-slate-400">Üsd be a 6 jegyű törzsszámodat</p>
+      <h1 className="mb-1 text-xl font-bold text-indigo-300">{t("kiosk.title")}</h1>
+      <p className="mb-6 text-sm text-slate-400">{t("kiosk.subtitle")}</p>
 
       {/* Kód kijelző */}
       <div className="mb-5 flex gap-2">
@@ -97,18 +103,18 @@ export default function OraPage() {
             }`}
           >
             <p className="text-lg font-semibold">
-              {result.action === "in" ? "✓ Beblokkolva" : "✓ Kiblokkolva"} — {result.employee_name}
+              {result.action === "in" ? t("kiosk.clockedIn") : t("kiosk.clockedOut")} — {result.employee_name}
             </p>
             <p className="text-sm opacity-90">
-              {new Date(result.at).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" })}
+              {new Date(result.at).toLocaleTimeString(lang === "hu" ? "hu-HU" : "en-GB", { hour: "2-digit", minute: "2-digit" })}
               {result.worked_minutes !== null &&
-                ` · ledolgozva: ${(result.worked_minutes / 60).toFixed(1)} óra`}
+                ` · ${t("kiosk.worked", { hours: (result.worked_minutes / 60).toFixed(1) })}`}
             </p>
           </div>
         ) : error ? (
           <p className="w-full rounded-2xl bg-red-600 px-4 py-3 font-medium">{error}</p>
         ) : (
-          <p className="text-slate-500">{busy ? "Feldolgozás…" : " "}</p>
+          <p className="text-slate-500">{busy ? t("kiosk.processing") : " "}</p>
         )}
       </div>
 
@@ -127,7 +133,7 @@ export default function OraPage() {
           onClick={() => setCode("")}
           className="rounded-2xl bg-slate-800 py-5 text-sm font-medium text-slate-400 hover:bg-slate-700"
         >
-          Töröl
+          {t("kiosk.clear")}
         </button>
         <button
           onClick={() => press("0")}
@@ -144,7 +150,7 @@ export default function OraPage() {
       </div>
 
       <a href="/login" className="mt-8 text-xs text-slate-600 hover:text-slate-400">
-        Admin belépés →
+        {t("kiosk.adminLink")}
       </a>
     </div>
   );

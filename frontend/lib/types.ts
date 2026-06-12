@@ -58,6 +58,7 @@ export interface ViolationOut {
   code: string;
   severity: "error" | "warning";
   message: string;
+  params?: Record<string, string | number>;
   employee_id: string | null;
   shift_ids: string[];
 }
@@ -95,16 +96,5 @@ export interface EntryOut {
   note: string | null;
 }
 
-export const TIME_OFF_LABELS: Record<string, string> = {
-  annual: "Szabadság",
-  sick: "Betegszabadság",
-  unpaid: "Fizetés nélküli",
-  other: "Egyéb távollét",
-};
-
-export const TIME_OFF_STATUS_LABELS: Record<string, string> = {
-  pending: "Függőben",
-  approved: "Jóváhagyva",
-  rejected: "Elutasítva",
-  cancelled: "Visszavonva",
-};
+// A távollét-típusok és státuszok feliratai a nyelvi fájlokban élnek:
+// i18n/hu.json és i18n/en.json → "leave.types" / "leave.statuses".
