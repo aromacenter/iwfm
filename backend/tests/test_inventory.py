@@ -155,3 +155,34 @@ async def test_partner_crud(client, manager):
     assert upd.status_code == 200
     assert upd.json()["name"] == "Átnevezett Kft."
     assert upd.json()["is_active"] is False
+
+
+async def test_partner_full_fields(client, manager):
+    _, mgr = manager
+    body = {
+        "name": "Teljes Kft.",
+        "partner_type": "supplier",
+        "tax_number": "12345678-2-42",
+        "eu_tax_number": "HU12345678",
+        "reg_number": "01-09-123456",
+        "website": "https://teljes.hu",
+        "billing_address": "1051 Budapest, Fő utca 1.",
+        "bank_account": "11773016-12345678-00000000",
+        "payment_terms_days": 30,
+    }
+    res = await client.post("/api/partners", json=body, headers=mgr)
+    assert res.status_code == 201, res.text
+    out = res.json()
+    for key, value in body.items():
+        assert out[key] == value
+    # default partner_type
+    plain = await make_partner(client, mgr, name="Alap Kft.")
+    assert plain["partner_type"] == "customer"
+
+
+async def test_partner_bad_type(client, manager):
+    _, mgr = manager
+    res = await client.post(
+        "/api/partners", json={"name": "X", "partner_type": "nope"}, headers=mgr
+    )
+    assert res.status_code == 422

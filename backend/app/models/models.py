@@ -420,10 +420,19 @@ class Partner(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # vevő (customer) | szállító (supplier) | mindkettő (both)
+    partner_type: Mapped[str] = mapped_column(String(16), nullable=False, default="customer")
+    tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)  # adószám
+    eu_tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)  # közösségi adószám
+    reg_number: Mapped[str | None] = mapped_column(String(64), nullable=True)  # cégjegyzékszám
     contact_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(512), nullable=True)  # székhely
+    billing_address: Mapped[str | None] = mapped_column(String(512), nullable=True)  # számlázási cím
+    bank_account: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fizetési határidő (nap)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

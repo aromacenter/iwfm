@@ -4,6 +4,7 @@
  * társítás (kihelyezés/visszavétel), vonalkód-olvasó és mozgástörténet. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -51,7 +52,6 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const EMPTY_ASSET = { id: "", barcode: "", name: "", category: "", model: "", serial_number: "", notes: "", status: "in_stock" };
-const EMPTY_PARTNER = { id: "", name: "", contact_name: "", contact_email: "", contact_phone: "", address: "", notes: "", is_active: true };
 
 export default function KeszletPage() {
   const { t, lang } = useT();
@@ -63,11 +63,9 @@ export default function KeszletPage() {
   const [scanMsg, setScanMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [assetForm, setAssetForm] = useState<typeof EMPTY_ASSET | null>(null);
-  const [partnerForm, setPartnerForm] = useState<typeof EMPTY_PARTNER | null>(null);
   const [deployFor, setDeployFor] = useState<Asset | null>(null);
   const [deploy, setDeploy] = useState({ partner_id: "", note: "" });
   const [historyFor, setHistoryFor] = useState<Asset | null>(null);
-  const [showPartners, setShowPartners] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
@@ -196,32 +194,6 @@ export default function KeszletPage() {
     }
   }
 
-  async function savePartner(e: React.FormEvent) {
-    e.preventDefault();
-    if (!partnerForm) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const body = {
-        name: partnerForm.name,
-        contact_name: partnerForm.contact_name || null,
-        contact_email: partnerForm.contact_email || null,
-        contact_phone: partnerForm.contact_phone || null,
-        address: partnerForm.address || null,
-        notes: partnerForm.notes || null,
-        is_active: partnerForm.is_active,
-      };
-      if (partnerForm.id) await api.patch(`/api/partners/${partnerForm.id}`, body);
-      else await api.post("/api/partners", body);
-      setPartnerForm(null);
-      loadPartners();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -251,9 +223,9 @@ export default function KeszletPage() {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-        <button onClick={() => setShowPartners(true)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">
+        <Link href="/partnerek" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">
           {t("inv.partners")}
-        </button>
+        </Link>
         <button onClick={() => { setError(null); setAssetForm({ ...EMPTY_ASSET }); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
           {t("inv.newAsset")}
         </button>
@@ -425,83 +397,6 @@ export default function KeszletPage() {
         </div>
       )}
 
-      {/* Partnerek kezelése */}
-      {showPartners && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-          <div className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">{t("inv.partners")}</h2>
-              <button onClick={() => { setError(null); setPartnerForm({ ...EMPTY_PARTNER }); }} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
-                {t("inv.addPartner")}
-              </button>
-            </div>
-            {partners.length === 0 ? (
-              <p className="text-sm text-slate-400">{t("inv.noPartners")}</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 text-sm">
-                {partners.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between py-2">
-                    <div>
-                      <span className="font-medium">{p.name}</span>
-                      {!p.is_active && <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs">{t("emp.inactive")}</span>}
-                      <div className="text-xs text-slate-400">
-                        {t("inv.assetCount", { count: p.asset_count })}
-                        {p.contact_name && ` · ${p.contact_name}`}
-                      </div>
-                    </div>
-                    <button onClick={() => { setError(null); setPartnerForm({ id: p.id, name: p.name, contact_name: p.contact_name ?? "", contact_email: p.contact_email ?? "", contact_phone: p.contact_phone ?? "", address: p.address ?? "", notes: p.notes ?? "", is_active: p.is_active }); }} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
-                      {t("common.edit")}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex justify-end">
-              <button onClick={() => setShowPartners(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.close")}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Partner űrlap */}
-      {partnerForm && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-          <form onSubmit={savePartner} className="my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">{partnerForm.id ? t("inv.editPartnerTitle") : t("inv.newPartnerTitle")}</h2>
-            <label className="block text-sm">
-              {t("inv.partnerName")}
-              <input required value={partnerForm.name} onChange={(e) => setPartnerForm({ ...partnerForm, name: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block text-sm">
-                {t("inv.contactName")}
-                <input value={partnerForm.contact_name} onChange={(e) => setPartnerForm({ ...partnerForm, contact_name: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-              </label>
-              <label className="block text-sm">
-                {t("inv.contactPhone")}
-                <input value={partnerForm.contact_phone} onChange={(e) => setPartnerForm({ ...partnerForm, contact_phone: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-              </label>
-            </div>
-            <label className="block text-sm">
-              {t("inv.contactEmail")}
-              <input type="email" value={partnerForm.contact_email} onChange={(e) => setPartnerForm({ ...partnerForm, contact_email: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-            </label>
-            <label className="block text-sm">
-              {t("inv.address")}
-              <input value={partnerForm.address} onChange={(e) => setPartnerForm({ ...partnerForm, address: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={partnerForm.is_active} onChange={(e) => setPartnerForm({ ...partnerForm, is_active: e.target.checked })} className="h-4 w-4" />
-              {t("inv.partnerActive")}
-            </label>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={() => setPartnerForm(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
-              <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{busy ? t("common.saving") : t("common.save")}</button>
-            </div>
-          </form>
-        </div>
-      )}
     </AppShell>
   );
 }

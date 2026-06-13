@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,23 +28,49 @@ ASSET_STATUSES = ("in_stock", "deployed", "maintenance", "retired")
 # ─── Partnerek ───────────────────────────────────────────────────────────────
 
 
+PARTNER_TYPES = ("customer", "supplier", "both")
+
+
 class PartnerBody(BaseModel):
     name: str = Field(min_length=1, max_length=256)
+    partner_type: str = Field(default="customer")
+    tax_number: str | None = Field(default=None, max_length=32)
+    eu_tax_number: str | None = Field(default=None, max_length=32)
+    reg_number: str | None = Field(default=None, max_length=64)
     contact_name: str | None = Field(default=None, max_length=256)
     contact_email: EmailStr | None = None
     contact_phone: str | None = Field(default=None, max_length=32)
+    website: str | None = Field(default=None, max_length=256)
     address: str | None = Field(default=None, max_length=512)
+    billing_address: str | None = Field(default=None, max_length=512)
+    bank_account: str | None = Field(default=None, max_length=64)
+    payment_terms_days: int | None = Field(default=None, ge=0, le=365)
     notes: str | None = None
     is_active: bool = True
+
+    @field_validator("partner_type")
+    @classmethod
+    def _check_type(cls, v: str) -> str:
+        if v not in PARTNER_TYPES:
+            raise ValueError("partner.bad_type")
+        return v
 
 
 class PartnerOut(BaseModel):
     id: str
     name: str
+    partner_type: str
+    tax_number: str | None
+    eu_tax_number: str | None
+    reg_number: str | None
     contact_name: str | None
     contact_email: str | None
     contact_phone: str | None
+    website: str | None
     address: str | None
+    billing_address: str | None
+    bank_account: str | None
+    payment_terms_days: int | None
     notes: str | None
     is_active: bool
     asset_count: int = 0
@@ -54,10 +80,18 @@ def _partner_out(p: Partner, asset_count: int = 0) -> PartnerOut:
     return PartnerOut(
         id=str(p.id),
         name=p.name,
+        partner_type=p.partner_type,
+        tax_number=p.tax_number,
+        eu_tax_number=p.eu_tax_number,
+        reg_number=p.reg_number,
         contact_name=p.contact_name,
         contact_email=p.contact_email,
         contact_phone=p.contact_phone,
+        website=p.website,
         address=p.address,
+        billing_address=p.billing_address,
+        bank_account=p.bank_account,
+        payment_terms_days=p.payment_terms_days,
         notes=p.notes,
         is_active=p.is_active,
         asset_count=asset_count,

@@ -48,6 +48,15 @@ def _ensure_employee_code_column(sync_conn) -> None:
 
     ensure_column("employees", "employee_code", "VARCHAR(6)")  # v0.2
     ensure_column("ai_settings", "assign_prompt", "TEXT")  # v0.4
+    # v0.5 — partner törzsadat-bővítés
+    ensure_column("partners", "partner_type", "VARCHAR(16) NOT NULL DEFAULT 'customer'")
+    ensure_column("partners", "tax_number", "VARCHAR(32)")
+    ensure_column("partners", "eu_tax_number", "VARCHAR(32)")
+    ensure_column("partners", "reg_number", "VARCHAR(64)")
+    ensure_column("partners", "website", "VARCHAR(256)")
+    ensure_column("partners", "billing_address", "VARCHAR(512)")
+    ensure_column("partners", "bank_account", "VARCHAR(64)")
+    ensure_column("partners", "payment_terms_days", "INTEGER")
     if "employees" in tables:
         sync_conn.execute(
             sql_text(
