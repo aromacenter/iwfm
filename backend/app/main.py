@@ -12,6 +12,7 @@ from app.api import (
     auth,
     dashboard,
     employees,
+    inventory,
     kiosk,
     me,
     payroll,
@@ -118,6 +119,8 @@ def create_app() -> FastAPI:
     app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
     app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
     app.include_router(tasks.me_router, prefix="/api/me/tasks", tags=["self-service"])
+    app.include_router(inventory.router, prefix="/api/partners", tags=["partners"])
+    app.include_router(inventory.assets_router, prefix="/api/assets", tags=["assets"])
 
     @app.get("/api/health")
     async def health():

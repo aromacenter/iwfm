@@ -16,6 +16,7 @@ const NAV = [
   { href: "/beosztas", key: "nav.schedule", roles: ["admin", "manager"] },
   { href: "/tavollet", key: "nav.timeOff", roles: ["admin", "manager"] },
   { href: "/jelenlet", key: "nav.attendance", roles: ["admin", "manager"] },
+  { href: "/keszlet", key: "nav.inventory", roles: ["admin", "manager"] },
   { href: "/beallitasok", key: "nav.settings", roles: ["admin"] },
   { href: "/beosztasom", key: "nav.mySchedule", roles: ["employee"] },
   { href: "/feladataim", key: "nav.myTasks", roles: ["employee"] },

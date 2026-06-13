@@ -412,6 +412,92 @@ class AISettings(Base):
     )
 
 
+class Partner(Base):
+    """Partner cég, akihez eszközök helyezhetők ki."""
+
+    __tablename__ = "partners"
+    __table_args__ = (Index("ix_partners_name", "name"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    contact_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class Asset(Base):
+    """Készleten lévő / kihelyezett eszköz (gép) egyedi vonalkóddal.
+
+    status: in_stock (raktáron) | deployed (kihelyezve) | maintenance
+            (szervizen) | retired (selejtezve). Kihelyezéskor partner_id +
+            deployed_at töltődik, visszavételkor nullázódik.
+    """
+
+    __tablename__ = "assets"
+    __table_args__ = (
+        UniqueConstraint("barcode", name="uq_assets_barcode"),
+        CheckConstraint(
+            "status IN ('in_stock','deployed','maintenance','retired')",
+            name="ck_assets_status",
+        ),
+        Index("ix_assets_status", "status"),
+        Index("ix_assets_partner", "partner_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    barcode: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    serial_number: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="in_stock")
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True
+    )
+    deployed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class AssetMovement(Base):
+    """Eszköz mozgástörténet (append-only): létrehozás, kihelyezés, visszavétel,
+    állapotváltás. Auditra és a kihelyezési előzményekhez."""
+
+    __tablename__ = "asset_movements"
+    __table_args__ = (Index("ix_asset_movements_asset", "asset_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("assets.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(24), nullable=False)  # created|deploy|return|status
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True
+    )
+    detail: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class AuditEvent(Base):
     """Append-only audit trail. Sensitive-data reveals, publishes, exports,
     and every mutation of employee PII are recorded here (GDPR accountability)."""

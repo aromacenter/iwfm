@@ -1,10 +1,13 @@
 from app.models.models import (  # noqa: F401
     AISettings,
+    Asset,
+    AssetMovement,
     AuditEvent,
     Base,
     EmailSettings,
     Employee,
     EmployeeSkill,
+    Partner,
     Shift,
     Skill,
     Task,
