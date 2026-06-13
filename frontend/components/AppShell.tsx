@@ -96,7 +96,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center px-5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="iwfm — Intelligence Workforce Management" className="h-8 w-auto" />
+        <img src="/logo.svg" alt="iwfm — Intelligence Workforce Management" className="h-11 w-auto" />
       </div>
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
         {groups.map((group) => (
@@ -159,7 +159,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </svg>
         </button>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="iwfm" className="h-7 w-auto" />
+        <img src="/logo.svg" alt="iwfm" className="h-9 w-auto" />
       </header>
 
       {/* Mobil oldalsáv (slide-over) */}
