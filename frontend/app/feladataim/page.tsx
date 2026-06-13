@@ -265,7 +265,7 @@ export default function FeladataimPage() {
       </div>
 
       {wsTask && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setWsTask(null); }} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
           <div className="my-6 w-full max-w-lg space-y-3 rounded-2xl bg-white p-5 shadow-xl">
             <h2 className="text-lg font-semibold">{t("myTasks.wsTitle", { title: wsTask.title })}</h2>
             {wsTask.worksheet_serial && (
