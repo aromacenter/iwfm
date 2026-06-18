@@ -86,6 +86,31 @@ def _validate_times(clock_in: datetime, clock_out: datetime | None) -> None:
         raise HTTPException(status_code=422, detail={"code": "timeclock.bad_range"})
 
 
+_FAR_FUTURE = datetime(9999, 12, 31, tzinfo=UTC)
+
+
+async def _ensure_no_overlap(
+    db: AsyncSession,
+    employee_id: uuid.UUID,
+    clock_in: datetime,
+    clock_out: datetime | None,
+    *,
+    exclude_id: uuid.UUID | None = None,
+) -> None:
+    """P3: ugyanannak a dolgozónak ne legyen időben átfedő bejegyzése
+    (nyitott bejegyzés a végtelenig tart). Megakadályozza a duplázott órát."""
+    new_in = _aware(clock_in)
+    new_out = _aware(clock_out) or _FAR_FUTURE
+    query = select(TimeEntry).where(TimeEntry.employee_id == employee_id)
+    if exclude_id is not None:
+        query = query.where(TimeEntry.id != exclude_id)
+    for e in (await db.execute(query)).scalars():
+        e_in = _aware(e.clock_in)
+        e_out = _aware(e.clock_out) or _FAR_FUTURE
+        if new_in < e_out and e_in < new_out:
+            raise HTTPException(status_code=409, detail={"code": "timeclock.overlap"})
+
+
 @router.get("", response_model=list[EntryOut])
 async def list_entries(
     date_from: date = Query(...),
@@ -126,6 +151,7 @@ async def create_entry(
     ).scalar_one_or_none()
     if emp is None:
         raise HTTPException(status_code=422, detail={"code": "timeclock.bad_employee"})
+    await _ensure_no_overlap(db, emp_id, body.clock_in, body.clock_out)
 
     entry = TimeEntry(
         employee_id=emp_id,
@@ -171,6 +197,7 @@ async def update_entry(
     new_in = data.get("clock_in", entry.clock_in)
     new_out = data.get("clock_out", entry.clock_out)
     _validate_times(_aware(new_in), _aware(new_out))
+    await _ensure_no_overlap(db, entry.employee_id, new_in, new_out, exclude_id=entry.id)
 
     for key, value in data.items():
         setattr(entry, key, value)

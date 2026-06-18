@@ -80,6 +80,34 @@ async def test_shift_on_approved_leave_rejected(client, manager):
     assert res.json()["detail"]["code"] == "shift.on_time_off"
 
 
+async def test_published_shift_edit_blocks_illegal(client, manager):
+    """P1: publikált műszakot nem lehet error-szintű szabálysértésre módosítani."""
+    _, headers = manager
+    emp = await make_emp(client)
+    monday = next_monday(weeks_ahead=3)  # messze, így nincs 96h/168h gond
+    created = await client.post(
+        "/api/shifts", json=shift_payload(str(emp.id), monday), headers=headers
+    )
+    sid = created.json()["id"]
+    pub = await client.post(
+        "/api/shifts/publish", json={"week_start": monday.isoformat()}, headers=headers
+    )
+    assert pub.status_code == 200, pub.text
+
+    # 08:00–23:00 = 15 óra > 12 (Mt. 99.§) → blokk
+    bad = await client.patch(
+        f"/api/shifts/{sid}", json={"end_time": "23:00:00", "force": True}, headers=headers
+    )
+    assert bad.status_code == 409, bad.text
+    assert bad.json()["detail"]["code"] == "shift.compliance_blocked"
+
+    # legális módosítás (08:00–17:00 = 9 óra) átmegy
+    ok = await client.patch(
+        f"/api/shifts/{sid}", json={"end_time": "17:00:00", "force": True}, headers=headers
+    )
+    assert ok.status_code == 200, ok.text
+
+
 async def test_publish_blocked_on_error_violation(client, manager):
     _, headers = manager
     emp = await make_emp(client)

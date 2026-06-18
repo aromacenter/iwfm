@@ -41,6 +41,24 @@ async def test_create_and_approve(client, manager):
     assert decided.json()["decided_at"] is not None
 
 
+async def test_overlapping_timeoff_rejected(client, manager):
+    """P2: átfedő (függő/jóváhagyott) távollét-kérelem nem vehető fel."""
+    _, headers = manager
+    emp = await make_emp()
+    first = await client.post("/api/time-off", json=payload(str(emp.id)), headers=headers)
+    assert first.status_code == 201
+
+    start = date.today() + timedelta(days=32)  # a 30..34 napos kérelembe lóg
+    overlapping = payload(
+        str(emp.id),
+        start_date=start.isoformat(),
+        end_date=(start + timedelta(days=4)).isoformat(),
+    )
+    res = await client.post("/api/time-off", json=overlapping, headers=headers)
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "timeoff.overlap"
+
+
 async def test_double_decide_conflict(client, manager):
     _, headers = manager
     emp = await make_emp()

@@ -74,6 +74,22 @@ def validate_range(type_: str, start: date, end: date) -> None:
         raise HTTPException(status_code=422, detail={"code": "timeoff.bad_range"})
 
 
+async def ensure_no_overlap(
+    db: AsyncSession, employee_id: uuid.UUID, start: date, end: date, *, exclude_id: uuid.UUID | None = None
+) -> None:
+    """P2: ugyanarra az időszakra ne legyen másik függő/jóváhagyott kérelem."""
+    query = select(TimeOffRequest.id).where(
+        TimeOffRequest.employee_id == employee_id,
+        TimeOffRequest.status.in_(("pending", "approved")),
+        TimeOffRequest.start_date <= end,
+        TimeOffRequest.end_date >= start,
+    )
+    if exclude_id is not None:
+        query = query.where(TimeOffRequest.id != exclude_id)
+    if (await db.execute(query)).first() is not None:
+        raise HTTPException(status_code=409, detail={"code": "timeoff.overlap"})
+
+
 @router.get("", response_model=list[TimeOffOut])
 async def list_time_off(
     status: str | None = Query(default=None),
@@ -108,6 +124,7 @@ async def create_time_off(
     ).scalar_one_or_none()
     if emp is None:
         raise HTTPException(status_code=422, detail={"code": "timeoff.bad_employee"})
+    await ensure_no_overlap(db, emp_id, body.start_date, body.end_date)
 
     req = TimeOffRequest(
         employee_id=emp_id,

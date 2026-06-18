@@ -202,6 +202,35 @@ async def _get_shift_or_404(db: AsyncSession, shift_id: str) -> Shift:
     return shift
 
 
+async def _employee_window_shifts(
+    db: AsyncSession, employee_id: uuid.UUID, around: date, *, exclude_id: uuid.UUID
+) -> list[Shift]:
+    """A dolgozó műszakjai az adott dátum körül (±7 nap), a megadott kivételével
+    — a pihenőidő/heti szabályok ellenőrzéséhez kell a szomszédos napok kontextusa."""
+    rows = (
+        await db.execute(
+            select(Shift).where(
+                Shift.employee_id == employee_id,
+                Shift.id != exclude_id,
+                Shift.work_date >= around - timedelta(days=7),
+                Shift.work_date <= around + timedelta(days=7),
+            )
+        )
+    ).scalars()
+    return list(rows)
+
+
+def _blocking_errors_for(candidate: ShiftSpan, others: list[Shift], *, now: datetime) -> list[Violation]:
+    """A jelölt műszak melletti error-szintű Mt.-szabálysértések (P1: publikált
+    műszak szerkesztése nem hozhat létre szabálytalan beosztást)."""
+    spans = [_span(s) for s in others] + [candidate]
+    return [
+        v
+        for v in check_schedule(spans, now=now)
+        if v.severity == "error" and (not v.shift_ids or candidate.id in v.shift_ids)
+    ]
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 
@@ -319,6 +348,31 @@ async def update_shift(
             )
 
     data = body.model_dump(exclude_unset=True, exclude={"force"})
+
+    # P1: publikált műszak szerkesztése nem hozhat létre Mt. error-szintű
+    # szabálysértést (napi 12h, heti 48h, pihenőidő, 6 munkanap). A draftot a
+    # publikálási kapu ellenőrzi, így ott nem blokkolunk.
+    if shift.status == "published" and data:
+        new_date = data.get("work_date", shift.work_date)
+        candidate = ShiftSpan(
+            id=shift.id,
+            employee_id=shift.employee_id,
+            work_date=new_date,
+            start_time=data.get("start_time", shift.start_time),
+            end_time=data.get("end_time", shift.end_time),
+            break_minutes=data.get("break_minutes", shift.break_minutes),
+        )
+        others = await _employee_window_shifts(db, shift.employee_id, new_date, exclude_id=shift.id)
+        errors = _blocking_errors_for(candidate, others, now=now)
+        if errors:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "shift.compliance_blocked",
+                    "violations": [_violation_out(v).model_dump() for v in errors],
+                },
+            )
+
     for key, value in data.items():
         setattr(shift, key, value)
     await record_audit(

@@ -38,6 +38,28 @@ async def test_manual_entry_and_worked_minutes(client, manager):
     assert res.json()["source"] == "manual"
 
 
+async def test_overlapping_entry_rejected(client, manager):
+    """P3: átfedő időbejegyzés ugyanannál a dolgozónál elutasítva."""
+    _, headers = manager
+    emp = await make_emp()
+    first = await client.post(
+        "/api/time-entries", json=entry_payload(str(emp.id)), headers=headers
+    )
+    assert first.status_code == 201, first.text
+
+    # az alap bejegyzés 08:00–16:30; az új 12:00–16:00 → átfed
+    noon = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    overlap = entry_payload(
+        str(emp.id),
+        clock_in=noon.isoformat(),
+        clock_out=(noon + timedelta(hours=4)).isoformat(),
+        break_minutes=0,
+    )
+    res = await client.post("/api/time-entries", json=overlap, headers=headers)
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "timeclock.overlap"
+
+
 async def test_bad_range_rejected(client, manager):
     _, headers = manager
     emp = await make_emp()
