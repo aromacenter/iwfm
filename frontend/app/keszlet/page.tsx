@@ -8,6 +8,7 @@ import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 
 interface Partner {
   id: string;
@@ -55,6 +56,7 @@ const EMPTY_ASSET = { id: "", barcode: "", name: "", category: "", model: "", se
 
 export default function KeszletPage() {
   const { t, lang } = useT();
+  const { toast } = useUI();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [search, setSearch] = useState("");
@@ -116,7 +118,7 @@ export default function KeszletPage() {
       const res = await api.get<{ barcode: string }>("/api/assets/generate-barcode");
       setAssetForm((f) => (f ? { ...f, barcode: res.barcode } : f));
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -150,7 +152,7 @@ export default function KeszletPage() {
       await api.patch(`/api/assets/${asset.id}`, { status });
       loadAssets();
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -181,7 +183,7 @@ export default function KeszletPage() {
       loadAssets();
       loadPartners();
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -190,7 +192,7 @@ export default function KeszletPage() {
       const full = await api.get<Asset>(`/api/assets/${asset.id}`);
       setHistoryFor(full);
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -314,7 +316,7 @@ export default function KeszletPage() {
               {t("inv.name")} *
               <input required value={assetForm.name} onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block text-sm">
                 {t("inv.category")}
                 <input value={assetForm.category} onChange={(e) => setAssetForm({ ...assetForm, category: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 import type { EmployeeOut } from "@/lib/types";
 
 interface Skill {
@@ -74,6 +75,7 @@ export default function FeladatokPage() {
     open_tasks: number;
   } | null>(null);
   const { t, lang } = useT();
+  const { toast, confirm } = useUI();
 
   const load = useCallback(() => {
     api
@@ -164,7 +166,7 @@ export default function FeladatokPage() {
       if (created.worksheet_serial) {
         messages.push(t("tasks.issuedAlert", { serial: created.worksheet_serial }));
       }
-      if (messages.length > 0) alert(messages.join("\n\n"));
+      if (messages.length > 0) toast(messages.join("\n\n"), "success");
       load();
     } catch (err) {
       setError(errorMessage(err));
@@ -178,7 +180,7 @@ export default function FeladatokPage() {
       await api.patch(`/api/tasks/${task.id}`, { status });
       load();
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -189,17 +191,17 @@ export default function FeladatokPage() {
         `${task.worksheet_serial ?? "munkalap"}.pdf`
       );
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
   async function remove(task: TaskOut) {
-    if (!confirm(t("tasks.deleteConfirm", { title: task.title }))) return;
+    if (!(await confirm(t("tasks.deleteConfirm", { title: task.title })))) return;
     try {
       await api.delete(`/api/tasks/${task.id}`);
       load();
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -398,7 +400,7 @@ export default function FeladatokPage() {
               {t("tasks.dueDate")}
               <input required type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block text-sm">
                 {t("tasks.client")}
                 <input value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} placeholder={t("tasks.clientPlaceholder")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

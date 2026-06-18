@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 
 interface EmailSettings {
   enabled: boolean;
@@ -37,6 +38,7 @@ const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-
 
 export default function BeallitasokPage() {
   const { t } = useT();
+  const { confirm } = useUI();
 
   // --- Email ---
   const [email, setEmail] = useState({
@@ -160,7 +162,7 @@ export default function BeallitasokPage() {
   }
 
   async function removeSkill(skill: Skill) {
-    if (!confirm(t("settings.deleteSkillConfirm", { name: skill.name }))) return;
+    if (!(await confirm(t("settings.deleteSkillConfirm", { name: skill.name })))) return;
     try {
       await api.delete(`/api/settings/skills/${skill.id}`);
       load();
@@ -229,7 +231,7 @@ export default function BeallitasokPage() {
             />
             {t("settings.emailEnabled")}
           </label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="col-span-2 block text-sm">
               {t("settings.smtpHost")}
               <input

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 import type { EmployeeOut, TimeOffOut } from "@/lib/types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -27,6 +28,7 @@ export default function TavolletPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { t } = useT();
+  const { toast } = useUI();
 
   const load = useCallback(() => {
     api
@@ -45,7 +47,7 @@ export default function TavolletPage() {
       await api.patch(`/api/time-off/${id}/decide`, { status });
       load();
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -150,7 +152,7 @@ export default function TavolletPage() {
                 ))}
               </select>
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block text-sm">
                 {t("leave.from")}
                 <input required type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

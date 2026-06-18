@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 import type { EmployeeOut, EntryOut } from "@/lib/types";
 
 function isoDate(d: Date): string {
@@ -44,6 +45,7 @@ export default function JelenletPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { t, lang } = useT();
+  const { toast } = useUI();
 
   const fmt = (dt: string) =>
     new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", {
@@ -115,7 +117,7 @@ export default function JelenletPage() {
         `berexport_${effFrom}_${effTo}.${format}`
       );
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -310,7 +312,7 @@ export default function JelenletPage() {
               {t("att.day")}
               <input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="block text-sm">
                 {t("att.in")}
                 <input required type="time" value={form.in_time} onChange={(e) => setForm({ ...form, in_time: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />

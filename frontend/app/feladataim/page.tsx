@@ -8,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 
 interface CommentOut {
   id: string;
@@ -70,6 +71,7 @@ export default function FeladataimPage() {
   const [wsError, setWsError] = useState<string | null>(null);
   const [wsBusy, setWsBusy] = useState(false);
   const { t } = useT();
+  const { toast } = useUI();
 
   const load = useCallback(() => {
     api
@@ -90,7 +92,7 @@ export default function FeladataimPage() {
       setComments((c) => ({ ...c, [task.id]: "" }));
       load();
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     } finally {
       setBusy(null);
     }
@@ -107,7 +109,7 @@ export default function FeladataimPage() {
       setComments((c) => ({ ...c, [task.id]: "" }));
       load();
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     } finally {
       setBusy(null);
     }
@@ -351,7 +353,7 @@ export default function FeladataimPage() {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="block text-sm">
                 {t("myTasks.wsClient")}
                 <input

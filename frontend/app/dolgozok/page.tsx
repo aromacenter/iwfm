@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 import type { AuthUser, EmployeeOut } from "@/lib/types";
 
 interface RevealOut {
@@ -73,6 +74,7 @@ export default function DolgozokPage() {
   const [allSkills, setAllSkills] = useState<Skill[]>([]);
   const [skillIds, setSkillIds] = useState<number[]>([]);
   const { t } = useT();
+  const { toast, confirm } = useUI();
 
   const load = useCallback(() => {
     api.get<EmployeeOut[]>("/api/employees").then(setEmployees).catch(() => {});
@@ -199,7 +201,7 @@ export default function DolgozokPage() {
             : null,
         ].filter(Boolean);
         if (info.length > 0) {
-          alert(`${t("emp.createdInfo")}\n\n${info.join("\n")}`);
+          toast(`${t("emp.createdInfo")}\n\n${info.join("\n")}`, "success");
         }
       }
       setShowForm(false);
@@ -222,19 +224,19 @@ export default function DolgozokPage() {
       const data = await api.get<RevealOut>(`/api/employees/${empId}/reveal`);
       setRevealed((r) => ({ ...r, [empId]: data }));
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
   async function resetPassword(empId: string) {
-    if (!confirm(t("account.resetConfirm"))) return;
+    if (!(await confirm(t("account.resetConfirm")))) return;
     try {
       const res = await api.post<{ generated_password: string }>(
         `/api/employees/${empId}/reset-password`,
       );
-      alert(t("account.resetDone", { password: res.generated_password }));
+      toast(t("account.resetDone", { password: res.generated_password }), "success");
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -364,7 +366,7 @@ export default function DolgozokPage() {
                 : t("emp.newTitle")}
             </h2>
 
-            <fieldset className="grid grid-cols-2 gap-3">
+            <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.personalSection")}</legend>
               <Field label={t("emp.lastName")}>
                 <input required value={form.last_name} onChange={(e) => set("last_name", e.target.value)} className={inputCls} />
@@ -398,7 +400,7 @@ export default function DolgozokPage() {
               </Field>
             </fieldset>
 
-            <fieldset className="grid grid-cols-2 gap-3">
+            <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.idsSection")}</legend>
               <Field label={editing ? t("emp.taxIdLabelEdit") : t("emp.taxIdLabel")}>
                 <input value={form.tax_id} onChange={(e) => set("tax_id", e.target.value)} placeholder="8xxxxxxxxx" className={fieldCls("tax_id")} />
@@ -417,7 +419,7 @@ export default function DolgozokPage() {
               </Field>
             </fieldset>
 
-            <fieldset className="grid grid-cols-2 gap-3">
+            <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.employmentSection")}</legend>
               <Field label={t("emp.hireDateLabel")}>
                 <input required type="date" value={form.hire_date} onChange={(e) => set("hire_date", e.target.value)} className={inputCls} />
@@ -501,7 +503,7 @@ export default function DolgozokPage() {
             </fieldset>
 
             {!editing && (
-              <fieldset className="grid grid-cols-2 gap-3">
+              <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.accountSection")}</legend>
                 <Field label={t("emp.loginEmail")}>
                   <input required type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inputCls} />

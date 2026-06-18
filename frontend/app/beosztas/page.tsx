@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { useT, translate } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 import type { EmployeeOut, ShiftOut, ViolationOut, WeekOut } from "@/lib/types";
 
 function mondayOf(d: Date): Date {
@@ -62,6 +63,7 @@ export default function BeosztasPage() {
   const [busy, setBusy] = useState(false);
   const [publishWarnings, setPublishWarnings] = useState<ViolationOut[] | null>(null);
   const { t } = useT();
+  const { toast, confirm } = useUI();
 
   const weekIso = iso(weekStart);
 
@@ -155,7 +157,7 @@ export default function BeosztasPage() {
       load();
     } catch (err) {
       if (err instanceof ApiError && err.code === "shift.modify_notice") {
-        if (confirm(t("sched.modifyConfirm"))) {
+        if (await confirm(t("sched.modifyConfirm"))) {
           await saveShift(e, true);
           return;
         }
@@ -175,7 +177,7 @@ export default function BeosztasPage() {
       load();
     } catch (err) {
       if (err instanceof ApiError && err.code === "shift.modify_notice") {
-        if (confirm(t("sched.deleteConfirm"))) {
+        if (await confirm(t("sched.deleteConfirm"))) {
           await deleteShift(true);
           return;
         }
@@ -194,7 +196,7 @@ export default function BeosztasPage() {
         week_start: weekIso,
         force,
       });
-      alert(t("sched.publishedOk", { count: res.published }));
+      toast(t("sched.publishedOk", { count: res.published }), "success");
       load();
     } catch (err) {
       if (err instanceof ApiError && err.code === "publish.needs_confirmation") {
@@ -202,12 +204,13 @@ export default function BeosztasPage() {
         setPublishWarnings(detail.violations);
       } else if (err instanceof ApiError && err.code === "publish.blocked") {
         const detail = err.detail as { violations: ViolationOut[] };
-        alert(
+        toast(
           `${t("sched.publishBlocked")}\n\n` +
-            detail.violations.map((v) => `• ${violationText(v)}`).join("\n")
+            detail.violations.map((v) => `• ${violationText(v)}`).join("\n"),
+          "error"
         );
       } else {
-        alert(errorMessage(err));
+        toast(errorMessage(err), "error");
       }
     } finally {
       setBusy(false);
@@ -355,7 +358,7 @@ export default function BeosztasPage() {
               {form.id ? t("sched.editShift") : t("sched.newShift")} — {employeeName(form.employee_id)}
             </h2>
             <p className="text-sm text-slate-500">{form.work_date}</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="block text-sm">
                 {t("sched.start")}
                 <input type="time" required value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />

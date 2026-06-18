@@ -8,6 +8,7 @@ import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 
 interface DashboardData {
   todays_tasks: { id: string; title: string; employee_name: string; status: string }[];
@@ -29,6 +30,7 @@ interface DashboardData {
 export default function VezerlopultPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const { t, lang } = useT();
+  const { toast } = useUI();
 
   const load = useCallback(() => {
     api.get<DashboardData>("/api/dashboard").then(setData).catch(() => {});
@@ -40,7 +42,7 @@ export default function VezerlopultPage() {
       await api.patch(`/api/time-off/${id}/decide`, { status });
       load();
     } catch (err) {
-      alert(errorMessage(err));
+      toast(errorMessage(err), "error");
     }
   }
 
