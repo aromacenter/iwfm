@@ -386,6 +386,16 @@ async def update_employee(
     if skill_ids is not None:
         await _set_skills(db, emp, skill_ids)
 
+    # Státuszváltás → a login-fiók (User) aktivitásának szinkronizálása.
+    # Inaktiválás egyúttal a nyitott munkameneteket is érvényteleníti
+    # (a get_current_user elutasítja a nem aktív usert).
+    if "status" in data:
+        emp_user = (
+            await db.execute(select(User).where(User.id == emp.user_id))
+        ).scalar_one_or_none()
+        if emp_user is not None:
+            emp_user.is_active = data["status"] == "active"
+
     await record_audit(
         db, actor=actor, action="employee.update", entity_type="employee",
         entity_id=str(emp.id), detail={"fields": changed}, request=request,

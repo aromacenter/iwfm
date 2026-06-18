@@ -45,6 +45,30 @@ async def test_create_employee_encrypts_and_masks(client, admin):
         assert gen_tax_id().encode() not in emp.tax_id_encrypted
 
 
+async def test_deactivating_employee_disables_login(client, admin):
+    """H2: a dolgozó inaktiválása letiltja a login-fiókot is."""
+    _, headers = admin
+    created = (
+        await client.post(
+            "/api/employees", json=employee_payload(email="kilepo@example.com"), headers=headers
+        )
+    ).json()
+    emp_id = created["id"]
+    password = created["generated_password"]
+    assert password  # rendszer-generált, egyszer látszik
+
+    creds = {"email": "kilepo@example.com", "password": password}
+    assert (await client.post("/api/auth/login", json=creds)).status_code == 200
+
+    upd = await client.patch(f"/api/employees/{emp_id}", json={"status": "inactive"}, headers=headers)
+    assert upd.status_code == 200
+    assert (await client.post("/api/auth/login", json=creds)).status_code == 401
+
+    # visszaaktiválás újra engedi a belépést
+    await client.patch(f"/api/employees/{emp_id}", json={"status": "active"}, headers=headers)
+    assert (await client.post("/api/auth/login", json=creds)).status_code == 200
+
+
 async def test_invalid_tax_id_rejected(client, admin):
     _, headers = admin
     res = await client.post(
