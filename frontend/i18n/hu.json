@@ -315,6 +315,9 @@
     "worksheetIssuedTitle": "Kiállítva — kitöltésre vár",
     "worksheetDoneTitle": "A dolgozó kitöltötte",
     "worksheetPdf": "Munkalap PDF",
+    "worksheetEmail": "Email",
+    "emailPrompt": "Add meg a címzett email-címét:",
+    "emailSent": "Elküldve ide: {to}",
     "issuedAlert": "Munkalap kiállítva: {serial}\nA dolgozó a telefonján tölti ki a munkavégzés után.",
     "deleteConfirm": "Törlöd a(z) „{title}\" feladatot?",
     "statuses": {
@@ -353,6 +356,9 @@
     "wsClientSig": "Ügyfél / átvevő aláírása (opcionális)",
     "wsClientSigKeep": "Ügyfél / átvevő aláírása (üresen: a korábbi marad)",
     "wsSave": "Munkalap mentése",
+    "wsShare": "Megosztás",
+    "wsEmail": "Email",
+    "wsDownloaded": "A munkalap PDF letöltve.",
     "sigClear": "Törlés"
   },
   "mySched": {

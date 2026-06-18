@@ -12,7 +12,7 @@ import uuid
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,7 @@ from app.api.deps import (
 from app.db import get_db
 from app.models import Employee, Skill, Task, TaskComment, User, Worksheet
 from app.services.wfm.ai_assign import suggest_assignee
+from app.services.wfm.email_service import load_smtp_config, send_email
 from app.services.wfm.worksheet_pdf import build_worksheet_pdf
 
 router = APIRouter()
@@ -472,14 +473,8 @@ async def manager_upsert_worksheet(
     return _worksheet_out(await _upsert_worksheet(db, task, body, actor, request))
 
 
-@router.get("/{task_id}/worksheet/pdf")
-async def worksheet_pdf(
-    task_id: str,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
-):
-    task = await _get_task_or_404(db, task_id)
+async def _build_worksheet_pdf(db: AsyncSession, task: Task) -> tuple[bytes, str]:
+    """A munkalap PDF-jét állítja elő — (pdf_bytes, sorszám). 404, ha nincs ML."""
     ws = await _get_worksheet(db, task.id)
     if ws is None:
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
@@ -506,22 +501,75 @@ async def worksheet_pdf(
             "client_location": ws.client_location,
             "employee_signature": ws.employee_signature,
             "client_signature": ws.client_signature,
-            "comments": [
-                {"author": c.author_name, "text": c.text} for c in comments
-            ],
+            "comments": [{"author": c.author_name, "text": c.text} for c in comments],
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
         }
     )
-    await record_audit(
-        db, actor=actor, action="worksheet.pdf", entity_type="worksheet",
-        entity_id=ws.serial, request=request,
-    )
-    await db.commit()
+    return pdf, ws.serial
+
+
+def _pdf_response(pdf: bytes, serial: str) -> Response:
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{ws.serial}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{serial}.pdf"'},
     )
+
+
+async def _email_worksheet_pdf(db: AsyncSession, to: str, pdf: bytes, serial: str) -> None:
+    """A munkalap PDF-jének elküldése emailben (csatolmányként). 422/502 hibakód."""
+    smtp = await load_smtp_config(db)
+    if smtp is None:
+        raise HTTPException(status_code=422, detail={"code": "settings.email_not_configured"})
+    ok = await send_email(
+        smtp,
+        to,
+        f"Iwfm — munkalap {serial}",
+        f"Mellékelve a(z) {serial} sorszámú munkalap PDF formátumban.\n\nIwfm",
+        attachments=[(f"{serial}.pdf", pdf, "application", "pdf")],
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail={"code": "settings.email_send_failed"})
+
+
+class WorksheetEmailBody(BaseModel):
+    to: EmailStr
+
+
+@router.get("/{task_id}/worksheet/pdf")
+async def worksheet_pdf(
+    task_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    task = await _get_task_or_404(db, task_id)
+    pdf, serial = await _build_worksheet_pdf(db, task)
+    await record_audit(
+        db, actor=actor, action="worksheet.pdf", entity_type="worksheet",
+        entity_id=serial, request=request,
+    )
+    await db.commit()
+    return _pdf_response(pdf, serial)
+
+
+@router.post("/{task_id}/worksheet/email")
+async def email_worksheet(
+    task_id: str,
+    body: WorksheetEmailBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    task = await _get_task_or_404(db, task_id)
+    pdf, serial = await _build_worksheet_pdf(db, task)
+    await _email_worksheet_pdf(db, body.to, pdf, serial)
+    await record_audit(
+        db, actor=actor, action="worksheet.email", entity_type="worksheet",
+        entity_id=serial, detail={"to": body.to}, request=request,
+    )
+    await db.commit()
+    return {"ok": True}
 
 
 class SuggestBody(BaseModel):
@@ -654,3 +702,43 @@ async def my_status(
     )
     await db.commit()
     return (await _tasks_out(db, [task]))[0]
+
+
+@me_router.get("/{task_id}/worksheet/pdf")
+async def my_worksheet_pdf(
+    task_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """A dolgozó letöltheti/megoszthatja a saját munkalapja PDF-jét (telefonon)."""
+    task = await _own_task_or_404(db, emp, task_id)
+    pdf, serial = await _build_worksheet_pdf(db, task)
+    await record_audit(
+        db, actor=user, action="worksheet.pdf_self", entity_type="worksheet",
+        entity_id=serial, request=request,
+    )
+    await db.commit()
+    return _pdf_response(pdf, serial)
+
+
+@me_router.post("/{task_id}/worksheet/email")
+async def my_email_worksheet(
+    task_id: str,
+    body: WorksheetEmailBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """A dolgozó elküldi a saját munkalapja PDF-jét emailben (pl. az ügyfélnek)."""
+    task = await _own_task_or_404(db, emp, task_id)
+    pdf, serial = await _build_worksheet_pdf(db, task)
+    await _email_worksheet_pdf(db, body.to, pdf, serial)
+    await record_audit(
+        db, actor=user, action="worksheet.email_self", entity_type="worksheet",
+        entity_id=serial, detail={"to": body.to}, request=request,
+    )
+    await db.commit()
+    return {"ok": True}

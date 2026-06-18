@@ -49,12 +49,23 @@ async def load_smtp_config(db: AsyncSession) -> SmtpConfig | None:
     )
 
 
-def _send_sync(config: SmtpConfig, to: str, subject: str, body: str) -> None:
+Attachment = tuple[str, bytes, str, str]  # (filename, data, maintype, subtype)
+
+
+def _send_sync(
+    config: SmtpConfig,
+    to: str,
+    subject: str,
+    body: str,
+    attachments: list[Attachment] | None = None,
+) -> None:
     msg = EmailMessage()
     msg["From"] = config.from_address
     msg["To"] = to
     msg["Subject"] = subject
     msg.set_content(body)
+    for filename, data, maintype, subtype in attachments or []:
+        msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
 
     if config.port == 465:
         with smtplib.SMTP_SSL(config.host, config.port, timeout=15) as server:
@@ -70,10 +81,16 @@ def _send_sync(config: SmtpConfig, to: str, subject: str, body: str) -> None:
             server.send_message(msg)
 
 
-async def send_email(config: SmtpConfig, to: str, subject: str, body: str) -> bool:
-    """Egy email elküldése. False hibánál (logolva), True ha elment."""
+async def send_email(
+    config: SmtpConfig,
+    to: str,
+    subject: str,
+    body: str,
+    attachments: list[Attachment] | None = None,
+) -> bool:
+    """Egy email elküldése (opcionális csatolmányokkal). False hibánál (logolva)."""
     try:
-        await asyncio.to_thread(_send_sync, config, to, subject, body)
+        await asyncio.to_thread(_send_sync, config, to, subject, body, attachments)
         return True
     except Exception:
         logger.warning("Email küldés sikertelen: %s → %s", subject, to, exc_info=True)

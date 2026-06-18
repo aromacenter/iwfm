@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import SignatureCanvas from "@/components/SignatureCanvas";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, shareOrDownloadFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
 
@@ -71,7 +71,7 @@ export default function FeladataimPage() {
   const [wsError, setWsError] = useState<string | null>(null);
   const [wsBusy, setWsBusy] = useState(false);
   const { t } = useT();
-  const { toast } = useUI();
+  const { toast, prompt } = useUI();
 
   const load = useCallback(() => {
     api
@@ -140,6 +140,31 @@ export default function FeladataimPage() {
       } catch {
         /* friss űrlap marad */
       }
+    }
+  }
+
+  async function shareWorksheet() {
+    if (!wsTask) return;
+    try {
+      const result = await shareOrDownloadFile(
+        `/api/me/tasks/${wsTask.id}/worksheet/pdf`,
+        `${wsTask.worksheet_serial ?? "munkalap"}.pdf`,
+      );
+      if (result === "downloaded") toast(t("myTasks.wsDownloaded"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function emailWorksheet() {
+    if (!wsTask) return;
+    const to = await prompt(t("tasks.emailPrompt"), { type: "email", placeholder: "ugyfel@example.com" });
+    if (!to) return;
+    try {
+      await api.post(`/api/me/tasks/${wsTask.id}/worksheet/email`, { to });
+      toast(t("tasks.emailSent", { to }), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -382,7 +407,25 @@ export default function FeladataimPage() {
             />
 
             {wsError && <p className="text-sm text-red-600">{wsError}</p>}
-            <div className="flex justify-end gap-2 pt-1">
+            <div className="flex flex-wrap justify-end gap-2 pt-1">
+              {wsTask.worksheet_serial && (
+                <>
+                  <button
+                    type="button"
+                    onClick={shareWorksheet}
+                    className="mr-auto rounded-lg border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                  >
+                    {t("myTasks.wsShare")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={emailWorksheet}
+                    className="rounded-lg border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                  >
+                    {t("myTasks.wsEmail")}
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => setWsTask(null)}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"

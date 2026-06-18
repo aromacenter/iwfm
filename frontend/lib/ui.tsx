@@ -25,9 +25,22 @@ interface ConfirmState {
   resolve: (ok: boolean) => void;
 }
 
+interface PromptOptions {
+  type?: string;
+  placeholder?: string;
+  initial?: string;
+}
+
+interface PromptState extends PromptOptions {
+  text: string;
+  value: string;
+  resolve: (value: string | null) => void;
+}
+
 interface UIContextValue {
   toast: (text: string, type?: ToastType) => void;
   confirm: (text: string) => Promise<boolean>;
+  prompt: (text: string, options?: PromptOptions) => Promise<string | null>;
 }
 
 const UIContext = createContext<UIContextValue | null>(null);
@@ -42,6 +55,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
   const { t } = useT();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [promptState, setPromptState] = useState<PromptState | null>(null);
   const nextId = useRef(1);
 
   const toast = useCallback((text: string, type: ToastType = "info") => {
@@ -55,13 +69,26 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const prompt = useCallback(
+    (text: string, options: PromptOptions = {}) =>
+      new Promise<string | null>((resolve) =>
+        setPromptState({ text, value: options.initial ?? "", resolve, ...options }),
+      ),
+    [],
+  );
+
   function closeConfirm(ok: boolean) {
     confirmState?.resolve(ok);
     setConfirmState(null);
   }
 
+  function closePrompt(value: string | null) {
+    promptState?.resolve(value);
+    setPromptState(null);
+  }
+
   return (
-    <UIContext.Provider value={{ toast, confirm }}>
+    <UIContext.Provider value={{ toast, confirm, prompt }}>
       {children}
 
       {/* Toast-verem — mobilon alul középen, nagyobb képernyőn jobbra lent */}
@@ -100,6 +127,43 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Szöveg-bekérő (prompt) dialógus */}
+      {promptState && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) closePrompt(null); }}
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4"
+        >
+          <form
+            onSubmit={(e) => { e.preventDefault(); closePrompt(promptState.value.trim() || null); }}
+            className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl"
+          >
+            <label className="block text-sm text-slate-700">
+              {promptState.text}
+              <input
+                autoFocus
+                type={promptState.type ?? "text"}
+                placeholder={promptState.placeholder}
+                value={promptState.value}
+                onChange={(e) => setPromptState((s) => (s ? { ...s, value: e.target.value } : s))}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => closePrompt(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+              >
+                {t("common.cancel")}
+              </button>
+              <button className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                {t("common.send")}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </UIContext.Provider>

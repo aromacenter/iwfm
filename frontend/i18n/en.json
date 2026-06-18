@@ -315,6 +315,9 @@
     "worksheetIssuedTitle": "Issued — awaiting completion",
     "worksheetDoneTitle": "Completed by the employee",
     "worksheetPdf": "Worksheet PDF",
+    "worksheetEmail": "Email",
+    "emailPrompt": "Enter the recipient's email address:",
+    "emailSent": "Sent to {to}",
     "issuedAlert": "Worksheet issued: {serial}\nThe employee completes it on their phone after the work is done.",
     "deleteConfirm": "Delete task \"{title}\"?",
     "statuses": {
@@ -353,6 +356,9 @@
     "wsClientSig": "Client / receiver signature (optional)",
     "wsClientSigKeep": "Client / receiver signature (leave empty to keep previous)",
     "wsSave": "Save worksheet",
+    "wsShare": "Share",
+    "wsEmail": "Email",
+    "wsDownloaded": "Worksheet PDF downloaded.",
     "sigClear": "Clear"
   },
   "mySched": {

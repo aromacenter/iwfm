@@ -121,6 +121,34 @@ async def test_manager_pdf_download(client, manager):
     assert "ML-" in res.headers["content-disposition"]
 
 
+async def test_employee_can_download_own_pdf(client, manager):
+    """A dolgozó letöltheti a SAJÁT munkalapja PDF-jét (megosztáshoz)."""
+    _, mgr = manager
+    emp, emp_h = await make_emp(email="sajatpdf@example.com")
+    task = await task_for(client, mgr, emp)
+    await client.put(f"/api/me/tasks/{task['id']}/worksheet", json=ws_payload(), headers=emp_h)
+
+    res = await client.get(f"/api/me/tasks/{task['id']}/worksheet/pdf", headers=emp_h)
+    assert res.status_code == 200, res.text
+    assert res.content[:5] == b"%PDF-"
+
+
+async def test_worksheet_email_requires_smtp(client, manager):
+    """Email-küldés SMTP nélkül 422-t ad (a beállítás hiányzik)."""
+    _, mgr = manager
+    emp, emp_h = await make_emp(email="emailpdf@example.com")
+    task = await task_for(client, mgr, emp)
+    await client.put(f"/api/me/tasks/{task['id']}/worksheet", json=ws_payload(), headers=emp_h)
+
+    res = await client.post(
+        f"/api/tasks/{task['id']}/worksheet/email",
+        json={"to": "ugyfel@example.com"},
+        headers=mgr,
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "settings.email_not_configured"
+
+
 async def test_task_creation_issues_worksheet(client, manager):
     """A feladat létrehozása eleve online munkalapot állít ki."""
     _, mgr = manager

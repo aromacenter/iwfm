@@ -75,7 +75,7 @@ export default function FeladatokPage() {
     open_tasks: number;
   } | null>(null);
   const { t, lang } = useT();
-  const { toast, confirm } = useUI();
+  const { toast, confirm, prompt } = useUI();
 
   const load = useCallback(() => {
     api
@@ -184,6 +184,17 @@ export default function FeladatokPage() {
     }
   }
 
+  async function emailWorksheet(task: TaskOut) {
+    const to = await prompt(t("tasks.emailPrompt"), { type: "email", placeholder: "ugyfel@example.com" });
+    if (!to) return;
+    try {
+      await api.post(`/api/tasks/${task.id}/worksheet/email`, { to });
+      toast(t("tasks.emailSent", { to }), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function downloadWorksheet(task: TaskOut) {
     try {
       await downloadFile(
@@ -262,12 +273,20 @@ export default function FeladatokPage() {
               </div>
               <div className="flex gap-2">
                 {task.worksheet_serial && (
-                  <button
-                    onClick={() => downloadWorksheet(task)}
-                    className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
-                  >
-                    {t("tasks.worksheetPdf")}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => downloadWorksheet(task)}
+                      className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      {t("tasks.worksheetPdf")}
+                    </button>
+                    <button
+                      onClick={() => emailWorksheet(task)}
+                      className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      {t("tasks.worksheetEmail")}
+                    </button>
+                  </>
                 )}
                 {task.status !== "open" && (
                   <button

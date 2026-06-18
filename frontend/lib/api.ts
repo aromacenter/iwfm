@@ -57,12 +57,43 @@ export async function downloadFile(path: string, filename: string) {
   const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
   if (!res.ok) throw new ApiError(res.status, `http.${res.status}`, null);
   const blob = await res.blob();
+  triggerDownload(blob, filename);
+}
+
+function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** Telefon natív megosztás (Web Share API) — ha nem támogatott (vagy asztali),
+ *  letöltésre esik vissza. Visszatérés: "shared" | "downloaded" | "cancelled". */
+export async function shareOrDownloadFile(
+  path: string,
+  filename: string,
+): Promise<"shared" | "downloaded" | "cancelled"> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(res.status, `http.${res.status}`, null);
+  const blob = await res.blob();
+  const file = new File([blob], filename, { type: blob.type || "application/pdf" });
+  const nav = navigator as Navigator & {
+    canShare?: (data: { files: File[] }) => boolean;
+    share?: (data: { files: File[]; title?: string }) => Promise<void>;
+  };
+  if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+    try {
+      await nav.share({ files: [file], title: filename });
+      return "shared";
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return "cancelled";
+      // egyéb hiba → letöltés
+    }
+  }
+  triggerDownload(blob, filename);
+  return "downloaded";
 }
 
 /** Emberi hibaüzenetek a backend hibakódjaihoz — a nyelvi fájlokból
