@@ -1,7 +1,15 @@
 @import "tailwindcss";
 
-/* Egységes világos téma — a komponensek slate/indigo Tailwind-színekkel
-   dolgoznak, sötét módot majd egy későbbi verzió kap dedikált tokenekkel. */
+/* Osztály-alapú sötét mód (a <html>-en .dark) — a no-flash init a layoutban. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+
 body {
   background: #f8fafc; /* slate-50 */
   color: #0f172a; /* slate-900 */
@@ -13,4 +21,88 @@ body {
     "Helvetica Neue",
     Arial,
     sans-serif;
+}
+
+/* ─── Sötét téma ───────────────────────────────────────────────────────────
+   A komponensek slate/indigo Tailwind-utility-ket használnak; sötét módban a
+   gyakori felület-osztályokat központilag írjuk felül, hogy ne kelljen minden
+   oldalt módosítani. Az akcentus (indigo/emerald/red…) színek maradnak. */
+.dark body {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+.dark .bg-white {
+  background-color: #131c2e !important;
+}
+.dark .bg-slate-50 {
+  background-color: #0f1828 !important;
+}
+.dark .bg-slate-100 {
+  background-color: #1b2638 !important;
+}
+.dark .bg-slate-200 {
+  background-color: #27344a !important;
+}
+.dark .hover\:bg-slate-100:hover {
+  background-color: #1b2638 !important;
+}
+.dark .hover\:bg-slate-50:hover {
+  background-color: #16213a !important;
+}
+
+.dark .text-slate-900 {
+  color: #e2e8f0 !important;
+}
+.dark .text-slate-700 {
+  color: #cbd5e1 !important;
+}
+.dark .text-slate-600 {
+  color: #b8c4d6 !important;
+}
+.dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+.dark .text-slate-400 {
+  color: #7e8ca5 !important;
+}
+.dark .text-slate-300 {
+  color: #64748b !important;
+}
+
+.dark .border-slate-200 {
+  border-color: #27344a !important;
+}
+.dark .border-slate-300 {
+  border-color: #33415c !important;
+}
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1f2a3d !important;
+}
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #27344a !important;
+}
+
+/* Aktív navigáció + indigo halvány hátterek */
+.dark .bg-indigo-50 {
+  background-color: #1e293b !important;
+}
+.dark .text-indigo-700 {
+  color: #a5b4fc !important;
+}
+
+/* Űrlapmezők */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: #0f1828;
+  color: #e2e8f0;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+/* A vászon-alapú aláírás háttere maradjon halvány, hogy a fekete vonal látszódjon */
+.dark canvas {
+  background-color: #e2e8f0;
 }

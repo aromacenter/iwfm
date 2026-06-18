@@ -30,6 +30,12 @@
     "myTasks": "Feladatok",
     "inventory": "Készlet",
     "openMenu": "Menü megnyitása",
+    "theme": "Téma",
+    "themes": {
+      "light": "Világos",
+      "dark": "Sötét",
+      "system": "Rendszer"
+    },
     "groups": {
       "overview": "Áttekintés",
       "operations": "Munkavégzés",

@@ -67,9 +67,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [pwBusy, setPwBusy] = useState(false);
   const [pwErr, setPwErr] = useState<string | null>(null);
   const [pwMsg, setPwMsg] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useT();
+
+  useEffect(() => {
+    const stored = localStorage.getItem("iwfm-theme");
+    if (stored === "light" || stored === "dark" || stored === "system") setTheme(stored);
+  }, []);
+
+  function applyTheme(next: "light" | "dark" | "system") {
+    setTheme(next);
+    localStorage.setItem("iwfm-theme", next);
+    const dark =
+      next === "dark" ||
+      (next === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.classList.toggle("dark", dark);
+  }
+
+  function cycleTheme() {
+    applyTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light");
+  }
 
   useEffect(() => {
     api
@@ -157,7 +176,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ))}
       </nav>
       <div className="space-y-3 border-t border-slate-200 px-5 py-4">
-        <LanguageSwitcher />
+        <div className="flex items-center justify-between gap-2">
+          <LanguageSwitcher />
+          <button
+            onClick={cycleTheme}
+            title={`${t("nav.theme")}: ${t(`nav.themes.${theme}`)}`}
+            aria-label={t("nav.theme")}
+            className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+          >
+            {theme === "light" ? "☀️" : theme === "dark" ? "🌙" : "🖥️"}
+          </button>
+        </div>
         <div className="text-sm text-slate-500">{user.display_name}</div>
         <button
           onClick={openPassword}

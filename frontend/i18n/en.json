@@ -30,6 +30,12 @@
     "myTasks": "Tasks",
     "inventory": "Inventory",
     "openMenu": "Open menu",
+    "theme": "Theme",
+    "themes": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
     "groups": {
       "overview": "Overview",
       "operations": "Operations",
