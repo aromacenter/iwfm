@@ -23,7 +23,15 @@ from app.api.deps import (
     require_role,
 )
 from app.db import get_db
-from app.models import Employee, Skill, Task, TaskComment, User, Worksheet
+from app.models import (
+    Employee,
+    Skill,
+    Task,
+    TaskComment,
+    User,
+    Worksheet,
+    WorksheetSettings,
+)
 from app.services.wfm.ai_assign import suggest_assignee
 from app.services.wfm.email_service import load_smtp_config, send_email
 from app.services.wfm.worksheet_pdf import build_worksheet_pdf
@@ -503,9 +511,30 @@ async def _build_worksheet_pdf(db: AsyncSession, task: Task) -> tuple[bytes, str
             "client_signature": ws.client_signature,
             "comments": [{"author": c.author_name, "text": c.text} for c in comments],
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
-        }
+        },
+        await _worksheet_pdf_settings(db),
     )
     return pdf, ws.serial
+
+
+async def _worksheet_pdf_settings(db: AsyncSession) -> dict | None:
+    """A munkalap-PDF testreszabási beállításai (logó, fejléc, szín, kapcsolók)."""
+    row = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    return {
+        "company_name": row.company_name,
+        "company_address": row.company_address,
+        "footer_text": row.footer_text,
+        "accent_color": row.accent_color,
+        "logo_bytes": bytes(row.logo_data) if row.logo_data else None,
+        "show_materials": row.show_materials,
+        "show_hours": row.show_hours,
+        "show_client_signature": row.show_client_signature,
+        "show_comments": row.show_comments,
+    }
 
 
 def _pdf_response(pdf: bytes, serial: str) -> Response:

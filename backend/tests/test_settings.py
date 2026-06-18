@@ -6,6 +6,46 @@ import app.db as app_db
 from app.models import EmailSettings
 
 
+async def test_worksheet_settings_roundtrip_and_logo(client, admin):
+    """Munkalap-testreszabás: mezők + PNG logó mentése/lekérése, hibás szín tiltás."""
+    import base64 as _b64
+
+    _, headers = admin
+    tiny_png = "data:image/png;base64," + _b64.b64encode(
+        _b64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
+            "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        )
+    ).decode()
+
+    res = await client.put(
+        "/api/settings/worksheet",
+        json={
+            "company_name": "Aroma Kft.",
+            "footer_text": "Köszönjük a bizalmat!",
+            "accent_color": "#0EA5E9",
+            "show_client_signature": False,
+            "logo": tiny_png,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["company_name"] == "Aroma Kft."
+    assert body["accent_color"] == "#0ea5e9"
+    assert body["show_client_signature"] is False
+    assert body["has_logo"] is True
+
+    logo = await client.get("/api/settings/worksheet/logo", headers=headers)
+    assert logo.status_code == 200
+    assert logo.headers["content-type"].startswith("image/")
+
+    bad = await client.put(
+        "/api/settings/worksheet", json={"accent_color": "kék"}, headers=headers
+    )
+    assert bad.status_code == 422
+
+
 async def test_email_settings_roundtrip_password_never_returned(client, admin):
     _, headers = admin
     res = await client.put(

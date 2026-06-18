@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field
+import base64
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_role
 from app.core.crypto import encrypt_pii
 from app.db import get_db
-from app.models import EmailSettings, EmployeeSkill, Skill, User
+from app.models import EmailSettings, EmployeeSkill, Skill, User, WorksheetSettings
 from app.services.wfm.ai_assign import DEFAULT_ASSIGN_PROMPT
 from app.services.wfm.ai_service import (
     PROVIDERS as AI_PROVIDERS,
@@ -281,3 +283,133 @@ async def delete_skill(
     )
     await db.commit()
     return {"ok": True}
+
+
+# ─── Munkalap-PDF testreszabás ───────────────────────────────────────────────
+
+
+_MAX_LOGO_BYTES = 2 * 1024 * 1024  # 2 MB
+_LOGO_MIME = {"image/png", "image/jpeg", "image/jpg"}
+
+
+class WorksheetSettingsBody(BaseModel):
+    company_name: str | None = Field(default=None, max_length=256)
+    company_address: str | None = Field(default=None, max_length=512)
+    footer_text: str | None = Field(default=None, max_length=512)
+    accent_color: str = Field(default="#1e40af")
+    show_materials: bool = True
+    show_hours: bool = True
+    show_client_signature: bool = True
+    show_comments: bool = True
+    logo: str | None = None  # data URL (image/png|jpeg); ha üres, marad a régi
+    remove_logo: bool = False
+
+    @field_validator("accent_color")
+    @classmethod
+    def _check_color(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) != 7 or not v.startswith("#") or any(ch not in "0123456789abcdefABCDEF" for ch in v[1:]):
+            raise ValueError("settings.bad_color")
+        return v.lower()
+
+
+class WorksheetSettingsOut(BaseModel):
+    company_name: str | None
+    company_address: str | None
+    footer_text: str | None
+    accent_color: str
+    show_materials: bool
+    show_hours: bool
+    show_client_signature: bool
+    show_comments: bool
+    has_logo: bool
+
+
+async def _get_or_create_worksheet(db: AsyncSession) -> WorksheetSettings:
+    row = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    if row is None:
+        row = WorksheetSettings(id=1)
+        db.add(row)
+        await db.flush()
+    return row
+
+
+def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
+    return WorksheetSettingsOut(
+        company_name=row.company_name,
+        company_address=row.company_address,
+        footer_text=row.footer_text,
+        accent_color=row.accent_color,
+        show_materials=row.show_materials,
+        show_hours=row.show_hours,
+        show_client_signature=row.show_client_signature,
+        show_comments=row.show_comments,
+        has_logo=row.logo_data is not None,
+    )
+
+
+@router.get("/worksheet", response_model=WorksheetSettingsOut)
+async def get_worksheet_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    return _worksheet_out(await _get_or_create_worksheet(db))
+
+
+@router.get("/worksheet/logo")
+async def get_worksheet_logo(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("manager")),
+):
+    row = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    if row is None or row.logo_data is None:
+        raise HTTPException(status_code=404, detail={"code": "settings.no_logo"})
+    return Response(content=bytes(row.logo_data), media_type=row.logo_mime or "image/png")
+
+
+@router.put("/worksheet", response_model=WorksheetSettingsOut)
+async def update_worksheet_settings(
+    body: WorksheetSettingsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    row = await _get_or_create_worksheet(db)
+    row.company_name = body.company_name
+    row.company_address = body.company_address
+    row.footer_text = body.footer_text
+    row.accent_color = body.accent_color
+    row.show_materials = body.show_materials
+    row.show_hours = body.show_hours
+    row.show_client_signature = body.show_client_signature
+    row.show_comments = body.show_comments
+
+    if body.remove_logo:
+        row.logo_data = None
+        row.logo_mime = None
+    elif body.logo:
+        if not body.logo.startswith("data:"):
+            raise HTTPException(status_code=422, detail={"code": "settings.bad_logo"})
+        try:
+            header, b64 = body.logo.split(",", 1)
+            mime = header.split(";")[0].removeprefix("data:").lower()
+            raw = base64.b64decode(b64)
+        except Exception:
+            raise HTTPException(status_code=422, detail={"code": "settings.bad_logo"})
+        if mime not in _LOGO_MIME:
+            raise HTTPException(status_code=422, detail={"code": "settings.bad_logo"})
+        if len(raw) > _MAX_LOGO_BYTES:
+            raise HTTPException(status_code=422, detail={"code": "settings.logo_too_large"})
+        row.logo_data = raw
+        row.logo_mime = "image/jpeg" if mime in ("image/jpg", "image/jpeg") else "image/png"
+
+    await record_audit(
+        db, actor=actor, action="settings.worksheet_update", entity_type="settings",
+        entity_id="worksheet", request=request,
+    )
+    await db.commit()
+    return _worksheet_out(row)

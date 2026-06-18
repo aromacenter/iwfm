@@ -415,6 +415,28 @@ class AISettings(Base):
     )
 
 
+class WorksheetSettings(Base):
+    """Munkalap-PDF testreszabás — egyetlen sor (id=1). Céglogo, fejléc/lábléc,
+    akcentusszín és mező-kapcsolók a kiállított munkalap kinézetéhez."""
+
+    __tablename__ = "worksheet_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    company_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    company_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    footer_text: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    accent_color: Mapped[str] = mapped_column(String(7), nullable=False, default="#1e40af")
+    logo_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    logo_mime: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    show_materials: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    show_hours: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    show_client_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    show_comments: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class Partner(Base):
     """Partner cég, akihez eszközök helyezhetők ki."""
 

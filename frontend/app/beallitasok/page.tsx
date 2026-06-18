@@ -34,6 +34,18 @@ interface AISettings {
   default_assign_prompt: string;
 }
 
+interface WorksheetSettings {
+  company_name: string | null;
+  company_address: string | null;
+  footer_text: string | null;
+  accent_color: string;
+  show_materials: boolean;
+  show_hours: boolean;
+  show_client_signature: boolean;
+  show_comments: boolean;
+  has_logo: boolean;
+}
+
 const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 
 export default function BeallitasokPage() {
@@ -75,6 +87,24 @@ export default function BeallitasokPage() {
   const [promptIsCustom, setPromptIsCustom] = useState(false);
   const [defaultPrompt, setDefaultPrompt] = useState("");
 
+  // --- Munkalap-PDF testreszabás ---
+  const [ws, setWs] = useState({
+    company_name: "",
+    company_address: "",
+    footer_text: "",
+    accent_color: "#1e40af",
+    show_materials: true,
+    show_hours: true,
+    show_client_signature: true,
+    show_comments: true,
+  });
+  const [wsHasLogo, setWsHasLogo] = useState(false);
+  const [wsLogo, setWsLogo] = useState<string | null>(null); // újonnan feltöltött data URL
+  const [wsRemoveLogo, setWsRemoveLogo] = useState(false);
+  const [wsLogoVer, setWsLogoVer] = useState(0); // cache-bust a logó-előnézethez
+  const [wsMsg, setWsMsg] = useState<string | null>(null);
+  const [wsBusy, setWsBusy] = useState(false);
+
   const load = useCallback(() => {
     api
       .get<EmailSettings>("/api/settings/email")
@@ -107,6 +137,25 @@ export default function BeallitasokPage() {
         setAssignPrompt(s.assign_prompt);
         setPromptIsCustom(s.assign_prompt_is_custom);
         setDefaultPrompt(s.default_assign_prompt);
+      })
+      .catch(() => {});
+    api
+      .get<WorksheetSettings>("/api/settings/worksheet")
+      .then((s) => {
+        setWs({
+          company_name: s.company_name ?? "",
+          company_address: s.company_address ?? "",
+          footer_text: s.footer_text ?? "",
+          accent_color: s.accent_color,
+          show_materials: s.show_materials,
+          show_hours: s.show_hours,
+          show_client_signature: s.show_client_signature,
+          show_comments: s.show_comments,
+        });
+        setWsHasLogo(s.has_logo);
+        setWsLogo(null);
+        setWsRemoveLogo(false);
+        setWsLogoVer((v) => v + 1);
       })
       .catch(() => {});
   }, []);
@@ -210,11 +259,115 @@ export default function BeallitasokPage() {
     }
   }
 
+  function onLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setWsLogo(reader.result as string);
+      setWsRemoveLogo(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function saveWorksheet(e: React.FormEvent) {
+    e.preventDefault();
+    setWsBusy(true);
+    setWsMsg(null);
+    try {
+      await api.put("/api/settings/worksheet", {
+        company_name: ws.company_name || null,
+        company_address: ws.company_address || null,
+        footer_text: ws.footer_text || null,
+        accent_color: ws.accent_color,
+        show_materials: ws.show_materials,
+        show_hours: ws.show_hours,
+        show_client_signature: ws.show_client_signature,
+        show_comments: ws.show_comments,
+        logo: wsLogo,
+        remove_logo: wsRemoveLogo,
+      });
+      setWsMsg(t("common.saved"));
+      load();
+    } catch (err) {
+      setWsMsg(errorMessage(err));
+    } finally {
+      setWsBusy(false);
+    }
+  }
+
+  const wsToggles = [
+    ["show_materials", "wsShowMaterials"],
+    ["show_hours", "wsShowHours"],
+    ["show_client_signature", "wsShowClientSig"],
+    ["show_comments", "wsShowComments"],
+  ] as const;
+
   return (
     <AppShell>
       <h1 className="mb-4 text-xl font-bold">{t("settings.title")}</h1>
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
+        {/* Munkalap-PDF testreszabás */}
+        <form
+          onSubmit={saveWorksheet}
+          className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        >
+          <h2 className="font-semibold">{t("settings.wsTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.wsHint")}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              {t("settings.wsCompanyName")}
+              <input value={ws.company_name} onChange={(e) => setWs({ ...ws, company_name: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              {t("settings.wsCompanyAddress")}
+              <input value={ws.company_address} onChange={(e) => setWs({ ...ws, company_address: e.target.value })} className={inputCls} />
+            </label>
+          </div>
+          <label className="block text-sm">
+            {t("settings.wsFooter")}
+            <input value={ws.footer_text} onChange={(e) => setWs({ ...ws, footer_text: e.target.value })} className={inputCls} />
+          </label>
+          <div className="flex items-center gap-3">
+            <span className="text-sm">{t("settings.wsAccent")}</span>
+            <input type="color" value={ws.accent_color} onChange={(e) => setWs({ ...ws, accent_color: e.target.value })} className="h-8 w-12 rounded border border-slate-300" />
+            <span className="font-mono text-xs text-slate-500">{ws.accent_color}</span>
+          </div>
+          <div className="space-y-1">
+            <span className="block text-sm">{t("settings.wsLogo")}</span>
+            <div className="flex items-center gap-3">
+              {wsLogo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={wsLogo} alt="logo" className="h-12 w-auto rounded border border-slate-200" />
+              ) : wsHasLogo && !wsRemoveLogo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`/api/settings/worksheet/logo?v=${wsLogoVer}`} alt="logo" className="h-12 w-auto rounded border border-slate-200" />
+              ) : (
+                <span className="text-xs text-slate-400">{t("settings.wsNoLogo")}</span>
+              )}
+              <input type="file" accept="image/png,image/jpeg" onChange={onLogoFile} className="text-xs" />
+              {(wsHasLogo || wsLogo) && !wsRemoveLogo && (
+                <button type="button" onClick={() => { setWsLogo(null); setWsRemoveLogo(true); }} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
+                  {t("settings.wsRemoveLogo")}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {wsToggles.map(([key, lbl]) => (
+              <label key={key} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={ws[key]} onChange={(e) => setWs({ ...ws, [key]: e.target.checked })} className="h-4 w-4" />
+                {t(`settings.${lbl}`)}
+              </label>
+            ))}
+          </div>
+          {wsMsg && <p className="text-sm text-slate-600">{wsMsg}</p>}
+          <button disabled={wsBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            {wsBusy ? t("common.saving") : t("common.save")}
+          </button>
+        </form>
+
         {/* Email értesítések */}
         <form
           onSubmit={saveEmail}

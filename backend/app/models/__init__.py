@@ -16,4 +16,5 @@ from app.models.models import (  # noqa: F401
     TimeOffRequest,
     User,
     Worksheet,
+    WorksheetSettings,
 )

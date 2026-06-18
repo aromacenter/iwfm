@@ -52,12 +52,42 @@ def _signature_image(data_url: str | None) -> ImageReader | None:
         return None
 
 
-def build_worksheet_pdf(data: dict) -> bytes:
+def _hex_rgb(value: str | None, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
+    """'#1e40af' → (0.11, 0.25, 0.68). Hibás érték esetén a fallback."""
+    if value and value.startswith("#") and len(value) == 7:
+        try:
+            return tuple(int(value[i : i + 2], 16) / 255 for i in (1, 3, 5))  # type: ignore[return-value]
+        except ValueError:
+            pass
+    return fallback
+
+
+def _logo_image(logo_bytes: bytes | None) -> ImageReader | None:
+    if not logo_bytes:
+        return None
+    try:
+        return ImageReader(io.BytesIO(logo_bytes))
+    except Exception:
+        return None
+
+
+def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
     """Munkalap PDF. ``data`` kulcsai: serial, task_title, task_description,
     due_date, status_label, employee_name, employee_code, job_title,
     work_description, materials [{name, qty, unit}], hours_spent,
     client_name, client_location, employee_signature, client_signature,
-    comments [{author, text, at}], generated_at."""
+    comments [{author, text, at}], generated_at.
+
+    ``settings`` (opcionális testreszabás): company_name, company_address,
+    footer_text, accent_color (#hex), logo_bytes, show_materials, show_hours,
+    show_client_signature, show_comments."""
+    s = settings or {}
+    accent = _hex_rgb(s.get("accent_color"), (0.15, 0.25, 0.65))
+    show_materials = s.get("show_materials", True)
+    show_hours = s.get("show_hours", True)
+    show_client_signature = s.get("show_client_signature", True)
+    show_comments = s.get("show_comments", True)
+
     buf = io.BytesIO()
     c = pdf_canvas.Canvas(buf, pagesize=A4)
     width, height = A4
@@ -86,24 +116,42 @@ def build_worksheet_pdf(data: dict) -> bytes:
             c.drawString(left, y, paragraph)
             y -= 4.5 * mm
 
+    accent_tint = tuple(ch + (1 - ch) * 0.88 for ch in accent)  # nagyon világos akcentus
+
     def section(title: str) -> None:
         nonlocal y
         y -= 3 * mm
-        c.setFillColorRGB(0.93, 0.94, 0.98)
+        c.setFillColorRGB(*accent_tint)
         c.rect(left, y - 1.5 * mm, right - left, 6.5 * mm, fill=1, stroke=0)
-        c.setFillColorRGB(0.15, 0.2, 0.45)
+        c.setFillColorRGB(*accent)
         c.setFont(FONT_BOLD, 10)
         c.drawString(left + 2 * mm, y, title)
         c.setFillColorRGB(0, 0, 0)
         y -= 8 * mm
 
-    # ─── Fejléc ───
-    c.setFillColorRGB(0.15, 0.25, 0.65)
-    c.setFont(FONT_BOLD, 22)
-    c.drawString(left, y, "iwfm")
-    c.setFillColorRGB(0.35, 0.4, 0.5)
-    c.setFont(FONT, 8)
-    c.drawString(left, y - 4.5 * mm, "Intelligence Workforce Management")
+    # ─── Fejléc (céglogo/cégnév vagy iwfm-alapértelmezés) ───
+    logo = _logo_image(s.get("logo_bytes"))
+    company_name = s.get("company_name")
+    if logo is not None:
+        try:
+            c.drawImage(
+                logo, left, y - 9 * mm, width=48 * mm, height=14 * mm,
+                preserveAspectRatio=True, anchor="sw", mask="auto",
+            )
+        except Exception:  # pragma: no cover - hibás képadat
+            logo = None
+    if logo is None:
+        c.setFillColorRGB(*accent)
+        c.setFont(FONT_BOLD, 22)
+        c.drawString(left, y, company_name or "iwfm")
+        c.setFillColorRGB(0.35, 0.4, 0.5)
+        c.setFont(FONT, 8)
+        c.drawString(left, y - 4.5 * mm, s.get("company_address") or "Intelligence Workforce Management")
+    elif company_name:
+        c.setFillColorRGB(0.35, 0.4, 0.5)
+        c.setFont(FONT, 8)
+        c.drawString(left, y - 12 * mm, company_name)
+
     c.setFillColorRGB(0, 0, 0)
     c.setFont(FONT_BOLD, 16)
     c.drawRightString(right, y, "MUNKALAP")
@@ -113,7 +161,7 @@ def build_worksheet_pdf(data: dict) -> bytes:
     c.drawRightString(right, y - 11 * mm, f"Kelt: {data.get('generated_at', '')}")
     y -= 18 * mm
     c.setLineWidth(1)
-    c.setStrokeColorRGB(0.15, 0.25, 0.65)
+    c.setStrokeColorRGB(*accent)
     c.line(left, y, right, y)
     c.setStrokeColorRGB(0, 0, 0)
     y -= 8 * mm
@@ -145,12 +193,12 @@ def build_worksheet_pdf(data: dict) -> bytes:
     # ─── Elvégzett munka ───
     section("Elvégzett munka")
     wrapped(data.get("work_description", ""))
-    if data.get("hours_spent") is not None:
+    if show_hours and data.get("hours_spent") is not None:
         y -= 1 * mm
         line("Ráfordított idő:", f"{data['hours_spent']:g} óra")
 
     # ─── Anyagok ───
-    materials = data.get("materials") or []
+    materials = data.get("materials") or [] if show_materials else []
     if materials:
         section("Felhasznált anyagok")
         c.setFont(FONT_BOLD, 9)
@@ -166,7 +214,7 @@ def build_worksheet_pdf(data: dict) -> bytes:
             y -= 4.5 * mm
 
     # ─── Megjegyzések ───
-    comments = data.get("comments") or []
+    comments = data.get("comments") or [] if show_comments else []
     if comments:
         section("Megjegyzések")
         for comment in comments[:10]:
@@ -175,10 +223,10 @@ def build_worksheet_pdf(data: dict) -> bytes:
     # ─── Aláírások (lap alján) ───
     sig_y = 38 * mm
     box_w = 70 * mm
-    for x, sig_key, label in (
-        (left, "employee_signature", "Munkavégző aláírása"),
-        (right - box_w, "client_signature", "Ügyfél / átvevő aláírása"),
-    ):
+    signature_boxes = [(left, "employee_signature", "Munkavégző aláírása")]
+    if show_client_signature:
+        signature_boxes.append((right - box_w, "client_signature", "Ügyfél / átvevő aláírása"))
+    for x, sig_key, label in signature_boxes:
         img = _signature_image(data.get(sig_key))
         if img is not None:
             c.drawImage(
@@ -189,11 +237,17 @@ def build_worksheet_pdf(data: dict) -> bytes:
         c.setFont(FONT, 8)
         c.drawCentredString(x + box_w / 2, sig_y - 4.5 * mm, label)
 
+    # ─── Lábléc ───
+    footer_text = s.get("footer_text")
+    if footer_text:
+        c.setFont(FONT, 8)
+        c.setFillColorRGB(0.3, 0.3, 0.35)
+        c.drawCentredString(width / 2, 17 * mm, footer_text[:160])
     c.setFont(FONT, 7)
     c.setFillColorRGB(0.5, 0.5, 0.55)
     c.drawCentredString(
         width / 2, 12 * mm,
-        f"Iwfm munkalap · {data.get('serial', '')} · generálva: {data.get('generated_at', '')}",
+        f"{data.get('serial', '')} · generálva: {data.get('generated_at', '')}",
     )
 
     c.showPage()
