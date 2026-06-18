@@ -13,6 +13,36 @@ async def two_employees(client):
     return (e1, h1), (e2, h2)
 
 
+async def test_change_password_invalidates_old_sessions(client):
+    """M1/M4: jelszóváltás után a régi token érvénytelen, az új jelszó működik."""
+    user, headers = await make_user(
+        email="jelszo@example.com", role="employee", password="RegiJelszo-123"
+    )
+    await make_employee_record(user)
+
+    bad = await client.post(
+        "/api/me/password",
+        json={"current_password": "rossz", "new_password": "UjJelszo-9876"},
+        headers=headers,
+    )
+    assert bad.status_code == 403
+
+    ok = await client.post(
+        "/api/me/password",
+        json={"current_password": "RegiJelszo-123", "new_password": "UjJelszo-9876"},
+        headers=headers,
+    )
+    assert ok.status_code == 200
+
+    # a régi Bearer token (tv=0) már nem érvényes
+    assert (await client.get("/api/auth/me", headers=headers)).status_code == 401
+    # az új jelszóval be lehet lépni
+    login = await client.post(
+        "/api/auth/login", json={"email": "jelszo@example.com", "password": "UjJelszo-9876"}
+    )
+    assert login.status_code == 200
+
+
 async def test_my_schedule_only_published_and_own(client, manager):
     _, mgr = manager
     (e1, h1), (e2, h2) = await two_employees(client)

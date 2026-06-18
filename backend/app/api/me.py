@@ -19,15 +19,17 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import set_session_cookie
 from app.api.deps import get_current_user, get_own_employee, record_audit
 from app.api.shifts import ShiftOut, _shift_out, _week_bounds
 from app.api.timeclock import EntryOut, to_out as entry_out
 from app.api.timeoff import TimeOffOut, to_out as timeoff_out, validate_range
+from app.core.security import hash_password, mint_token, verify_password
 from app.db import get_db
 from app.models import Employee, Shift, TimeEntry, TimeOffRequest, User
 
@@ -49,6 +51,39 @@ async def my_profile(emp: Employee = Depends(get_own_employee)):
         "employee_code": emp.employee_code,
         "job_title": emp.job_title,
     }
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+
+@router.post("/password")
+async def change_password(
+    body: PasswordChange,
+    response: Response,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Saját jelszó módosítása (bármely szerepkör). A token_version növelésével
+    minden korábbi munkamenet érvénytelenné válik; az aktuális kérés friss
+    sütit kap, hogy bejelentkezve maradjon."""
+    if not verify_password(user.password_hash, body.current_password):
+        raise HTTPException(status_code=403, detail={"code": "auth.bad_password"})
+    if body.new_password == body.current_password:
+        raise HTTPException(status_code=422, detail={"code": "auth.same_password"})
+    user.password_hash = hash_password(body.new_password)
+    user.token_version += 1
+    await record_audit(
+        db, actor=user, action="auth.password_change", entity_type="user",
+        entity_id=str(user.id), request=request,
+    )
+    await db.commit()
+    set_session_cookie(
+        response, mint_token(user_id=user.id, role=user.role, token_version=user.token_version)
+    )
+    return {"ok": True}
 
 
 @router.get("/schedule", response_model=list[ShiftOut])

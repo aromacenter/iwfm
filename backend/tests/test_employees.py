@@ -69,6 +69,30 @@ async def test_deactivating_employee_disables_login(client, admin):
     assert (await client.post("/api/auth/login", json=creds)).status_code == 200
 
 
+async def test_admin_reset_password(client, admin):
+    """M1: admin új ideiglenes jelszót ad, a régi munkamenet/jelszó érvénytelen."""
+    _, headers = admin
+    created = (
+        await client.post(
+            "/api/employees", json=employee_payload(email="reset@example.com"), headers=headers
+        )
+    ).json()
+    emp_id = created["id"]
+    old_pw = created["generated_password"]
+
+    creds_old = {"email": "reset@example.com", "password": old_pw}
+    assert (await client.post("/api/auth/login", json=creds_old)).status_code == 200
+
+    res = await client.post(f"/api/employees/{emp_id}/reset-password", headers=headers)
+    assert res.status_code == 200
+    new_pw = res.json()["generated_password"]
+    assert new_pw and new_pw != old_pw
+
+    assert (await client.post("/api/auth/login", json=creds_old)).status_code == 401
+    creds_new = {"email": "reset@example.com", "password": new_pw}
+    assert (await client.post("/api/auth/login", json=creds_new)).status_code == 200
+
+
 async def test_invalid_tax_id_rejected(client, admin):
     _, headers = admin
     res = await client.post(

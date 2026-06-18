@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
 
@@ -62,6 +62,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwErr, setPwErr] = useState<string | null>(null);
+  const [pwMsg, setPwMsg] = useState<string | null>(null);
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useT();
@@ -80,6 +85,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   async function logout() {
     await api.post("/api/auth/logout");
     router.replace("/login");
+  }
+
+  function openPassword() {
+    setPw({ current: "", next: "", confirm: "" });
+    setPwErr(null);
+    setPwMsg(null);
+    setPwOpen(true);
+  }
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwErr(null);
+    if (pw.next !== pw.confirm) {
+      setPwErr(t("account.mismatch"));
+      return;
+    }
+    setPwBusy(true);
+    try {
+      await api.post("/api/me/password", { current_password: pw.current, new_password: pw.next });
+      setPwMsg(t("account.changed"));
+      setPw({ current: "", next: "", confirm: "" });
+    } catch (err) {
+      setPwErr(errorMessage(err));
+    } finally {
+      setPwBusy(false);
+    }
   }
 
   if (loading) {
@@ -129,6 +160,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <LanguageSwitcher />
         <div className="text-sm text-slate-500">{user.display_name}</div>
         <button
+          onClick={openPassword}
+          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+        >
+          {t("account.password")}
+        </button>
+        <button
           onClick={logout}
           className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
         >
@@ -173,6 +210,59 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main className="min-w-0 flex-1">
         <div className="mx-auto max-w-6xl px-4 py-6">{children}</div>
       </main>
+
+      {pwOpen && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setPwOpen(false); }}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+        >
+          <form onSubmit={changePassword} className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">{t("account.password")}</h2>
+            <label className="block text-sm">
+              {t("account.current")}
+              <input
+                type="password"
+                required
+                value={pw.current}
+                onChange={(e) => setPw({ ...pw, current: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              {t("account.new")} <span className="text-slate-400">{t("account.newHint")}</span>
+              <input
+                type="password"
+                required
+                minLength={10}
+                value={pw.next}
+                onChange={(e) => setPw({ ...pw, next: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              {t("account.confirm")}
+              <input
+                type="password"
+                required
+                minLength={10}
+                value={pw.confirm}
+                onChange={(e) => setPw({ ...pw, confirm: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            {pwErr && <p className="text-sm text-red-600">{pwErr}</p>}
+            {pwMsg && <p className="text-sm text-emerald-600">{pwMsg}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setPwOpen(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+                {t("common.close")}
+              </button>
+              <button disabled={pwBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                {pwBusy ? t("common.saving") : t("common.save")}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

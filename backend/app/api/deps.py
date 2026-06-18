@@ -43,6 +43,10 @@ async def get_current_user(
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail={"code": "auth.invalid"})
+    # Token-verzió: jelszóváltás/kényszerített kijelentkeztetés érvényteleníti
+    # a régi tokeneket. (A régi, tv nélküli tokenek 0-nak számítanak.)
+    if int(payload.get("tv", 0)) != user.token_version:
+        raise HTTPException(status_code=401, detail={"code": "auth.invalid"})
     return user
 
 

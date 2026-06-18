@@ -73,6 +73,18 @@
       "both": "Customer & supplier"
     }
   },
+  "account": {
+    "password": "Change password",
+    "current": "Current password",
+    "new": "New password",
+    "newHint": "(min. 10 characters)",
+    "confirm": "Confirm new password",
+    "mismatch": "The two new passwords don't match.",
+    "changed": "Password changed.",
+    "resetPassword": "Reset password",
+    "resetConfirm": "Set a new temporary password for this employee? Their existing sessions will end.",
+    "resetDone": "New temporary password (hand it to the employee): {password}"
+  },
   "login": {
     "title": "Sign in",
     "bootstrapTitle": "Create first admin",
@@ -437,6 +449,9 @@
     "auth.forbidden": "You don't have permission for this.",
     "auth.missing": "Please sign in.",
     "auth.invalid": "Your session expired — sign in again.",
+    "auth.bad_password": "Incorrect current password.",
+    "auth.same_password": "The new password must differ from the old one.",
+    "auth.bootstrap_token": "Invalid bootstrap token.",
     "employee.email_taken": "An account with this email already exists.",
     "employee.invalid_ids": "Invalid identifier (tax ID / social security / bank account).",
     "employee.not_found": "Employee not found.",

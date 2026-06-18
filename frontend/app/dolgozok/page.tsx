@@ -226,6 +226,18 @@ export default function DolgozokPage() {
     }
   }
 
+  async function resetPassword(empId: string) {
+    if (!confirm(t("account.resetConfirm"))) return;
+    try {
+      const res = await api.post<{ generated_password: string }>(
+        `/api/employees/${empId}/reset-password`,
+      );
+      alert(t("account.resetDone", { password: res.generated_password }));
+    } catch (err) {
+      alert(errorMessage(err));
+    }
+  }
+
   return (
     <AppShell>
       <div className="mb-4 flex items-center justify-between">
@@ -316,6 +328,12 @@ export default function DolgozokPage() {
                           className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
                         >
                           {t("common.edit")}
+                        </button>
+                        <button
+                          onClick={() => resetPassword(emp.id)}
+                          className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                        >
+                          {t("account.resetPassword")}
                         </button>
                       </div>
                     )}

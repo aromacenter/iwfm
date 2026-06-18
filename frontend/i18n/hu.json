@@ -73,6 +73,18 @@
       "both": "Vevő és szállító"
     }
   },
+  "account": {
+    "password": "Jelszó módosítása",
+    "current": "Jelenlegi jelszó",
+    "new": "Új jelszó",
+    "newHint": "(min. 10 karakter)",
+    "confirm": "Új jelszó megerősítése",
+    "mismatch": "A két új jelszó nem egyezik.",
+    "changed": "A jelszó megváltozott.",
+    "resetPassword": "Jelszó visszaállítása",
+    "resetConfirm": "Új ideiglenes jelszót állítasz be ennek a dolgozónak? A régi munkamenetei megszűnnek.",
+    "resetDone": "Az új ideiglenes jelszó (add át a dolgozónak): {password}"
+  },
   "login": {
     "title": "Bejelentkezés",
     "bootstrapTitle": "Első admin létrehozása",
@@ -437,6 +449,9 @@
     "auth.forbidden": "Ehhez nincs jogosultságod.",
     "auth.missing": "Jelentkezz be.",
     "auth.invalid": "A munkamenet lejárt, jelentkezz be újra.",
+    "auth.bad_password": "Hibás jelenlegi jelszó.",
+    "auth.same_password": "Az új jelszó nem egyezhet a régivel.",
+    "auth.bootstrap_token": "Hibás bootstrap-token.",
     "employee.email_taken": "Ezzel az email címmel már létezik fiók.",
     "employee.invalid_ids": "Hibás azonosító (adóazonosító / TAJ / bankszámla).",
     "employee.not_found": "A dolgozó nem található.",

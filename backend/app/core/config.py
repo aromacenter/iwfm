@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:3000"
     cookie_secure: bool = False  # set True in production (HTTPS)
     session_hours: int = 12
+    # Ha be van állítva, az első-admin bootstrap CSAK ezzel a tokennel hívható
+    # (megvédi a nyitott bootstrap-ablakot, ha a users tábla valaha kiürülne).
+    bootstrap_token: str = ""
 
     model_config = {"env_prefix": "WFM_", "env_file": ".env", "extra": "ignore"}
 

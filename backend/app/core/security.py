@@ -35,12 +35,13 @@ def verify_password(password_hash: str, candidate: str) -> bool:
         return False
 
 
-def mint_token(*, user_id: uuid.UUID, role: str) -> str:
+def mint_token(*, user_id: uuid.UUID, role: str, token_version: int = 0) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
         "role": role,
+        "tv": token_version,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(hours=settings.session_hours)).timestamp()),
         "jti": uuid.uuid4().hex,

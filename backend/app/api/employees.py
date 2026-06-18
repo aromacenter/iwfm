@@ -427,3 +427,33 @@ async def reveal_sensitive(
         bank_account=decrypt_pii(emp.bank_account_encrypted),
         wage_amount=decrypt_pii(emp.wage_encrypted),
     )
+
+
+class PasswordResetOut(BaseModel):
+    generated_password: str
+
+
+@router.post("/{employee_id}/reset-password", response_model=PasswordResetOut)
+async def reset_password(
+    employee_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """Új ideiglenes jelszó a dolgozó login-fiókjához — egyszer látható, az admin
+    adja át. A token_version növelésével minden korábbi munkamenet érvénytelen."""
+    emp = await _get_or_404(db, employee_id)
+    user = (
+        await db.execute(select(User).where(User.id == emp.user_id))
+    ).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail={"code": "employee.not_found"})
+    new_password = secrets.token_urlsafe(12)
+    user.password_hash = hash_password(new_password)
+    user.token_version += 1
+    await record_audit(
+        db, actor=actor, action="employee.reset_password", entity_type="user",
+        entity_id=str(user.id), request=request,
+    )
+    await db.commit()
+    return PasswordResetOut(generated_password=new_password)

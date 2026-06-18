@@ -43,6 +43,7 @@ class BootstrapBody(BaseModel):
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
     display_name: str = Field(min_length=1, max_length=256)
+    token: str | None = None  # csak ha WFM_BOOTSTRAP_TOKEN be van állítva
 
 
 class LoginBody(BaseModel):
@@ -63,7 +64,7 @@ def _user_out(user: User) -> UserOut:
     )
 
 
-def _set_cookie(response: Response, token: str) -> None:
+def set_session_cookie(response: Response, token: str) -> None:
     settings = get_settings()
     response.set_cookie(
         SESSION_COOKIE,
@@ -84,7 +85,11 @@ async def bootstrap_admin(
     db: AsyncSession = Depends(get_db),
 ):
     """Create the very first admin account. Only works while the users table
-    is empty — afterwards it always returns 403."""
+    is empty — afterwards it always returns 403. Ha be van állítva a
+    WFM_BOOTSTRAP_TOKEN, a hívásnak tartalmaznia kell az egyező tokent."""
+    settings = get_settings()
+    if settings.bootstrap_token and body.token != settings.bootstrap_token:
+        raise HTTPException(status_code=403, detail={"code": "auth.bootstrap_token"})
     count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
     if count > 0:
         raise HTTPException(status_code=403, detail={"code": "auth.bootstrap_closed"})
@@ -101,7 +106,7 @@ async def bootstrap_admin(
         entity_id=str(user.id), request=request,
     )
     await db.commit()
-    _set_cookie(response, mint_token(user_id=user.id, role=user.role))
+    set_session_cookie(response, mint_token(user_id=user.id, role=user.role, token_version=user.token_version))
     return _user_out(user)
 
 
@@ -133,7 +138,7 @@ async def login(
         entity_id=str(user.id), request=request,
     )
     await db.commit()
-    _set_cookie(response, mint_token(user_id=user.id, role=user.role))
+    set_session_cookie(response, mint_token(user_id=user.id, role=user.role, token_version=user.token_version))
     return _user_out(user)
 
 

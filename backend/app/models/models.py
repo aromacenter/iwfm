@@ -57,6 +57,9 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(256), nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="employee")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # A kiadott JWT-k érvényességi pecsétje: növelésekor minden korábbi token
+    # érvénytelenné válik (jelszóváltás / kényszerített kijelentkeztetés).
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

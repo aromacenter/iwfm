@@ -48,6 +48,7 @@ def _ensure_employee_code_column(sync_conn) -> None:
 
     ensure_column("employees", "employee_code", "VARCHAR(6)")  # v0.2
     ensure_column("ai_settings", "assign_prompt", "TEXT")  # v0.4
+    ensure_column("users", "token_version", "INTEGER NOT NULL DEFAULT 0")  # v0.6
     # v0.5 — partner törzsadat-bővítés
     ensure_column("partners", "partner_type", "VARCHAR(16) NOT NULL DEFAULT 'customer'")
     ensure_column("partners", "tax_number", "VARCHAR(32)")
