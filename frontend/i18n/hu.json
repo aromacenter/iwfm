@@ -466,6 +466,7 @@
     "timeoff.already_decided": "Ez a kérelem már el lett bírálva.",
     "timeoff.bad_range": "Hibás dátumtartomány.",
     "timeoff.overlap": "Erre az időszakra már van (függő vagy jóváhagyott) távollét-kérelem.",
+    "timeoff.over_balance": "A jóváhagyás túllépné az éves szabadságkeretet (munkanapban).",
     "timeclock.already_open": "Már van nyitott bejelentkezésed.",
     "timeclock.not_open": "Nincs nyitott bejelentkezésed.",
     "timeclock.bad_range": "A kijelentkezés nem lehet a bejelentkezés előtt.",

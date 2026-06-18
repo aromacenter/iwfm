@@ -14,3 +14,4 @@ openpyxl>=3.1
 anthropic>=0.80
 httpx>=0.27
 reportlab>=4.2
+tzdata>=2024.1  # zoneinfo (Europe/Budapest) slim Docker imagen és Windows alatt

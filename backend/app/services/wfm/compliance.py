@@ -18,9 +18,15 @@ Implemented rules:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Iterable
 from uuid import UUID
+from zoneinfo import ZoneInfo
+
+# A beosztás-idők helyi (magyar) idő szerint értendők. A műszak abszolút
+# instansát ebben a zónában számoljuk, így a közlési határidő (Mt. 97.§) és a
+# DST-átmeneten átnyúló műszakok óraszáma is helyes.
+TZ = ZoneInfo("Europe/Budapest")
 
 HOURS_MAX_DAILY = 12
 HOURS_MAX_WEEKLY = 48
@@ -44,14 +50,14 @@ class ShiftSpan:
 
     @property
     def start(self) -> datetime:
-        return datetime.combine(self.work_date, self.start_time, tzinfo=UTC)
+        return datetime.combine(self.work_date, self.start_time, tzinfo=TZ)
 
     @property
     def end(self) -> datetime:
         end_day = self.work_date
         if self.end_time <= self.start_time:  # átnyúlik éjfélen
             end_day = self.work_date + timedelta(days=1)
-        return datetime.combine(end_day, self.end_time, tzinfo=UTC)
+        return datetime.combine(end_day, self.end_time, tzinfo=TZ)
 
     @property
     def worked_hours(self) -> float:
@@ -194,7 +200,7 @@ def check_weekly_rest(shifts: Iterable[ShiftSpan]) -> list[Violation]:
     out = []
     for year, week in sorted(weeks):
         week_start = datetime.combine(
-            date.fromisocalendar(year, week, 1), time.min, tzinfo=UTC
+            date.fromisocalendar(year, week, 1), time.min, tzinfo=TZ
         )
         week_end = week_start + timedelta(days=7)
         ok = any(

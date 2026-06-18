@@ -59,6 +59,24 @@ async def test_overlapping_timeoff_rejected(client, manager):
     assert res.json()["detail"]["code"] == "timeoff.overlap"
 
 
+async def test_annual_balance_blocks_approval(client, manager):
+    """P2: éves szabadság jóváhagyása nem lépheti túl a keretet (alap 20 munkanap)."""
+    _, headers = manager
+    emp = await make_emp()
+    start = date.today() + timedelta(days=30)
+    long_req = payload(
+        str(emp.id),
+        start_date=start.isoformat(),
+        end_date=(start + timedelta(days=40)).isoformat(),  # ~29 munkanap > 20
+    )
+    rid = (await client.post("/api/time-off", json=long_req, headers=headers)).json()["id"]
+    res = await client.patch(
+        f"/api/time-off/{rid}/decide", json={"status": "approved"}, headers=headers
+    )
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "timeoff.over_balance"
+
+
 async def test_double_decide_conflict(client, manager):
     _, headers = manager
     emp = await make_emp()

@@ -7,7 +7,7 @@ through the self-service router (me.py) which reuses the same helpers.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -90,6 +90,35 @@ async def ensure_no_overlap(
         raise HTTPException(status_code=409, detail={"code": "timeoff.overlap"})
 
 
+def working_days(start: date, end: date, *, year: int | None = None) -> int:
+    """Munkanapok (hétfő–péntek) száma a tartományban (záró nap beleértve).
+    Munkaszüneti napokat nem von le — ez dokumentált egyszerűsítés."""
+    days = 0
+    cursor = start
+    while cursor <= end:
+        if (year is None or cursor.year == year) and cursor.weekday() < 5:
+            days += 1
+        cursor += timedelta(days=1)
+    return days
+
+
+async def _annual_used_working_days(
+    db: AsyncSession, employee_id: uuid.UUID, year: int, *, exclude_id: uuid.UUID
+) -> int:
+    """A dolgozó adott évben már JÓVÁHAGYOTT éves szabadságának munkanapjai."""
+    rows = (
+        await db.execute(
+            select(TimeOffRequest).where(
+                TimeOffRequest.employee_id == employee_id,
+                TimeOffRequest.type == "annual",
+                TimeOffRequest.status == "approved",
+                TimeOffRequest.id != exclude_id,
+            )
+        )
+    ).scalars()
+    return sum(working_days(r.start_date, r.end_date, year=year) for r in rows)
+
+
 @router.get("", response_model=list[TimeOffOut])
 async def list_time_off(
     status: str | None = Query(default=None),
@@ -165,6 +194,27 @@ async def decide_time_off(
         raise HTTPException(status_code=404, detail={"code": "timeoff.not_found"})
     if req.status != "pending":
         raise HTTPException(status_code=409, detail={"code": "timeoff.already_decided"})
+
+    # P2: éves szabadság jóváhagyásakor a keret (annual_leave_days, munkanapban)
+    # nem léphető túl. A munkaszüneti napok levonása nincs implementálva.
+    if body.status == "approved" and req.type == "annual":
+        emp = (
+            await db.execute(select(Employee).where(Employee.id == req.employee_id))
+        ).scalar_one_or_none()
+        if emp is not None:
+            year = req.start_date.year
+            used = await _annual_used_working_days(db, req.employee_id, year, exclude_id=req.id)
+            requested = working_days(req.start_date, req.end_date, year=year)
+            if used + requested > emp.annual_leave_days:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "timeoff.over_balance",
+                        "entitlement": emp.annual_leave_days,
+                        "used": used,
+                        "requested": requested,
+                    },
+                )
 
     req.status = body.status
     req.decided_by = actor.id

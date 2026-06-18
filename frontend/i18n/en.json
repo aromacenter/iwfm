@@ -466,6 +466,7 @@
     "timeoff.already_decided": "This request has already been decided.",
     "timeoff.bad_range": "Invalid date range.",
     "timeoff.overlap": "There is already a (pending or approved) time-off request for this period.",
+    "timeoff.over_balance": "Approving this would exceed the annual leave entitlement (in working days).",
     "timeclock.already_open": "You already have an open clock-in.",
     "timeclock.not_open": "You have no open clock-in.",
     "timeclock.bad_range": "Clock-out cannot be before clock-in.",
