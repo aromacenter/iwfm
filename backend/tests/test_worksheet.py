@@ -133,6 +133,29 @@ async def test_employee_can_download_own_pdf(client, manager):
     assert res.content[:5] == b"%PDF-"
 
 
+async def test_worksheet_from_photo_validation(client, manager):
+    """AI nélkül 422 (nincs konfig); hibás kép 422 (bad_photo)."""
+    _, mgr = manager
+    emp, _ = await make_emp(email="foto@example.com")
+    task = await task_for(client, mgr, emp)
+
+    no_ai = await client.post(
+        f"/api/tasks/{task['id']}/worksheet/from-photo",
+        json={"image": TINY_PNG},
+        headers=mgr,
+    )
+    assert no_ai.status_code == 422
+    assert no_ai.json()["detail"]["code"] == "settings.ai_not_configured"
+
+    bad = await client.post(
+        f"/api/tasks/{task['id']}/worksheet/from-photo",
+        json={"image": "nem-data-url"},
+        headers=mgr,
+    )
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["code"] == "tasks.bad_photo"
+
+
 async def test_worksheet_email_requires_smtp(client, manager):
     """Email-küldés SMTP nélkül 422-t ad (a beállítás hiányzik)."""
     _, mgr = manager

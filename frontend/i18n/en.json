@@ -359,6 +359,9 @@
     "wsShare": "Share",
     "wsEmail": "Email",
     "wsDownloaded": "Worksheet PDF downloaded.",
+    "wsPhotoFill": "Fill from photo",
+    "wsPhotoBusy": "Processing photo…",
+    "wsPhotoFilled": "Filled from the photo — review and save.",
     "sigClear": "Clear"
   },
   "mySched": {
@@ -500,6 +503,9 @@
     "skills.name_taken": "A skill with this name already exists.",
     "tasks.no_candidates": "There is no active employee to assign the task to.",
     "tasks.ai_suggest_failed": "The AI suggestion failed — try again or choose manually.",
+    "tasks.bad_photo": "Invalid image (PNG or JPEG required).",
+    "tasks.photo_too_large": "The image is too large (max 8 MB).",
+    "tasks.ai_photo_failed": "Could not process the photo — try again or fill in manually.",
     "worksheet.not_found": "No worksheet has been filled in for this task yet.",
     "worksheet.bad_signature": "Invalid signature format — draw it again.",
     "kiosk.rate_limited": "Too many failed attempts — wait 5 minutes.",

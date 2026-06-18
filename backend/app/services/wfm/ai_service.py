@@ -79,6 +79,83 @@ async def _gemini_generate(api_key: str, model: str, prompt: str, max_tokens: in
         return ""
 
 
+async def _anthropic_vision(
+    api_key: str, model: str, prompt: str, image_b64: str, mime: str, max_tokens: int
+) -> str:
+    from anthropic import AsyncAnthropic
+
+    async with AsyncAnthropic(api_key=api_key) as client:
+        response = await client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": mime, "data": image_b64},
+                        },
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ],
+        )
+    return "".join(block.text for block in response.content if block.type == "text")
+
+
+async def _gemini_vision(
+    api_key: str, model: str, prompt: str, image_b64: str, mime: str, max_tokens: int
+) -> str:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    async with httpx.AsyncClient(timeout=45) as client:
+        res = await client.post(
+            url,
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+            json={
+                "contents": [
+                    {
+                        "parts": [
+                            {"inline_data": {"mime_type": mime, "data": image_b64}},
+                            {"text": prompt},
+                        ]
+                    }
+                ],
+                "generationConfig": {"maxOutputTokens": max_tokens},
+            },
+        )
+        res.raise_for_status()
+        data = res.json()
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError):
+        return ""
+
+
+async def generate_from_image(
+    db: AsyncSession,
+    prompt: str,
+    *,
+    image_b64: str,
+    mime: str,
+    provider: str | None = None,
+    max_tokens: int = 1500,
+) -> str:
+    """Kép + szöveges prompt → válasz az aktív (vagy megadott) vision-modellel.
+    ValueError, ha nincs konfigurálva."""
+    row = await get_or_create_settings(db)
+    chosen = provider or row.active_provider
+    if chosen not in PROVIDERS:
+        raise ValueError("ai_not_configured")
+    api_key = _provider_key(row, chosen)
+    if not api_key:
+        raise ValueError("ai_not_configured")
+    model = _provider_model(row, chosen)
+    if chosen == "anthropic":
+        return await _anthropic_vision(api_key, model, prompt, image_b64, mime, max_tokens)
+    return await _gemini_vision(api_key, model, prompt, image_b64, mime, max_tokens)
+
+
 async def generate(
     db: AsyncSession,
     prompt: str,

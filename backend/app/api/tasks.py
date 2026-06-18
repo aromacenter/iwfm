@@ -8,6 +8,8 @@ komment írása, státusz: 'done' (befejezett) / 'needs_more_work'
 
 from __future__ import annotations
 
+import base64
+import json
 import uuid
 from datetime import UTC, date, datetime
 
@@ -33,6 +35,7 @@ from app.models import (
     WorksheetSettings,
 )
 from app.services.wfm.ai_assign import suggest_assignee
+from app.services.wfm.ai_service import generate_from_image
 from app.services.wfm.email_service import load_smtp_config, send_email
 from app.services.wfm.worksheet_pdf import build_worksheet_pdf
 
@@ -601,6 +604,111 @@ async def email_worksheet(
     return {"ok": True}
 
 
+# ─── AI: munkalap-előkitöltés fotóból ───────────────────────────────────────
+
+_PHOTO_MIME = {"image/png", "image/jpeg", "image/jpg"}
+_MAX_PHOTO_BYTES = 8 * 1024 * 1024  # 8 MB
+
+WORKSHEET_PHOTO_PROMPT = (
+    "Egy szerelési/karbantartási munkalap vagy kézzel írt jegyzet fotóját kapod. "
+    "Olvasd ki a tartalmát és add vissza KIZÁRÓLAG érvényes JSON-ként, magyarul, "
+    "pontosan ezzel a sémával:\n"
+    '{"work_description": "az elvégzett munka összefoglalója szövegként", '
+    '"materials": [{"name": "anyag neve", "qty": "mennyiség", "unit": "egység pl. db/m/kg"}], '
+    '"hours_spent": ráfordított órák száma vagy null}\n'
+    "Amit nem tudsz kiolvasni, azt hagyd üresen vagy null. Csak a JSON-t add vissza."
+)
+
+
+class PhotoFillBody(BaseModel):
+    image: str  # data URL (image/png|jpeg)
+
+
+class PhotoFillOut(BaseModel):
+    work_description: str | None = None
+    materials: list[dict] = []
+    hours_spent: float | None = None
+
+
+def _parse_json_object(text: str) -> dict | None:
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        parsed = json.loads(text[start : end + 1])
+        return parsed if isinstance(parsed, dict) else None
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+async def _extract_worksheet_from_photo(db: AsyncSession, image_data_url: str) -> PhotoFillOut:
+    if not image_data_url.startswith("data:"):
+        raise HTTPException(status_code=422, detail={"code": "tasks.bad_photo"})
+    try:
+        header, b64 = image_data_url.split(",", 1)
+        mime = header.split(";")[0].removeprefix("data:").lower()
+        raw = base64.b64decode(b64)
+    except Exception:
+        raise HTTPException(status_code=422, detail={"code": "tasks.bad_photo"})
+    if mime not in _PHOTO_MIME:
+        raise HTTPException(status_code=422, detail={"code": "tasks.bad_photo"})
+    if len(raw) > _MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=422, detail={"code": "tasks.photo_too_large"})
+    norm_mime = "image/jpeg" if mime in ("image/jpg", "image/jpeg") else "image/png"
+
+    try:
+        text = await generate_from_image(
+            db, WORKSHEET_PHOTO_PROMPT, image_b64=b64, mime=norm_mime
+        )
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settings.ai_not_configured"})
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "tasks.ai_photo_failed"})
+
+    parsed = _parse_json_object(text or "")
+    if parsed is None:
+        raise HTTPException(status_code=502, detail={"code": "tasks.ai_photo_failed"})
+
+    materials: list[dict] = []
+    for item in (parsed.get("materials") or [])[:30]:
+        if isinstance(item, dict) and item.get("name"):
+            materials.append(
+                {
+                    "name": str(item.get("name"))[:120],
+                    "qty": str(item.get("qty") or ""),
+                    "unit": str(item.get("unit") or ""),
+                }
+            )
+    hours = parsed.get("hours_spent")
+    try:
+        hours = float(hours) if hours is not None else None
+    except (TypeError, ValueError):
+        hours = None
+    return PhotoFillOut(
+        work_description=(str(parsed.get("work_description") or "").strip() or None),
+        materials=materials,
+        hours_spent=hours,
+    )
+
+
+@router.post("/{task_id}/worksheet/from-photo", response_model=PhotoFillOut)
+async def worksheet_from_photo(
+    task_id: str,
+    body: PhotoFillBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    task = await _get_task_or_404(db, task_id)
+    result = await _extract_worksheet_from_photo(db, body.image)
+    await record_audit(
+        db, actor=actor, action="worksheet.photo_fill", entity_type="task",
+        entity_id=str(task.id), request=request,
+    )
+    await db.commit()
+    return result
+
+
 class SuggestBody(BaseModel):
     title: str = Field(min_length=1, max_length=256)
     description: str | None = Field(default=None, max_length=4000)
@@ -771,3 +879,24 @@ async def my_email_worksheet(
     )
     await db.commit()
     return {"ok": True}
+
+
+@me_router.post("/{task_id}/worksheet/from-photo", response_model=PhotoFillOut)
+async def my_worksheet_from_photo(
+    task_id: str,
+    body: PhotoFillBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """A dolgozó lefotózza a papír munkalapot/jegyzetet → az AI előkitölti a
+    munkaleírást, anyagokat, órákat (a dolgozó ellenőrzi és menti)."""
+    task = await _own_task_or_404(db, emp, task_id)
+    result = await _extract_worksheet_from_photo(db, body.image)
+    await record_audit(
+        db, actor=user, action="worksheet.photo_fill_self", entity_type="task",
+        entity_id=str(task.id), request=request,
+    )
+    await db.commit()
+    return result

@@ -70,6 +70,7 @@ export default function FeladataimPage() {
   const [ws, setWs] = useState<WorksheetForm>(EMPTY_WS);
   const [wsError, setWsError] = useState<string | null>(null);
   const [wsBusy, setWsBusy] = useState(false);
+  const [wsPhotoBusy, setWsPhotoBusy] = useState(false);
   const { t } = useT();
   const { toast, prompt } = useUI();
 
@@ -165,6 +166,38 @@ export default function FeladataimPage() {
       toast(t("tasks.emailSent", { to }), "success");
     } catch (err) {
       toast(errorMessage(err), "error");
+    }
+  }
+
+  async function fillFromPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // ugyanaz a fájl újra kiválasztható legyen
+    if (!file || !wsTask) return;
+    setWsPhotoBusy(true);
+    setWsError(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("read"));
+        reader.readAsDataURL(file);
+      });
+      const result = await api.post<{
+        work_description: string | null;
+        materials: MaterialRow[];
+        hours_spent: number | null;
+      }>(`/api/me/tasks/${wsTask.id}/worksheet/from-photo`, { image: dataUrl });
+      setWs((prev) => ({
+        ...prev,
+        work_description: result.work_description || prev.work_description,
+        hours_spent: result.hours_spent != null ? String(result.hours_spent) : prev.hours_spent,
+        materials: [...prev.materials, ...(result.materials ?? [])],
+      }));
+      toast(t("myTasks.wsPhotoFilled"), "success");
+    } catch (err) {
+      setWsError(errorMessage(err));
+    } finally {
+      setWsPhotoBusy(false);
     }
   }
 
@@ -298,6 +331,17 @@ export default function FeladataimPage() {
             {wsTask.worksheet_serial && (
               <p className="text-xs text-slate-500">{t("myTasks.wsSerial", { serial: wsTask.worksheet_serial })}</p>
             )}
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
+              📷 {wsPhotoBusy ? t("myTasks.wsPhotoBusy") : t("myTasks.wsPhotoFill")}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={fillFromPhoto}
+                disabled={wsPhotoBusy}
+                className="hidden"
+              />
+            </label>
             <label className="block text-sm">
               {t("myTasks.wsWork")}
               <textarea

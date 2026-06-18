@@ -359,6 +359,9 @@
     "wsShare": "Megosztás",
     "wsEmail": "Email",
     "wsDownloaded": "A munkalap PDF letöltve.",
+    "wsPhotoFill": "Kitöltés fotóból",
+    "wsPhotoBusy": "Fotó feldolgozása…",
+    "wsPhotoFilled": "A fotóból kinyert adatok kitöltve — ellenőrizd, majd mentsd.",
     "sigClear": "Törlés"
   },
   "mySched": {
@@ -500,6 +503,9 @@
     "skills.name_taken": "Ilyen nevű skill már létezik.",
     "tasks.no_candidates": "Nincs aktív dolgozó, akire a feladat kiosztható lenne.",
     "tasks.ai_suggest_failed": "Az AI javaslat nem sikerült — próbáld újra, vagy válassz kézzel.",
+    "tasks.bad_photo": "Érvénytelen kép (PNG vagy JPEG kell).",
+    "tasks.photo_too_large": "A kép túl nagy (max. 8 MB).",
+    "tasks.ai_photo_failed": "A fotó feldolgozása nem sikerült — próbáld újra, vagy töltsd ki kézzel.",
     "worksheet.not_found": "Ehhez a feladathoz még nincs munkalap kitöltve.",
     "worksheet.bad_signature": "Hibás aláírás-formátum — rajzold újra.",
     "kiosk.rate_limited": "Túl sok hibás próbálkozás — várj 5 percet.",
