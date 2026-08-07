@@ -226,10 +226,16 @@ async def update_partner(
 
 class AssetBody(BaseModel):
     barcode: str = Field(min_length=1, max_length=64)
-    name: str = Field(min_length=1, max_length=256)
+    name: str = Field(min_length=1, max_length=256)  # Típus
     category: str | None = Field(default=None, max_length=128)
     model: str | None = Field(default=None, max_length=128)
+    manufacturer: str | None = Field(default=None, max_length=128)
+    article_number: str | None = Field(default=None, max_length=64)
     serial_number: str | None = Field(default=None, max_length=128)
+    location_type: str | None = Field(default=None, max_length=64)
+    counter: int | None = Field(default=None, ge=0)
+    norm: float | None = Field(default=None, ge=0)
+    tangible: bool = False
     notes: str | None = None
 
 
@@ -239,7 +245,13 @@ class AssetPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=256)
     category: str | None = None
     model: str | None = None
+    manufacturer: str | None = None
+    article_number: str | None = None
     serial_number: str | None = None
+    location_type: str | None = None
+    counter: int | None = Field(default=None, ge=0)
+    norm: float | None = Field(default=None, ge=0)
+    tangible: bool | None = None
     notes: str | None = None
     status: str | None = None  # csak in_stock|maintenance|retired (deploy külön)
 
@@ -268,7 +280,13 @@ class AssetOut(BaseModel):
     name: str
     category: str | None
     model: str | None
+    manufacturer: str | None
+    article_number: str | None
     serial_number: str | None
+    location_type: str | None
+    counter: int | None
+    norm: float | None
+    tangible: bool
     status: str
     partner_id: str | None
     partner_name: str | None
@@ -285,7 +303,13 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         name=a.name,
         category=a.category,
         model=a.model,
+        manufacturer=a.manufacturer,
+        article_number=a.article_number,
         serial_number=a.serial_number,
+        location_type=a.location_type,
+        counter=a.counter,
+        norm=a.norm,
+        tangible=a.tangible,
         status=a.status,
         partner_id=str(a.partner_id) if a.partner_id else None,
         partner_name=partner_name,
@@ -346,7 +370,8 @@ async def list_assets(
         like = f"%{q.strip()}%"
         query = query.where(
             or_(Asset.barcode.ilike(like), Asset.name.ilike(like),
-                Asset.serial_number.ilike(like), Asset.model.ilike(like))
+                Asset.serial_number.ilike(like), Asset.model.ilike(like),
+                Asset.manufacturer.ilike(like), Asset.article_number.ilike(like))
         )
     if status:
         if status not in ASSET_STATUSES:
@@ -433,7 +458,13 @@ async def create_asset(
         name=body.name.strip(),
         category=(body.category or "").strip() or None,
         model=(body.model or "").strip() or None,
+        manufacturer=(body.manufacturer or "").strip() or None,
+        article_number=(body.article_number or "").strip() or None,
         serial_number=(body.serial_number or "").strip() or None,
+        location_type=(body.location_type or "").strip() or None,
+        counter=body.counter,
+        norm=body.norm,
+        tangible=body.tangible,
         notes=body.notes,
         created_by=actor.id,
     )

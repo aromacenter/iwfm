@@ -153,6 +153,56 @@ async def test_multi_sheet_preview_and_import(client, manager):
     assert bad.json()["detail"]["code"] == "impex.bad_sheet"
 
 
+async def test_import_assets_with_partner(client, manager):
+    """Gép-import a valós Excel-oszlopokkal: partner-feloldás, bool, számok."""
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Iváncsa"}, headers=mgr)
+    ).json()
+
+    sheet = [
+        ["Vonalkód", "Gyártó", "Típus", "Cikkszám", "Gyárt Szám", "Szerződött partner", "Hely típus", "Számláló", "Norma", "Tárgyi"],
+        [11241539519, "Jura", "X9", "JUR-X9", 11241539519, "", "Polc", 0, 0, "False"],
+        [11261445399, "SCHAERER", "Intense", "SCH-INT", 1605211484, "Iváncsa", "Polc", 21561, 110, "True"],
+        [99999999999, "Saeco", "TWIN", "SAE-TW2", 11580, "Nincs Ilyen Kft.", "Polc", 0, 140, "True"],
+    ]
+    res = await client.post(
+        "/api/import-export/import",
+        json={
+            "entity": "assets",
+            "file": xlsx_data_url(sheet),
+            "mapping": {
+                "barcode": 0, "manufacturer": 1, "name": 2, "article_number": 3,
+                "serial_number": 4, "partner_name": 5, "location_type": 6,
+                "counter": 7, "norm": 8, "tangible": 9,
+            },
+        },
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["created"] == 2
+    assert len(body["errors"]) == 1  # ismeretlen partner
+    assert "Nincs Ilyen Kft." in body["errors"][0]["error"]
+
+    assets = (await client.get("/api/assets", headers=mgr)).json()
+    by_barcode = {a["barcode"]: a for a in assets}
+    # Excel-számból nem lett ".0" végű vonalkód
+    assert "11241539519" in by_barcode
+    jura = by_barcode["11241539519"]
+    assert jura["manufacturer"] == "Jura"
+    assert jura["name"] == "X9"
+    assert jura["tangible"] is False
+    assert jura["status"] == "in_stock"
+
+    schaerer = by_barcode["11261445399"]
+    assert schaerer["counter"] == 21561
+    assert schaerer["norm"] == 110
+    assert schaerer["tangible"] is True
+    assert schaerer["status"] == "deployed"
+    assert schaerer["partner_id"] == partner["id"]
+
+
 async def test_import_requires_name_mapping(client, manager):
     _, mgr = manager
     res = await client.post(

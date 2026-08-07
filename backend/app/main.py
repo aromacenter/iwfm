@@ -77,6 +77,13 @@ def _ensure_employee_code_column(sync_conn) -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_partners_code ON partners (partner_code)"
             )
         )
+    # v0.8 — gépek (assets) törzsadat-bővítés
+    ensure_column("assets", "manufacturer", "VARCHAR(128)")
+    ensure_column("assets", "article_number", "VARCHAR(64)")
+    ensure_column("assets", "location_type", "VARCHAR(64)")
+    ensure_column("assets", "counter", "INTEGER")
+    ensure_column("assets", "norm", "FLOAT")
+    ensure_column("assets", "tangible", "BOOLEAN NOT NULL DEFAULT FALSE")
     if "employees" in tables:
         sync_conn.execute(
             sql_text(

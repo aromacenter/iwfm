@@ -33,10 +33,16 @@ interface Movement {
 interface Asset {
   id: string;
   barcode: string;
-  name: string;
+  name: string; // Típus
   category: string | null;
   model: string | null;
+  manufacturer: string | null;
+  article_number: string | null;
   serial_number: string | null;
+  location_type: string | null;
+  counter: number | null;
+  norm: number | null;
+  tangible: boolean;
   status: "in_stock" | "deployed" | "maintenance" | "retired";
   partner_id: string | null;
   partner_name: string | null;
@@ -52,9 +58,22 @@ const STATUS_COLORS: Record<string, string> = {
   retired: "bg-red-100 text-red-700",
 };
 
-const EMPTY_ASSET = { id: "", barcode: "", name: "", category: "", model: "", serial_number: "", notes: "", status: "in_stock" };
+const EMPTY_ASSET = {
+  id: "",
+  barcode: "",
+  name: "",
+  manufacturer: "",
+  article_number: "",
+  serial_number: "",
+  location_type: "",
+  counter: "",
+  norm: "",
+  tangible: false,
+  notes: "",
+  status: "in_stock",
+};
 
-export default function KeszletPage() {
+export default function GepekPage() {
   const { t, lang } = useT();
   const { toast } = useUI();
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -131,9 +150,13 @@ export default function KeszletPage() {
       const body = {
         barcode: assetForm.barcode,
         name: assetForm.name,
-        category: assetForm.category || null,
-        model: assetForm.model || null,
+        manufacturer: assetForm.manufacturer || null,
+        article_number: assetForm.article_number || null,
         serial_number: assetForm.serial_number || null,
+        location_type: assetForm.location_type || null,
+        counter: assetForm.counter !== "" ? Number(assetForm.counter) : null,
+        norm: assetForm.norm !== "" ? Number(assetForm.norm) : null,
+        tangible: assetForm.tangible,
         notes: assetForm.notes || null,
       };
       if (assetForm.id) await api.patch(`/api/assets/${assetForm.id}`, body);
@@ -244,11 +267,15 @@ export default function KeszletPage() {
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
               <th className="px-4 py-3">{t("inv.barcode")}</th>
-              <th className="px-4 py-3">{t("inv.name")}</th>
-              <th className="px-4 py-3">{t("inv.category")}</th>
+              <th className="px-4 py-3">{t("inv.manufacturer")}</th>
+              <th className="px-4 py-3">{t("inv.type")}</th>
+              <th className="px-4 py-3">{t("inv.articleNo")}</th>
               <th className="px-4 py-3">{t("inv.serial")}</th>
-              <th className="px-4 py-3">{t("inv.status")}</th>
               <th className="px-4 py-3">{t("inv.partner")}</th>
+              <th className="px-4 py-3">{t("inv.locationType")}</th>
+              <th className="px-4 py-3">{t("inv.counter")}</th>
+              <th className="px-4 py-3">{t("inv.norm")}</th>
+              <th className="px-4 py-3">{t("inv.status")}</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -256,18 +283,22 @@ export default function KeszletPage() {
             {assets.map((a) => (
               <tr key={a.id} className="border-b border-slate-100 last:border-0">
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-700">{a.barcode}</td>
+                <td className="px-4 py-3 text-slate-500">{a.manufacturer ?? "—"}</td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{a.name}</div>
-                  {a.model && <div className="text-xs text-slate-400">{a.model}</div>}
+                  {a.tangible && <div className="text-xs text-slate-400">{t("inv.tangible")}</div>}
                 </td>
-                <td className="px-4 py-3 text-slate-500">{a.category ?? "—"}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-500">{a.article_number ?? "—"}</td>
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{a.serial_number ?? "—"}</td>
+                <td className="px-4 py-3">{a.partner_name ?? <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-slate-500">{a.location_type ?? "—"}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{a.counter ?? "—"}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{a.norm ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status]}`}>
                     {t(`inv.statuses.${a.status}`)}
                   </span>
                 </td>
-                <td className="px-4 py-3">{a.partner_name ?? <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">
                     {a.status === "deployed" ? (
@@ -282,7 +313,7 @@ export default function KeszletPage() {
                     <button onClick={() => openHistory(a)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
                       {t("inv.history")}
                     </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, category: a.category ?? "", model: a.model ?? "", serial_number: a.serial_number ?? "", notes: a.notes ?? "", status: a.status }); }} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
+                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, notes: a.notes ?? "", status: a.status }); }} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
                       {t("common.edit")}
                     </button>
                   </div>
@@ -290,7 +321,7 @@ export default function KeszletPage() {
               </tr>
             ))}
             {assets.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("inv.empty")}</td></tr>
+              <tr><td colSpan={11} className="px-4 py-10 text-center text-slate-400">{t("inv.empty")}</td></tr>
             )}
           </tbody>
         </table>
@@ -312,23 +343,43 @@ export default function KeszletPage() {
                 )}
               </div>
             </label>
-            <label className="block text-sm">
-              {t("inv.name")} *
-              <input required value={assetForm.name} onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-            </label>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block text-sm">
-                {t("inv.category")}
-                <input value={assetForm.category} onChange={(e) => setAssetForm({ ...assetForm, category: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                {t("inv.manufacturer")}
+                <input value={assetForm.manufacturer} onChange={(e) => setAssetForm({ ...assetForm, manufacturer: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
               <label className="block text-sm">
-                {t("inv.model")}
-                <input value={assetForm.model} onChange={(e) => setAssetForm({ ...assetForm, model: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                {t("inv.type")} *
+                <input required value={assetForm.name} onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
             </div>
-            <label className="block text-sm">
-              {t("inv.serial")}
-              <input value={assetForm.serial_number} onChange={(e) => setAssetForm({ ...assetForm, serial_number: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                {t("inv.articleNo")}
+                <input value={assetForm.article_number} onChange={(e) => setAssetForm({ ...assetForm, article_number: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono" />
+              </label>
+              <label className="block text-sm">
+                {t("inv.serial")}
+                <input value={assetForm.serial_number} onChange={(e) => setAssetForm({ ...assetForm, serial_number: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono" />
+              </label>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="block text-sm">
+                {t("inv.locationType")}
+                <input value={assetForm.location_type} onChange={(e) => setAssetForm({ ...assetForm, location_type: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+              <label className="block text-sm">
+                {t("inv.counter")}
+                <input type="number" min={0} value={assetForm.counter} onChange={(e) => setAssetForm({ ...assetForm, counter: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+              <label className="block text-sm">
+                {t("inv.norm")}
+                <input type="number" min={0} step="0.1" value={assetForm.norm} onChange={(e) => setAssetForm({ ...assetForm, norm: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={assetForm.tangible} onChange={(e) => setAssetForm({ ...assetForm, tangible: e.target.checked })} className="h-4 w-4" />
+              {t("inv.tangible")}
             </label>
             <label className="block text-sm">
               {t("inv.notes")}

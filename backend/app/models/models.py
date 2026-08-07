@@ -503,10 +503,16 @@ class Asset(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     barcode: Mapped[str] = mapped_column(String(64), nullable=False)
-    name: Mapped[str] = mapped_column(String(256), nullable=False)
-    category: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    serial_number: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)  # Típus (megnevezés)
+    category: Mapped[str | None] = mapped_column(String(128), nullable=True)  # legacy
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)  # legacy
+    manufacturer: Mapped[str | None] = mapped_column(String(128), nullable=True)  # gyártó
+    article_number: Mapped[str | None] = mapped_column(String(64), nullable=True)  # cikkszám
+    serial_number: Mapped[str | None] = mapped_column(String(128), nullable=True)  # gyárt. szám
+    location_type: Mapped[str | None] = mapped_column(String(64), nullable=True)  # hely típus
+    counter: Mapped[int | None] = mapped_column(Integer, nullable=True)  # számláló-állás
+    norm: Mapped[float | None] = mapped_column(Float, nullable=True)  # norma
+    tangible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # tárgyi eszköz
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="in_stock")
     partner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True

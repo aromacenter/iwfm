@@ -42,7 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dolgozok", key: "nav.employees", roles: ["admin", "manager"] },
       { href: "/partnerek", key: "nav.partners", roles: ["admin", "manager"] },
-      { href: "/keszlet", key: "nav.inventory", roles: ["admin", "manager"] },
+      { href: "/gepek", key: "nav.inventory", roles: ["admin", "manager"] },
       { href: "/termekek", key: "nav.products", roles: ["admin", "manager"] },
     ],
   },

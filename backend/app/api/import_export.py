@@ -24,9 +24,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import UTC, datetime as dt
+
 from app.api.deps import record_audit, require_role
 from app.db import get_db
-from app.models import Partner, Product, Settlement, User
+from app.models import Asset, AssetMovement, Partner, Product, Settlement, User
 
 router = APIRouter()
 
@@ -71,9 +73,22 @@ ENTITY_FIELDS: dict[str, list[dict]] = {
         {"key": "vat_percent", "required": False, "max_len": None, "type": "int"},
         {"key": "notes", "required": False, "max_len": None, "type": "str"},
     ],
+    "assets": [
+        {"key": "barcode", "required": True, "max_len": 64, "type": "str"},
+        {"key": "manufacturer", "required": False, "max_len": 128, "type": "str"},
+        {"key": "name", "required": True, "max_len": 256, "type": "str"},  # Típus
+        {"key": "article_number", "required": False, "max_len": 64, "type": "str"},
+        {"key": "serial_number", "required": False, "max_len": 128, "type": "str"},
+        {"key": "partner_name", "required": False, "max_len": 256, "type": "str"},  # szerződött partner
+        {"key": "location_type", "required": False, "max_len": 64, "type": "str"},
+        {"key": "counter", "required": False, "max_len": None, "type": "int"},
+        {"key": "norm", "required": False, "max_len": None, "type": "float"},
+        {"key": "tangible", "required": False, "max_len": None, "type": "bool"},
+        {"key": "notes", "required": False, "max_len": None, "type": "str"},
+    ],
 }
 
-EXPORT_ENTITIES = ("partners", "products", "settlements")
+EXPORT_ENTITIES = ("partners", "products", "assets", "settlements")
 
 
 # ─── Fájl-parszolás ──────────────────────────────────────────────────────────
@@ -110,9 +125,19 @@ def _parse_rows(raw: bytes, kind: str, sheet: int = 0) -> tuple[list[list[str]],
                 wb.close()
                 raise HTTPException(status_code=422, detail={"code": "impex.bad_sheet"})
             ws = wb.worksheets[sheet]
+
+            def cell_str(c) -> str:
+                if c is None:
+                    return ""
+                # Excel a számokat floatként adhatja — az egészeket ne
+                # "11241539519.0" formában kapjuk (vonalkód, irányítószám!)
+                if isinstance(c, float) and c.is_integer():
+                    return str(int(c))
+                return str(c).strip()
+
             rows = []
             for row in ws.iter_rows(max_row=_MAX_ROWS + 1, values_only=True):
-                rows.append(["" if c is None else str(c).strip() for c in row])
+                rows.append([cell_str(c) for c in row])
             wb.close()
         except HTTPException:
             raise
@@ -205,6 +230,13 @@ def _coerce(value: str, field: dict) -> object:
         return int(float(value.replace(",", ".").replace(" ", "")))
     if field["type"] == "float":
         return float(value.replace(",", ".").replace(" ", ""))
+    if field["type"] == "bool":
+        norm = value.lower()
+        if norm in ("true", "igaz", "igen", "yes", "1", "x"):
+            return True
+        if norm in ("false", "hamis", "nem", "no", "0", ""):
+            return False
+        raise ValueError("bad bool")
     if field["type"] == "partner_type":
         norm = value.lower()
         aliases = {
@@ -245,12 +277,16 @@ async def run_import(
     if len(data_rows) > _MAX_ROWS:
         raise HTTPException(status_code=422, detail={"code": "impex.too_many_rows"})
 
-    # meglévő nevek a duplikátum-kihagyáshoz
-    model = Partner if body.entity == "partners" else Product
-    existing_names = {
-        n.strip().lower()
-        for n in (await db.execute(select(model.name))).scalars()
-    }
+    # Duplikátum-kihagyás kulcsa: gépeknél a vonalkód, egyébként a név.
+    if body.entity == "assets":
+        existing_keys = {
+            b.strip().lower() for b in (await db.execute(select(Asset.barcode))).scalars()
+        }
+    else:
+        model = Partner if body.entity == "partners" else Product
+        existing_keys = {
+            n.strip().lower() for n in (await db.execute(select(model.name))).scalars()
+        }
 
     # ügyfél-kód sorszámozás (PT-NNNN) az importált partnereknek
     next_partner_num = 0
@@ -259,6 +295,14 @@ async def run_import(
 
         codes = list((await db.execute(select(Partner.partner_code))).scalars())
         next_partner_num = _next_partner_number(codes)
+
+    # Gépeknél: partner-feloldás névre vagy PT-kódra ("szerződött partner")
+    partners_by_key: dict[str, Partner] = {}
+    if body.entity == "assets":
+        for p in (await db.execute(select(Partner))).scalars():
+            partners_by_key[p.name.strip().lower()] = p
+            if p.partner_code:
+                partners_by_key[p.partner_code.lower()] = p
 
     created = 0
     skipped = 0
@@ -284,10 +328,42 @@ async def run_import(
         if not name:
             errors.append({"row": i + row_offset, "error": "name: üres"})
             continue
-        if name.lower() in existing_names:
+        key_field = "barcode" if body.entity == "assets" else "name"
+        key = str(values.get(key_field) or "").strip()
+        if not key:
+            errors.append({"row": i + row_offset, "error": f"{key_field}: üres"})
+            continue
+        if key.lower() in existing_keys:
             skipped += 1
             continue
-        existing_names.add(name.lower())
+        existing_keys.add(key.lower())
+
+        if body.entity == "assets":
+            partner_ref = str(values.pop("partner_name", "") or "").strip()
+            partner = partners_by_key.get(partner_ref.lower()) if partner_ref else None
+            if partner_ref and partner is None:
+                errors.append(
+                    {"row": i + row_offset, "error": f"partner_name: '{partner_ref}' nem található"}
+                )
+                existing_keys.discard(key.lower())
+                continue
+            asset = Asset(**values, created_by=actor.id)
+            if partner is not None:
+                asset.status = "deployed"
+                asset.partner_id = partner.id
+                asset.deployed_at = dt.now(UTC)
+            db.add(asset)
+            await db.flush()
+            db.add(AssetMovement(asset_id=asset.id, action="created", actor_user_id=actor.id))
+            if partner is not None:
+                db.add(
+                    AssetMovement(
+                        asset_id=asset.id, action="deploy", partner_id=partner.id,
+                        detail="import", actor_user_id=actor.id,
+                    )
+                )
+            created += 1
+            continue
 
         if body.entity == "partners":
             from app.api.inventory import compose_address
@@ -360,6 +436,26 @@ async def run_export(
         rows = (await db.execute(select(Product).order_by(Product.name))).scalars().all()
         headers = [f["key"] for f in ENTITY_FIELDS["products"]] + ["is_active"]
         data = [[getattr(p, h) for h in headers] for p in rows]
+    elif entity == "assets":
+        result = (
+            await db.execute(
+                select(Asset, Partner.name)
+                .outerjoin(Partner, Partner.id == Asset.partner_id)
+                .order_by(Asset.name)
+            )
+        ).all()
+        headers = [
+            "barcode", "manufacturer", "name", "article_number", "serial_number",
+            "partner_name", "location_type", "counter", "norm", "tangible", "status",
+        ]
+        data = [
+            [
+                a.barcode, a.manufacturer, a.name, a.article_number, a.serial_number,
+                pname, a.location_type, a.counter, a.norm,
+                "True" if a.tangible else "False", a.status,
+            ]
+            for a, pname in result
+        ]
     else:  # settlements
         result = (
             await db.execute(
