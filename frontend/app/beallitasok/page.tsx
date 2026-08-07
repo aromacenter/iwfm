@@ -87,6 +87,12 @@ export default function BeallitasokPage() {
   const [promptIsCustom, setPromptIsCustom] = useState(false);
   const [defaultPrompt, setDefaultPrompt] = useState("");
 
+  // --- Billingó számlázó ---
+  const [billingo, setBillingo] = useState({ enabled: false, api_key: "", block_id: "", test_mode: true });
+  const [billingoHasKey, setBillingoHasKey] = useState(false);
+  const [billingoMsg, setBillingoMsg] = useState<string | null>(null);
+  const [billingoBusy, setBillingoBusy] = useState(false);
+
   // --- Munkalap-PDF testreszabás ---
   const [ws, setWs] = useState({
     company_name: "",
@@ -137,6 +143,20 @@ export default function BeallitasokPage() {
         setAssignPrompt(s.assign_prompt);
         setPromptIsCustom(s.assign_prompt_is_custom);
         setDefaultPrompt(s.default_assign_prompt);
+      })
+      .catch(() => {});
+    api
+      .get<{ enabled: boolean; has_api_key: boolean; block_id: number | null; test_mode: boolean }>(
+        "/api/settings/billingo",
+      )
+      .then((s) => {
+        setBillingo({
+          enabled: s.enabled,
+          api_key: "",
+          block_id: s.block_id != null ? String(s.block_id) : "",
+          test_mode: s.test_mode,
+        });
+        setBillingoHasKey(s.has_api_key);
       })
       .catch(() => {});
     api
@@ -259,6 +279,46 @@ export default function BeallitasokPage() {
     }
   }
 
+  async function saveBillingo(e: React.FormEvent) {
+    e.preventDefault();
+    setBillingoBusy(true);
+    setBillingoMsg(null);
+    try {
+      await api.put("/api/settings/billingo", {
+        enabled: billingo.enabled,
+        api_key: billingo.api_key || null,
+        block_id: billingo.block_id ? Number(billingo.block_id) : null,
+        test_mode: billingo.test_mode,
+      });
+      setBillingoMsg(t("common.saved"));
+      setBillingo((s) => ({ ...s, api_key: "" }));
+      load();
+    } catch (err) {
+      setBillingoMsg(errorMessage(err));
+    } finally {
+      setBillingoBusy(false);
+    }
+  }
+
+  async function testBillingo() {
+    setBillingoBusy(true);
+    setBillingoMsg(null);
+    try {
+      const res = await api.post<{ ok: boolean; blocks: { id: number; name: string }[] }>(
+        "/api/settings/billingo/test",
+      );
+      setBillingoMsg(
+        t("settings.billingoTestOk", {
+          blocks: res.blocks.map((b) => `${b.name} (#${b.id})`).join(", ") || "—",
+        }),
+      );
+    } catch (err) {
+      setBillingoMsg(errorMessage(err));
+    } finally {
+      setBillingoBusy(false);
+    }
+  }
+
   function onLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -366,6 +426,69 @@ export default function BeallitasokPage() {
           <button disabled={wsBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
             {wsBusy ? t("common.saving") : t("common.save")}
           </button>
+        </form>
+
+        {/* Billingó számlázó */}
+        <form
+          onSubmit={saveBillingo}
+          className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        >
+          <h2 className="font-semibold">{t("settings.billingoTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.billingoHint")}</p>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={billingo.enabled}
+              onChange={(e) => setBillingo({ ...billingo, enabled: e.target.checked })}
+              className="h-4 w-4"
+            />
+            {t("settings.billingoEnabled")}
+          </label>
+          <label className="block text-sm">
+            {t("settings.billingoApiKey")} {billingoHasKey && <span className="text-emerald-600">✓</span>}
+            <input
+              type="password"
+              value={billingo.api_key}
+              onChange={(e) => setBillingo({ ...billingo, api_key: e.target.value })}
+              placeholder={billingoHasKey ? "••••••••" : ""}
+              className={inputCls}
+            />
+          </label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              {t("settings.billingoBlock")}
+              <input
+                type="number"
+                min={1}
+                value={billingo.block_id}
+                onChange={(e) => setBillingo({ ...billingo, block_id: e.target.value })}
+                className={inputCls}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm sm:mt-6">
+              <input
+                type="checkbox"
+                checked={billingo.test_mode}
+                onChange={(e) => setBillingo({ ...billingo, test_mode: e.target.checked })}
+                className="h-4 w-4"
+              />
+              {t("settings.billingoTestMode")}
+            </label>
+          </div>
+          {!billingo.test_mode && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {t("settings.billingoLiveWarning")}
+            </p>
+          )}
+          {billingoMsg && <p className="text-sm text-slate-600">{billingoMsg}</p>}
+          <div className="flex gap-2">
+            <button disabled={billingoBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {billingoBusy ? t("common.saving") : t("common.save")}
+            </button>
+            <button type="button" onClick={testBillingo} disabled={billingoBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
+              {t("settings.billingoTest")}
+            </button>
+          </div>
         </form>
 
         {/* Email értesítések */}

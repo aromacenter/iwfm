@@ -532,6 +532,152 @@ class AssetMovement(Base):
     )
 
 
+class BillingoSettings(Base):
+    """Billingó számlázó integráció — egyetlen sor (id=1). Az API-kulcs
+    Fernet-titkosítva; test_mode=True esetén díjbekérő (proforma) készül,
+    éles módban számla (NAV-jelentett!)."""
+
+    __tablename__ = "billingo_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    block_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # számlatömb
+    test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class Product(Base):
+    """Bizományba kihelyezhető fogyóeszköz (pl. kávé). kg-ban töltjük fel a
+    partner külső raktárába; a gramm/adag alapján számoljuk az adagszámot és
+    az elszámoláskor adag × ár/adag alapon számlázunk."""
+
+    __tablename__ = "products"
+    __table_args__ = (Index("ix_products_name", "name"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    unit: Mapped[str] = mapped_column(String(16), nullable=False, default="kg")  # feltöltés egysége
+    grams_per_portion: Mapped[int] = mapped_column(Integer, nullable=False, default=7)  # 1 adag = X g
+    price_per_portion: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)  # Ft/adag (nettó)
+    vat_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=27)  # ÁFA %
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PartnerStock(Base):
+    """A partner külső raktárában lévő aktuális (könyv szerinti) készlet egy
+    termékből, a termék egységében (pl. kg). Feltöltéskor nő, elszámoláskor a
+    fizikai leltárra állítjuk (a különbség a fogyás)."""
+
+    __tablename__ = "partner_stock"
+    __table_args__ = (
+        UniqueConstraint("partner_id", "product_id", name="uq_partner_stock"),
+        Index("ix_partner_stock_partner", "partner_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)  # egységben (kg)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class StockMovement(Base):
+    """Partner-készlet mozgástörténet (append-only): feltöltés (+) és elszámolás
+    szerinti fogyás (−). Auditra és a készletváltozások követésére."""
+
+    __tablename__ = "stock_movements"
+    __table_args__ = (Index("ix_stock_movements_partner", "partner_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(16), nullable=False)  # replenish | settlement
+    quantity_delta: Mapped[float] = mapped_column(Float, nullable=False)  # + feltöltés, − fogyás
+    settlement_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("settlements.id", ondelete="SET NULL"), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Settlement(Base):
+    """Egy partner (ügyfél) elszámolása: a fogyás kiszámlázása. Rögzíti az
+    elszámoló nevét (bejelentkezett user), a fizetési módot és a Billingó-számla
+    állapotát. A tételek a settlement_lines-ban."""
+
+    __tablename__ = "settlements"
+    __table_args__ = (
+        CheckConstraint(
+            "payment_method IN ('cash','card','transfer')", name="ck_settlement_payment"
+        ),
+        Index("ix_settlements_partner", "partner_id", "created_at"),
+        Index("ix_settlements_user", "settled_by_user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False
+    )
+    settled_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    settled_by_name: Mapped[str] = mapped_column(String(256), nullable=False)  # pillanatkép
+    payment_method: Mapped[str] = mapped_column(String(16), nullable=False)  # cash|card|transfer
+    total_net: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    total_gross: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    invoiced: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    billingo_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    billingo_status: Mapped[str | None] = mapped_column(String(16), nullable=True)  # created|error|none
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SettlementLine(Base):
+    """Elszámolási tétel: egy termék fogyása és kiszámlázott értéke (adag alapon)."""
+
+    __tablename__ = "settlement_lines"
+    __table_args__ = (Index("ix_settlement_lines_settlement", "settlement_id"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    settlement_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("settlements.id", ondelete="CASCADE"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="SET NULL"), nullable=True
+    )
+    product_name: Mapped[str] = mapped_column(String(256), nullable=False)  # pillanatkép
+    previous_qty: Mapped[float] = mapped_column(Float, nullable=False)  # könyv szerinti (kg)
+    physical_qty: Mapped[float] = mapped_column(Float, nullable=False)  # fizikai leltár (kg)
+    consumed_qty: Mapped[float] = mapped_column(Float, nullable=False)  # fogyás (kg)
+    portions: Mapped[float] = mapped_column(Float, nullable=False)  # adag
+    price_per_portion: Mapped[float] = mapped_column(Float, nullable=False)  # pillanatkép Ft/adag
+    vat_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=27)
+    amount_net: Mapped[float] = mapped_column(Float, nullable=False)  # portions * price
+
+
 class AuditEvent(Base):
     """Append-only audit trail. Sensitive-data reveals, publishes, exports,
     and every mutation of employee PII are recorded here (GDPR accountability)."""

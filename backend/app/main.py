@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     auth,
+    consignment,
     dashboard,
     employees,
     inventory,
@@ -131,6 +132,9 @@ def create_app() -> FastAPI:
     app.include_router(tasks.me_router, prefix="/api/me/tasks", tags=["self-service"])
     app.include_router(inventory.router, prefix="/api/partners", tags=["partners"])
     app.include_router(inventory.assets_router, prefix="/api/assets", tags=["assets"])
+    app.include_router(consignment.products_router, prefix="/api/products", tags=["products"])
+    app.include_router(consignment.stock_router, prefix="/api/partners", tags=["partner-stock"])
+    app.include_router(consignment.settlements_router, prefix="/api/settlements", tags=["settlements"])
 
     @app.get("/api/health")
     async def health():

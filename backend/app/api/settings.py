@@ -12,7 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import record_audit, require_role
 from app.core.crypto import encrypt_pii
 from app.db import get_db
-from app.models import EmailSettings, EmployeeSkill, Skill, User, WorksheetSettings
+from app.models import (
+    BillingoSettings,
+    EmailSettings,
+    EmployeeSkill,
+    Skill,
+    User,
+    WorksheetSettings,
+)
 from app.services.wfm.ai_assign import DEFAULT_ASSIGN_PROMPT
 from app.services.wfm.ai_service import (
     PROVIDERS as AI_PROVIDERS,
@@ -413,3 +420,85 @@ async def update_worksheet_settings(
     )
     await db.commit()
     return _worksheet_out(row)
+
+
+# ─── Billingó számlázó integráció ────────────────────────────────────────────
+
+
+class BillingoSettingsBody(BaseModel):
+    enabled: bool = False
+    api_key: str | None = Field(default=None, max_length=256)  # üresen: marad a régi
+    block_id: int | None = Field(default=None, ge=1)
+    test_mode: bool = True
+
+
+class BillingoSettingsOut(BaseModel):
+    enabled: bool
+    has_api_key: bool
+    block_id: int | None
+    test_mode: bool
+
+
+async def _get_or_create_billingo(db: AsyncSession) -> BillingoSettings:
+    row = (
+        await db.execute(select(BillingoSettings).where(BillingoSettings.id == 1))
+    ).scalar_one_or_none()
+    if row is None:
+        row = BillingoSettings(id=1)
+        db.add(row)
+        await db.flush()
+    return row
+
+
+def _billingo_out(row: BillingoSettings) -> BillingoSettingsOut:
+    return BillingoSettingsOut(
+        enabled=row.enabled,
+        has_api_key=row.api_key_encrypted is not None,
+        block_id=row.block_id,
+        test_mode=row.test_mode,
+    )
+
+
+@router.get("/billingo", response_model=BillingoSettingsOut)
+async def get_billingo_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    return _billingo_out(await _get_or_create_billingo(db))
+
+
+@router.put("/billingo", response_model=BillingoSettingsOut)
+async def update_billingo_settings(
+    body: BillingoSettingsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    row = await _get_or_create_billingo(db)
+    row.enabled = body.enabled
+    row.block_id = body.block_id
+    row.test_mode = body.test_mode
+    if body.api_key:  # üres = nem változik
+        row.api_key_encrypted = encrypt_pii(body.api_key.strip())
+    await record_audit(
+        db, actor=actor, action="settings.billingo_update", entity_type="settings",
+        entity_id="billingo", detail={"test_mode": body.test_mode}, request=request,
+    )
+    await db.commit()
+    return _billingo_out(row)
+
+
+@router.post("/billingo/test")
+async def test_billingo(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Kapcsolat-teszt: számlatömbök lekérése (block_id kiválasztásához is)."""
+    from app.services.wfm.billingo_service import test_connection
+
+    try:
+        return await test_connection(db)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "settings.billingo_test_failed"})

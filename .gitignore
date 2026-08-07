@@ -29,3 +29,7 @@ npm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
+
+# Word ideiglenes/lock fajlok es helyi riportok
+~$*
+Iwfm-piackutatas.docx
