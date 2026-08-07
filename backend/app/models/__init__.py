@@ -9,6 +9,7 @@ from app.models.models import (  # noqa: F401
     Employee,
     EmployeeSkill,
     Partner,
+    PartnerPrice,
     PartnerStock,
     PermissionSettings,
     Product,

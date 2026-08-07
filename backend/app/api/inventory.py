@@ -21,6 +21,7 @@ from app.models import (
     Asset,
     AssetMovement,
     Partner,
+    PartnerPrice,
     PartnerStock,
     Settlement,
     StockMovement,
@@ -279,6 +280,7 @@ async def bulk_delete_partners(
         # függő rekordok explicit takarítása (SQLite-on nincs FK-cascade garancia)
         await db.execute(sa_delete(PartnerStock).where(PartnerStock.partner_id == pid))
         await db.execute(sa_delete(StockMovement).where(StockMovement.partner_id == pid))
+        await db.execute(sa_delete(PartnerPrice).where(PartnerPrice.partner_id == pid))
         await db.execute(
             sa_update(AssetMovement).where(AssetMovement.partner_id == pid).values(partner_id=None)
         )

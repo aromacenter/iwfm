@@ -368,6 +368,61 @@ async def test_due_settlements(client, manager):
     assert "Kávézó Bt." not in [d["name"] for d in due1]
 
 
+async def test_partner_price_override(client, manager):
+    """Partner-ár: a felülírt ár érvényes a készletnézetben és az
+    elszámolásban; törlés után visszaáll az alapár."""
+    _, mgr = manager
+    partner = await make_partner(client, mgr, name="Kedvezményes Kft.")
+    product = await make_product(client, mgr)  # alapár: 50 Ft/adag
+
+    res = await client.put(
+        f"/api/partners/{partner['id']}/prices/{product['id']}",
+        json={"price_per_portion": 40.0},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["price_per_portion"] == 40.0
+    assert res.json()["base_price_per_portion"] == 50.0
+
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 1.0},
+        headers=mgr,
+    )
+    stock = (await client.get(f"/api/partners/{partner['id']}/stock", headers=mgr)).json()
+    assert stock[0]["price_per_portion"] == 40.0
+    assert stock[0]["has_price_override"] is True
+
+    # elszámolás a partner-árral: 0.7 kg = 100 adag × 40 Ft = 4000 Ft
+    body = (
+        await client.post(
+            "/api/settlements",
+            json={
+                "partner_id": partner["id"],
+                "payment_method": "cash",
+                "lines": [{"product_id": product["id"], "physical_qty": 0.3}],
+            },
+            headers=mgr,
+        )
+    ).json()
+    assert abs(body["lines"][0]["amount_net"] - 4000.0) < 0.01
+    assert body["lines"][0]["price_per_portion"] == 40.0
+
+    # felülírás törlése → alapár
+    cleared = await client.delete(
+        f"/api/partners/{partner['id']}/prices/{product['id']}", headers=mgr
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["price_per_portion"] is None
+    listed = (await client.get(f"/api/partners/{partner['id']}/prices", headers=mgr)).json()
+    row = next(r for r in listed if r["product_id"] == product["id"])
+    assert row["price_per_portion"] is None
+
+    stock2 = (await client.get(f"/api/partners/{partner['id']}/stock", headers=mgr)).json()
+    assert stock2[0]["price_per_portion"] == 50.0
+    assert stock2[0]["has_price_override"] is False
+
+
 async def test_receivables_and_mark_paid(client, manager):
     """Kintlévőségek: kézzel számlázottra állított utalásos elszámolás
     megjelenik, lejárat számítódik, fizetve-jelöléssel eltűnik."""

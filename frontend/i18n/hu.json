@@ -232,6 +232,17 @@
     "emailSent": "Bizonylat elküldve emailben.",
     "emailSentAt": "Elküldve: {at}"
   },
+  "prices": {
+    "button": "Partner-árak",
+    "title": "Partner-specifikus árak",
+    "hint": "Üresen hagyva a termék alapára érvényes. Az itt megadott ár (Ft/adag, nettó) csak ennél a partnernél számít.",
+    "unitPrice": "Ft/adag",
+    "basePrice": "Alapár",
+    "partnerPrice": "Partner-ár",
+    "defaultPh": "alapár",
+    "saved": "Partner-árak elmentve.",
+    "overrideHint": "Partner-specifikus ár (alapár: {base})"
+  },
   "recv": {
     "title": "Kintlévőségek ({count})",
     "dueDate": "Fizetési határidő",

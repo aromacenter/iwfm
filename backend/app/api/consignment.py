@@ -21,6 +21,7 @@ from app.api.deps import record_audit, require_perm
 from app.db import get_db
 from app.models import (
     Partner,
+    PartnerPrice,
     PartnerStock,
     Product,
     Settlement,
@@ -172,6 +173,7 @@ async def bulk_delete_products(
         # függő rekordok explicit takarítása (SQLite-on nincs FK-cascade garancia)
         await db.execute(sa_delete(PartnerStock).where(PartnerStock.product_id == pid))
         await db.execute(sa_delete(StockMovement).where(StockMovement.product_id == pid))
+        await db.execute(sa_delete(PartnerPrice).where(PartnerPrice.product_id == pid))
         await db.execute(
             sa_update(SettlementLine).where(SettlementLine.product_id == pid).values(product_id=None)
         )
@@ -202,7 +204,9 @@ class StockOut(BaseModel):
     unit: str
     quantity: float  # aktuális könyv szerinti készlet (kg)
     grams_per_portion: int
-    price_per_portion: float
+    price_per_portion: float  # érvényes ár (partner-felülírás, ha van)
+    base_price_per_portion: float  # a termék alapára
+    has_price_override: bool = False
     portions_available: int  # hány adag készíthető (lefelé kerekítve)
 
 
@@ -223,7 +227,28 @@ async def _get_partner_or_404(db: AsyncSession, partner_id: str) -> Partner:
     return p
 
 
-def _stock_out(stock: PartnerStock, product: Product) -> StockOut:
+async def _partner_price_map(db: AsyncSession, partner_id: uuid.UUID) -> dict[uuid.UUID, float]:
+    """{product_id: felülírt ár} a partnerhez."""
+    return {
+        pid: price
+        for pid, price in (
+            await db.execute(
+                select(PartnerPrice.product_id, PartnerPrice.price_per_portion).where(
+                    PartnerPrice.partner_id == partner_id
+                )
+            )
+        ).all()
+    }
+
+
+def _effective_price(product: Product, overrides: dict[uuid.UUID, float]) -> float:
+    return overrides.get(product.id, product.price_per_portion)
+
+
+def _stock_out(
+    stock: PartnerStock, product: Product, overrides: dict[uuid.UUID, float] | None = None
+) -> StockOut:
+    overrides = overrides or {}
     return StockOut(
         partner_id=str(stock.partner_id),
         product_id=str(product.id),
@@ -231,7 +256,9 @@ def _stock_out(stock: PartnerStock, product: Product) -> StockOut:
         unit=product.unit,
         quantity=stock.quantity,
         grams_per_portion=product.grams_per_portion,
-        price_per_portion=product.price_per_portion,
+        price_per_portion=_effective_price(product, overrides),
+        base_price_per_portion=product.price_per_portion,
+        has_price_override=product.id in overrides,
         portions_available=int(math.floor(portions_from(stock.quantity, product.grams_per_portion))),
     )
 
@@ -242,7 +269,7 @@ async def list_partner_stock(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("settlements")),
 ):
-    await _get_partner_or_404(db, partner_id)
+    partner = await _get_partner_or_404(db, partner_id)
     rows = (
         await db.execute(
             select(PartnerStock, Product)
@@ -251,7 +278,8 @@ async def list_partner_stock(
             .order_by(Product.name)
         )
     ).all()
-    return [_stock_out(stock, product) for stock, product in rows]
+    overrides = await _partner_price_map(db, partner.id)
+    return [_stock_out(stock, product, overrides) for stock, product in rows]
 
 
 @stock_router.post("/{partner_id}/stock/replenish", response_model=StockOut)
@@ -291,7 +319,113 @@ async def replenish_partner_stock(
         request=request,
     )
     await db.commit()
-    return _stock_out(stock, product)
+    return _stock_out(stock, product, await _partner_price_map(db, partner.id))
+
+
+# ─── Partner-specifikus árak ─────────────────────────────────────────────────
+
+
+class PartnerPriceOut(BaseModel):
+    product_id: str
+    product_name: str
+    base_price_per_portion: float
+    price_per_portion: float | None  # None = nincs felülírás (alapár érvényes)
+
+
+class PartnerPriceBody(BaseModel):
+    price_per_portion: float = Field(ge=0)
+
+
+@stock_router.get("/{partner_id}/prices", response_model=list[PartnerPriceOut])
+async def list_partner_prices(
+    partner_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("products")),
+):
+    """Minden aktív termék a partner-felülírással (ha van)."""
+    partner = await _get_partner_or_404(db, partner_id)
+    overrides = await _partner_price_map(db, partner.id)
+    products = (
+        await db.execute(select(Product).where(Product.is_active.is_(True)).order_by(Product.name))
+    ).scalars().all()
+    return [
+        PartnerPriceOut(
+            product_id=str(p.id),
+            product_name=p.name,
+            base_price_per_portion=p.price_per_portion,
+            price_per_portion=overrides.get(p.id),
+        )
+        for p in products
+    ]
+
+
+@stock_router.put("/{partner_id}/prices/{product_id}", response_model=PartnerPriceOut)
+async def set_partner_price(
+    partner_id: str,
+    product_id: str,
+    body: PartnerPriceBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("products")),
+):
+    partner = await _get_partner_or_404(db, partner_id)
+    product = await _get_product_or_404(db, product_id)
+    row = (
+        await db.execute(
+            select(PartnerPrice).where(
+                PartnerPrice.partner_id == partner.id, PartnerPrice.product_id == product.id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = PartnerPrice(
+            partner_id=partner.id, product_id=product.id,
+            price_per_portion=body.price_per_portion,
+        )
+        db.add(row)
+    else:
+        row.price_per_portion = body.price_per_portion
+    await record_audit(
+        db, actor=actor, action="partner_price.set", entity_type="partner_price",
+        entity_id=str(partner.id),
+        detail={"product": product.name, "price": body.price_per_portion}, request=request,
+    )
+    await db.commit()
+    return PartnerPriceOut(
+        product_id=str(product.id),
+        product_name=product.name,
+        base_price_per_portion=product.price_per_portion,
+        price_per_portion=row.price_per_portion,
+    )
+
+
+@stock_router.delete("/{partner_id}/prices/{product_id}", response_model=PartnerPriceOut)
+async def clear_partner_price(
+    partner_id: str,
+    product_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("products")),
+):
+    """A felülírás törlése — visszaáll a termék alapára."""
+    partner = await _get_partner_or_404(db, partner_id)
+    product = await _get_product_or_404(db, product_id)
+    await db.execute(
+        sa_delete(PartnerPrice).where(
+            PartnerPrice.partner_id == partner.id, PartnerPrice.product_id == product.id
+        )
+    )
+    await record_audit(
+        db, actor=actor, action="partner_price.clear", entity_type="partner_price",
+        entity_id=str(partner.id), detail={"product": product.name}, request=request,
+    )
+    await db.commit()
+    return PartnerPriceOut(
+        product_id=str(product.id),
+        product_name=product.name,
+        base_price_per_portion=product.price_per_portion,
+        price_per_portion=None,
+    )
 
 
 # ─── Elszámolás (settlement) ─────────────────────────────────────────────────
@@ -422,6 +556,7 @@ async def create_settlement(
     db.add(settlement)
     await db.flush()
 
+    price_overrides = await _partner_price_map(db, partner.id)
     total_net = 0.0
     total_gross = 0.0
     for line_in in body.lines:
@@ -437,7 +572,8 @@ async def create_settlement(
         previous = stock.quantity if stock is not None else 0.0
         consumed = max(previous - line_in.physical_qty, 0.0)
         portions = portions_from(consumed, product.grams_per_portion)
-        amount_net = _money(portions * product.price_per_portion)
+        unit_price = _effective_price(product, price_overrides)
+        amount_net = _money(portions * unit_price)
         amount_gross = _money(amount_net * (1 + product.vat_percent / 100))
         total_net += amount_net
         total_gross += amount_gross
@@ -451,7 +587,7 @@ async def create_settlement(
                 physical_qty=line_in.physical_qty,
                 consumed_qty=consumed,
                 portions=portions,
-                price_per_portion=product.price_per_portion,
+                price_per_portion=unit_price,
                 vat_percent=product.vat_percent,
                 amount_net=amount_net,
             )

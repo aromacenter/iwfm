@@ -26,6 +26,8 @@ interface Stock {
   quantity: number;
   grams_per_portion: number;
   price_per_portion: number;
+  base_price_per_portion: number;
+  has_price_override: boolean;
   portions_available: number;
 }
 
@@ -50,6 +52,13 @@ interface Settlement {
   created_at: string;
 }
 
+interface PartnerPrice {
+  product_id: string;
+  product_name: string;
+  base_price_per_portion: number;
+  price_per_portion: number | null;
+}
+
 interface DuePartner {
   partner_id: string;
   partner_code: string | null;
@@ -65,7 +74,9 @@ const PAYMENTS = ["cash", "card", "transfer"] as const;
 export default function ElszamolasPage() {
   const { t, lang } = useT();
   const { toast, confirm, prompt } = useUI();
-  const canDelete = usePerms().can("delete");
+  const { can } = usePerms();
+  const canDelete = can("delete");
+  const canPrices = can("products");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [partners, setPartners] = useState<Partner[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -80,6 +91,8 @@ export default function ElszamolasPage() {
   const [showDue, setShowDue] = useState(true);
   const [signing, setSigning] = useState<Settlement | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
+  const [prices, setPrices] = useState<PartnerPrice[] | null>(null); // null = modal zárva
+  const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -243,6 +256,48 @@ export default function ElszamolasPage() {
     }
   }
 
+  async function openPrices() {
+    if (!partnerId) return;
+    try {
+      const rows = await api.get<PartnerPrice[]>(`/api/partners/${partnerId}/prices`);
+      setPrices(rows);
+      setPriceEdits(
+        Object.fromEntries(rows.map((r) => [r.product_id, r.price_per_portion?.toString() ?? ""])),
+      );
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function savePrices() {
+    if (!prices || !partnerId) return;
+    setBusy(true);
+    try {
+      for (const row of prices) {
+        const raw = (priceEdits[row.product_id] ?? "").trim();
+        const hadOverride = row.price_per_portion !== null;
+        if (raw === "") {
+          if (hadOverride) await api.delete(`/api/partners/${partnerId}/prices/${row.product_id}`);
+        } else {
+          const value = Number(raw);
+          if (!Number.isFinite(value) || value < 0) continue;
+          if (!hadOverride || value !== row.price_per_portion) {
+            await api.put(`/api/partners/${partnerId}/prices/${row.product_id}`, {
+              price_per_portion: value,
+            });
+          }
+        }
+      }
+      toast(t("prices.saved"), "success");
+      setPrices(null);
+      loadStock(); // az érvényes árak frissülnek
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function emailReceipt(s: Settlement) {
     const partnerEmail = partners.find((p) => p.id === s.partner_id)?.contact_email ?? "";
     const to = await prompt(t("cons.emailPrompt"), { type: "email", initial: partnerEmail });
@@ -278,6 +333,14 @@ export default function ElszamolasPage() {
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
           >
             {t("cons.replenish")}
+          </button>
+        )}
+        {partnerId && canPrices && (
+          <button
+            onClick={openPrices}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
+          >
+            {t("prices.button")}
           </button>
         )}
       </div>
@@ -342,6 +405,7 @@ export default function ElszamolasPage() {
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
                 <th className="px-4 py-3">{t("cons.name")}</th>
+                <th className="px-4 py-3">{t("prices.unitPrice")}</th>
                 <th className="px-4 py-3">{t("cons.bookQty")}</th>
                 <th className="px-4 py-3">{t("cons.portionsAvail")}</th>
                 <th className="px-4 py-3">{t("cons.physicalQty")}</th>
@@ -354,6 +418,12 @@ export default function ElszamolasPage() {
               {preview.rows.map((s) => (
                 <tr key={s.product_id} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3 font-medium">{s.product_name}</td>
+                  <td className="px-4 py-3">
+                    {ft(s.price_per_portion)}
+                    {s.has_price_override && (
+                      <span title={t("prices.overrideHint", { base: ft(s.base_price_per_portion) })} className="ml-1 text-xs text-indigo-600">*</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">{s.quantity} {s.unit}</td>
                   <td className="px-4 py-3 text-slate-500">{s.portions_available}</td>
                   <td className="px-4 py-3">
@@ -373,7 +443,7 @@ export default function ElszamolasPage() {
                 </tr>
               ))}
               {stock.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("cons.noStock")}</td></tr>
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">{t("cons.noStock")}</td></tr>
               )}
             </tbody>
           </table>
@@ -511,6 +581,64 @@ export default function ElszamolasPage() {
           </tbody>
         </table>
       </div>
+
+      {prices && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setPrices(null); }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        >
+          <div className="max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">{t("prices.title")}</h2>
+            <p className="text-sm text-slate-500">{t("prices.hint")}</p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-slate-500">
+                  <th className="py-2">{t("cons.name")}</th>
+                  <th className="py-2">{t("prices.basePrice")}</th>
+                  <th className="py-2">{t("prices.partnerPrice")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prices.map((row) => (
+                  <tr key={row.product_id} className="border-t border-slate-100">
+                    <td className="py-2 pr-2 font-medium">{row.product_name}</td>
+                    <td className="py-2 pr-2 text-slate-500">{ft(row.base_price_per_portion)}</td>
+                    <td className="py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={priceEdits[row.product_id] ?? ""}
+                        onChange={(e) =>
+                          setPriceEdits({ ...priceEdits, [row.product_id]: e.target.value })
+                        }
+                        placeholder={t("prices.defaultPh")}
+                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setPrices(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={savePrices}
+                disabled={busy}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {busy ? t("common.saving") : t("common.save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {signing && (
         <div

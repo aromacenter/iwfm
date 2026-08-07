@@ -232,6 +232,17 @@
     "emailSent": "Receipt sent by email.",
     "emailSentAt": "Sent: {at}"
   },
+  "prices": {
+    "button": "Partner prices",
+    "title": "Partner-specific prices",
+    "hint": "Leave empty to use the product's base price. Prices here (HUF/portion, net) apply to this partner only.",
+    "unitPrice": "HUF/portion",
+    "basePrice": "Base price",
+    "partnerPrice": "Partner price",
+    "defaultPh": "base price",
+    "saved": "Partner prices saved.",
+    "overrideHint": "Partner-specific price (base: {base})"
+  },
   "recv": {
     "title": "Receivables ({count})",
     "dueDate": "Due date",

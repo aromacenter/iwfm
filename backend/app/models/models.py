@@ -635,6 +635,29 @@ class PartnerStock(Base):
     )
 
 
+class PartnerPrice(Base):
+    """Partner-specifikus ár-felülírás egy termékre (Ft/adag, nettó).
+    Ha nincs sor, a termék alapára érvényes."""
+
+    __tablename__ = "partner_prices"
+    __table_args__ = (
+        UniqueConstraint("partner_id", "product_id", name="uq_partner_price"),
+        Index("ix_partner_prices_partner", "partner_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
+    price_per_portion: Mapped[float] = mapped_column(Float, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class StockMovement(Base):
     """Partner-készlet mozgástörténet (append-only): feltöltés (+) és elszámolás
     szerinti fogyás (−). Auditra és a készletváltozások követésére."""
