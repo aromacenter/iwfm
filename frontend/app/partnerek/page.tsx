@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
 
 type PartnerType = "customer" | "supplier" | "both";
@@ -77,6 +78,7 @@ const TYPE_COLORS: Record<PartnerType, string> = {
 export default function PartnerekPage() {
   const { t } = useT();
   const { toast, confirm } = useUI();
+  const canDelete = usePerms().can("delete");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [partners, setPartners] = useState<Partner[]>([]);
   const [search, setSearch] = useState("");
@@ -292,6 +294,7 @@ export default function PartnerekPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              {canDelete && (
               <th className="w-8 px-3 py-3">
                 <input
                   type="checkbox"
@@ -302,6 +305,7 @@ export default function PartnerekPage() {
                   className="h-4 w-4"
                 />
               </th>
+              )}
               <th className="px-4 py-3">{t("partners.code")}</th>
               <th className="px-4 py-3">{t("partners.name")}</th>
               <th className="px-4 py-3">{t("partners.type")}</th>
@@ -314,6 +318,7 @@ export default function PartnerekPage() {
           <tbody>
             {filtered.map((p) => (
               <tr key={p.id} className="border-b border-slate-100 last:border-0">
+                {canDelete && (
                 <td className="px-3 py-3">
                   <input
                     type="checkbox"
@@ -322,6 +327,7 @@ export default function PartnerekPage() {
                     className="h-4 w-4"
                   />
                 </td>
+                )}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-700">{p.partner_code ?? "—"}</td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{p.name}</div>

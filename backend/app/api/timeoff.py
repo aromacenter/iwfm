@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_role
+from app.api.deps import record_audit, require_perm
 from app.db import get_db
 from app.models import Employee, TimeOffRequest, User
 from app.services.wfm.email_service import load_smtp_config, send_many
@@ -123,7 +123,7 @@ async def _annual_used_working_days(
 async def list_time_off(
     status: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("timeoff")),
 ):
     query = (
         select(TimeOffRequest, Employee.last_name, Employee.first_name)
@@ -141,7 +141,7 @@ async def create_time_off(
     body: TimeOffCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("timeoff")),
 ):
     validate_range(body.type, body.start_date, body.end_date)
     try:
@@ -179,7 +179,7 @@ async def decide_time_off(
     request: Request,
     background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("timeoff")),
 ):
     if body.status not in ("approved", "rejected"):
         raise HTTPException(status_code=422, detail={"code": "timeoff.bad_decision"})

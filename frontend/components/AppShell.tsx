@@ -8,14 +8,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
+import { PermissionsContext } from "@/lib/perms";
 import type { AuthUser } from "@/lib/types";
-
-type Role = "admin" | "manager" | "employee";
 
 interface NavItem {
   href: string;
   key: string;
-  roles: Role[];
+  perm: string | "admin-only";
 }
 
 interface NavGroup {
@@ -26,45 +25,45 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: "nav.groups.overview",
-    items: [{ href: "/vezerlopult", key: "nav.dashboard", roles: ["admin", "manager"] }],
+    items: [{ href: "/vezerlopult", key: "nav.dashboard", perm: "dashboard" }],
   },
   {
     labelKey: "nav.groups.operations",
     items: [
-      { href: "/feladatok", key: "nav.tasks", roles: ["admin", "manager"] },
-      { href: "/beosztas", key: "nav.schedule", roles: ["admin", "manager"] },
-      { href: "/jelenlet", key: "nav.attendance", roles: ["admin", "manager"] },
-      { href: "/tavollet", key: "nav.timeOff", roles: ["admin", "manager"] },
+      { href: "/feladatok", key: "nav.tasks", perm: "tasks" },
+      { href: "/beosztas", key: "nav.schedule", perm: "schedule" },
+      { href: "/jelenlet", key: "nav.attendance", perm: "attendance" },
+      { href: "/tavollet", key: "nav.timeOff", perm: "timeoff" },
     ],
   },
   {
     labelKey: "nav.groups.masterData",
     items: [
-      { href: "/dolgozok", key: "nav.employees", roles: ["admin", "manager"] },
-      { href: "/partnerek", key: "nav.partners", roles: ["admin", "manager"] },
-      { href: "/gepek", key: "nav.inventory", roles: ["admin", "manager"] },
-      { href: "/termekek", key: "nav.products", roles: ["admin", "manager"] },
+      { href: "/dolgozok", key: "nav.employees", perm: "employees" },
+      { href: "/partnerek", key: "nav.partners", perm: "partners" },
+      { href: "/gepek", key: "nav.inventory", perm: "machines" },
+      { href: "/termekek", key: "nav.products", perm: "products" },
     ],
   },
   {
     labelKey: "nav.groups.billing",
     items: [
-      { href: "/elszamolas", key: "nav.settlement", roles: ["admin", "manager"] },
-      { href: "/uzletkoto", key: "nav.agentReport", roles: ["admin", "manager"] },
+      { href: "/elszamolas", key: "nav.settlement", perm: "settlements" },
+      { href: "/uzletkoto", key: "nav.agentReport", perm: "agent_report" },
     ],
   },
   {
     labelKey: "nav.groups.system",
     items: [
-      { href: "/import-export", key: "nav.importExport", roles: ["admin", "manager"] },
-      { href: "/beallitasok", key: "nav.settings", roles: ["admin"] },
+      { href: "/import-export", key: "nav.importExport", perm: "import_export" },
+      { href: "/beallitasok", key: "nav.settings", perm: "admin-only" },
     ],
   },
   {
     labelKey: "nav.groups.personal",
     items: [
-      { href: "/beosztasom", key: "nav.mySchedule", roles: ["employee"] },
-      { href: "/feladataim", key: "nav.myTasks", roles: ["employee"] },
+      { href: "/beosztasom", key: "nav.mySchedule", perm: "my_schedule" },
+      { href: "/feladataim", key: "nav.myTasks", perm: "my_tasks" },
     ],
   },
 ];
@@ -148,9 +147,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
   if (!user) return null;
 
+  const perms = user.permissions ?? [];
   const groups = NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((n) => n.roles.includes(user.role as Role)),
+    items: g.items.filter((n) =>
+      n.perm === "admin-only" ? user.role === "admin" : perms.includes(n.perm),
+    ),
   })).filter((g) => g.items.length > 0);
 
   const sidebar = (
@@ -248,7 +250,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <main className="min-w-0 flex-1">
-        <div className="mx-auto max-w-6xl px-4 py-6">{children}</div>
+        <div className="mx-auto max-w-6xl px-4 py-6">
+          <PermissionsContext.Provider value={perms}>{children}</PermissionsContext.Provider>
+        </div>
       </main>
 
       {pwOpen && (

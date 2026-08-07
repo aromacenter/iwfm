@@ -22,7 +22,8 @@ from app.api.deps import (
     get_current_user,
     get_own_employee,
     record_audit,
-    require_role,
+    require_perm,
+    require_perm,
 )
 from app.db import get_db
 from app.models import (
@@ -295,7 +296,7 @@ async def list_tasks(
     date_to: date | None = Query(default=None),
     status: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("tasks")),
 ):
     query = select(Task).order_by(Task.due_date.desc(), Task.created_at.desc())
     if date_from:
@@ -315,7 +316,7 @@ async def create_task(
     body: TaskCreateBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("tasks")),
 ):
     ai_reason: str | None = None
     employee_id_str = body.employee_id
@@ -400,7 +401,7 @@ async def update_task(
     body: TaskPatchBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("tasks")),
 ):
     task = await _get_task_or_404(db, task_id)
     data = body.model_dump(exclude_unset=True)
@@ -426,7 +427,7 @@ async def delete_task(
     task_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("tasks")),
 ):
     task = await _get_task_or_404(db, task_id)
     await db.delete(task)
@@ -443,7 +444,7 @@ async def manager_comment(
     task_id: str,
     body: CommentBody,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("tasks")),
 ):
     task = await _get_task_or_404(db, task_id)
     db.add(TaskComment(task_id=task.id, author_user_id=actor.id, text=body.text.strip()))
@@ -462,7 +463,7 @@ STATUS_LABELS_HU = {
 async def get_task_worksheet(
     task_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("tasks")),
 ):
     task = await _get_task_or_404(db, task_id)
     ws = await _get_worksheet(db, task.id)
@@ -477,7 +478,7 @@ async def manager_upsert_worksheet(
     body: WorksheetBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("tasks")),
 ):
     """Vezetői kitöltés/javítás — ugyanaz a folyamat, mint a dolgozói."""
     task = await _get_task_or_404(db, task_id)
@@ -573,7 +574,7 @@ async def worksheet_pdf(
     task_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("tasks")),
 ):
     task = await _get_task_or_404(db, task_id)
     pdf, serial = await _build_worksheet_pdf(db, task)
@@ -591,7 +592,7 @@ async def email_worksheet(
     body: WorksheetEmailBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("tasks")),
 ):
     task = await _get_task_or_404(db, task_id)
     pdf, serial = await _build_worksheet_pdf(db, task)
@@ -697,7 +698,7 @@ async def worksheet_from_photo(
     body: PhotoFillBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("tasks")),
 ):
     task = await _get_task_or_404(db, task_id)
     result = await _extract_worksheet_from_photo(db, body.image)
@@ -720,7 +721,7 @@ class SuggestBody(BaseModel):
 async def ai_suggest_assignee(
     body: SuggestBody,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("tasks")),
 ):
     """AI-javaslat a legalkalmasabb dolgozóra (skill + szabadság + terhelés)."""
     try:

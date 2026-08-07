@@ -77,6 +77,17 @@ def _ensure_employee_code_column(sync_conn) -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_partners_code ON partners (partner_code)"
             )
         )
+    # v0.9 — új szerepkörök (uzletkoto, szervizes): a régi CHECK-korlát cseréje
+    # (PostgreSQL; SQLite-on a friss create_all már az új korláttal készül)
+    if sync_conn.dialect.name == "postgresql" and "users" in tables:
+        sync_conn.execute(sql_text("ALTER TABLE users DROP CONSTRAINT IF EXISTS ck_users_role"))
+        sync_conn.execute(
+            sql_text(
+                "ALTER TABLE users ADD CONSTRAINT ck_users_role CHECK "
+                "(role IN ('admin','manager','uzletkoto','szervizes','employee'))"
+            )
+        )
+
     # v0.8 — gépek (assets) törzsadat-bővítés
     ensure_column("assets", "manufacturer", "VARCHAR(128)")
     ensure_column("assets", "article_number", "VARCHAR(64)")

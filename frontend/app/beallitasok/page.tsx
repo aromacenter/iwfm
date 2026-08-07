@@ -87,6 +87,13 @@ export default function BeallitasokPage() {
   const [promptIsCustom, setPromptIsCustom] = useState(false);
   const [defaultPrompt, setDefaultPrompt] = useState("");
 
+  // --- Jogosultságok (szerepkör × funkció mátrix) ---
+  const [permRoles, setPermRoles] = useState<string[]>([]);
+  const [permFeatures, setPermFeatures] = useState<string[]>([]);
+  const [permMatrix, setPermMatrix] = useState<Record<string, string[]>>({});
+  const [permMsg, setPermMsg] = useState<string | null>(null);
+  const [permBusy, setPermBusy] = useState(false);
+
   // --- Billingó számlázó ---
   const [billingo, setBillingo] = useState({ enabled: false, api_key: "", block_id: "", test_mode: true });
   const [billingoHasKey, setBillingoHasKey] = useState(false);
@@ -143,6 +150,16 @@ export default function BeallitasokPage() {
         setAssignPrompt(s.assign_prompt);
         setPromptIsCustom(s.assign_prompt_is_custom);
         setDefaultPrompt(s.default_assign_prompt);
+      })
+      .catch(() => {});
+    api
+      .get<{ roles: string[]; features: string[]; matrix: Record<string, string[]> }>(
+        "/api/settings/permissions",
+      )
+      .then((p) => {
+        setPermRoles(p.roles);
+        setPermFeatures(p.features);
+        setPermMatrix(p.matrix);
       })
       .catch(() => {});
     api
@@ -279,6 +296,29 @@ export default function BeallitasokPage() {
     }
   }
 
+  function togglePerm(role: string, feature: string) {
+    setPermMatrix((m) => {
+      const current = m[role] ?? [];
+      const next = current.includes(feature)
+        ? current.filter((f) => f !== feature)
+        : [...current, feature];
+      return { ...m, [role]: next };
+    });
+  }
+
+  async function savePermissions() {
+    setPermBusy(true);
+    setPermMsg(null);
+    try {
+      await api.put("/api/settings/permissions", { matrix: permMatrix });
+      setPermMsg(t("common.saved"));
+    } catch (err) {
+      setPermMsg(errorMessage(err));
+    } finally {
+      setPermBusy(false);
+    }
+  }
+
   async function saveBillingo(e: React.FormEvent) {
     e.preventDefault();
     setBillingoBusy(true);
@@ -366,6 +406,64 @@ export default function BeallitasokPage() {
   return (
     <AppShell>
       <h1 className="mb-4 text-xl font-bold">{t("settings.title")}</h1>
+
+      {/* Jogosultságok — szerepkör × funkció mátrix */}
+      {permRoles.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="font-semibold">{t("settings.permTitle")}</h2>
+          <p className="mb-3 text-xs text-slate-500">{t("settings.permHint")}</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                  <th className="px-3 py-2">{t("settings.permFeature")}</th>
+                  <th className="px-3 py-2 text-center">{t("roles.admin")}</th>
+                  {permRoles.map((r) => (
+                    <th key={r} className="px-3 py-2 text-center">{t(`roles.${r}`)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {permFeatures.map((f) => (
+                  <tr key={f} className="border-b border-slate-100 last:border-0">
+                    <td className="px-3 py-2">
+                      {t(`features.${f}`)}
+                      {f === "delete" && (
+                        <span className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-700">
+                          {t("settings.permDeleteHint")}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <input type="checkbox" checked disabled className="h-4 w-4 opacity-50" />
+                    </td>
+                    {permRoles.map((r) => (
+                      <td key={r} className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={(permMatrix[r] ?? []).includes(f)}
+                          onChange={() => togglePerm(r, f)}
+                          className="h-4 w-4"
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={savePermissions}
+              disabled={permBusy}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {permBusy ? t("common.saving") : t("common.save")}
+            </button>
+            {permMsg && <span className="text-sm text-slate-600">{permMsg}</span>}
+          </div>
+        </div>
+      )}
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {/* Munkalap-PDF testreszabás */}

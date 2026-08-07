@@ -8,6 +8,7 @@ import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
 
 interface Partner {
@@ -76,6 +77,7 @@ const EMPTY_ASSET = {
 export default function GepekPage() {
   const { t, lang } = useT();
   const { toast, confirm } = useUI();
+  const canDelete = usePerms().can("delete");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [search, setSearch] = useState("");
@@ -306,6 +308,7 @@ export default function GepekPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              {canDelete && (
               <th className="w-8 px-3 py-3">
                 <input
                   type="checkbox"
@@ -316,6 +319,7 @@ export default function GepekPage() {
                   className="h-4 w-4"
                 />
               </th>
+              )}
               <th className="px-4 py-3">{t("inv.barcode")}</th>
               <th className="px-4 py-3">{t("inv.manufacturer")}</th>
               <th className="px-4 py-3">{t("inv.type")}</th>
@@ -332,6 +336,7 @@ export default function GepekPage() {
           <tbody>
             {assets.map((a) => (
               <tr key={a.id} className="border-b border-slate-100 last:border-0">
+                {canDelete && (
                 <td className="px-3 py-3">
                   <input
                     type="checkbox"
@@ -340,6 +345,7 @@ export default function GepekPage() {
                     className="h-4 w-4"
                   />
                 </td>
+                )}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-700">{a.barcode}</td>
                 <td className="px-4 py-3 text-slate-500">{a.manufacturer ?? "—"}</td>
                 <td className="px-4 py-3">

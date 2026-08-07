@@ -17,9 +17,88 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import SESSION_COOKIE, decode_token
 from app.db import get_db
-from app.models import AuditEvent, Employee, User
+from app.models import AuditEvent, Employee, PermissionSettings, User
 
-ROLE_ORDER = {"employee": 0, "manager": 1, "admin": 2}
+ROLE_ORDER = {"employee": 0, "szervizes": 0, "uzletkoto": 0, "manager": 1, "admin": 2}
+
+# ─── Funkció-alapú jogosultságok ─────────────────────────────────────────────
+# Az admin mindig mindent tehet. A többi szerepkör jogait a permission_settings
+# mátrix adja (Beállítások → Jogosultságok); hiányzó szerepkörre a DEFAULT.
+
+ROLES = ("admin", "manager", "uzletkoto", "szervizes", "employee")
+CONFIGURABLE_ROLES = ("manager", "uzletkoto", "szervizes", "employee")
+
+FEATURES = (
+    "dashboard",      # vezérlőpult
+    "tasks",          # feladatok kezelése
+    "schedule",       # beosztás
+    "attendance",     # jelenlét
+    "timeoff",        # távollét
+    "employees",      # dolgozók (lista/megtekintés)
+    "partners",       # partnerek
+    "machines",       # gépek
+    "products",       # termékek
+    "settlements",    # elszámolás (készlet-feltöltés is)
+    "invoicing",      # kiszámlázás (Billingó)
+    "agent_report",   # üzletkötő-elszámolás
+    "import_export",  # import/export
+    "payroll",        # bérexport
+    "my_schedule",    # saját beosztás (önkiszolgáló)
+    "my_tasks",       # saját feladatok/munkalap (önkiszolgáló)
+    "delete",         # törlés funkciók (alapból csak admin)
+)
+
+DEFAULT_MATRIX: dict[str, list[str]] = {
+    "manager": [
+        "dashboard", "tasks", "schedule", "attendance", "timeoff", "employees",
+        "partners", "machines", "products", "settlements", "invoicing",
+        "agent_report", "import_export", "payroll",
+    ],
+    "uzletkoto": [
+        "dashboard", "partners", "machines", "products", "settlements",
+        "invoicing", "agent_report",
+    ],
+    "szervizes": ["machines", "my_schedule", "my_tasks"],
+    "employee": ["my_schedule", "my_tasks"],
+}
+
+
+async def get_permission_matrix(db: AsyncSession) -> dict[str, list[str]]:
+    """A mentett mátrix a beépített alapértelmezésekkel kiegészítve."""
+    row = (
+        await db.execute(select(PermissionSettings).where(PermissionSettings.id == 1))
+    ).scalar_one_or_none()
+    stored = row.matrix if row is not None and isinstance(row.matrix, dict) else {}
+    out: dict[str, list[str]] = {}
+    for role in CONFIGURABLE_ROLES:
+        value = stored.get(role)
+        if isinstance(value, list):
+            out[role] = [f for f in value if f in FEATURES]
+        else:
+            out[role] = list(DEFAULT_MATRIX.get(role, []))
+    return out
+
+
+def permissions_for(role: str, matrix: dict[str, list[str]]) -> list[str]:
+    if role == "admin":
+        return list(FEATURES)
+    return matrix.get(role, [])
+
+
+def require_perm(feature: str):
+    """Guard: a funkció engedélyezett-e a hívó szerepkörének (admin mindig)."""
+
+    async def _guard(
+        user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    ) -> User:
+        if user.role == "admin":
+            return user
+        matrix = await get_permission_matrix(db)
+        if feature not in matrix.get(user.role, []):
+            raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+        return user
+
+    return _guard
 
 
 def _extract_token(request: Request) -> str | None:

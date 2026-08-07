@@ -220,9 +220,10 @@ async def test_partner_structured_address_and_code(client, manager):
     assert upd.json()["partner_code"] == "PT-0001"  # a kód nem változik
 
 
-async def test_bulk_delete_assets_deployed_guard(client, manager):
+async def test_bulk_delete_assets_deployed_guard(client, manager, admin):
     """Gép tömeges törlés: kihelyezett blokkolva, raktári törölhető."""
     _, mgr = manager
+    _, adm = admin
     partner = await make_partner(client, mgr)
     deployed = (
         await client.post("/api/assets", json=asset_payload(barcode="DEL-1"), headers=mgr)
@@ -237,7 +238,7 @@ async def test_bulk_delete_assets_deployed_guard(client, manager):
     res = await client.post(
         "/api/assets/bulk-delete",
         json={"ids": [deployed["id"], stockroom["id"]]},
-        headers=mgr,
+        headers=adm,
     )
     assert res.status_code == 200, res.text
     body = res.json()

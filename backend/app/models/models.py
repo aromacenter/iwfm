@@ -48,7 +48,10 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
-        CheckConstraint("role IN ('admin','manager','employee')", name="ck_users_role"),
+        CheckConstraint(
+            "role IN ('admin','manager','uzletkoto','szervizes','employee')",
+            name="ck_users_role",
+        ),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -549,6 +552,21 @@ class AssetMovement(Base):
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PermissionSettings(Base):
+    """Szerepkör → engedélyezett funkciók mátrix — egyetlen sor (id=1).
+    A matrix JSON: {role: [feature, ...]}. Az admin mindig mindent lát/tehet
+    (nem szerepel a mátrixban); a hiányzó szerepkörök a beépített
+    alapértelmezést kapják (deps.DEFAULT_MATRIX)."""
+
+    __tablename__ = "permission_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    matrix: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 

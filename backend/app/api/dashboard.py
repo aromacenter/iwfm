@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_role
+from app.api.deps import require_perm
 from app.db import get_db
 from app.models import Employee, Shift, Task, TimeEntry, TimeOffRequest, User
 
@@ -25,7 +25,7 @@ router = APIRouter()
 @router.get("")
 async def dashboard(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("dashboard")),
 ):
     today = date.today()
     next_monday = today + timedelta(days=(7 - today.weekday()) % 7 or 7)

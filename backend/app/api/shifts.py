@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_role
+from app.api.deps import record_audit, require_perm
 from app.db import get_db
 from app.models import Employee, Shift, TimeOffRequest, User
 from app.services.wfm.compliance import (
@@ -238,7 +238,7 @@ def _blocking_errors_for(candidate: ShiftSpan, others: list[Shift], *, now: date
 async def get_week(
     week_start: date = Query(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("schedule")),
 ):
     monday, sunday = _week_bounds(week_start)
     all_shifts = await _week_shifts(db, monday, sunday)
@@ -269,7 +269,7 @@ async def create_shift(
     body: ShiftBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("schedule")),
 ):
     try:
         emp_id = uuid.UUID(body.employee_id)
@@ -323,7 +323,7 @@ async def update_shift(
     request: Request,
     background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("schedule")),
 ):
     shift = await _get_shift_or_404(db, shift_id)
     now = datetime.now(UTC)
@@ -400,7 +400,7 @@ async def delete_shift(
     request: Request,
     force: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("schedule")),
 ):
     shift = await _get_shift_or_404(db, shift_id)
     now = datetime.now(UTC)
@@ -435,7 +435,7 @@ async def delete_shift(
 async def preview_compliance(
     week_start: date = Query(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("schedule")),
 ):
     """Publish-előnézet: minden szabály, a 168 órás közlési szabállyal együtt."""
     monday, sunday = _week_bounds(week_start)
@@ -482,7 +482,7 @@ async def publish_week(
     request: Request,
     background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("schedule")),
 ):
     monday, sunday = _week_bounds(body.week_start)
     all_shifts = await _week_shifts(db, monday, sunday)

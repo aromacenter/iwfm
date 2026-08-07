@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete, func as sa_func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_role
+from app.api.deps import record_audit, require_perm
 from app.db import get_db
 from app.models import (
     Partner,
@@ -87,7 +87,7 @@ async def _get_product_or_404(db: AsyncSession, product_id: str) -> Product:
 @products_router.get("", response_model=list[ProductOut])
 async def list_products(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("products")),
 ):
     rows = (await db.execute(select(Product).order_by(Product.name))).scalars().all()
     return [_product_out(p) for p in rows]
@@ -98,7 +98,7 @@ async def create_product(
     body: ProductBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("products")),
 ):
     p = Product(**body.model_dump())
     db.add(p)
@@ -117,7 +117,7 @@ async def update_product(
     body: ProductBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("products")),
 ):
     p = await _get_product_or_404(db, product_id)
     for key, value in body.model_dump().items():
@@ -139,7 +139,7 @@ async def bulk_delete_products(
     body: BulkDeleteBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("delete")),
 ):
     """Termékek (tömeges) törlése. Ha egy termékből még van kint készlet
     valamelyik partnernél (>0), nem törölhető — előbb el kell számolni
@@ -240,7 +240,7 @@ def _stock_out(stock: PartnerStock, product: Product) -> StockOut:
 async def list_partner_stock(
     partner_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("settlements")),
 ):
     await _get_partner_or_404(db, partner_id)
     rows = (
@@ -260,7 +260,7 @@ async def replenish_partner_stock(
     body: ReplenishBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("settlements")),
 ):
     """Termék feltöltése a partner külső raktárába (kg-ban)."""
     partner = await _get_partner_or_404(db, partner_id)
@@ -391,7 +391,7 @@ async def create_settlement(
     body: SettlementCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("settlements")),
 ):
     """Elszámolás rögzítése: a fizikai leltár alapján kiszámolja a fogyást
     (adag) és az összeget (adag × ár/adag), levonja a partner készletéből.
@@ -491,7 +491,7 @@ async def list_settlements(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("settlements")),
 ):
     query = (
         select(Settlement, Partner.name)
@@ -522,7 +522,7 @@ async def bulk_delete_settlements(
     body: BulkDeleteBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("delete")),
 ):
     """Elszámolások (tömeges) törlése. Már kiszámlázott elszámolás nem
     törölhető (a Billingó-bizonylat létezik). Törléskor a levont készlet
@@ -613,7 +613,7 @@ class AgentOut(BaseModel):
 @settlements_router.get("/agents", response_model=list[AgentOut])
 async def settlement_agents(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("agent_report")),
 ):
     """Az elszámolást végzők (üzletkötők) listája — a szűrő legördülőhöz."""
     rows = (
@@ -652,7 +652,7 @@ async def settlement_summary(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("agent_report")),
 ):
     """Fizetési módonkénti összesítés (üzletkötő-elszámoláshoz): darab + nettó +
     bruttó, valamint a teljes összeg."""
@@ -683,7 +683,7 @@ async def settlement_summary(
 async def get_settlement(
     settlement_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("settlements")),
 ):
     s = await _get_settlement_or_404(db, settlement_id)
     partner = (
@@ -706,7 +706,7 @@ async def invoice_settlement(
     settlement_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("invoicing")),
 ):
     """„Kiszámlázott” gomb: a fogyás kiszámlázása a Billingón keresztül.
     Teszt-módban díjbekérő (proforma) készül, éles módban számla."""

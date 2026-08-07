@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from datetime import UTC, datetime as dt
 
-from app.api.deps import record_audit, require_role
+from app.api.deps import record_audit, require_perm
 from app.db import get_db
 from app.models import Asset, AssetMovement, Partner, Product, Settlement, User
 
@@ -178,7 +178,7 @@ def _column_letter(index: int) -> str:
 
 
 @router.get("/entities")
-async def list_entities(_: User = Depends(require_role("manager"))):
+async def list_entities(_: User = Depends(require_perm("import_export"))):
     return {
         "import": [
             {"entity": entity, "fields": fields}
@@ -196,7 +196,7 @@ class PreviewBody(BaseModel):
 @router.post("/preview")
 async def preview_file(
     body: PreviewBody,
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("import_export")),
 ):
     raw, kind = _decode_file(body.file)
     rows, sheet_names = _parse_rows(raw, kind, body.sheet)
@@ -258,7 +258,7 @@ async def run_import(
     body: ImportBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("import_export")),
 ):
     if body.entity not in ENTITY_FIELDS:
         raise HTTPException(status_code=422, detail={"code": "impex.bad_entity"})
@@ -420,7 +420,7 @@ async def run_export(
     entity: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("import_export")),
 ):
     if entity not in EXPORT_ENTITIES:
         raise HTTPException(status_code=422, detail={"code": "impex.bad_entity"})

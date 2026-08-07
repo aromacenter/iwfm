@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
 
 interface Product {
@@ -34,6 +35,7 @@ const EMPTY = {
 export default function TermekekPage() {
   const { t } = useT();
   const { toast, confirm } = useUI();
+  const canDelete = usePerms().can("delete");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState<typeof EMPTY | null>(null);
@@ -140,6 +142,7 @@ export default function TermekekPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              {canDelete && (
               <th className="w-8 px-3 py-3">
                 <input
                   type="checkbox"
@@ -150,6 +153,7 @@ export default function TermekekPage() {
                   className="h-4 w-4"
                 />
               </th>
+              )}
               <th className="px-4 py-3">{t("cons.name")}</th>
               <th className="px-4 py-3">{t("cons.unit")}</th>
               <th className="px-4 py-3">{t("cons.gramsPerPortion")}</th>
@@ -161,6 +165,7 @@ export default function TermekekPage() {
           <tbody>
             {products.map((p) => (
               <tr key={p.id} className="border-b border-slate-100 last:border-0">
+                {canDelete && (
                 <td className="px-3 py-3">
                   <input
                     type="checkbox"
@@ -169,6 +174,7 @@ export default function TermekekPage() {
                     className="h-4 w-4"
                   />
                 </td>
+                )}
                 <td className="px-4 py-3">
                   <span className="font-medium">{p.name}</span>
                   {!p.is_active && (

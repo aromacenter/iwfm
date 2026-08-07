@@ -15,7 +15,12 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, record_audit
+from app.api.deps import (
+    get_current_user,
+    get_permission_matrix,
+    permissions_for,
+    record_audit,
+)
 from app.core.config import get_settings
 from app.core.security import SESSION_COOKIE, hash_password, mint_token, verify_password
 from app.db import get_db
@@ -56,11 +61,16 @@ class UserOut(BaseModel):
     email: str
     display_name: str
     role: str
+    permissions: list[str] = []
 
 
-def _user_out(user: User) -> UserOut:
+def _user_out(user: User, permissions: list[str] | None = None) -> UserOut:
     return UserOut(
-        id=str(user.id), email=user.email, display_name=user.display_name, role=user.role
+        id=str(user.id),
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+        permissions=permissions or [],
     )
 
 
@@ -107,7 +117,8 @@ async def bootstrap_admin(
     )
     await db.commit()
     set_session_cookie(response, mint_token(user_id=user.id, role=user.role, token_version=user.token_version))
-    return _user_out(user)
+    matrix = await get_permission_matrix(db)
+    return _user_out(user, permissions_for(user.role, matrix))
 
 
 @router.post("/login", response_model=UserOut)
@@ -139,7 +150,8 @@ async def login(
     )
     await db.commit()
     set_session_cookie(response, mint_token(user_id=user.id, role=user.role, token_version=user.token_version))
-    return _user_out(user)
+    matrix = await get_permission_matrix(db)
+    return _user_out(user, permissions_for(user.role, matrix))
 
 
 @router.post("/logout")
@@ -149,5 +161,9 @@ async def logout(response: Response):
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: User = Depends(get_current_user)):
-    return _user_out(user)
+async def me(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    matrix = await get_permission_matrix(db)
+    return _user_out(user, permissions_for(user.role, matrix))

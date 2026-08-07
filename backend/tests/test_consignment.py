@@ -158,9 +158,10 @@ async def test_billingo_settings_roundtrip(client, admin):
     assert "api_key" not in body  # a kulcs sosem megy vissza
 
 
-async def test_bulk_delete_products_and_stock_guard(client, manager):
+async def test_bulk_delete_products_and_stock_guard(client, manager, admin):
     """Termék tömeges törlés: kint lévő készletű blokkolva, üres törölhető."""
     _, mgr = manager
+    _, adm = admin
     partner = await make_partner(client, mgr, name="Raktáras Bt.")
     stocked = await make_product(client, mgr, name="Kint lévő kávé")
     empty = await make_product(client, mgr, name="Üres termék")
@@ -173,7 +174,7 @@ async def test_bulk_delete_products_and_stock_guard(client, manager):
     res = await client.post(
         "/api/products/bulk-delete",
         json={"ids": [stocked["id"], empty["id"]]},
-        headers=mgr,
+        headers=adm,
     )
     assert res.status_code == 200, res.text
     body = res.json()
@@ -185,16 +186,17 @@ async def test_bulk_delete_products_and_stock_guard(client, manager):
     assert "Üres termék" not in names and "Kint lévő kávé" in names
 
 
-async def test_bulk_delete_partner_guards(client, manager):
+async def test_bulk_delete_partner_guards(client, manager, admin):
     """Partner törlés: elszámolásos partner blokkolva, sima törölhető."""
     _, mgr = manager
+    _, adm = admin
     _, _, settlement = await _setup_settlement(client, mgr)  # 'Kávézó Bt.' elszámolással
     plain = await make_partner(client, mgr, name="Sima Kft.")
 
     res = await client.post(
         "/api/partners/bulk-delete",
         json={"ids": [settlement["partner_id"], plain["id"]]},
-        headers=mgr,
+        headers=adm,
     )
     assert res.status_code == 200, res.text
     body = res.json()
@@ -205,7 +207,7 @@ async def test_bulk_delete_partner_guards(client, manager):
     assert "Sima Kft." not in names and "Kávézó Bt." in names
 
 
-async def test_bulk_delete_settlement_restores_stock(client, manager):
+async def test_bulk_delete_settlement_restores_stock(client, manager, admin):
     """Elszámolás törlése: a fogyás visszakerül a készletbe; számlázott blokkolt."""
     import uuid as _uuid
 
@@ -215,10 +217,11 @@ async def test_bulk_delete_settlement_restores_stock(client, manager):
     from app.models import Settlement
 
     _, mgr = manager
+    _, adm = admin
     partner, product, body = await _setup_settlement(client, mgr)  # 1.0 → 0.3, fogyás 0.7
 
     res = await client.post(
-        "/api/settlements/bulk-delete", json={"ids": [body["id"]]}, headers=mgr
+        "/api/settlements/bulk-delete", json={"ids": [body["id"]]}, headers=adm
     )
     assert res.status_code == 200, res.text
     assert res.json()["deleted"] == 1
@@ -248,7 +251,7 @@ async def test_bulk_delete_settlement_restores_stock(client, manager):
         await session.commit()
 
     res3 = await client.post(
-        "/api/settlements/bulk-delete", json={"ids": [sid]}, headers=mgr
+        "/api/settlements/bulk-delete", json={"ids": [sid]}, headers=adm
     )
     assert res3.json()["deleted"] == 0
     assert res3.json()["blocked"][0]["code"] == "settlement.invoiced"

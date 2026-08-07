@@ -9,13 +9,21 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_role
+from app.api.deps import (
+    CONFIGURABLE_ROLES,
+    FEATURES,
+    get_current_user,
+    get_permission_matrix,
+    record_audit,
+    require_role,
+)
 from app.core.crypto import encrypt_pii
 from app.db import get_db
 from app.models import (
     BillingoSettings,
     EmailSettings,
     EmployeeSkill,
+    PermissionSettings,
     Skill,
     User,
     WorksheetSettings,
@@ -243,7 +251,7 @@ class SkillOut(BaseModel):
 @router.get("/skills", response_model=list[SkillOut])
 async def list_skills(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(get_current_user),  # ártalmatlan metaadat — bármely belépettnek
 ):
     rows = (await db.execute(select(Skill).order_by(Skill.name))).scalars()
     return [SkillOut(id=s.id, name=s.name) for s in rows]
@@ -486,6 +494,67 @@ async def update_billingo_settings(
     )
     await db.commit()
     return _billingo_out(row)
+
+
+# ─── Jogosultságok (szerepkör × funkció mátrix) ─────────────────────────────
+
+
+class PermissionsBody(BaseModel):
+    matrix: dict[str, list[str]]
+
+
+@router.get("/permissions")
+async def get_permissions(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    return {
+        "roles": list(CONFIGURABLE_ROLES),
+        "features": list(FEATURES),
+        "matrix": await get_permission_matrix(db),
+    }
+
+
+@router.put("/permissions")
+async def update_permissions(
+    body: PermissionsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """A szerepkörönkénti funkció-engedélyek mentése. Az admin nem
+    konfigurálható (mindig minden funkciója megvan)."""
+    cleaned: dict[str, list[str]] = {}
+    for role, features in body.matrix.items():
+        if role not in CONFIGURABLE_ROLES:
+            raise HTTPException(status_code=422, detail={"code": "settings.bad_role"})
+        if not isinstance(features, list):
+            raise HTTPException(status_code=422, detail={"code": "settings.bad_matrix"})
+        for feature in features:
+            if feature not in FEATURES:
+                raise HTTPException(status_code=422, detail={"code": "settings.bad_matrix"})
+        cleaned[role] = sorted(set(features))
+
+    row = (
+        await db.execute(select(PermissionSettings).where(PermissionSettings.id == 1))
+    ).scalar_one_or_none()
+    if row is None:
+        row = PermissionSettings(id=1)
+        db.add(row)
+    # a nem küldött szerepkörök megtartják a jelenlegi (default/mentett) jogaikat
+    current = await get_permission_matrix(db)
+    current.update(cleaned)
+    row.matrix = current
+    await record_audit(
+        db, actor=actor, action="settings.permissions_update", entity_type="settings",
+        entity_id="permissions", request=request,
+    )
+    await db.commit()
+    return {
+        "roles": list(CONFIGURABLE_ROLES),
+        "features": list(FEATURES),
+        "matrix": await get_permission_matrix(db),
+    }
 
 
 @router.post("/billingo/test")

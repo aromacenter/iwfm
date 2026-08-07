@@ -49,6 +49,32 @@
       "personal": "Personal"
     }
   },
+  "roles": {
+    "admin": "Admin",
+    "manager": "Manager",
+    "uzletkoto": "Sales agent",
+    "szervizes": "Service technician",
+    "employee": "Employee"
+  },
+  "features": {
+    "dashboard": "Dashboard",
+    "tasks": "Task management",
+    "schedule": "Schedule",
+    "attendance": "Attendance",
+    "timeoff": "Time off",
+    "employees": "View employees",
+    "partners": "Partners",
+    "machines": "Machines",
+    "products": "Products",
+    "settlements": "Settlement",
+    "invoicing": "Invoicing (Billingó)",
+    "agent_report": "Agent report",
+    "import_export": "Import / Export",
+    "payroll": "Payroll export",
+    "my_schedule": "My schedule",
+    "my_tasks": "My tasks / worksheet",
+    "delete": "Delete functions"
+  },
   "validation": {
     "email": "invalid email address",
     "required": "required field",
@@ -330,6 +356,7 @@
     "skillsSection": "Skills / qualifications",
     "noSkillsYet": "No skills yet — create them in Settings.",
     "accountSection": "Login account",
+    "loginRole": "Role",
     "loginEmail": "Email (for sign-in) *",
     "initialPassword": "Initial password (empty: generated)",
     "fixMarked": "Fix the fields marked in red.",
@@ -544,6 +571,10 @@
   },
   "settings": {
     "title": "Settings",
+    "permTitle": "Permissions",
+    "permHint": "Toggle per role which features are accessible. Admin always has everything. Changes apply immediately (users must reload the page).",
+    "permFeature": "Feature",
+    "permDeleteHint": "admin-only by default",
     "billingoTitle": "Billingó invoicing",
     "billingoHint": "The settlements' \"Invoiced\" button creates the document in Billingó.",
     "billingoEnabled": "Billingó invoicing enabled",

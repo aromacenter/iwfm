@@ -15,7 +15,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import delete as sa_delete, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_role
+from app.api.deps import record_audit, require_perm
 from app.db import get_db
 from app.models import (
     Asset,
@@ -173,7 +173,7 @@ async def _get_partner_or_404(db: AsyncSession, partner_id: str) -> Partner:
 @router.get("", response_model=list[PartnerOut])
 async def list_partners(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("partners")),
 ):
     partners = (
         (await db.execute(select(Partner).order_by(Partner.name))).scalars().all()
@@ -195,7 +195,7 @@ async def create_partner(
     body: PartnerBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("partners")),
 ):
     from app.services.wfm.codes import generate_partner_code
 
@@ -216,7 +216,7 @@ async def update_partner(
     body: PartnerBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("partners")),
 ):
     p = await _get_partner_or_404(db, partner_id)
     for key, value in body.resolved().items():
@@ -248,7 +248,7 @@ async def bulk_delete_partners(
     body: BulkDeleteBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("delete")),
 ):
     """Partnerek (tömeges) törlése. Védőkorlátok: elszámolással rendelkező vagy
     kihelyezett géppel rendelkező partner nem törölhető (blocked listában
@@ -426,7 +426,7 @@ async def _next_barcode(db: AsyncSession) -> str:
 @assets_router.get("/generate-barcode")
 async def generate_barcode(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("machines")),
 ):
     return {"barcode": await _next_barcode(db)}
 
@@ -437,7 +437,7 @@ async def list_assets(
     status: str | None = Query(default=None),
     partner_id: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("machines")),
 ):
     query = select(Asset).order_by(Asset.created_at.desc())
     if q:
@@ -466,7 +466,7 @@ async def list_assets(
 async def asset_by_barcode(
     barcode: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("machines")),
 ):
     a = (
         await db.execute(select(Asset).where(Asset.barcode == barcode.strip()))
@@ -481,7 +481,7 @@ async def asset_by_barcode(
 async def get_asset(
     asset_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("machines")),
 ):
     a = await _get_asset_or_404(db, asset_id)
     names = await _partner_names(db, {a.partner_id})
@@ -518,7 +518,7 @@ async def create_asset(
     body: AssetBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("machines")),
 ):
     barcode = body.barcode.strip()
     existing = (
@@ -559,7 +559,7 @@ async def update_asset(
     body: AssetPatch,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("machines")),
 ):
     a = await _get_asset_or_404(db, asset_id)
     data = body.model_dump(exclude_unset=True)
@@ -608,7 +608,7 @@ async def deploy_asset(
     body: DeployBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("machines")),
 ):
     a = await _get_asset_or_404(db, asset_id)
     if a.status == "retired":
@@ -638,7 +638,7 @@ async def return_asset(
     body: ReturnBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("machines")),
 ):
     a = await _get_asset_or_404(db, asset_id)
     if a.status != "deployed":
@@ -666,7 +666,7 @@ async def bulk_delete_assets(
     body: BulkDeleteBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("delete")),
 ):
     """Gépek (tömeges) törlése. Kihelyezett gép nem törölhető — előbb vissza
     kell venni (blocked listában jelezzük, a többi törlődik)."""

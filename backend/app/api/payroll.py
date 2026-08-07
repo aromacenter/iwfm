@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_role
+from app.api.deps import record_audit, require_perm
 from app.core.crypto import decrypt_pii
 from app.db import get_db
 from app.models import Employee, Shift, TimeEntry, TimeOffRequest, User
@@ -31,7 +31,7 @@ async def export_payroll(
     format: str = Query(default="csv", pattern="^(csv|xlsx)$"),
     request: Request = None,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("payroll")),
 ):
     if period_end < period_start:
         raise HTTPException(status_code=422, detail={"code": "payroll.bad_range"})

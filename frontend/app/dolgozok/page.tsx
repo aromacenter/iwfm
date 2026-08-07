@@ -21,8 +21,11 @@ interface Skill {
   name: string;
 }
 
+const LOGIN_ROLES = ["employee", "szervizes", "uzletkoto", "manager", "admin"] as const;
+
 const EMPTY_FORM = {
   email: "",
+  role: "employee" as (typeof LOGIN_ROLES)[number],
   last_name: "",
   first_name: "",
   birth_name: "",
@@ -118,6 +121,7 @@ export default function DolgozokPage() {
     setForm({
       ...EMPTY_FORM,
       email: emp.email ?? "",
+      role: (emp.role as (typeof LOGIN_ROLES)[number]) ?? "employee",
       last_name: emp.last_name,
       first_name: emp.first_name,
       birth_name: emp.birth_name ?? "",
@@ -170,6 +174,7 @@ export default function DolgozokPage() {
           wage_type: form.wage_type,
           annual_leave_days: form.annual_leave_days,
           skill_ids: skillIds,
+          role: form.role,
         };
         for (const k of ["tax_id", "taj", "bank_account", "wage_amount"] as const) {
           if (form[k].trim() !== "") body[k] = form[k].trim();
@@ -502,17 +507,30 @@ export default function DolgozokPage() {
               )}
             </fieldset>
 
-            {!editing && (
-              <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.accountSection")}</legend>
-                <Field label={t("emp.loginEmail")}>
-                  <input required type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inputCls} />
-                </Field>
-                <Field label={t("emp.initialPassword")}>
-                  <input value={form.initial_password} onChange={(e) => set("initial_password", e.target.value)} minLength={form.initial_password ? 10 : undefined} className={inputCls} />
-                </Field>
-              </fieldset>
-            )}
+            <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.accountSection")}</legend>
+              {!editing && (
+                <>
+                  <Field label={t("emp.loginEmail")}>
+                    <input required type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label={t("emp.initialPassword")}>
+                    <input value={form.initial_password} onChange={(e) => set("initial_password", e.target.value)} minLength={form.initial_password ? 10 : undefined} className={inputCls} />
+                  </Field>
+                </>
+              )}
+              <Field label={t("emp.loginRole")}>
+                <select
+                  value={form.role}
+                  onChange={(e) => set("role", e.target.value as (typeof LOGIN_ROLES)[number])}
+                  className={inputCls}
+                >
+                  {LOGIN_ROLES.map((r) => (
+                    <option key={r} value={r}>{t(`roles.${r}`)}</option>
+                  ))}
+                </select>
+              </Field>
+            </fieldset>
 
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">

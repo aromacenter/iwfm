@@ -19,7 +19,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_role
+from app.api.deps import record_audit, require_perm, require_role
 from app.core.crypto import decrypt_pii, encrypt_pii, mask_tail
 from app.core.security import hash_password
 from app.db import get_db
@@ -91,10 +91,21 @@ class SensitiveFields(BaseModel):
     wage_amount: str | None = None  # bér (összeg, szabad formátum pl. "650000 HUF/hó")
 
 
+LOGIN_ROLES = ("employee", "szervizes", "uzletkoto", "manager", "admin")
+
+
 class EmployeeCreate(EmployeeBase, SensitiveFields):
     email: EmailStr  # login fiók email
     initial_password: str | None = Field(default=None, min_length=10, max_length=128)
     skill_ids: list[int] = Field(default_factory=list)
+    role: str = "employee"  # a login-fiók szerepköre
+
+    @field_validator("role")
+    @classmethod
+    def _role(cls, v: str) -> str:
+        if v not in LOGIN_ROLES:
+            raise ValueError("employee.bad_role")
+        return v
 
 
 class EmployeeUpdate(BaseModel):
@@ -126,12 +137,14 @@ class EmployeeUpdate(BaseModel):
     bank_account: str | None = None
     wage_amount: str | None = None
     skill_ids: list[int] | None = None  # ha megadod, lecseréli a teljes listát
+    role: str | None = None  # a login-fiók szerepkörének módosítása
 
 
 class EmployeeOut(EmployeeBase):
     id: str
     user_id: str
     email: str | None = None
+    role: str | None = None  # a login-fiók szerepköre
     status: str
     tax_id_masked: str | None = None
     taj_masked: str | None = None
@@ -224,11 +237,12 @@ async def _set_skills(db: AsyncSession, emp: Employee, skill_ids: list[int]) -> 
         db.add(EmployeeSkill(employee_id=emp.id, skill_id=sid))
 
 
-def _employee_out(emp: Employee, email: str | None = None) -> EmployeeOut:
+def _employee_out(emp: Employee, email: str | None = None, role: str | None = None) -> EmployeeOut:
     return EmployeeOut(
         id=str(emp.id),
         user_id=str(emp.user_id),
         email=email,
+        role=role,
         status=emp.status,
         last_name=emp.last_name,
         first_name=emp.first_name,
@@ -275,19 +289,19 @@ async def _get_or_404(db: AsyncSession, employee_id: str) -> Employee:
 @router.get("", response_model=list[EmployeeOut])
 async def list_employees(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("employees")),
 ):
     rows = (
         await db.execute(
-            select(Employee, User.email)
+            select(Employee, User.email, User.role)
             .join(User, User.id == Employee.user_id)
             .order_by(Employee.last_name, Employee.first_name)
         )
     ).all()
-    skills_map = await _load_skills_map(db, [emp.id for emp, _ in rows])
+    skills_map = await _load_skills_map(db, [emp.id for emp, _, _ in rows])
     out = []
-    for emp, email in rows:
-        item = _employee_out(emp, email)
+    for emp, email, role in rows:
+        item = _employee_out(emp, email, role)
         item.skills = skills_map.get(emp.id, [])
         out.append(item)
     return out
@@ -313,7 +327,7 @@ async def create_employee(
         email=body.email.lower(),
         password_hash=hash_password(password),
         display_name=f"{body.last_name} {body.first_name}",
-        role="employee",
+        role=body.role,
     )
     db.add(user)
     await db.flush()
@@ -324,7 +338,7 @@ async def create_employee(
         **body.model_dump(
             exclude={
                 "email", "initial_password", "tax_id", "taj",
-                "bank_account", "wage_amount", "skill_ids",
+                "bank_account", "wage_amount", "skill_ids", "role",
             }
         ),
     )
@@ -339,7 +353,7 @@ async def create_employee(
         entity_id=str(emp.id), request=request,
     )
     await db.commit()
-    out = _employee_out(emp, user.email)
+    out = _employee_out(emp, user.email, user.role)
     out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
     if body.initial_password is None:
         out.generated_password = password  # egyszeri megjelenítés az adminnak
@@ -350,11 +364,11 @@ async def create_employee(
 async def get_employee(
     employee_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("employees")),
 ):
     emp = await _get_or_404(db, employee_id)
     user = (await db.execute(select(User).where(User.id == emp.user_id))).scalar_one_or_none()
-    out = _employee_out(emp, user.email if user else None)
+    out = _employee_out(emp, user.email if user else None, user.role if user else None)
     out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
     return out
 
@@ -369,6 +383,16 @@ async def update_employee(
 ):
     emp = await _get_or_404(db, employee_id)
     data = body.model_dump(exclude_unset=True)
+
+    new_role = data.pop("role", None)
+    if new_role is not None:
+        if new_role not in LOGIN_ROLES:
+            raise HTTPException(status_code=422, detail={"code": "employee.bad_role"})
+        role_user = (
+            await db.execute(select(User).where(User.id == emp.user_id))
+        ).scalar_one_or_none()
+        if role_user is not None:
+            role_user.role = new_role
 
     skill_ids = data.pop("skill_ids", None)
     sensitive_in = SensitiveFields(
@@ -402,7 +426,7 @@ async def update_employee(
     )
     await db.commit()
     user = (await db.execute(select(User).where(User.id == emp.user_id))).scalar_one_or_none()
-    out = _employee_out(emp, user.email if user else None)
+    out = _employee_out(emp, user.email if user else None, user.role if user else None)
     out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
     return out
 

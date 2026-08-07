@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
 
 interface Agent {
@@ -38,6 +39,7 @@ const PAYMENTS = ["cash", "card", "transfer"] as const;
 export default function UzletkotoPage() {
   const { t, lang } = useT();
   const { toast, confirm } = useUI();
+  const canDelete = usePerms().can("delete");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState("");
@@ -133,6 +135,7 @@ export default function UzletkotoPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              {canDelete && (
               <th className="w-8 px-3 py-3">
                 <input
                   type="checkbox"
@@ -143,6 +146,7 @@ export default function UzletkotoPage() {
                   className="h-4 w-4"
                 />
               </th>
+              )}
               <th className="px-4 py-3">{t("cons.date")}</th>
               <th className="px-4 py-3">{t("cons.partner")}</th>
               <th className="px-4 py-3">{t("cons.settledBy")}</th>
@@ -155,6 +159,7 @@ export default function UzletkotoPage() {
           <tbody>
             {rows.map((s) => (
               <tr key={s.id} className="border-b border-slate-100 last:border-0">
+                {canDelete && (
                 <td className="px-3 py-3">
                   <input
                     type="checkbox"
@@ -163,6 +168,7 @@ export default function UzletkotoPage() {
                     className="h-4 w-4"
                   />
                 </td>
+                )}
                 <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
                 <td className="px-4 py-3">{s.partner_name}</td>
                 <td className="px-4 py-3 text-slate-500">{s.settled_by_name}</td>

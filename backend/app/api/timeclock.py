@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_role
+from app.api.deps import record_audit, require_perm
 from app.db import get_db
 from app.models import Employee, TimeEntry, User
 
@@ -116,7 +116,7 @@ async def list_entries(
     date_from: date = Query(...),
     date_to: date = Query(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role("manager")),
+    _: User = Depends(require_perm("attendance")),
 ):
     rows = (
         await db.execute(
@@ -137,7 +137,7 @@ async def create_entry(
     body: EntryCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("attendance")),
 ):
     body.clock_in = _aware(body.clock_in)
     body.clock_out = _aware(body.clock_out)
@@ -178,7 +178,7 @@ async def update_entry(
     body: EntryPatch,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("manager")),
+    actor: User = Depends(require_perm("attendance")),
 ):
     try:
         eid = uuid.UUID(entry_id)
