@@ -68,13 +68,22 @@ async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> in
         if item.get("name", "").strip().lower() == partner.name.strip().lower():
             return int(item["id"])
 
+    # Strukturált számlázási cím előnyben; visszaesés a székhelyre / egysorosra.
+    zip_ = partner.billing_zip or partner.address_zip or "0000"
+    city = partner.billing_city or partner.address_city or "-"
+    street = " ".join(
+        x for x in (
+            partner.billing_street or partner.address_street,
+            partner.billing_number or partner.address_number,
+        ) if x
+    ) or (partner.billing_address or partner.address or "-")
     body = {
         "name": partner.name,
         "address": {
             "country_code": "HU",
-            "post_code": "0000",
-            "city": "-",
-            "address": partner.billing_address or partner.address or "-",
+            "post_code": zip_,
+            "city": city,
+            "address": street,
         },
         "emails": [partner.contact_email] if partner.contact_email else [],
         "taxcode": partner.tax_number or "",

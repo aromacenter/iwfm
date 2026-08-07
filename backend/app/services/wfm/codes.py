@@ -1,4 +1,4 @@
-"""6 jegyű dolgozói törzsszám generálás (blokkoló-terminálhoz)."""
+"""Azonosító-generálás: dolgozói törzsszám (6 jegy) + ügyfél-kód (PT-NNNN)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import secrets
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Employee
+from app.models import Employee, Partner
 
 
 async def generate_unique_employee_code(session: AsyncSession) -> str:
@@ -33,4 +33,41 @@ async def backfill_employee_codes(session: AsyncSession) -> int:
         emp.employee_code = await generate_unique_employee_code(session)
     if rows:
         await session.commit()
+    return len(rows)
+
+
+def _next_partner_number(codes: list[str | None]) -> int:
+    nums = []
+    for code in codes:
+        if code and code.startswith("PT-") and code[3:].isdigit():
+            nums.append(int(code[3:]))
+    return (max(nums) + 1) if nums else 1
+
+
+async def generate_partner_code(session: AsyncSession) -> str:
+    """Sorfolytonos ügyfél-azonosító: PT-0001, PT-0002, …"""
+    codes = list((await session.execute(select(Partner.partner_code))).scalars())
+    return f"PT-{_next_partner_number(codes):04d}"
+
+
+async def backfill_partner_codes(session: AsyncSession) -> int:
+    """Kód nélküli (korábban felvett) partnerek azonosítóval való feltöltése."""
+    rows = (
+        (
+            await session.execute(
+                select(Partner)
+                .where(Partner.partner_code.is_(None))
+                .order_by(Partner.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return 0
+    codes = list((await session.execute(select(Partner.partner_code))).scalars())
+    next_num = _next_partner_number(codes)
+    for i, partner in enumerate(rows):
+        partner.partner_code = f"PT-{next_num + i:04d}"
+    await session.commit()
     return len(rows)

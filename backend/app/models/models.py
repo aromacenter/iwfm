@@ -444,6 +444,8 @@ class Partner(Base):
     __table_args__ = (Index("ix_partners_name", "name"),)
 
     id: Mapped[uuid.UUID] = _uuid_pk()
+    # Rövid, ember-olvasható ügyfél-azonosító (PT-0001) — automatikusan generált.
+    partner_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     # vevő (customer) | szállító (supplier) | mindkettő (both)
     partner_type: Mapped[str] = mapped_column(String(16), nullable=False, default="customer")
@@ -454,8 +456,20 @@ class Partner(Base):
     contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     website: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Összerakott (legacy) címek — a strukturált részekből számolódnak, ha azok
+    # ki vannak töltve; a régi, egysoros adatot is megőrzik.
     address: Mapped[str | None] = mapped_column(String(512), nullable=True)  # székhely
     billing_address: Mapped[str | None] = mapped_column(String(512), nullable=True)  # számlázási cím
+    # Strukturált székhely
+    address_zip: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    address_city: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    address_street: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    address_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Strukturált számlázási cím
+    billing_zip: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    billing_city: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    billing_street: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    billing_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     bank_account: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fizetési határidő (nap)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

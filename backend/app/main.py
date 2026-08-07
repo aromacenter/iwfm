@@ -60,6 +60,22 @@ def _ensure_employee_code_column(sync_conn) -> None:
     ensure_column("partners", "billing_address", "VARCHAR(512)")
     ensure_column("partners", "bank_account", "VARCHAR(64)")
     ensure_column("partners", "payment_terms_days", "INTEGER")
+    # v0.7 — strukturált címek + ügyfél-azonosító
+    ensure_column("partners", "partner_code", "VARCHAR(16)")
+    ensure_column("partners", "address_zip", "VARCHAR(16)")
+    ensure_column("partners", "address_city", "VARCHAR(128)")
+    ensure_column("partners", "address_street", "VARCHAR(256)")
+    ensure_column("partners", "address_number", "VARCHAR(32)")
+    ensure_column("partners", "billing_zip", "VARCHAR(16)")
+    ensure_column("partners", "billing_city", "VARCHAR(128)")
+    ensure_column("partners", "billing_street", "VARCHAR(256)")
+    ensure_column("partners", "billing_number", "VARCHAR(32)")
+    if "partners" in tables:
+        sync_conn.execute(
+            sql_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_partners_code ON partners (partner_code)"
+            )
+        )
     if "employees" in tables:
         sync_conn.execute(
             sql_text(
@@ -77,14 +93,17 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(_ensure_employee_code_column)
         await conn.run_sync(Base.metadata.create_all)
 
-    # Meglévő dolgozók törzsszám-backfillje (idempotens).
+    # Meglévő dolgozók törzsszám- és partnerek kód-backfillje (idempotens).
     from app.db import get_session_factory
-    from app.services.wfm.codes import backfill_employee_codes
+    from app.services.wfm.codes import backfill_employee_codes, backfill_partner_codes
 
     async with get_session_factory()() as session:
         filled = await backfill_employee_codes(session)
         if filled:
             logger.info("Backfilled %d employee codes", filled)
+        filled_partners = await backfill_partner_codes(session)
+        if filled_partners:
+            logger.info("Backfilled %d partner codes", filled_partners)
     yield
     await engine.dispose()
 

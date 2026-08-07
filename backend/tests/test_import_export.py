@@ -182,8 +182,10 @@ async def test_export_partners_xlsx(client, manager):
 
     wb = load_workbook(io.BytesIO(res.content))
     rows = list(wb.active.iter_rows(values_only=True))
-    assert rows[0][0] == "name"
-    assert any(r[0] == "Export Kft." for r in rows[1:])
+    assert rows[0][0] == "partner_code"
+    assert rows[0][1] == "name"
+    assert any(r[1] == "Export Kft." for r in rows[1:])
+    assert rows[1][0].startswith("PT-")  # az exportban ott az ügyfél-kód
 
 
 async def test_import_export_rbac(client, employee_user):

@@ -51,6 +51,14 @@ ENTITY_FIELDS: dict[str, list[dict]] = {
         {"key": "website", "required": False, "max_len": 256, "type": "str"},
         {"key": "address", "required": False, "max_len": 512, "type": "str"},
         {"key": "billing_address", "required": False, "max_len": 512, "type": "str"},
+        {"key": "address_zip", "required": False, "max_len": 16, "type": "str"},
+        {"key": "address_city", "required": False, "max_len": 128, "type": "str"},
+        {"key": "address_street", "required": False, "max_len": 256, "type": "str"},
+        {"key": "address_number", "required": False, "max_len": 32, "type": "str"},
+        {"key": "billing_zip", "required": False, "max_len": 16, "type": "str"},
+        {"key": "billing_city", "required": False, "max_len": 128, "type": "str"},
+        {"key": "billing_street", "required": False, "max_len": 256, "type": "str"},
+        {"key": "billing_number", "required": False, "max_len": 32, "type": "str"},
         {"key": "bank_account", "required": False, "max_len": 64, "type": "str"},
         {"key": "payment_terms_days", "required": False, "max_len": None, "type": "int"},
         {"key": "notes", "required": False, "max_len": None, "type": "str"},
@@ -244,6 +252,14 @@ async def run_import(
         for n in (await db.execute(select(model.name))).scalars()
     }
 
+    # ügyfél-kód sorszámozás (PT-NNNN) az importált partnereknek
+    next_partner_num = 0
+    if body.entity == "partners":
+        from app.services.wfm.codes import _next_partner_number
+
+        codes = list((await db.execute(select(Partner.partner_code))).scalars())
+        next_partner_num = _next_partner_number(codes)
+
     created = 0
     skipped = 0
     errors: list[dict] = []
@@ -274,7 +290,22 @@ async def run_import(
         existing_names.add(name.lower())
 
         if body.entity == "partners":
-            db.add(Partner(**values))
+            from app.api.inventory import compose_address
+
+            composed = compose_address(
+                values.get("address_zip"), values.get("address_city"),
+                values.get("address_street"), values.get("address_number"),
+            )
+            if composed and not values.get("address"):
+                values["address"] = composed
+            composed_billing = compose_address(
+                values.get("billing_zip"), values.get("billing_city"),
+                values.get("billing_street"), values.get("billing_number"),
+            )
+            if composed_billing and not values.get("billing_address"):
+                values["billing_address"] = composed_billing
+            db.add(Partner(**values, partner_code=f"PT-{next_partner_num:04d}"))
+            next_partner_num += 1
         else:
             db.add(Product(**values))
         created += 1
@@ -320,7 +351,7 @@ async def run_export(
 
     if entity == "partners":
         rows = (await db.execute(select(Partner).order_by(Partner.name))).scalars().all()
-        headers = [f["key"] for f in ENTITY_FIELDS["partners"]] + ["is_active"]
+        headers = ["partner_code"] + [f["key"] for f in ENTITY_FIELDS["partners"]] + ["is_active"]
         data = [
             [getattr(p, h) for h in headers]
             for p in rows

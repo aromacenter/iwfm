@@ -180,6 +180,46 @@ async def test_partner_full_fields(client, manager):
     assert plain["partner_type"] == "customer"
 
 
+async def test_partner_structured_address_and_code(client, manager):
+    """Strukturált cím → összerakott egysoros cím; automatikus PT-kód."""
+    _, mgr = manager
+    res = await client.post(
+        "/api/partners",
+        json={
+            "name": "Címes Kft.",
+            "address_zip": "1051",
+            "address_city": "Budapest",
+            "address_street": "Fő utca",
+            "address_number": "1.",
+            "billing_zip": "6720",
+            "billing_city": "Szeged",
+            "billing_street": "Kárász utca",
+            "billing_number": "10.",
+        },
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["partner_code"] == "PT-0001"
+    assert body["address"] == "1051 Budapest, Fő utca 1."
+    assert body["billing_address"] == "6720 Szeged, Kárász utca 10."
+    assert body["address_city"] == "Budapest"
+
+    # második partner sorfolytonos kódot kap
+    second = await make_partner(client, mgr, name="Második Kft.")
+    assert second["partner_code"] == "PT-0002"
+
+    # szerkesztéskor a cím újra összeáll a részekből
+    upd = await client.patch(
+        f"/api/partners/{body['id']}",
+        json={"name": "Címes Kft.", "address_zip": "1052", "address_city": "Budapest"},
+        headers=mgr,
+    )
+    assert upd.status_code == 200
+    assert upd.json()["address"] == "1052 Budapest"
+    assert upd.json()["partner_code"] == "PT-0001"  # a kód nem változik
+
+
 async def test_partner_bad_type(client, manager):
     _, mgr = manager
     res = await client.post(

@@ -31,6 +31,17 @@ ASSET_STATUSES = ("in_stock", "deployed", "maintenance", "retired")
 PARTNER_TYPES = ("customer", "supplier", "both")
 
 
+def compose_address(
+    zip_: str | None, city: str | None, street: str | None, number: str | None
+) -> str | None:
+    """Strukturált részek → egysoros cím ('1051 Budapest, Fő utca 1.')."""
+    left = " ".join(x.strip() for x in (zip_, city) if x and x.strip())
+    right = " ".join(x.strip() for x in (street, number) if x and x.strip())
+    if left and right:
+        return f"{left}, {right}"
+    return left or right or None
+
+
 class PartnerBody(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     partner_type: str = Field(default="customer")
@@ -43,6 +54,14 @@ class PartnerBody(BaseModel):
     website: str | None = Field(default=None, max_length=256)
     address: str | None = Field(default=None, max_length=512)
     billing_address: str | None = Field(default=None, max_length=512)
+    address_zip: str | None = Field(default=None, max_length=16)
+    address_city: str | None = Field(default=None, max_length=128)
+    address_street: str | None = Field(default=None, max_length=256)
+    address_number: str | None = Field(default=None, max_length=32)
+    billing_zip: str | None = Field(default=None, max_length=16)
+    billing_city: str | None = Field(default=None, max_length=128)
+    billing_street: str | None = Field(default=None, max_length=256)
+    billing_number: str | None = Field(default=None, max_length=32)
     bank_account: str | None = Field(default=None, max_length=64)
     payment_terms_days: int | None = Field(default=None, ge=0, le=365)
     notes: str | None = None
@@ -55,9 +74,26 @@ class PartnerBody(BaseModel):
             raise ValueError("partner.bad_type")
         return v
 
+    def resolved(self) -> dict:
+        """Mezők úgy, hogy az egysoros címek a strukturált részekből álljanak
+        össze, ha azok (bármelyike) ki van töltve."""
+        data = self.model_dump()
+        composed = compose_address(
+            self.address_zip, self.address_city, self.address_street, self.address_number
+        )
+        if composed:
+            data["address"] = composed
+        composed_billing = compose_address(
+            self.billing_zip, self.billing_city, self.billing_street, self.billing_number
+        )
+        if composed_billing:
+            data["billing_address"] = composed_billing
+        return data
+
 
 class PartnerOut(BaseModel):
     id: str
+    partner_code: str | None
     name: str
     partner_type: str
     tax_number: str | None
@@ -69,6 +105,14 @@ class PartnerOut(BaseModel):
     website: str | None
     address: str | None
     billing_address: str | None
+    address_zip: str | None
+    address_city: str | None
+    address_street: str | None
+    address_number: str | None
+    billing_zip: str | None
+    billing_city: str | None
+    billing_street: str | None
+    billing_number: str | None
     bank_account: str | None
     payment_terms_days: int | None
     notes: str | None
@@ -79,6 +123,7 @@ class PartnerOut(BaseModel):
 def _partner_out(p: Partner, asset_count: int = 0) -> PartnerOut:
     return PartnerOut(
         id=str(p.id),
+        partner_code=p.partner_code,
         name=p.name,
         partner_type=p.partner_type,
         tax_number=p.tax_number,
@@ -90,6 +135,14 @@ def _partner_out(p: Partner, asset_count: int = 0) -> PartnerOut:
         website=p.website,
         address=p.address,
         billing_address=p.billing_address,
+        address_zip=p.address_zip,
+        address_city=p.address_city,
+        address_street=p.address_street,
+        address_number=p.address_number,
+        billing_zip=p.billing_zip,
+        billing_city=p.billing_city,
+        billing_street=p.billing_street,
+        billing_number=p.billing_number,
         bank_account=p.bank_account,
         payment_terms_days=p.payment_terms_days,
         notes=p.notes,
@@ -136,7 +189,9 @@ async def create_partner(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_role("manager")),
 ):
-    p = Partner(**body.model_dump())
+    from app.services.wfm.codes import generate_partner_code
+
+    p = Partner(**body.resolved(), partner_code=await generate_partner_code(db))
     db.add(p)
     await db.flush()
     await record_audit(
@@ -156,7 +211,7 @@ async def update_partner(
     actor: User = Depends(require_role("manager")),
 ):
     p = await _get_partner_or_404(db, partner_id)
-    for key, value in body.model_dump().items():
+    for key, value in body.resolved().items():
         setattr(p, key, value)
     await record_audit(
         db, actor=actor, action="partner.update", entity_type="partner",

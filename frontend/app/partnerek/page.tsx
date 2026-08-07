@@ -12,6 +12,7 @@ type PartnerType = "customer" | "supplier" | "both";
 
 interface Partner {
   id: string;
+  partner_code: string | null;
   name: string;
   partner_type: PartnerType;
   tax_number: string | null;
@@ -23,6 +24,14 @@ interface Partner {
   website: string | null;
   address: string | null;
   billing_address: string | null;
+  address_zip: string | null;
+  address_city: string | null;
+  address_street: string | null;
+  address_number: string | null;
+  billing_zip: string | null;
+  billing_city: string | null;
+  billing_street: string | null;
+  billing_number: string | null;
   bank_account: string | null;
   payment_terms_days: number | null;
   notes: string | null;
@@ -32,6 +41,7 @@ interface Partner {
 
 const EMPTY = {
   id: "",
+  partner_code: "",
   name: "",
   partner_type: "customer" as PartnerType,
   tax_number: "",
@@ -43,6 +53,14 @@ const EMPTY = {
   website: "",
   address: "",
   billing_address: "",
+  address_zip: "",
+  address_city: "",
+  address_street: "",
+  address_number: "",
+  billing_zip: "",
+  billing_city: "",
+  billing_street: "",
+  billing_number: "",
   bank_account: "",
   payment_terms_days: "",
   notes: "",
@@ -77,6 +95,7 @@ export default function PartnerekPage() {
       if (!q) return true;
       return (
         p.name.toLowerCase().includes(q) ||
+        (p.partner_code ?? "").toLowerCase().includes(q) ||
         (p.tax_number ?? "").toLowerCase().includes(q) ||
         (p.contact_name ?? "").toLowerCase().includes(q) ||
         (p.contact_email ?? "").toLowerCase().includes(q)
@@ -88,6 +107,7 @@ export default function PartnerekPage() {
     setError(null);
     setForm({
       id: p.id,
+      partner_code: p.partner_code ?? "",
       name: p.name,
       partner_type: p.partner_type,
       tax_number: p.tax_number ?? "",
@@ -99,6 +119,14 @@ export default function PartnerekPage() {
       website: p.website ?? "",
       address: p.address ?? "",
       billing_address: p.billing_address ?? "",
+      address_zip: p.address_zip ?? "",
+      address_city: p.address_city ?? "",
+      address_street: p.address_street ?? "",
+      address_number: p.address_number ?? "",
+      billing_zip: p.billing_zip ?? "",
+      billing_city: p.billing_city ?? "",
+      billing_street: p.billing_street ?? "",
+      billing_number: p.billing_number ?? "",
       bank_account: p.bank_account ?? "",
       payment_terms_days: p.payment_terms_days != null ? String(p.payment_terms_days) : "",
       notes: p.notes ?? "",
@@ -124,6 +152,14 @@ export default function PartnerekPage() {
         website: form.website || null,
         address: form.address || null,
         billing_address: form.billing_address || null,
+        address_zip: form.address_zip || null,
+        address_city: form.address_city || null,
+        address_street: form.address_street || null,
+        address_number: form.address_number || null,
+        billing_zip: form.billing_zip || null,
+        billing_city: form.billing_city || null,
+        billing_street: form.billing_street || null,
+        billing_number: form.billing_number || null,
         bank_account: form.bank_account || null,
         payment_terms_days: form.payment_terms_days ? Number(form.payment_terms_days) : null,
         notes: form.notes || null,
@@ -188,6 +224,7 @@ export default function PartnerekPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              <th className="px-4 py-3">{t("partners.code")}</th>
               <th className="px-4 py-3">{t("partners.name")}</th>
               <th className="px-4 py-3">{t("partners.type")}</th>
               <th className="px-4 py-3">{t("partners.taxNumber")}</th>
@@ -199,6 +236,7 @@ export default function PartnerekPage() {
           <tbody>
             {filtered.map((p) => (
               <tr key={p.id} className="border-b border-slate-100 last:border-0">
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-700">{p.partner_code ?? "—"}</td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{p.name}</div>
                   {!p.is_active && (
@@ -229,7 +267,7 @@ export default function PartnerekPage() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("partners.empty")}</td></tr>
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("partners.empty")}</td></tr>
             )}
           </tbody>
         </table>
@@ -240,6 +278,9 @@ export default function PartnerekPage() {
           <form onSubmit={save} className="my-8 w-full max-w-2xl space-y-4 rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold">
               {form.id ? t("partners.editTitle") : t("partners.newTitle")}
+              {form.partner_code && (
+                <span className="ml-2 font-mono text-sm font-semibold text-indigo-700">{form.partner_code}</span>
+              )}
             </h2>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -300,8 +341,30 @@ export default function PartnerekPage() {
 
             <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
               <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("partners.addressSection")}</legend>
-              {field(t("partners.address"), "address")}
-              {field(t("partners.billingAddress"), "billing_address")}
+              <div>
+                <p className="mb-1 text-sm font-medium text-slate-600">{t("partners.address")}</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {field(t("partners.zip"), "address_zip")}
+                  {field(t("partners.city"), "address_city")}
+                  {field(t("partners.street"), "address_street")}
+                  {field(t("partners.houseNo"), "address_number")}
+                </div>
+                {form.address && !form.address_zip && !form.address_city && !form.address_street && (
+                  <p className="mt-1 text-xs text-slate-400">{t("partners.legacyAddress", { address: form.address })}</p>
+                )}
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium text-slate-600">{t("partners.billingAddress")}</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {field(t("partners.zip"), "billing_zip")}
+                  {field(t("partners.city"), "billing_city")}
+                  {field(t("partners.street"), "billing_street")}
+                  {field(t("partners.houseNo"), "billing_number")}
+                </div>
+                {form.billing_address && !form.billing_zip && !form.billing_city && !form.billing_street && (
+                  <p className="mt-1 text-xs text-slate-400">{t("partners.legacyAddress", { address: form.billing_address })}</p>
+                )}
+              </div>
             </fieldset>
 
             <label className="block text-sm">
