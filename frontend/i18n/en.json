@@ -49,6 +49,17 @@
       "personal": "Personal"
     }
   },
+  "validation": {
+    "email": "invalid email address",
+    "required": "required field",
+    "integer": "enter a whole number",
+    "number": "enter a number",
+    "tooLong": "must be at most {max} characters",
+    "tooShort": "must be at least {min} characters",
+    "min": "must be at least {min}",
+    "max": "must be at most {max}",
+    "minItems": "at least {min} item(s) required"
+  },
   "bulk": {
     "deleteSelected": "Delete ({count})",
     "confirm": "Delete the {count} selected item(s)? This cannot be undone.",
@@ -663,6 +674,12 @@
     "kiosk.unknown_code": "Unknown employee ID.",
     "network": "Network error — is the backend running?",
     "unknown": "An error occurred ({code}).",
+    "validation": "Invalid data — {details}",
+    "server": "Server error ({status}) — please try again shortly.",
+    "http.404": "The requested item was not found.",
+    "http.409": "Conflict — the item changed in the meantime or already exists.",
+    "http.413": "The uploaded file is too large.",
+    "http.429": "Too many requests — wait a bit and try again.",
     "partner.not_found": "Partner not found.",
     "product.not_found": "Product not found.",
     "partner.has_settlements": "has settlements",

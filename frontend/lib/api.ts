@@ -135,6 +135,50 @@ const ERROR_MESSAGES: Record<string, string> = {
   "skills.name_taken": "Ilyen nevű skill már létezik.",
 };
 
+interface ValidationItem {
+  loc?: (string | number)[];
+  msg?: string;
+}
+
+/** Pydantic/FastAPI validációs üzenet → lefordított, emberi szöveg. */
+function translateValidationMsg(
+  msg: string,
+  translate: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const rules: [RegExp, (m: RegExpMatchArray) => string][] = [
+    [/valid email address/i, () => translate("validation.email")],
+    [/Field required/i, () => translate("validation.required")],
+    [/valid integer/i, () => translate("validation.integer")],
+    [/valid number/i, () => translate("validation.number")],
+    [/at most (\d+) characters?/i, (m) => translate("validation.tooLong", { max: m[1] })],
+    [/at least (\d+) characters?/i, (m) => translate("validation.tooShort", { min: m[1] })],
+    [/greater than or equal to (\S+)/i, (m) => translate("validation.min", { min: m[1] })],
+    [/less than or equal to (\S+)/i, (m) => translate("validation.max", { max: m[1] })],
+    [/at least (\d+) items?/i, (m) => translate("validation.minItems", { min: m[1] })],
+  ];
+  // Saját validátoraink: "Value error, partner.bad_type" → errors.* kulcs
+  const custom = msg.match(/^Value error,\s*(\S+)$/);
+  if (custom) {
+    const translated = translate(`errors.${custom[1]}`);
+    if (translated !== `errors.${custom[1]}`) return translated;
+  }
+  for (const [pattern, build] of rules) {
+    const m = msg.match(pattern);
+    if (m) return build(m);
+  }
+  return msg;
+}
+
+/** Mezőnév → emberi címke (az impex.fields szótárból, ha van). */
+function fieldLabel(
+  field: string,
+  translate: (key: string) => string,
+): string {
+  const viaImpex = translate(`impex.fields.${field}`);
+  if (viaImpex !== `impex.fields.${field}`) return viaImpex;
+  return field;
+}
+
 export function errorMessage(err: unknown): string {
   // Lusta import, hogy ne legyen körkörös függés a modulok között.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -142,7 +186,28 @@ export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     const localized = translate(`errors.${err.code}`);
     if (localized !== `errors.${err.code}`) return localized;
-    return ERROR_MESSAGES[err.code] ?? translate("errors.unknown", { code: err.code });
+    if (ERROR_MESSAGES[err.code]) return ERROR_MESSAGES[err.code];
+
+    // FastAPI/Pydantic validációs hiba: mezőnkénti pontos üzenet
+    if (err.status === 422 && Array.isArray(err.detail)) {
+      const parts = (err.detail as ValidationItem[]).slice(0, 5).map((item) => {
+        const locs = (item.loc ?? []).filter(
+          (x): x is string => typeof x === "string" && x !== "body",
+        );
+        const field = locs.length > 0 ? locs[locs.length - 1] : "";
+        const msg = translateValidationMsg(item.msg ?? "", translate);
+        return field ? `${fieldLabel(field, translate)}: ${msg}` : msg;
+      });
+      return translate("errors.validation", { details: parts.join("; ") });
+    }
+
+    // Kódolatlan HTTP-hibák érthető szöveggel
+    const httpKey = `errors.http.${err.status}`;
+    const httpMsg = translate(httpKey);
+    if (httpMsg !== httpKey) return httpMsg;
+    if (err.status >= 500) return translate("errors.server", { status: err.status });
+
+    return translate("errors.unknown", { code: err.code });
   }
   return translate("errors.network");
 }

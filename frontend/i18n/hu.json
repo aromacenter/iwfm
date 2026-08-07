@@ -49,6 +49,17 @@
       "personal": "Saját"
     }
   },
+  "validation": {
+    "email": "érvénytelen email-cím",
+    "required": "kötelező mező",
+    "integer": "egész számot adj meg",
+    "number": "számot adj meg",
+    "tooLong": "legfeljebb {max} karakter lehet",
+    "tooShort": "legalább {min} karakter kell",
+    "min": "legalább {min} legyen",
+    "max": "legfeljebb {max} lehet",
+    "minItems": "legalább {min} elem kell"
+  },
   "bulk": {
     "deleteSelected": "Törlés ({count})",
     "confirm": "Biztosan törlöd a kijelölt {count} elemet? Ez nem vonható vissza.",
@@ -663,6 +674,12 @@
     "kiosk.unknown_code": "Ismeretlen törzsszám.",
     "network": "Hálózati hiba — fut a backend?",
     "unknown": "Hiba történt ({code}).",
+    "validation": "Érvénytelen adat — {details}",
+    "server": "Szerverhiba ({status}) — próbáld újra kicsit később.",
+    "http.404": "A keresett elem nem található.",
+    "http.409": "Ütközés — az elem időközben megváltozott vagy már létezik.",
+    "http.413": "A feltöltött fájl túl nagy.",
+    "http.429": "Túl sok kérés — várj egy kicsit, majd próbáld újra.",
     "partner.not_found": "A partner nem található.",
     "product.not_found": "A termék nem található.",
     "partner.has_settlements": "van hozzá elszámolás",
