@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 
 interface Product {
   id: string;
@@ -32,6 +33,8 @@ const EMPTY = {
 
 export default function TermekekPage() {
   const { t } = useT();
+  const { toast, confirm } = useUI();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState<typeof EMPTY | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +57,37 @@ export default function TermekekPage() {
       is_active: p.is_active,
       notes: p.notes ?? "",
     });
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function bulkDelete() {
+    if (selected.size === 0) return;
+    if (!(await confirm(t("bulk.confirm", { count: selected.size })))) return;
+    try {
+      const res = await api.post<{ deleted: number; blocked: { name: string; code: string }[] }>(
+        "/api/products/bulk-delete",
+        { ids: [...selected] },
+      );
+      toast(t("bulk.deleted", { count: res.deleted }), "success");
+      if (res.blocked.length > 0) {
+        const reasons = res.blocked
+          .map((b) => `${b.name}: ${t(`errors.${b.code}`)}`)
+          .join("\n");
+        toast(t("bulk.blocked", { count: res.blocked.length, reasons }), "error");
+      }
+      setSelected(new Set());
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
   }
 
   async function save(e: React.FormEvent) {
@@ -86,9 +120,17 @@ export default function TermekekPage() {
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">{t("cons.productsTitle")}</h1>
+        {selected.size > 0 && (
+          <button
+            onClick={bulkDelete}
+            className="ml-auto rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            {t("bulk.deleteSelected", { count: selected.size })}
+          </button>
+        )}
         <button
           onClick={() => { setError(null); setForm({ ...EMPTY }); }}
-          className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          className={`${selected.size > 0 ? "" : "ml-auto "}rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700`}
         >
           {t("cons.newProduct")}
         </button>
@@ -98,6 +140,16 @@ export default function TermekekPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              <th className="w-8 px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={products.length > 0 && products.every((p) => selected.has(p.id))}
+                  onChange={(e) =>
+                    setSelected(e.target.checked ? new Set(products.map((p) => p.id)) : new Set())
+                  }
+                  className="h-4 w-4"
+                />
+              </th>
               <th className="px-4 py-3">{t("cons.name")}</th>
               <th className="px-4 py-3">{t("cons.unit")}</th>
               <th className="px-4 py-3">{t("cons.gramsPerPortion")}</th>
@@ -109,6 +161,14 @@ export default function TermekekPage() {
           <tbody>
             {products.map((p) => (
               <tr key={p.id} className="border-b border-slate-100 last:border-0">
+                <td className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(p.id)}
+                    onChange={() => toggleSelect(p.id)}
+                    className="h-4 w-4"
+                  />
+                </td>
                 <td className="px-4 py-3">
                   <span className="font-medium">{p.name}</span>
                   {!p.is_active && (
@@ -127,7 +187,7 @@ export default function TermekekPage() {
               </tr>
             ))}
             {products.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("cons.noProducts")}</td></tr>
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("cons.noProducts")}</td></tr>
             )}
           </tbody>
         </table>

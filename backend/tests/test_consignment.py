@@ -158,6 +158,53 @@ async def test_billingo_settings_roundtrip(client, admin):
     assert "api_key" not in body  # a kulcs sosem megy vissza
 
 
+async def test_bulk_delete_products_and_stock_guard(client, manager):
+    """Termék tömeges törlés: kint lévő készletű blokkolva, üres törölhető."""
+    _, mgr = manager
+    partner = await make_partner(client, mgr, name="Raktáras Bt.")
+    stocked = await make_product(client, mgr, name="Kint lévő kávé")
+    empty = await make_product(client, mgr, name="Üres termék")
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": stocked["id"], "quantity": 1.0},
+        headers=mgr,
+    )
+
+    res = await client.post(
+        "/api/products/bulk-delete",
+        json={"ids": [stocked["id"], empty["id"]]},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["deleted"] == 1
+    assert len(body["blocked"]) == 1
+    assert body["blocked"][0]["code"] == "product.has_stock"
+
+    names = {p["name"] for p in (await client.get("/api/products", headers=mgr)).json()}
+    assert "Üres termék" not in names and "Kint lévő kávé" in names
+
+
+async def test_bulk_delete_partner_guards(client, manager):
+    """Partner törlés: elszámolásos partner blokkolva, sima törölhető."""
+    _, mgr = manager
+    _, _, settlement = await _setup_settlement(client, mgr)  # 'Kávézó Bt.' elszámolással
+    plain = await make_partner(client, mgr, name="Sima Kft.")
+
+    res = await client.post(
+        "/api/partners/bulk-delete",
+        json={"ids": [settlement["partner_id"], plain["id"]]},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["deleted"] == 1
+    assert body["blocked"][0]["code"] == "partner.has_settlements"
+
+    names = {p["name"] for p in (await client.get("/api/partners", headers=mgr)).json()}
+    assert "Sima Kft." not in names and "Kávézó Bt." in names
+
+
 async def test_agent_summary(client, manager):
     """Üzletkötő-elszámolás: agents lista + fizetési módonkénti összesítés."""
     _, mgr = manager

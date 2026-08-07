@@ -12,12 +12,20 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete as sa_delete, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_role
 from app.db import get_db
-from app.models import Asset, AssetMovement, Partner, User
+from app.models import (
+    Asset,
+    AssetMovement,
+    Partner,
+    PartnerStock,
+    Settlement,
+    StockMovement,
+    User,
+)
 
 router = APIRouter()  # /api/partners
 assets_router = APIRouter()  # /api/assets
@@ -219,6 +227,72 @@ async def update_partner(
     )
     await db.commit()
     return _partner_out(p)
+
+
+class BulkDeleteBody(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500)
+
+
+def _parse_uuid_list(ids: list[str]) -> list[uuid.UUID]:
+    out = []
+    for raw in ids:
+        try:
+            out.append(uuid.UUID(raw))
+        except ValueError:
+            continue  # érvénytelen id → egyszerűen kihagyjuk
+    return out
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_partners(
+    body: BulkDeleteBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    """Partnerek (tömeges) törlése. Védőkorlátok: elszámolással rendelkező vagy
+    kihelyezett géppel rendelkező partner nem törölhető (blocked listában
+    jelezzük, a többi törlődik)."""
+    ids = _parse_uuid_list(body.ids)
+    deleted = 0
+    blocked: list[dict] = []
+    for pid in ids:
+        partner = (
+            await db.execute(select(Partner).where(Partner.id == pid))
+        ).scalar_one_or_none()
+        if partner is None:
+            continue
+        has_settlement = (
+            await db.execute(select(Settlement.id).where(Settlement.partner_id == pid).limit(1))
+        ).first()
+        if has_settlement is not None:
+            blocked.append({"id": str(pid), "name": partner.name, "code": "partner.has_settlements"})
+            continue
+        has_deployed = (
+            await db.execute(
+                select(Asset.id).where(Asset.partner_id == pid, Asset.status == "deployed").limit(1)
+            )
+        ).first()
+        if has_deployed is not None:
+            blocked.append({"id": str(pid), "name": partner.name, "code": "partner.has_assets"})
+            continue
+        # függő rekordok explicit takarítása (SQLite-on nincs FK-cascade garancia)
+        await db.execute(sa_delete(PartnerStock).where(PartnerStock.partner_id == pid))
+        await db.execute(sa_delete(StockMovement).where(StockMovement.partner_id == pid))
+        await db.execute(
+            sa_update(AssetMovement).where(AssetMovement.partner_id == pid).values(partner_id=None)
+        )
+        await db.execute(
+            sa_update(Asset).where(Asset.partner_id == pid).values(partner_id=None)
+        )
+        await db.delete(partner)
+        deleted += 1
+    await record_audit(
+        db, actor=actor, action="partner.bulk_delete", entity_type="partner",
+        detail={"deleted": deleted, "blocked": len(blocked)}, request=request,
+    )
+    await db.commit()
+    return {"deleted": deleted, "blocked": blocked}
 
 
 # ─── Eszközök ────────────────────────────────────────────────────────────────
@@ -585,3 +659,35 @@ async def return_asset(
     )
     await db.commit()
     return _asset_out(a)
+
+
+@assets_router.post("/bulk-delete")
+async def bulk_delete_assets(
+    body: BulkDeleteBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    """Gépek (tömeges) törlése. Kihelyezett gép nem törölhető — előbb vissza
+    kell venni (blocked listában jelezzük, a többi törlődik)."""
+    ids = _parse_uuid_list(body.ids)
+    deleted = 0
+    blocked: list[dict] = []
+    for aid in ids:
+        asset = (
+            await db.execute(select(Asset).where(Asset.id == aid))
+        ).scalar_one_or_none()
+        if asset is None:
+            continue
+        if asset.status == "deployed":
+            blocked.append({"id": str(aid), "name": asset.barcode, "code": "asset.deployed"})
+            continue
+        await db.execute(sa_delete(AssetMovement).where(AssetMovement.asset_id == aid))
+        await db.delete(asset)
+        deleted += 1
+    await record_audit(
+        db, actor=actor, action="asset.bulk_delete", entity_type="asset",
+        detail={"deleted": deleted, "blocked": len(blocked)}, request=request,
+    )
+    await db.commit()
+    return {"deleted": deleted, "blocked": blocked}

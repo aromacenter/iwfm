@@ -220,6 +220,34 @@ async def test_partner_structured_address_and_code(client, manager):
     assert upd.json()["partner_code"] == "PT-0001"  # a kód nem változik
 
 
+async def test_bulk_delete_assets_deployed_guard(client, manager):
+    """Gép tömeges törlés: kihelyezett blokkolva, raktári törölhető."""
+    _, mgr = manager
+    partner = await make_partner(client, mgr)
+    deployed = (
+        await client.post("/api/assets", json=asset_payload(barcode="DEL-1"), headers=mgr)
+    ).json()
+    stockroom = (
+        await client.post("/api/assets", json=asset_payload(barcode="DEL-2"), headers=mgr)
+    ).json()
+    await client.post(
+        f"/api/assets/{deployed['id']}/deploy", json={"partner_id": partner["id"]}, headers=mgr
+    )
+
+    res = await client.post(
+        "/api/assets/bulk-delete",
+        json={"ids": [deployed["id"], stockroom["id"]]},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["deleted"] == 1
+    assert body["blocked"][0]["code"] == "asset.deployed"
+
+    barcodes = {a["barcode"] for a in (await client.get("/api/assets", headers=mgr)).json()}
+    assert "DEL-2" not in barcodes and "DEL-1" in barcodes
+
+
 async def test_partner_bad_type(client, manager):
     _, mgr = manager
     res = await client.post(

@@ -49,6 +49,12 @@
       "personal": "Personal"
     }
   },
+  "bulk": {
+    "deleteSelected": "Delete ({count})",
+    "confirm": "Delete the {count} selected item(s)? This cannot be undone.",
+    "deleted": "{count} item(s) deleted.",
+    "blocked": "{count} item(s) could not be deleted:\n{reasons}"
+  },
   "impex": {
     "title": "Import / Export",
     "import": "Import",
@@ -659,6 +665,10 @@
     "unknown": "An error occurred ({code}).",
     "partner.not_found": "Partner not found.",
     "product.not_found": "Product not found.",
+    "partner.has_settlements": "has settlements",
+    "partner.has_assets": "has deployed machines",
+    "asset.deployed": "is deployed (return it first)",
+    "product.has_stock": "has stock at partners (settle it first)",
     "impex.bad_file": "Invalid file — Excel (xlsx) or CSV required.",
     "impex.file_too_large": "The file is too large (max 10 MB).",
     "impex.parse_failed": "Could not read the file — check the format.",

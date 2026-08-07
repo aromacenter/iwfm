@@ -14,7 +14,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import func as sa_func, select
+from sqlalchemy import delete as sa_delete, func as sa_func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_role
@@ -128,6 +128,61 @@ async def update_product(
     )
     await db.commit()
     return _product_out(p)
+
+
+class BulkDeleteBody(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500)
+
+
+@products_router.post("/bulk-delete")
+async def bulk_delete_products(
+    body: BulkDeleteBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    """Termékek (tömeges) törlése. Ha egy termékből még van kint készlet
+    valamelyik partnernél (>0), nem törölhető — előbb el kell számolni
+    (blocked listában jelezzük, a többi törlődik). Az elszámolás-tételek
+    pillanatkép-nevet őriznek, így a korábbi elszámolások olvashatók maradnak."""
+    from app.models import SettlementLine
+
+    deleted = 0
+    blocked: list[dict] = []
+    for raw in body.ids:
+        try:
+            pid = uuid.UUID(raw)
+        except ValueError:
+            continue
+        product = (
+            await db.execute(select(Product).where(Product.id == pid))
+        ).scalar_one_or_none()
+        if product is None:
+            continue
+        has_stock = (
+            await db.execute(
+                select(PartnerStock.id)
+                .where(PartnerStock.product_id == pid, PartnerStock.quantity > 0)
+                .limit(1)
+            )
+        ).first()
+        if has_stock is not None:
+            blocked.append({"id": str(pid), "name": product.name, "code": "product.has_stock"})
+            continue
+        # függő rekordok explicit takarítása (SQLite-on nincs FK-cascade garancia)
+        await db.execute(sa_delete(PartnerStock).where(PartnerStock.product_id == pid))
+        await db.execute(sa_delete(StockMovement).where(StockMovement.product_id == pid))
+        await db.execute(
+            sa_update(SettlementLine).where(SettlementLine.product_id == pid).values(product_id=None)
+        )
+        await db.delete(product)
+        deleted += 1
+    await record_audit(
+        db, actor=actor, action="product.bulk_delete", entity_type="product",
+        detail={"deleted": deleted, "blocked": len(blocked)}, request=request,
+    )
+    await db.commit()
+    return {"deleted": deleted, "blocked": blocked}
 
 
 # ─── Partner-készlet (külső raktár) ──────────────────────────────────────────

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 
 type PartnerType = "customer" | "supplier" | "both";
 
@@ -75,6 +76,8 @@ const TYPE_COLORS: Record<PartnerType, string> = {
 
 export default function PartnerekPage() {
   const { t } = useT();
+  const { toast, confirm } = useUI();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [partners, setPartners] = useState<Partner[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -132,6 +135,37 @@ export default function PartnerekPage() {
       notes: p.notes ?? "",
       is_active: p.is_active,
     });
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function bulkDelete() {
+    if (selected.size === 0) return;
+    if (!(await confirm(t("bulk.confirm", { count: selected.size })))) return;
+    try {
+      const res = await api.post<{ deleted: number; blocked: { name: string; code: string }[] }>(
+        "/api/partners/bulk-delete",
+        { ids: [...selected] },
+      );
+      toast(t("bulk.deleted", { count: res.deleted }), "success");
+      if (res.blocked.length > 0) {
+        const reasons = res.blocked
+          .map((b) => `${b.name}: ${t(`errors.${b.code}`)}`)
+          .join("\n");
+        toast(t("bulk.blocked", { count: res.blocked.length, reasons }), "error");
+      }
+      setSelected(new Set());
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
   }
 
   async function save(e: React.FormEvent) {
@@ -238,6 +272,14 @@ export default function PartnerekPage() {
             <option key={tp} value={tp}>{t(`partners.types.${tp}`)}</option>
           ))}
         </select>
+        {selected.size > 0 && (
+          <button
+            onClick={bulkDelete}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            {t("bulk.deleteSelected", { count: selected.size })}
+          </button>
+        )}
         <button
           onClick={() => { setError(null); setForm({ ...EMPTY }); }}
           className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
@@ -250,6 +292,16 @@ export default function PartnerekPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              <th className="w-8 px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={filtered.length > 0 && filtered.every((p) => selected.has(p.id))}
+                  onChange={(e) =>
+                    setSelected(e.target.checked ? new Set(filtered.map((p) => p.id)) : new Set())
+                  }
+                  className="h-4 w-4"
+                />
+              </th>
               <th className="px-4 py-3">{t("partners.code")}</th>
               <th className="px-4 py-3">{t("partners.name")}</th>
               <th className="px-4 py-3">{t("partners.type")}</th>
@@ -262,6 +314,14 @@ export default function PartnerekPage() {
           <tbody>
             {filtered.map((p) => (
               <tr key={p.id} className="border-b border-slate-100 last:border-0">
+                <td className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(p.id)}
+                    onChange={() => toggleSelect(p.id)}
+                    className="h-4 w-4"
+                  />
+                </td>
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-700">{p.partner_code ?? "—"}</td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{p.name}</div>
@@ -293,7 +353,7 @@ export default function PartnerekPage() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("partners.empty")}</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">{t("partners.empty")}</td></tr>
             )}
           </tbody>
         </table>

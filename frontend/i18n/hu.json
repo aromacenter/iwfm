@@ -49,6 +49,12 @@
       "personal": "Saját"
     }
   },
+  "bulk": {
+    "deleteSelected": "Törlés ({count})",
+    "confirm": "Biztosan törlöd a kijelölt {count} elemet? Ez nem vonható vissza.",
+    "deleted": "{count} elem törölve.",
+    "blocked": "{count} elem nem törölhető:\n{reasons}"
+  },
   "impex": {
     "title": "Import / Export",
     "import": "Importálás",
@@ -659,6 +665,10 @@
     "unknown": "Hiba történt ({code}).",
     "partner.not_found": "A partner nem található.",
     "product.not_found": "A termék nem található.",
+    "partner.has_settlements": "van hozzá elszámolás",
+    "partner.has_assets": "van nála kihelyezett gép",
+    "asset.deployed": "ki van helyezve (előbb vedd vissza)",
+    "product.has_stock": "van belőle kint lévő készlet (előbb számold el)",
     "impex.bad_file": "Érvénytelen fájl — Excel (xlsx) vagy CSV kell.",
     "impex.file_too_large": "A fájl túl nagy (max. 10 MB).",
     "impex.parse_failed": "A fájl beolvasása nem sikerült — ellenőrizd a formátumot.",

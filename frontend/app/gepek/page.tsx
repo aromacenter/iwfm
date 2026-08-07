@@ -75,7 +75,7 @@ const EMPTY_ASSET = {
 
 export default function GepekPage() {
   const { t, lang } = useT();
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [search, setSearch] = useState("");
@@ -83,6 +83,7 @@ export default function GepekPage() {
   const [partnerFilter, setPartnerFilter] = useState("");
   const [scanMsg, setScanMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assetForm, setAssetForm] = useState<typeof EMPTY_ASSET | null>(null);
   const [deployFor, setDeployFor] = useState<Asset | null>(null);
   const [deploy, setDeploy] = useState({ partner_id: "", note: "" });
@@ -136,6 +137,37 @@ export default function GepekPage() {
     try {
       const res = await api.get<{ barcode: string }>("/api/assets/generate-barcode");
       setAssetForm((f) => (f ? { ...f, barcode: res.barcode } : f));
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function bulkDelete() {
+    if (selected.size === 0) return;
+    if (!(await confirm(t("bulk.confirm", { count: selected.size })))) return;
+    try {
+      const res = await api.post<{ deleted: number; blocked: { name: string; code: string }[] }>(
+        "/api/assets/bulk-delete",
+        { ids: [...selected] },
+      );
+      toast(t("bulk.deleted", { count: res.deleted }), "success");
+      if (res.blocked.length > 0) {
+        const reasons = res.blocked
+          .map((b) => `${b.name}: ${t(`errors.${b.code}`)}`)
+          .join("\n");
+        toast(t("bulk.blocked", { count: res.blocked.length, reasons }), "error");
+      }
+      setSelected(new Set());
+      loadAssets();
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -248,6 +280,14 @@ export default function GepekPage() {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
+        {selected.size > 0 && (
+          <button
+            onClick={bulkDelete}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            {t("bulk.deleteSelected", { count: selected.size })}
+          </button>
+        )}
         <Link href="/partnerek" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">
           {t("inv.partners")}
         </Link>
@@ -266,6 +306,16 @@ export default function GepekPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              <th className="w-8 px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={assets.length > 0 && assets.every((a) => selected.has(a.id))}
+                  onChange={(e) =>
+                    setSelected(e.target.checked ? new Set(assets.map((a) => a.id)) : new Set())
+                  }
+                  className="h-4 w-4"
+                />
+              </th>
               <th className="px-4 py-3">{t("inv.barcode")}</th>
               <th className="px-4 py-3">{t("inv.manufacturer")}</th>
               <th className="px-4 py-3">{t("inv.type")}</th>
@@ -282,6 +332,14 @@ export default function GepekPage() {
           <tbody>
             {assets.map((a) => (
               <tr key={a.id} className="border-b border-slate-100 last:border-0">
+                <td className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(a.id)}
+                    onChange={() => toggleSelect(a.id)}
+                    className="h-4 w-4"
+                  />
+                </td>
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-700">{a.barcode}</td>
                 <td className="px-4 py-3 text-slate-500">{a.manufacturer ?? "—"}</td>
                 <td className="px-4 py-3">
@@ -321,7 +379,7 @@ export default function GepekPage() {
               </tr>
             ))}
             {assets.length === 0 && (
-              <tr><td colSpan={11} className="px-4 py-10 text-center text-slate-400">{t("inv.empty")}</td></tr>
+              <tr><td colSpan={12} className="px-4 py-10 text-center text-slate-400">{t("inv.empty")}</td></tr>
             )}
           </tbody>
         </table>
