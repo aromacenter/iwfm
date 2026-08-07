@@ -719,6 +719,56 @@ class SettlementLine(Base):
     amount_net: Mapped[float] = mapped_column(Float, nullable=False)  # portions * price
 
 
+class ServiceTicket(Base):
+    """Szerviz-hibajegy vagy karbantartási munka egy géphez (vagy általános).
+
+    kind: repair (hibajavítás) | maintenance (karbantartás)
+    status: open → in_progress → done (vagy cancelled)
+    A gép- és partnernév pillanatképként is tárolódik, hogy törlés után is
+    olvasható maradjon a jegy. counter_at_service: a gép számláló-állása a
+    munka elvégzésekor — a karbantartás-esedékesség ebből számolódik.
+    """
+
+    __tablename__ = "service_tickets"
+    __table_args__ = (
+        CheckConstraint("kind IN ('repair','maintenance')", name="ck_service_kind"),
+        CheckConstraint(
+            "status IN ('open','in_progress','done','cancelled')", name="ck_service_status"
+        ),
+        CheckConstraint("priority IN ('low','normal','high')", name="ck_service_priority"),
+        Index("ix_service_status", "status", "created_at"),
+        Index("ix_service_asset", "asset_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    ticket_no: Mapped[str] = mapped_column(String(16), nullable=False)  # SZ-0001
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="repair")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    priority: Mapped[str] = mapped_column(String(8), nullable=False, default="normal")
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
+    )
+    asset_label: Mapped[str | None] = mapped_column(String(256), nullable=True)  # pillanatkép
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True
+    )
+    partner_label: Mapped[str | None] = mapped_column(String(256), nullable=True)  # pillanatkép
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    assigned_to_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    counter_at_service: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class AuditEvent(Base):
     """Append-only audit trail. Sensitive-data reveals, publishes, exports,
     and every mutation of employee PII are recorded here (GDPR accountability)."""

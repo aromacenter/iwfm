@@ -41,6 +41,7 @@ FEATURES = (
     "settlements",    # elszámolás (készlet-feltöltés is)
     "invoicing",      # kiszámlázás (Billingó)
     "agent_report",   # üzletkötő-elszámolás
+    "service",        # szerviz (hibajegyek, karbantartás)
     "import_export",  # import/export
     "payroll",        # bérexport
     "my_schedule",    # saját beosztás (önkiszolgáló)
@@ -52,13 +53,13 @@ DEFAULT_MATRIX: dict[str, list[str]] = {
     "manager": [
         "dashboard", "tasks", "schedule", "attendance", "timeoff", "employees",
         "partners", "machines", "products", "settlements", "invoicing",
-        "agent_report", "import_export", "payroll",
+        "agent_report", "service", "import_export", "payroll",
     ],
     "uzletkoto": [
         "dashboard", "partners", "machines", "products", "settlements",
         "invoicing", "agent_report",
     ],
-    "szervizes": ["machines", "my_schedule", "my_tasks"],
+    "szervizes": ["machines", "service", "my_schedule", "my_tasks"],
     "employee": ["my_schedule", "my_tasks"],
 }
 

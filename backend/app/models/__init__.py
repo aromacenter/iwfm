@@ -12,6 +12,7 @@ from app.models.models import (  # noqa: F401
     PartnerStock,
     PermissionSettings,
     Product,
+    ServiceTicket,
     Settlement,
     SettlementLine,
     Shift,

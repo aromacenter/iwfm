@@ -19,6 +19,7 @@ from app.api import (
     kiosk,
     me,
     payroll,
+    service,
     settings as settings_api,
     shifts,
     tasks,
@@ -178,6 +179,7 @@ def create_app() -> FastAPI:
     app.include_router(consignment.products_router, prefix="/api/products", tags=["products"])
     app.include_router(consignment.stock_router, prefix="/api/partners", tags=["partner-stock"])
     app.include_router(consignment.settlements_router, prefix="/api/settlements", tags=["settlements"])
+    app.include_router(service.router, prefix="/api/service", tags=["service"])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
 
