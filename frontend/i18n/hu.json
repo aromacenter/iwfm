@@ -235,6 +235,13 @@
     "emailSent": "Bizonylat elküldve emailben.",
     "emailSentAt": "Elküldve: {at}"
   },
+  "offline": {
+    "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
+    "pending": "{count} függő offline elszámolás — kattints az újraküldéshez",
+    "retryHint": "Újraküldés most",
+    "flushed": "{count} offline elszámolás sikeresen beküldve.",
+    "dropped": "Egy offline elszámolás nem küldhető be ({name}): {reason}"
+  },
   "portal": {
     "linkBtn": "Partner-portál link másolása",
     "linkCopied": "Portál-link a vágólapra másolva — küldd el a partnernek.",

@@ -235,6 +235,13 @@
     "emailSent": "Receipt sent by email.",
     "emailSentAt": "Sent: {at}"
   },
+  "offline": {
+    "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
+    "pending": "{count} pending offline settlement(s) — click to retry",
+    "retryHint": "Retry now",
+    "flushed": "{count} offline settlement(s) submitted successfully.",
+    "dropped": "An offline settlement could not be submitted ({name}): {reason}"
+  },
   "portal": {
     "linkBtn": "Copy partner portal link",
     "linkCopied": "Portal link copied — send it to the partner.",

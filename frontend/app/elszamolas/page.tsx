@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import SignatureCanvas from "@/components/SignatureCanvas";
-import { api, downloadFile, errorMessage } from "@/lib/api";
+import { api, ApiError, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -81,6 +81,31 @@ interface DuePartner {
 
 const PAYMENTS = ["cash", "card", "transfer"] as const;
 
+// Offline-várólista: hálózati hiba esetén ide kerül az elszámolás, és
+// újracsatlakozáskor automatikusan beküldjük.
+const QUEUE_KEY = "iwfm-pending-settlements";
+
+interface QueuedSettlement {
+  partner_id: string;
+  partner_name: string;
+  payment_method: (typeof PAYMENTS)[number];
+  lines: { product_id: string; physical_qty: number }[];
+  note: string | null;
+  queued_at: string;
+}
+
+function readQueue(): QueuedSettlement[] {
+  try {
+    return JSON.parse(localStorage.getItem(QUEUE_KEY) ?? "[]") as QueuedSettlement[];
+  } catch {
+    return [];
+  }
+}
+
+function writeQueue(items: QueuedSettlement[]) {
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(items));
+}
+
 export default function ElszamolasPage() {
   const { t, lang } = useT();
   const { toast, confirm, prompt } = useUI();
@@ -106,6 +131,7 @@ export default function ElszamolasPage() {
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingOffline, setPendingOffline] = useState(0);
 
   const fmt = (dt: string) =>
     new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "short" });
@@ -137,6 +163,51 @@ export default function ElszamolasPage() {
   useEffect(loadStock, [loadStock]);
   useEffect(loadHistory, [loadHistory]);
   useEffect(loadDue, [loadDue]);
+
+  // Offline-várólista ürítése betöltéskor és újracsatlakozáskor.
+  const flushQueue = useCallback(async () => {
+    let queue = readQueue();
+    setPendingOffline(queue.length);
+    if (queue.length === 0) return;
+    let sent = 0;
+    while (queue.length > 0) {
+      const item = queue[0];
+      try {
+        await api.post("/api/settlements", {
+          partner_id: item.partner_id,
+          payment_method: item.payment_method,
+          lines: item.lines,
+          note: item.note,
+        });
+        sent += 1;
+        queue = queue.slice(1);
+        writeQueue(queue);
+      } catch (err) {
+        if (err instanceof ApiError) {
+          // a szerver elutasította (pl. törölt partner) — eldobjuk, jelezzük
+          toast(t("offline.dropped", { name: item.partner_name, reason: errorMessage(err) }), "error");
+          queue = queue.slice(1);
+          writeQueue(queue);
+        } else {
+          break; // még mindig nincs hálózat — később újra
+        }
+      }
+    }
+    setPendingOffline(queue.length);
+    if (sent > 0) {
+      toast(t("offline.flushed", { count: sent }), "success");
+      loadStock();
+      loadHistory();
+      loadDue();
+    }
+  }, [toast, t, loadStock, loadHistory, loadDue]);
+
+  useEffect(() => {
+    flushQueue();
+    const onOnline = () => flushQueue();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [flushQueue]);
 
   // Élő fogyás-előnézet a beírt leltár alapján
   const preview = useMemo(() => {
@@ -195,7 +266,25 @@ export default function ElszamolasPage() {
       setSigning(res); // elszámolás után rögtön aláírathatjuk a partnerrel
       setSignature(null);
     } catch (err) {
-      toast(errorMessage(err), "error");
+      if (!(err instanceof ApiError)) {
+        // hálózati hiba (offline): várólistára tesszük, később beküldjük
+        const queue = readQueue();
+        queue.push({
+          partner_id: partnerId,
+          partner_name: partners.find((p) => p.id === partnerId)?.name ?? "?",
+          payment_method: payment,
+          lines,
+          note: note || null,
+          queued_at: new Date().toISOString(),
+        });
+        writeQueue(queue);
+        setPendingOffline(queue.length);
+        setNote("");
+        setPhysical(Object.fromEntries(stock.map((x) => [x.product_id, ""])));
+        toast(t("offline.queued"), "info");
+      } else {
+        toast(errorMessage(err), "error");
+      }
     } finally {
       setBusy(false);
     }
@@ -330,6 +419,15 @@ export default function ElszamolasPage() {
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">{t("cons.settlementTitle")}</h1>
+        {pendingOffline > 0 && (
+          <button
+            onClick={flushQueue}
+            title={t("offline.retryHint")}
+            className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200"
+          >
+            {t("offline.pending", { count: pendingOffline })}
+          </button>
+        )}
         <select
           value={partnerId}
           onChange={(e) => setPartnerId(e.target.value)}
