@@ -88,16 +88,22 @@ def _decode_file(data_url: str) -> tuple[bytes, str]:
     return raw, "csv"
 
 
-def _parse_rows(raw: bytes, kind: str) -> list[list[str]]:
-    """A fájl sorai — minden cella stringgé alakítva ('' ha üres)."""
+def _parse_rows(raw: bytes, kind: str, sheet: int = 0) -> tuple[list[list[str]], list[str]]:
+    """A fájl sorai a kiválasztott munkalapról (fülről) + az összes fül neve.
+    Minden cella stringgé alakítva ('' ha üres). CSV-nél egyetlen 'fül' van."""
+    sheet_names: list[str] = []
     if kind == "xlsx":
         try:
             from openpyxl import load_workbook
 
             wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
-            sheet = wb.worksheets[0]
+            sheet_names = list(wb.sheetnames)
+            if not (0 <= sheet < len(wb.worksheets)):
+                wb.close()
+                raise HTTPException(status_code=422, detail={"code": "impex.bad_sheet"})
+            ws = wb.worksheets[sheet]
             rows = []
-            for row in sheet.iter_rows(max_row=_MAX_ROWS + 1, values_only=True):
+            for row in ws.iter_rows(max_row=_MAX_ROWS + 1, values_only=True):
                 rows.append(["" if c is None else str(c).strip() for c in row])
             wb.close()
         except HTTPException:
@@ -123,7 +129,7 @@ def _parse_rows(raw: bytes, kind: str) -> list[list[str]]:
     rows = [r for r in rows if any(c for c in r)]
     if not rows:
         raise HTTPException(status_code=422, detail={"code": "impex.empty_file"})
-    return rows
+    return rows, sheet_names
 
 
 def _column_letter(index: int) -> str:
@@ -151,6 +157,7 @@ async def list_entities(_: User = Depends(require_role("manager"))):
 
 class PreviewBody(BaseModel):
     file: str  # data URL
+    sheet: int = Field(default=0, ge=0)  # munkalap (fül) indexe xlsx-nél
 
 
 @router.post("/preview")
@@ -159,7 +166,7 @@ async def preview_file(
     _: User = Depends(require_role("manager")),
 ):
     raw, kind = _decode_file(body.file)
-    rows = _parse_rows(raw, kind)
+    rows, sheet_names = _parse_rows(raw, kind, body.sheet)
     width = max(len(r) for r in rows)
     return {
         "columns": [
@@ -168,6 +175,8 @@ async def preview_file(
         ],
         "sample_rows": [r + [""] * (width - len(r)) for r in rows[1 : 1 + _PREVIEW_ROWS]],
         "total_rows": len(rows),
+        "sheets": sheet_names,  # üres lista CSV-nél
+        "sheet": body.sheet,
     }
 
 
@@ -176,6 +185,7 @@ class ImportBody(BaseModel):
     file: str  # data URL (ugyanaz, mint a preview-nál)
     mapping: dict[str, int]  # {mező_kulcs: oszlopindex}
     has_header: bool = True
+    sheet: int = Field(default=0, ge=0)  # munkalap (fül) indexe xlsx-nél
 
 
 def _coerce(value: str, field: dict) -> object:
@@ -222,7 +232,7 @@ async def run_import(
             raise HTTPException(status_code=422, detail={"code": "impex.missing_required"})
 
     raw, kind = _decode_file(body.file)
-    rows = _parse_rows(raw, kind)
+    rows, _sheet_names = _parse_rows(raw, kind, body.sheet)
     data_rows = rows[1:] if body.has_header else rows
     if len(data_rows) > _MAX_ROWS:
         raise HTTPException(status_code=422, detail={"code": "impex.too_many_rows"})

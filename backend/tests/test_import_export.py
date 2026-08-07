@@ -4,13 +4,17 @@ import base64
 import io
 
 
-def xlsx_data_url(rows: list[list]) -> str:
+def xlsx_data_url(rows: list[list], extra_sheets: dict[str, list[list]] | None = None) -> str:
     from openpyxl import Workbook
 
     wb = Workbook()
     ws = wb.active
     for row in rows:
         ws.append(row)
+    for name, sheet_rows in (extra_sheets or {}).items():
+        extra = wb.create_sheet(title=name)
+        for row in sheet_rows:
+            extra.append(row)
     buf = io.BytesIO()
     wb.save(buf)
     b64 = base64.b64encode(buf.getvalue()).decode()
@@ -105,6 +109,48 @@ async def test_import_products(client, manager):
     by_name = {p["name"]: p for p in products}
     assert by_name["Házi kávé"]["price_per_portion"] == 55.5
     assert by_name["Prémium kávé"]["grams_per_portion"] == 8
+
+
+async def test_multi_sheet_preview_and_import(client, manager):
+    """Több fülből a kiválasztottról olvasunk: preview fülnevekkel + import a 2. fülről."""
+    _, mgr = manager
+    file = xlsx_data_url(
+        [["Egyéb adat"], ["nem ez kell"]],
+        extra_sheets={"Ügyfelek": [["Cégnév"], ["Fül Kft."], ["Másik Bt."]]},
+    )
+
+    # alapból az 1. fül
+    p0 = (await client.post("/api/import-export/preview", json={"file": file}, headers=mgr)).json()
+    assert p0["sheets"] == ["Sheet", "Ügyfelek"]
+    assert p0["columns"][0]["header"] == "Egyéb adat"
+
+    # 2. fül kiválasztva
+    p1 = (
+        await client.post(
+            "/api/import-export/preview", json={"file": file, "sheet": 1}, headers=mgr
+        )
+    ).json()
+    assert p1["sheet"] == 1
+    assert p1["columns"][0]["header"] == "Cégnév"
+    assert p1["total_rows"] == 3
+
+    # import a 2. fülről
+    res = await client.post(
+        "/api/import-export/import",
+        json={"entity": "partners", "file": file, "mapping": {"name": 0}, "sheet": 1},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["created"] == 2
+    names = {p["name"] for p in (await client.get("/api/partners", headers=mgr)).json()}
+    assert {"Fül Kft.", "Másik Bt."} <= names
+
+    # nem létező fül → 422
+    bad = await client.post(
+        "/api/import-export/preview", json={"file": file, "sheet": 5}, headers=mgr
+    )
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["code"] == "impex.bad_sheet"
 
 
 async def test_import_requires_name_mapping(client, manager):

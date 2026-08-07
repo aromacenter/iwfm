@@ -30,6 +30,8 @@ interface Preview {
   columns: PreviewCol[];
   sample_rows: string[][];
   total_rows: number;
+  sheets: string[]; // xlsx fülnevek (CSV-nél üres)
+  sheet: number;
 }
 
 interface ImportResult {
@@ -82,6 +84,13 @@ export default function ImportExportPage() {
     return next;
   }
 
+  async function loadPreview(dataUrl: string, sheet: number) {
+    const p = await api.post<Preview>("/api/import-export/preview", { file: dataUrl, sheet });
+    setPreview(p);
+    setMapping(autoMap(p.columns, fields));
+    setResult(null);
+  }
+
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -95,11 +104,21 @@ export default function ImportExportPage() {
         reader.onerror = () => reject(new Error("read"));
         reader.readAsDataURL(file);
       });
-      const p = await api.post<Preview>("/api/import-export/preview", { file: dataUrl });
       setFileData(dataUrl);
       setFileName(file.name);
-      setPreview(p);
-      setMapping(autoMap(p.columns, fields));
+      await loadPreview(dataUrl, 0);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeSheet(sheet: number) {
+    if (!fileData) return;
+    setBusy(true);
+    try {
+      await loadPreview(fileData, sheet);
     } catch (err) {
       toast(errorMessage(err), "error");
     } finally {
@@ -121,6 +140,7 @@ export default function ImportExportPage() {
         file: fileData,
         mapping: mappingNum,
         has_header: true,
+        sheet: preview.sheet,
       });
       setResult(res);
       toast(t("impex.done", { created: res.created, skipped: res.skipped }), "success");
@@ -205,6 +225,21 @@ export default function ImportExportPage() {
                 className="hidden"
               />
             </label>
+            {preview && preview.sheets.length > 1 && (
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                {t("impex.sheet")}
+                <select
+                  value={String(preview.sheet)}
+                  onChange={(e) => changeSheet(Number(e.target.value))}
+                  disabled={busy}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  {preview.sheets.map((name, i) => (
+                    <option key={i} value={String(i)}>{name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             {preview && (
               <span className="text-sm text-slate-500">
                 {t("impex.rowsDetected", { count: preview.total_rows - 1 })}
