@@ -517,6 +517,88 @@ async def list_settlements(
     return [_settlement_out(s, name) for s, name in rows]
 
 
+@settlements_router.post("/bulk-delete")
+async def bulk_delete_settlements(
+    body: BulkDeleteBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    """Elszámolások (tömeges) törlése. Már kiszámlázott elszámolás nem
+    törölhető (a Billingó-bizonylat létezik). Törléskor a levont készlet
+    visszakerül a partner külső raktárába (revert mozgással), így az
+    elszámolás megismételhető."""
+    deleted = 0
+    blocked: list[dict] = []
+    for raw in body.ids:
+        try:
+            sid = uuid.UUID(raw)
+        except ValueError:
+            continue
+        settlement = (
+            await db.execute(select(Settlement).where(Settlement.id == sid))
+        ).scalar_one_or_none()
+        if settlement is None:
+            continue
+        partner_name = (
+            await db.execute(select(Partner.name).where(Partner.id == settlement.partner_id))
+        ).scalar_one_or_none()
+        label = f"{partner_name or '?'} ({settlement.created_at:%Y-%m-%d})"
+        if settlement.invoiced:
+            blocked.append({"id": str(sid), "name": label, "code": "settlement.invoiced"})
+            continue
+
+        lines = (
+            (
+                await db.execute(
+                    select(SettlementLine).where(SettlementLine.settlement_id == sid)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        # Készlet-visszaállítás: a fogyás visszakerül a partner raktárába.
+        for line in lines:
+            if line.product_id is None or line.consumed_qty <= 0:
+                continue  # törölt termék fogyása nem állítható vissza
+            stock = (
+                await db.execute(
+                    select(PartnerStock).where(
+                        PartnerStock.partner_id == settlement.partner_id,
+                        PartnerStock.product_id == line.product_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if stock is None:
+                stock = PartnerStock(
+                    partner_id=settlement.partner_id, product_id=line.product_id, quantity=0.0
+                )
+                db.add(stock)
+            stock.quantity += line.consumed_qty
+            db.add(
+                StockMovement(
+                    partner_id=settlement.partner_id, product_id=line.product_id,
+                    action="revert", quantity_delta=line.consumed_qty,
+                    note=f"elszámolás törölve ({label})", actor_user_id=actor.id,
+                )
+            )
+        # az eredeti fogyás-mozgások megmaradnak, csak a hivatkozás oldódik
+        await db.execute(
+            sa_update(StockMovement)
+            .where(StockMovement.settlement_id == sid)
+            .values(settlement_id=None)
+        )
+        await db.execute(sa_delete(SettlementLine).where(SettlementLine.settlement_id == sid))
+        await db.delete(settlement)
+        deleted += 1
+    await record_audit(
+        db, actor=actor, action="settlement.bulk_delete", entity_type="settlement",
+        detail={"deleted": deleted, "blocked": len(blocked)}, request=request,
+    )
+    await db.commit()
+    return {"deleted": deleted, "blocked": blocked}
+
+
 # ─── Üzletkötő-elszámolás (Phase 4) ──────────────────────────────────────────
 # FONTOS: a statikus útvonalak (/agents, /summary) a /{settlement_id} ELŐTT
 # legyenek, különben a path-paraméter elnyelné őket.

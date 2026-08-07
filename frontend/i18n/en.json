@@ -183,7 +183,8 @@
     "dateTo": "To",
     "summaryByPayment": "Summary by payment method",
     "count": "Count",
-    "settlementSaved": "Settlement recorded — total: {gross} HUF (gross)."
+    "settlementSaved": "Settlement recorded — total: {gross} HUF (gross).",
+    "deleteConfirm": "Delete the {count} selected settlement(s)? The deducted stock will be returned to the partner's warehouse. This cannot be undone."
   },
   "partners": {
     "title": "Partners",
@@ -686,6 +687,7 @@
     "partner.has_assets": "has deployed machines",
     "asset.deployed": "is deployed (return it first)",
     "product.has_stock": "has stock at partners (settle it first)",
+    "settlement.invoiced": "already invoiced (the Billingó document exists)",
     "impex.bad_file": "Invalid file — Excel (xlsx) or CSV required.",
     "impex.file_too_large": "The file is too large (max 10 MB).",
     "impex.parse_failed": "Could not read the file — check the format.",

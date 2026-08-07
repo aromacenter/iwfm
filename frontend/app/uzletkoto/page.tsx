@@ -5,8 +5,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 
 interface Agent {
   user_id: string | null;
@@ -36,6 +37,8 @@ const PAYMENTS = ["cash", "card", "transfer"] as const;
 
 export default function UzletkotoPage() {
   const { t, lang } = useT();
+  const { toast, confirm } = useUI();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -61,6 +64,37 @@ export default function UzletkotoPage() {
   }, [agentId, dateFrom, dateTo]);
   useEffect(load, [load]);
 
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function bulkDelete() {
+    if (selected.size === 0) return;
+    if (!(await confirm(t("cons.deleteConfirm", { count: selected.size })))) return;
+    try {
+      const res = await api.post<{ deleted: number; blocked: { name: string; code: string }[] }>(
+        "/api/settlements/bulk-delete",
+        { ids: [...selected] },
+      );
+      toast(t("bulk.deleted", { count: res.deleted }), "success");
+      if (res.blocked.length > 0) {
+        const reasons = res.blocked
+          .map((b) => `${b.name}: ${t(`errors.${b.code}`)}`)
+          .join("\n");
+        toast(t("bulk.blocked", { count: res.blocked.length, reasons }), "error");
+      }
+      setSelected(new Set());
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -85,12 +119,30 @@ export default function UzletkotoPage() {
           {t("cons.dateTo")}
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5" />
         </label>
+        {selected.size > 0 && (
+          <button
+            onClick={bulkDelete}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            {t("bulk.deleteSelected", { count: selected.size })}
+          </button>
+        )}
       </div>
 
       <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              <th className="w-8 px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={rows.length > 0 && rows.every((s) => selected.has(s.id))}
+                  onChange={(e) =>
+                    setSelected(e.target.checked ? new Set(rows.map((s) => s.id)) : new Set())
+                  }
+                  className="h-4 w-4"
+                />
+              </th>
               <th className="px-4 py-3">{t("cons.date")}</th>
               <th className="px-4 py-3">{t("cons.partner")}</th>
               <th className="px-4 py-3">{t("cons.settledBy")}</th>
@@ -103,6 +155,14 @@ export default function UzletkotoPage() {
           <tbody>
             {rows.map((s) => (
               <tr key={s.id} className="border-b border-slate-100 last:border-0">
+                <td className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(s.id)}
+                    onChange={() => toggleSelect(s.id)}
+                    className="h-4 w-4"
+                  />
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
                 <td className="px-4 py-3">{s.partner_name}</td>
                 <td className="px-4 py-3 text-slate-500">{s.settled_by_name}</td>
@@ -117,7 +177,7 @@ export default function UzletkotoPage() {
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
             )}
           </tbody>
         </table>

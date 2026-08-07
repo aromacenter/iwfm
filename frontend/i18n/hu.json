@@ -183,7 +183,8 @@
     "dateTo": "Eddig",
     "summaryByPayment": "Összesítés fizetési módonként",
     "count": "Darab",
-    "settlementSaved": "Elszámolás rögzítve — összeg: {gross} Ft (bruttó)."
+    "settlementSaved": "Elszámolás rögzítve — összeg: {gross} Ft (bruttó).",
+    "deleteConfirm": "Biztosan törlöd a kijelölt {count} elszámolást? A levont készlet visszakerül a partner raktárába. Ez nem vonható vissza."
   },
   "partners": {
     "title": "Partnerek",
@@ -686,6 +687,7 @@
     "partner.has_assets": "van nála kihelyezett gép",
     "asset.deployed": "ki van helyezve (előbb vedd vissza)",
     "product.has_stock": "van belőle kint lévő készlet (előbb számold el)",
+    "settlement.invoiced": "már ki van számlázva (a Billingó-bizonylat létezik)",
     "impex.bad_file": "Érvénytelen fájl — Excel (xlsx) vagy CSV kell.",
     "impex.file_too_large": "A fájl túl nagy (max. 10 MB).",
     "impex.parse_failed": "A fájl beolvasása nem sikerült — ellenőrizd a formátumot.",

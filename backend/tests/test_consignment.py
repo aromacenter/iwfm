@@ -205,6 +205,55 @@ async def test_bulk_delete_partner_guards(client, manager):
     assert "Sima Kft." not in names and "Kávézó Bt." in names
 
 
+async def test_bulk_delete_settlement_restores_stock(client, manager):
+    """Elszámolás törlése: a fogyás visszakerül a készletbe; számlázott blokkolt."""
+    import uuid as _uuid
+
+    from sqlalchemy import select as _select
+
+    import app.db as app_db
+    from app.models import Settlement
+
+    _, mgr = manager
+    partner, product, body = await _setup_settlement(client, mgr)  # 1.0 → 0.3, fogyás 0.7
+
+    res = await client.post(
+        "/api/settlements/bulk-delete", json={"ids": [body["id"]]}, headers=mgr
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["deleted"] == 1
+
+    # a készlet visszaállt az elszámolás előtti 1.0 kg-ra
+    stock = (await client.get(f"/api/partners/{partner['id']}/stock", headers=mgr)).json()
+    assert abs(stock[0]["quantity"] - 1.0) < 1e-9
+    assert (await client.get("/api/settlements", headers=mgr)).json() == []
+
+    # új elszámolás, kézzel számlázottra állítva → blokkolt
+    res2 = await client.post(
+        "/api/settlements",
+        json={
+            "partner_id": partner["id"],
+            "payment_method": "card",
+            "lines": [{"product_id": product["id"], "physical_qty": 0.5}],
+        },
+        headers=mgr,
+    )
+    sid = res2.json()["id"]
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        s = (
+            await session.execute(_select(Settlement).where(Settlement.id == _uuid.UUID(sid)))
+        ).scalar_one()
+        s.invoiced = True
+        await session.commit()
+
+    res3 = await client.post(
+        "/api/settlements/bulk-delete", json={"ids": [sid]}, headers=mgr
+    )
+    assert res3.json()["deleted"] == 0
+    assert res3.json()["blocked"][0]["code"] == "settlement.invoiced"
+
+
 async def test_agent_summary(client, manager):
     """Üzletkötő-elszámolás: agents lista + fizetési módonkénti összesítés."""
     _, mgr = manager
