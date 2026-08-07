@@ -235,6 +235,19 @@
     "emailSent": "Bizonylat elküldve emailben.",
     "emailSentAt": "Elküldve: {at}"
   },
+  "portal": {
+    "linkBtn": "Partner-portál link másolása",
+    "linkCopied": "Portál-link a vágólapra másolva — küldd el a partnernek.",
+    "notFound": "Ez a portál-link érvénytelen vagy visszavonták.",
+    "outstanding": "Fizetésre váró számlák összege: {total} Ft",
+    "stockTitle": "Aktuális készlet (külső raktár)",
+    "noStock": "Jelenleg nincs kihelyezett készlet.",
+    "settlementsTitle": "Elszámolások",
+    "status": "Státusz",
+    "paid": "Fizetve",
+    "unpaid": "Fizetésre vár",
+    "footer": "Ezt az oldalt az iwfm rendszer állítja elő — csak olvasható nézet."
+  },
   "audit": {
     "title": "Audit napló",
     "allActions": "Minden művelet",

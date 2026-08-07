@@ -108,6 +108,21 @@ export default function PartnerekPage() {
     });
   }, [partners, search, typeFilter]);
 
+  async function copyPortalLink(p: Partner) {
+    try {
+      const res = await api.post<{ path: string }>(`/api/partners/${p.id}/portal-link`);
+      const url = `${window.location.origin}${res.path}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast(t("portal.linkCopied"), "success");
+      } catch {
+        toast(url, "info"); // vágólap-hozzáférés híján legalább mutassuk
+      }
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   function edit(p: Partner) {
     setError(null);
     setForm({
@@ -349,12 +364,21 @@ export default function PartnerekPage() {
                 </td>
                 <td className="px-4 py-3 text-slate-500">{p.asset_count}</td>
                 <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => edit(p)}
-                    className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
-                  >
-                    {t("common.edit")}
-                  </button>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={() => copyPortalLink(p)}
+                      title={t("portal.linkBtn")}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                    >
+                      🔗
+                    </button>
+                    <button
+                      onClick={() => edit(p)}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                    >
+                      {t("common.edit")}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

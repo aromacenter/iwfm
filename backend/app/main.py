@@ -20,6 +20,7 @@ from app.api import (
     kiosk,
     me,
     payroll,
+    portal,
     service,
     settings as settings_api,
     shifts,
@@ -111,6 +112,16 @@ def _ensure_employee_code_column(sync_conn) -> None:
     # v0.12 — alacsony készlet riasztási küszöb a termékeken
     ensure_column("products", "low_stock_threshold", "FLOAT")
 
+    # v0.13 — partner-portál token
+    ensure_column("partners", "portal_token", "VARCHAR(64)")
+    if "partners" in tables:
+        sync_conn.execute(
+            sql_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_partners_portal_token "
+                "ON partners (portal_token)"
+            )
+        )
+
     # v0.8 — gépek (assets) törzsadat-bővítés
     ensure_column("assets", "manufacturer", "VARCHAR(128)")
     ensure_column("assets", "article_number", "VARCHAR(64)")
@@ -199,6 +210,8 @@ def create_app() -> FastAPI:
     app.include_router(consignment.settlements_router, prefix="/api/settlements", tags=["settlements"])
     app.include_router(service.router, prefix="/api/service", tags=["service"])
     app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
+    app.include_router(portal.router, prefix="/api/portal", tags=["portal"])
+    app.include_router(portal.manage_router, prefix="/api/partners", tags=["portal"])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
 

@@ -475,6 +475,8 @@ class Partner(Base):
     billing_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     bank_account: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fizetési határidő (nap)
+    # Partner-portál: kitalálhatatlan token a csak-olvasható nyilvános nézethez.
+    portal_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
