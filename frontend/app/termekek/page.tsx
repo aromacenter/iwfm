@@ -17,6 +17,7 @@ interface Product {
   grams_per_portion: number;
   price_per_portion: number;
   vat_percent: number;
+  low_stock_threshold: number | null;
   is_active: boolean;
   notes: string | null;
 }
@@ -28,6 +29,7 @@ const EMPTY = {
   grams_per_portion: "7",
   price_per_portion: "",
   vat_percent: "27",
+  low_stock_threshold: "",
   is_active: true,
   notes: "",
 };
@@ -56,6 +58,7 @@ export default function TermekekPage() {
       grams_per_portion: String(p.grams_per_portion),
       price_per_portion: String(p.price_per_portion),
       vat_percent: String(p.vat_percent),
+      low_stock_threshold: p.low_stock_threshold?.toString() ?? "",
       is_active: p.is_active,
       notes: p.notes ?? "",
     });
@@ -104,6 +107,8 @@ export default function TermekekPage() {
         grams_per_portion: Number(form.grams_per_portion) || 7,
         price_per_portion: Number(form.price_per_portion) || 0,
         vat_percent: Number(form.vat_percent) || 27,
+        low_stock_threshold:
+          form.low_stock_threshold === "" ? null : Number(form.low_stock_threshold),
         is_active: form.is_active,
         notes: form.notes || null,
       };
@@ -224,10 +229,16 @@ export default function TermekekPage() {
                 <input type="number" min={0} max={100} value={form.vat_percent} onChange={(e) => setForm({ ...form, vat_percent: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
             </div>
-            <label className="block text-sm">
-              {t("cons.pricePerPortion")} *
-              <input required type="number" min={0} step="0.01" value={form.price_per_portion} onChange={(e) => setForm({ ...form, price_per_portion: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-            </label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                {t("cons.pricePerPortion")} *
+                <input required type="number" min={0} step="0.01" value={form.price_per_portion} onChange={(e) => setForm({ ...form, price_per_portion: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+              <label className="block text-sm">
+                {t("cons.lowStockThreshold")}
+                <input type="number" min={0} step="0.1" value={form.low_stock_threshold} onChange={(e) => setForm({ ...form, low_stock_threshold: e.target.value })} placeholder={t("cons.noAlert")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+            </div>
             <label className="block text-sm">
               {t("cons.notes")}
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

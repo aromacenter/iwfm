@@ -46,6 +46,7 @@ class ProductBody(BaseModel):
     grams_per_portion: int = Field(default=7, ge=1, le=100000)
     price_per_portion: float = Field(default=0.0, ge=0)
     vat_percent: int = Field(default=27, ge=0, le=100)
+    low_stock_threshold: float | None = Field(default=None, ge=0)
     is_active: bool = True
     notes: str | None = None
 
@@ -57,6 +58,7 @@ class ProductOut(BaseModel):
     grams_per_portion: int
     price_per_portion: float
     vat_percent: int
+    low_stock_threshold: float | None
     is_active: bool
     notes: str | None
 
@@ -69,6 +71,7 @@ def _product_out(p: Product) -> ProductOut:
         grams_per_portion=p.grams_per_portion,
         price_per_portion=p.price_per_portion,
         vat_percent=p.vat_percent,
+        low_stock_threshold=p.low_stock_threshold,
         is_active=p.is_active,
         notes=p.notes,
     )
@@ -83,6 +86,52 @@ async def _get_product_or_404(db: AsyncSession, product_id: str) -> Product:
     if p is None:
         raise HTTPException(status_code=404, detail={"code": "product.not_found"})
     return p
+
+
+class LowStockOut(BaseModel):
+    partner_id: str
+    partner_name: str
+    product_id: str
+    product_name: str
+    unit: str
+    quantity: float
+    threshold: float
+
+
+@products_router.get("/low-stock", response_model=list[LowStockOut])
+async def low_stock(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """Küszöb alatti partner-készletek: hol fogy ki hamarosan a termék.
+    A legkisebb (küszöbhöz mért) készletek elöl."""
+    rows = (
+        await db.execute(
+            select(PartnerStock, Product, Partner.name)
+            .join(Product, Product.id == PartnerStock.product_id)
+            .join(Partner, Partner.id == PartnerStock.partner_id)
+            .where(
+                Product.low_stock_threshold.is_not(None),
+                Product.is_active.is_(True),
+                Partner.is_active.is_(True),
+                PartnerStock.quantity <= Product.low_stock_threshold,
+            )
+        )
+    ).all()
+    out = [
+        LowStockOut(
+            partner_id=str(stock.partner_id),
+            partner_name=partner_name,
+            product_id=str(product.id),
+            product_name=product.name,
+            unit=product.unit,
+            quantity=stock.quantity,
+            threshold=product.low_stock_threshold or 0.0,
+        )
+        for stock, product, partner_name in rows
+    ]
+    out.sort(key=lambda r: r.quantity - r.threshold)
+    return out
 
 
 @products_router.get("", response_model=list[ProductOut])

@@ -211,6 +211,8 @@
     "dateTo": "To",
     "summaryByPayment": "Summary by payment method",
     "count": "Count",
+    "lowStockThreshold": "Alert threshold (kg)",
+    "noAlert": "no alert",
     "settlementSaved": "Settlement recorded — total: {gross} HUF (gross).",
     "deleteConfirm": "Delete the {count} selected settlement(s)? The deducted stock will be returned to the partner's warehouse. This cannot be undone.",
     "dueTitle": "Due settlements ({count})",
@@ -231,6 +233,10 @@
     "emailPrompt": "Recipient email address",
     "emailSent": "Receipt sent by email.",
     "emailSentAt": "Sent: {at}"
+  },
+  "lowStock": {
+    "title": "Low stock ({count})",
+    "hint": "Alert threshold: {threshold} {unit}"
   },
   "prices": {
     "button": "Partner prices",

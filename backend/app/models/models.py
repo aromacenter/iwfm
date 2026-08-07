@@ -601,6 +601,8 @@ class Product(Base):
     grams_per_portion: Mapped[int] = mapped_column(Integer, nullable=False, default=7)  # 1 adag = X g
     price_per_portion: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)  # Ft/adag (nettó)
     vat_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=27)  # ÁFA %
+    # Riasztási küszöb (kg): ha egy partnernél ennyi vagy kevesebb van, jelzünk.
+    low_stock_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

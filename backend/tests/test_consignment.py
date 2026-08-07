@@ -368,6 +368,42 @@ async def test_due_settlements(client, manager):
     assert "Kávézó Bt." not in [d["name"] for d in due1]
 
 
+async def test_low_stock_alert(client, manager):
+    """Küszöb alatti készlet jelez; küszöb nélküli termék sosem."""
+    _, mgr = manager
+    partner = await make_partner(client, mgr, name="Fogyó Bt.")
+    watched = await make_product(client, mgr, name="Figyelt kávé", low_stock_threshold=0.5)
+    silent = await make_product(client, mgr, name="Néma kávé")  # nincs küszöb
+
+    for product in (watched, silent):
+        await client.post(
+            f"/api/partners/{partner['id']}/stock/replenish",
+            json={"product_id": product["id"], "quantity": 2.0},
+            headers=mgr,
+        )
+    assert (await client.get("/api/products/low-stock", headers=mgr)).json() == []
+
+    # elszámolás után 0.3 kg marad a figyelt termékből → riasztás
+    await client.post(
+        "/api/settlements",
+        json={
+            "partner_id": partner["id"],
+            "payment_method": "cash",
+            "lines": [
+                {"product_id": watched["id"], "physical_qty": 0.3},
+                {"product_id": silent["id"], "physical_qty": 0.2},
+            ],
+        },
+        headers=mgr,
+    )
+    alerts = (await client.get("/api/products/low-stock", headers=mgr)).json()
+    assert len(alerts) == 1
+    assert alerts[0]["product_name"] == "Figyelt kávé"
+    assert alerts[0]["partner_name"] == "Fogyó Bt."
+    assert abs(alerts[0]["quantity"] - 0.3) < 1e-9
+    assert alerts[0]["threshold"] == 0.5
+
+
 async def test_partner_price_override(client, manager):
     """Partner-ár: a felülírt ár érvényes a készletnézetben és az
     elszámolásban; törlés után visszaáll az alapár."""

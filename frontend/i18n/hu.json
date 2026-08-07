@@ -211,6 +211,8 @@
     "dateTo": "Eddig",
     "summaryByPayment": "Összesítés fizetési módonként",
     "count": "Darab",
+    "lowStockThreshold": "Riasztási küszöb (kg)",
+    "noAlert": "nincs riasztás",
     "settlementSaved": "Elszámolás rögzítve — összeg: {gross} Ft (bruttó).",
     "deleteConfirm": "Biztosan törlöd a kijelölt {count} elszámolást? A levont készlet visszakerül a partner raktárába. Ez nem vonható vissza.",
     "dueTitle": "Esedékes elszámolások ({count})",
@@ -231,6 +233,10 @@
     "emailPrompt": "Címzett email-címe",
     "emailSent": "Bizonylat elküldve emailben.",
     "emailSentAt": "Elküldve: {at}"
+  },
+  "lowStock": {
+    "title": "Alacsony készlet ({count})",
+    "hint": "Riasztási küszöb: {threshold} {unit}"
   },
   "prices": {
     "button": "Partner-árak",

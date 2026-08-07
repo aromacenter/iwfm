@@ -59,6 +59,16 @@ interface PartnerPrice {
   price_per_portion: number | null;
 }
 
+interface LowStock {
+  partner_id: string;
+  partner_name: string;
+  product_id: string;
+  product_name: string;
+  unit: string;
+  quantity: number;
+  threshold: number;
+}
+
 interface DuePartner {
   partner_id: string;
   partner_code: string | null;
@@ -89,6 +99,7 @@ export default function ElszamolasPage() {
   const [replenish, setReplenish] = useState<{ product_id: string; quantity: string } | null>(null);
   const [due, setDue] = useState<DuePartner[]>([]);
   const [showDue, setShowDue] = useState(true);
+  const [lowStock, setLowStock] = useState<LowStock[]>([]);
   const [signing, setSigning] = useState<Settlement | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
   const [prices, setPrices] = useState<PartnerPrice[] | null>(null); // null = modal zárva
@@ -120,6 +131,7 @@ export default function ElszamolasPage() {
 
   const loadDue = useCallback(() => {
     api.get<DuePartner[]>("/api/settlements/due?days=30").then(setDue).catch(() => {});
+    api.get<LowStock[]>("/api/products/low-stock").then(setLowStock).catch(() => {});
   }, []);
 
   useEffect(loadStock, [loadStock]);
@@ -153,6 +165,7 @@ export default function ElszamolasPage() {
       });
       setReplenish(null);
       loadStock();
+      loadDue(); // a készlet-riasztások frissülnek
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -344,6 +357,24 @@ export default function ElszamolasPage() {
           </button>
         )}
       </div>
+
+      {lowStock.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
+          <p className="mb-2 font-semibold text-rose-900">{t("lowStock.title", { count: lowStock.length })}</p>
+          <div className="flex flex-wrap gap-2">
+            {lowStock.map((r) => (
+              <button
+                key={`${r.partner_id}-${r.product_id}`}
+                onClick={() => setPartnerId(r.partner_id)}
+                title={t("lowStock.hint", { threshold: r.threshold, unit: r.unit })}
+                className="rounded-full border border-rose-300 bg-white px-3 py-1 text-xs text-rose-800 hover:bg-rose-100"
+              >
+                {r.partner_name} · {r.product_name}: <span className="font-semibold">{r.quantity} {r.unit}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {due.length > 0 && (
         <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">

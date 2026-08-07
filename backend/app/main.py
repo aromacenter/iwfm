@@ -107,6 +107,9 @@ def _ensure_employee_code_column(sync_conn) -> None:
             )
         )
 
+    # v0.12 — alacsony készlet riasztási küszöb a termékeken
+    ensure_column("products", "low_stock_threshold", "FLOAT")
+
     # v0.8 — gépek (assets) törzsadat-bővítés
     ensure_column("assets", "manufacturer", "VARCHAR(128)")
     ensure_column("assets", "article_number", "VARCHAR(64)")
