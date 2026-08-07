@@ -230,7 +230,7 @@ async def update_partner(
 
 
 class BulkDeleteBody(BaseModel):
-    ids: list[str] = Field(min_length=1, max_length=500)
+    ids: list[str] = Field(min_length=1, max_length=1000)
 
 
 def _parse_uuid_list(ids: list[str]) -> list[uuid.UUID]:

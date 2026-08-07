@@ -131,7 +131,7 @@ async def update_product(
 
 
 class BulkDeleteBody(BaseModel):
-    ids: list[str] = Field(min_length=1, max_length=500)
+    ids: list[str] = Field(min_length=1, max_length=1000)
 
 
 @products_router.post("/bulk-delete")
