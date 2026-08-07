@@ -41,6 +41,7 @@
     "agentReport": "Agent report",
     "importExport": "Import / Export",
     "service": "Service",
+    "audit": "Audit log",
     "groups": {
       "overview": "Overview",
       "operations": "Operations",
@@ -233,6 +234,18 @@
     "emailPrompt": "Recipient email address",
     "emailSent": "Receipt sent by email.",
     "emailSentAt": "Sent: {at}"
+  },
+  "audit": {
+    "title": "Audit log",
+    "allActions": "All actions",
+    "allActors": "Everyone",
+    "when": "When",
+    "who": "Who",
+    "action": "Action",
+    "entity": "Entity",
+    "detail": "Details",
+    "empty": "No events for this filter.",
+    "total": "{count} events in total"
   },
   "lowStock": {
     "title": "Low stock ({count})",

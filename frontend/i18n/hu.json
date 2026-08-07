@@ -41,6 +41,7 @@
     "agentReport": "Üzletkötő-elszámolás",
     "importExport": "Import / Export",
     "service": "Szerviz",
+    "audit": "Napló",
     "groups": {
       "overview": "Áttekintés",
       "operations": "Munkavégzés",
@@ -233,6 +234,18 @@
     "emailPrompt": "Címzett email-címe",
     "emailSent": "Bizonylat elküldve emailben.",
     "emailSentAt": "Elküldve: {at}"
+  },
+  "audit": {
+    "title": "Audit napló",
+    "allActions": "Minden művelet",
+    "allActors": "Mindenki",
+    "when": "Mikor",
+    "who": "Ki",
+    "action": "Művelet",
+    "entity": "Érintett",
+    "detail": "Részletek",
+    "empty": "Nincs esemény a szűrésre.",
+    "total": "{count} esemény összesen"
   },
   "lowStock": {
     "title": "Alacsony készlet ({count})",
