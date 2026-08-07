@@ -88,6 +88,10 @@ def _ensure_employee_code_column(sync_conn) -> None:
             )
         )
 
+    # v0.10 — elszámolási bizonylat: partner-aláírás + email-küldés időpontja
+    ensure_column("settlements", "partner_signature", "TEXT")
+    ensure_column("settlements", "receipt_sent_at", "TIMESTAMPTZ" if sync_conn.dialect.name == "postgresql" else "TIMESTAMP")
+
     # v0.8 — gépek (assets) törzsadat-bővítés
     ensure_column("assets", "manufacturer", "VARCHAR(128)")
     ensure_column("assets", "article_number", "VARCHAR(64)")

@@ -257,6 +257,117 @@ async def test_bulk_delete_settlement_restores_stock(client, manager, admin):
     assert res3.json()["blocked"][0]["code"] == "settlement.invoiced"
 
 
+PNG_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
+
+
+async def test_settlement_receipt_pdf_and_signature(client, manager):
+    """Bizonylat PDF letölthető; a partner-aláírás rögzíthető és a PDF-be kerül."""
+    _, mgr = manager
+    _, _, body = await _setup_settlement(client, mgr)
+
+    res = await client.get(f"/api/settlements/{body['id']}/pdf", headers=mgr)
+    assert res.status_code == 200, res.text
+    assert res.headers["content-type"] == "application/pdf"
+    assert res.content[:5] == b"%PDF-"
+
+    # érvénytelen aláírás-adat
+    bad = await client.post(
+        f"/api/settlements/{body['id']}/signature",
+        json={"signature": "data:text/plain;base64,aGVsbG8hIGl0J3Mgbm90IGEgcG5n"},
+        headers=mgr,
+    )
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["code"] == "settlement.bad_signature"
+
+    ok = await client.post(
+        f"/api/settlements/{body['id']}/signature",
+        json={"signature": PNG_DATA_URL},
+        headers=mgr,
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["has_signature"] is True
+
+    # aláírással is generálható a PDF
+    res2 = await client.get(f"/api/settlements/{body['id']}/pdf", headers=mgr)
+    assert res2.status_code == 200
+
+
+async def test_settlement_receipt_email_requires_config(client, manager):
+    """Email-küldés: cím nélkül settlement.no_email, SMTP nélkül
+    settings.email_not_configured."""
+    _, mgr = manager
+    _, _, body = await _setup_settlement(client, mgr)  # partner email: p@example.com
+
+    # cím nélkül a partner kapcsolattartói emailje a default → SMTP-hiba jön
+    res = await client.post(
+        f"/api/settlements/{body['id']}/receipt-email", json={}, headers=mgr
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "settings.email_not_configured"
+
+    # email nélküli partnernél cím sincs → settlement.no_email
+    no_mail = (
+        await client.post("/api/partners", json={"name": "Némacím Bt."}, headers=mgr)
+    ).json()
+    prod = await make_product(client, mgr, name="Néma kávé")
+    await client.post(
+        f"/api/partners/{no_mail['id']}/stock/replenish",
+        json={"product_id": prod["id"], "quantity": 1.0},
+        headers=mgr,
+    )
+    s2 = (
+        await client.post(
+            "/api/settlements",
+            json={
+                "partner_id": no_mail["id"],
+                "payment_method": "cash",
+                "lines": [{"product_id": prod["id"], "physical_qty": 0.5}],
+            },
+            headers=mgr,
+        )
+    ).json()
+    res2 = await client.post(
+        f"/api/settlements/{s2['id']}/receipt-email", json={}, headers=mgr
+    )
+    assert res2.status_code == 422
+    assert res2.json()["detail"]["code"] == "settlement.no_email"
+
+
+async def test_due_settlements(client, manager):
+    """Esedékesek: készletes, sosem elszámolt partner szerepel; a most
+    elszámolt (0 napja) nem éri el a 30 napos küszöböt."""
+    _, mgr = manager
+    # sosem elszámolt, de van kint készlete
+    waiting = await make_partner(client, mgr, name="Váró Bt.")
+    product = await make_product(client, mgr, name="Váró kávé")
+    await client.post(
+        f"/api/partners/{waiting['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 2.0},
+        headers=mgr,
+    )
+    # most elszámolt partner
+    await _setup_settlement(client, mgr)
+    # készlet és elszámolás nélküli partner — nem releváns
+    await make_partner(client, mgr, name="Üres Kft.")
+
+    due = (await client.get("/api/settlements/due?days=30", headers=mgr)).json()
+    names = [d["name"] for d in due]
+    assert "Váró Bt." in names
+    assert "Kávézó Bt." not in names  # ma volt elszámolva
+    assert "Üres Kft." not in names
+    row = next(d for d in due if d["name"] == "Váró Bt.")
+    assert row["last_settlement_at"] is None
+    assert row["days_since"] is None
+    assert row["stock_products"] == 1
+
+    # 1 napos küszöbbel sem jelenik meg a ma elszámolt (0 nap < 1 nap)
+    due1 = (await client.get("/api/settlements/due?days=1", headers=mgr)).json()
+    assert "Kávézó Bt." not in [d["name"] for d in due1]
+
+
 async def test_agent_summary(client, manager):
     """Üzletkötő-elszámolás: agents lista + fizetési módonkénti összesítés."""
     _, mgr = manager

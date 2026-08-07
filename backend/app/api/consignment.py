@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import math
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import delete as sa_delete, func as sa_func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -333,6 +333,8 @@ class SettlementOut(BaseModel):
     invoiced: bool
     billingo_document_id: str | None
     billingo_status: str | None
+    has_signature: bool = False
+    receipt_sent_at: datetime | None = None
     note: str | None
     created_at: datetime
     lines: list[SettlementLineOut] | None = None
@@ -370,6 +372,8 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         invoiced=s.invoiced,
         billingo_document_id=s.billingo_document_id,
         billingo_status=s.billingo_status,
+        has_signature=bool(s.partner_signature),
+        receipt_sent_at=s.receipt_sent_at,
         note=s.note,
         created_at=s.created_at,
     )
@@ -679,6 +683,78 @@ async def settlement_summary(
     }
 
 
+class DuePartnerOut(BaseModel):
+    partner_id: str
+    partner_code: str | None
+    name: str
+    contact_phone: str | None
+    last_settlement_at: datetime | None  # None = még sosem volt elszámolva
+    days_since: int | None
+    stock_products: int  # hány termékből van kint készlete
+
+
+@settlements_router.get("/due", response_model=list[DuePartnerOut])
+async def due_settlements(
+    days: int = Query(default=30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """Esedékes elszámolások (látogatási terv): azok az aktív partnerek, akiknél
+    van kint készlet vagy volt már elszámolás, és az utolsó elszámolásuk N+
+    napja történt (vagy még sosem). A legrégebben elszámoltak elöl."""
+    last_at = {
+        pid: at
+        for pid, at in (
+            await db.execute(
+                select(Settlement.partner_id, sa_func.max(Settlement.created_at))
+                .group_by(Settlement.partner_id)
+            )
+        ).all()
+    }
+    stock_counts = {
+        pid: int(cnt)
+        for pid, cnt in (
+            await db.execute(
+                select(PartnerStock.partner_id, sa_func.count())
+                .where(PartnerStock.quantity > 0)
+                .group_by(PartnerStock.partner_id)
+            )
+        ).all()
+    }
+    relevant = set(last_at) | set(stock_counts)
+    if not relevant:
+        return []
+    partners = (
+        await db.execute(
+            select(Partner).where(Partner.id.in_(relevant), Partner.is_active.is_(True))
+        )
+    ).scalars().all()
+
+    now = datetime.now(UTC)
+    out: list[DuePartnerOut] = []
+    for p in partners:
+        last = last_at.get(p.id)
+        if last is not None and last.tzinfo is None:
+            last = last.replace(tzinfo=UTC)  # SQLite naiv datetime-ot ad vissza
+        since = (now - last).days if last is not None else None
+        if since is not None and since < days:
+            continue
+        out.append(
+            DuePartnerOut(
+                partner_id=str(p.id),
+                partner_code=p.partner_code,
+                name=p.name,
+                contact_phone=p.contact_phone,
+                last_settlement_at=last,
+                days_since=since,
+                stock_products=stock_counts.get(p.id, 0),
+            )
+        )
+    # sosem elszámoltak elöl, utána a legrégebbiek
+    out.sort(key=lambda d: (d.days_since is not None, -(d.days_since or 0)))
+    return out
+
+
 @settlements_router.get("/{settlement_id}", response_model=SettlementOut)
 async def get_settlement(
     settlement_id: str,
@@ -744,3 +820,171 @@ async def invoice_settlement(
     )
     await db.commit()
     return _settlement_out(s, partner.name)
+
+
+# ─── Bizonylat: PDF + aláírás + email ────────────────────────────────────────
+
+
+def _receipt_no(s: Settlement) -> str:
+    return f"ELSZ-{s.created_at:%Y%m%d}-{str(s.id)[:8].upper()}"
+
+
+async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes, str]:
+    """A bizonylat PDF-je — (pdf_bytes, bizonylatszám)."""
+    from app.models import WorksheetSettings
+    from app.services.wfm.settlement_pdf import build_settlement_pdf
+
+    partner = (
+        await db.execute(select(Partner).where(Partner.id == s.partner_id))
+    ).scalar_one_or_none()
+    lines = (
+        await db.execute(select(SettlementLine).where(SettlementLine.settlement_id == s.id))
+    ).scalars().all()
+
+    branding = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    settings = None
+    if branding is not None:
+        settings = {
+            "company_name": branding.company_name,
+            "company_address": branding.company_address,
+            "footer_text": branding.footer_text,
+            "accent_color": branding.accent_color,
+            "logo_bytes": bytes(branding.logo_data) if branding.logo_data else None,
+        }
+
+    receipt_no = _receipt_no(s)
+    pdf = build_settlement_pdf(
+        {
+            "receipt_no": receipt_no,
+            "created_at": f"{s.created_at:%Y-%m-%d %H:%M}",
+            "partner_name": partner.name if partner else "—",
+            "partner_code": partner.partner_code if partner else None,
+            "partner_address": partner.address if partner else None,
+            "partner_tax_number": partner.tax_number if partner else None,
+            "settled_by_name": s.settled_by_name,
+            "payment_method": s.payment_method,
+            "invoiced": s.invoiced,
+            "billingo_document_id": s.billingo_document_id,
+            "note": s.note,
+            "lines": [
+                {
+                    "product_name": line.product_name,
+                    "previous_qty": line.previous_qty,
+                    "physical_qty": line.physical_qty,
+                    "consumed_qty": line.consumed_qty,
+                    "portions": line.portions,
+                    "price_per_portion": line.price_per_portion,
+                    "amount_net": line.amount_net,
+                    "amount_gross": _money(line.amount_net * (1 + line.vat_percent / 100)),
+                }
+                for line in lines
+            ],
+            "total_net": s.total_net,
+            "total_gross": s.total_gross,
+            "partner_signature": s.partner_signature,
+            "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
+        },
+        settings,
+    )
+    return pdf, receipt_no
+
+
+@settlements_router.get("/{settlement_id}/pdf")
+async def settlement_pdf(
+    settlement_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    s = await _get_settlement_or_404(db, settlement_id)
+    pdf, receipt_no = await _build_settlement_pdf(db, s)
+    await record_audit(
+        db, actor=actor, action="settlement.pdf", entity_type="settlement",
+        entity_id=str(s.id), request=request,
+    )
+    await db.commit()
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{receipt_no}.pdf"'},
+    )
+
+
+class SignatureBody(BaseModel):
+    signature: str = Field(min_length=30, max_length=500_000)
+
+
+@settlements_router.post("/{settlement_id}/signature", response_model=SettlementOut)
+async def sign_settlement(
+    settlement_id: str,
+    body: SignatureBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """A partner képernyős aláírásának rögzítése a bizonylathoz."""
+    if not body.signature.startswith("data:image/png;base64,"):
+        raise HTTPException(status_code=422, detail={"code": "settlement.bad_signature"})
+    s = await _get_settlement_or_404(db, settlement_id)
+    s.partner_signature = body.signature
+    partner_name = (
+        await db.execute(select(Partner.name).where(Partner.id == s.partner_id))
+    ).scalar_one_or_none()
+    await record_audit(
+        db, actor=actor, action="settlement.sign", entity_type="settlement",
+        entity_id=str(s.id), request=request,
+    )
+    await db.commit()
+    return _settlement_out(s, partner_name)
+
+
+class ReceiptEmailBody(BaseModel):
+    to: EmailStr | None = None  # None → a partner kapcsolattartói email-címe
+
+
+@settlements_router.post("/{settlement_id}/receipt-email", response_model=SettlementOut)
+async def email_settlement_receipt(
+    settlement_id: str,
+    body: ReceiptEmailBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """A bizonylat PDF elküldése emailben a partnernek (vagy megadott címre)."""
+    from app.services.wfm.email_service import load_smtp_config, send_email
+
+    s = await _get_settlement_or_404(db, settlement_id)
+    partner = (
+        await db.execute(select(Partner).where(Partner.id == s.partner_id))
+    ).scalar_one_or_none()
+    to = body.to or (partner.contact_email if partner else None)
+    if not to:
+        raise HTTPException(status_code=422, detail={"code": "settlement.no_email"})
+
+    smtp = await load_smtp_config(db)
+    if smtp is None:
+        raise HTTPException(status_code=422, detail={"code": "settings.email_not_configured"})
+
+    pdf, receipt_no = await _build_settlement_pdf(db, s)
+    ok = await send_email(
+        smtp,
+        to,
+        f"Elszámolási bizonylat — {receipt_no}",
+        (
+            f"Tisztelt Partnerünk!\n\nMellékelve küldjük a(z) {receipt_no} számú "
+            f"elszámolási bizonylatot.\n\nÜdvözlettel:\n{s.settled_by_name}"
+        ),
+        attachments=[(f"{receipt_no}.pdf", pdf, "application", "pdf")],
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail={"code": "settings.email_send_failed"})
+
+    s.receipt_sent_at = datetime.now(UTC)
+    await record_audit(
+        db, actor=actor, action="settlement.receipt_email", entity_type="settlement",
+        entity_id=str(s.id), detail={"to": to}, request=request,
+    )
+    await db.commit()
+    return _settlement_out(s, partner.name if partner else None)

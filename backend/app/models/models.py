@@ -687,6 +687,9 @@ class Settlement(Base):
     invoiced: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     billingo_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     billingo_status: Mapped[str | None] = mapped_column(String(16), nullable=True)  # created|error|none
+    # A partner képernyős aláírása a bizonylaton (PNG data URL)
+    partner_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    receipt_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

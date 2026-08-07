@@ -6,7 +6,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { api, errorMessage } from "@/lib/api";
+import SignatureCanvas from "@/components/SignatureCanvas";
+import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -14,6 +15,7 @@ import { useUI } from "@/lib/ui";
 interface Partner {
   id: string;
   name: string;
+  contact_email: string | null;
   is_active: boolean;
 }
 
@@ -43,14 +45,26 @@ interface Settlement {
   total_gross: number;
   invoiced: boolean;
   billingo_status: string | null;
+  has_signature: boolean;
+  receipt_sent_at: string | null;
   created_at: string;
+}
+
+interface DuePartner {
+  partner_id: string;
+  partner_code: string | null;
+  name: string;
+  contact_phone: string | null;
+  last_settlement_at: string | null;
+  days_since: number | null;
+  stock_products: number;
 }
 
 const PAYMENTS = ["cash", "card", "transfer"] as const;
 
 export default function ElszamolasPage() {
   const { t, lang } = useT();
-  const { toast, confirm } = useUI();
+  const { toast, confirm, prompt } = useUI();
   const canDelete = usePerms().can("delete");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -62,6 +76,10 @@ export default function ElszamolasPage() {
   const [note, setNote] = useState("");
   const [history, setHistory] = useState<Settlement[]>([]);
   const [replenish, setReplenish] = useState<{ product_id: string; quantity: string } | null>(null);
+  const [due, setDue] = useState<DuePartner[]>([]);
+  const [showDue, setShowDue] = useState(true);
+  const [signing, setSigning] = useState<Settlement | null>(null);
+  const [signature, setSignature] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,8 +105,13 @@ export default function ElszamolasPage() {
     api.get<Settlement[]>(`/api/settlements${params}`).then(setHistory).catch(() => {});
   }, [partnerId]);
 
+  const loadDue = useCallback(() => {
+    api.get<DuePartner[]>("/api/settlements/due?days=30").then(setDue).catch(() => {});
+  }, []);
+
   useEffect(loadStock, [loadStock]);
   useEffect(loadHistory, [loadHistory]);
+  useEffect(loadDue, [loadDue]);
 
   // Élő fogyás-előnézet a beírt leltár alapján
   const preview = useMemo(() => {
@@ -142,6 +165,9 @@ export default function ElszamolasPage() {
       setNote("");
       loadStock();
       loadHistory();
+      loadDue();
+      setSigning(res); // elszámolás után rögtön aláírathatjuk a partnerrel
+      setSignature(null);
     } catch (err) {
       toast(errorMessage(err), "error");
     } finally {
@@ -176,6 +202,7 @@ export default function ElszamolasPage() {
       setSelected(new Set());
       loadHistory();
       loadStock(); // a törlés visszaállítja a készletet
+      loadDue();
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -185,6 +212,44 @@ export default function ElszamolasPage() {
     try {
       const res = await api.post<Settlement>(`/api/settlements/${s.id}/invoice`);
       toast(t("cons.invoiceOk", { mode: res.billingo_status ?? "?" }), "success");
+      loadHistory();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function downloadReceipt(s: Settlement) {
+    try {
+      const day = s.created_at.slice(0, 10).replaceAll("-", "");
+      await downloadFile(`/api/settlements/${s.id}/pdf`, `ELSZ-${day}-${s.id.slice(0, 8).toUpperCase()}.pdf`);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function saveSignature() {
+    if (!signing || !signature) return;
+    setBusy(true);
+    try {
+      await api.post(`/api/settlements/${signing.id}/signature`, { signature });
+      toast(t("cons.signatureSaved"), "success");
+      setSigning(null);
+      setSignature(null);
+      loadHistory();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function emailReceipt(s: Settlement) {
+    const partnerEmail = partners.find((p) => p.id === s.partner_id)?.contact_email ?? "";
+    const to = await prompt(t("cons.emailPrompt"), { type: "email", initial: partnerEmail });
+    if (to === null) return;
+    try {
+      await api.post(`/api/settlements/${s.id}/receipt-email`, { to: to.trim() });
+      toast(t("cons.emailSent"), "success");
       loadHistory();
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -216,6 +281,60 @@ export default function ElszamolasPage() {
           </button>
         )}
       </div>
+
+      {due.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
+          <button
+            onClick={() => setShowDue((v) => !v)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <span className="font-semibold text-amber-900">
+              {t("cons.dueTitle", { count: due.length })}
+            </span>
+            <span className="text-amber-700">{showDue ? "▾" : "▸"}</span>
+          </button>
+          {showDue && (
+            <div className="overflow-x-auto border-t border-amber-200">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-amber-700">
+                    <th className="px-4 py-2">{t("cons.partner")}</th>
+                    <th className="px-4 py-2">{t("cons.dueLast")}</th>
+                    <th className="px-4 py-2">{t("cons.dueDays")}</th>
+                    <th className="px-4 py-2">{t("cons.dueStock")}</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {due.map((d) => (
+                    <tr key={d.partner_id} className="border-t border-amber-100">
+                      <td className="px-4 py-2 font-medium text-amber-950">
+                        {d.name}
+                        {d.partner_code && <span className="ml-2 text-xs text-amber-600">{d.partner_code}</span>}
+                      </td>
+                      <td className="px-4 py-2 text-amber-800">
+                        {d.last_settlement_at ? fmt(d.last_settlement_at) : t("cons.dueNever")}
+                      </td>
+                      <td className="px-4 py-2 text-amber-800">
+                        {d.days_since !== null ? t("cons.dueDaysAgo", { days: d.days_since }) : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-amber-800">{d.stock_products}</td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => setPartnerId(d.partner_id)}
+                          className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700"
+                        >
+                          {t("cons.dueSettle")}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {partnerId && (
         <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -344,18 +463,45 @@ export default function ElszamolasPage() {
                 <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
                 <td className="px-4 py-3 font-medium">{ft(s.total_gross)}</td>
                 <td className="px-4 py-3 text-right">
-                  {s.invoiced ? (
-                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                      {t("cons.invoiced")}{s.billingo_status ? ` (${s.billingo_status})` : ""}
-                    </span>
-                  ) : (
+                  <div className="flex items-center justify-end gap-1.5">
                     <button
-                      onClick={() => invoice(s)}
-                      className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                      onClick={() => downloadReceipt(s)}
+                      title={t("cons.receiptPdf")}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
                     >
-                      {t("cons.invoiceBtn")}
+                      PDF
                     </button>
-                  )}
+                    {s.has_signature ? (
+                      <span title={t("cons.signed")} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">✍ ✓</span>
+                    ) : (
+                      <button
+                        onClick={() => { setSigning(s); setSignature(null); }}
+                        title={t("cons.signBtn")}
+                        className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                      >
+                        ✍
+                      </button>
+                    )}
+                    <button
+                      onClick={() => emailReceipt(s)}
+                      title={s.receipt_sent_at ? t("cons.emailSentAt", { at: fmt(s.receipt_sent_at) }) : t("cons.emailBtn")}
+                      className={`rounded border px-2 py-1 text-xs hover:bg-slate-100 ${s.receipt_sent_at ? "border-emerald-300 text-emerald-700" : "border-slate-300"}`}
+                    >
+                      ✉{s.receipt_sent_at ? " ✓" : ""}
+                    </button>
+                    {s.invoiced ? (
+                      <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                        {t("cons.invoiced")}{s.billingo_status ? ` (${s.billingo_status})` : ""}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => invoice(s)}
+                        className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                      >
+                        {t("cons.invoiceBtn")}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -365,6 +511,37 @@ export default function ElszamolasPage() {
           </tbody>
         </table>
       </div>
+
+      {signing && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) { setSigning(null); setSignature(null); } }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        >
+          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">{t("cons.signTitle")}</h2>
+            <p className="text-sm text-slate-600">
+              {signing.partner_name} · {ft(signing.total_gross)} · {fmt(signing.created_at)}
+            </p>
+            <SignatureCanvas label={t("cons.signLabel")} onChange={setSignature} />
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setSigning(null); setSignature(null); }}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={saveSignature}
+                disabled={busy || !signature}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {busy ? t("common.saving") : t("cons.signSave")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {replenish && (
         <div
