@@ -55,7 +55,10 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     labelKey: "nav.groups.system",
-    items: [{ href: "/beallitasok", key: "nav.settings", roles: ["admin"] }],
+    items: [
+      { href: "/import-export", key: "nav.importExport", roles: ["admin", "manager"] },
+      { href: "/beallitasok", key: "nav.settings", roles: ["admin"] },
+    ],
   },
   {
     labelKey: "nav.groups.personal",
