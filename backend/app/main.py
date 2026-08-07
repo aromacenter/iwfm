@@ -13,6 +13,7 @@ from app.api import (
     consignment,
     dashboard,
     employees,
+    geo,
     import_export,
     inventory,
     kiosk,
@@ -156,6 +157,7 @@ def create_app() -> FastAPI:
     app.include_router(consignment.stock_router, prefix="/api/partners", tags=["partner-stock"])
     app.include_router(consignment.settlements_router, prefix="/api/settlements", tags=["settlements"])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
+    app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
 
     @app.get("/api/health")
     async def health():

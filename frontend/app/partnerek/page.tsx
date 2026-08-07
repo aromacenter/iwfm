@@ -3,7 +3,7 @@
 /** Partnerek törzsadat: cégadatok (adószám, cégjegyzékszám, bank, fizetési
  *  határidő), kapcsolattartó, székhely/számlázási cím — teljes nyilvántartás. */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -176,6 +176,27 @@ export default function PartnerekPage() {
     }
   }
 
+  // Irányítószám → város automatikus kitöltés (4 számjegynél, ha a város üres
+  // vagy egy korábbi auto-kitöltés eredménye).
+  const lastAutoCity = useRef<Record<string, string>>({});
+
+  async function zipLookup(zipKey: "address_zip" | "billing_zip", zip: string) {
+    const cityKey = zipKey === "address_zip" ? "address_city" : "billing_city";
+    if (!/^\d{4}$/.test(zip)) return;
+    try {
+      const res = await api.get<{ city: string }>(`/api/geo/zip/${zip}`);
+      setForm((f) => {
+        if (!f) return f;
+        const current = String(f[cityKey] ?? "").trim();
+        if (current && current !== lastAutoCity.current[cityKey]) return f; // kézi értéket nem írunk felül
+        lastAutoCity.current[cityKey] = res.city;
+        return { ...f, [cityKey]: res.city };
+      });
+    } catch {
+      /* ismeretlen irányítószám — nem töltünk ki semmit */
+    }
+  }
+
   const field = (
     label: string,
     key: keyof typeof EMPTY,
@@ -186,7 +207,12 @@ export default function PartnerekPage() {
       <input
         type={opts.type ?? "text"}
         value={form ? String(form[key] ?? "") : ""}
-        onChange={(e) => form && setForm({ ...form, [key]: e.target.value })}
+        onChange={(e) => {
+          if (!form) return;
+          const value = e.target.value;
+          setForm({ ...form, [key]: value });
+          if (key === "address_zip" || key === "billing_zip") zipLookup(key, value.trim());
+        }}
         className={`mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 ${opts.mono ? "font-mono" : ""}`}
       />
     </label>
