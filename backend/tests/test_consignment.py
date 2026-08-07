@@ -368,6 +368,96 @@ async def test_due_settlements(client, manager):
     assert "Kávézó Bt." not in [d["name"] for d in due1]
 
 
+async def test_receivables_and_mark_paid(client, manager):
+    """Kintlévőségek: kézzel számlázottra állított utalásos elszámolás
+    megjelenik, lejárat számítódik, fizetve-jelöléssel eltűnik."""
+    import uuid as _uuid
+    from datetime import date as _date, timedelta as _td
+
+    from sqlalchemy import select as _select
+
+    import app.db as app_db
+    from app.models import Settlement
+
+    _, mgr = manager
+    partner, product, _first = await _setup_settlement(client, mgr)
+    res = await client.post(
+        "/api/settlements",
+        json={
+            "partner_id": partner["id"],
+            "payment_method": "transfer",
+            "lines": [{"product_id": product["id"], "physical_qty": 0.1}],
+        },
+        headers=mgr,
+    )
+    sid = res.json()["id"]
+
+    # nem számlázott → mark-paid 422
+    denied = await client.post(f"/api/settlements/{sid}/mark-paid", headers=mgr)
+    assert denied.status_code == 422
+    assert denied.json()["detail"]["code"] == "settlement.not_invoiced"
+
+    # kézzel számlázottra állítjuk 5 napja lejárt határidővel
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        s = (
+            await session.execute(_select(Settlement).where(Settlement.id == _uuid.UUID(sid)))
+        ).scalar_one()
+        s.invoiced = True
+        s.payment_status = "outstanding"
+        s.due_date = _date.today() - _td(days=5)
+        await session.commit()
+
+    recv = (await client.get("/api/settlements/receivables", headers=mgr)).json()
+    assert len(recv) == 1
+    assert recv[0]["days_overdue"] == 5
+    assert recv[0]["partner_name"] == "Kávézó Bt."
+
+    ok = await client.post(f"/api/settlements/{sid}/mark-paid", headers=mgr)
+    assert ok.status_code == 200
+    assert ok.json()["payment_status"] == "paid"
+    assert ok.json()["paid_at"] is not None
+
+    assert (await client.get("/api/settlements/receivables", headers=mgr)).json() == []
+
+    # kétszer nem jelölhető
+    again = await client.post(f"/api/settlements/{sid}/mark-paid", headers=mgr)
+    assert again.status_code == 409
+    assert again.json()["detail"]["code"] == "settlement.already_paid"
+
+
+async def test_sync_payment_requires_billingo(client, manager):
+    import uuid as _uuid
+
+    from sqlalchemy import select as _select
+
+    import app.db as app_db
+    from app.models import Settlement
+
+    _, mgr = manager
+    _, _, body = await _setup_settlement(client, mgr)
+    sid = body["id"]
+
+    # nem számlázott → 422 not_invoiced
+    res = await client.post(f"/api/settlements/{sid}/sync-payment", headers=mgr)
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "settlement.not_invoiced"
+
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        s = (
+            await session.execute(_select(Settlement).where(Settlement.id == _uuid.UUID(sid)))
+        ).scalar_one()
+        s.invoiced = True
+        s.billingo_document_id = "12345"
+        await session.commit()
+
+    # Billingó-konfiguráció nélkül 422
+    res2 = await client.post(f"/api/settlements/{sid}/sync-payment", headers=mgr)
+    assert res2.status_code == 422
+    assert res2.json()["detail"]["code"] == "settings.billingo_not_configured"
+
+
 async def test_agent_summary(client, manager):
     """Üzletkötő-elszámolás: agents lista + fizetési módonkénti összesítés."""
     _, mgr = manager

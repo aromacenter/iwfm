@@ -93,6 +93,20 @@ def _ensure_employee_code_column(sync_conn) -> None:
     ensure_column("settlements", "partner_signature", "TEXT")
     ensure_column("settlements", "receipt_sent_at", "TIMESTAMPTZ" if sync_conn.dialect.name == "postgresql" else "TIMESTAMP")
 
+    # v0.11 — kintlévőség-követés: fizetési státusz + határidő + fizetve-időpont.
+    # Meglévő számlázott sorok backfillje: készpénz/kártya = fizetve, utalás = kint.
+    ensure_column("settlements", "payment_status", "VARCHAR(16) NOT NULL DEFAULT 'none'")
+    ensure_column("settlements", "due_date", "DATE")
+    ensure_column("settlements", "paid_at", "TIMESTAMPTZ" if sync_conn.dialect.name == "postgresql" else "TIMESTAMP")
+    if "settlements" in tables:
+        sync_conn.execute(
+            sql_text(
+                "UPDATE settlements SET payment_status = CASE "
+                "WHEN payment_method IN ('cash','card') THEN 'paid' ELSE 'outstanding' END "
+                "WHERE invoiced AND payment_status = 'none'"
+            )
+        )
+
     # v0.8 — gépek (assets) törzsadat-bővítés
     ensure_column("assets", "manufacturer", "VARCHAR(128)")
     ensure_column("assets", "article_number", "VARCHAR(64)")

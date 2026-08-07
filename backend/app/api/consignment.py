@@ -335,6 +335,9 @@ class SettlementOut(BaseModel):
     billingo_status: str | None
     has_signature: bool = False
     receipt_sent_at: datetime | None = None
+    payment_status: str = "none"
+    due_date: date | None = None
+    paid_at: datetime | None = None
     note: str | None
     created_at: datetime
     lines: list[SettlementLineOut] | None = None
@@ -374,6 +377,9 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         billingo_status=s.billingo_status,
         has_signature=bool(s.partner_signature),
         receipt_sent_at=s.receipt_sent_at,
+        payment_status=s.payment_status,
+        due_date=s.due_date,
+        paid_at=s.paid_at,
         note=s.note,
         created_at=s.created_at,
     )
@@ -755,6 +761,117 @@ async def due_settlements(
     return out
 
 
+class ReceivableOut(BaseModel):
+    id: str
+    partner_id: str
+    partner_name: str | None
+    payment_method: str
+    total_gross: float
+    billingo_document_id: str | None
+    billingo_status: str | None
+    due_date: date | None
+    days_overdue: int  # 0, ha még nem járt le
+    created_at: datetime
+
+
+@settlements_router.get("/receivables", response_model=list[ReceivableOut])
+async def list_receivables(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """Kintlévőségek: kiszámlázott, de még nem fizetett elszámolások.
+    A lejártak elöl, a legrégebb óta lejárt legfelül."""
+    rows = (
+        await db.execute(
+            select(Settlement, Partner.name)
+            .join(Partner, Partner.id == Settlement.partner_id)
+            .where(Settlement.invoiced.is_(True), Settlement.payment_status == "outstanding")
+            .order_by(Settlement.due_date.asc().nulls_last())
+        )
+    ).all()
+    today = date.today()
+    out = []
+    for s, partner_name in rows:
+        overdue = (today - s.due_date).days if s.due_date and s.due_date < today else 0
+        out.append(
+            ReceivableOut(
+                id=str(s.id),
+                partner_id=str(s.partner_id),
+                partner_name=partner_name,
+                payment_method=s.payment_method,
+                total_gross=s.total_gross,
+                billingo_document_id=s.billingo_document_id,
+                billingo_status=s.billingo_status,
+                due_date=s.due_date,
+                days_overdue=overdue,
+                created_at=s.created_at,
+            )
+        )
+    out.sort(key=lambda r: -r.days_overdue)
+    return out
+
+
+@settlements_router.post("/{settlement_id}/mark-paid", response_model=SettlementOut)
+async def mark_settlement_paid(
+    settlement_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    """Kézi „fizetve” jelölés (pl. beérkezett utalás alapján)."""
+    s = await _get_settlement_or_404(db, settlement_id)
+    if not s.invoiced:
+        raise HTTPException(status_code=422, detail={"code": "settlement.not_invoiced"})
+    if s.payment_status == "paid":
+        raise HTTPException(status_code=409, detail={"code": "settlement.already_paid"})
+    s.payment_status = "paid"
+    s.paid_at = datetime.now(UTC)
+    partner_name = (
+        await db.execute(select(Partner.name).where(Partner.id == s.partner_id))
+    ).scalar_one_or_none()
+    await record_audit(
+        db, actor=actor, action="settlement.mark_paid", entity_type="settlement",
+        entity_id=str(s.id), request=request,
+    )
+    await db.commit()
+    return _settlement_out(s, partner_name)
+
+
+@settlements_router.post("/{settlement_id}/sync-payment")
+async def sync_settlement_payment(
+    settlement_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    """Fizetési státusz frissítése a Billingóból. Ha ott már fizetve, itt is
+    fizetettre áll."""
+    from app.services.wfm.billingo_service import fetch_payment_status
+
+    s = await _get_settlement_or_404(db, settlement_id)
+    if not s.invoiced or not s.billingo_document_id:
+        raise HTTPException(status_code=422, detail={"code": "settlement.not_invoiced"})
+    try:
+        status = await fetch_payment_status(db, s.billingo_document_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "settlement.sync_failed"})
+
+    changed = False
+    if status == "paid" and s.payment_status != "paid":
+        s.payment_status = "paid"
+        s.paid_at = datetime.now(UTC)
+        changed = True
+    if changed:
+        await record_audit(
+            db, actor=actor, action="settlement.payment_synced", entity_type="settlement",
+            entity_id=str(s.id), detail={"billingo_status": status}, request=request,
+        )
+        await db.commit()
+    return {"billingo_payment_status": status, "payment_status": s.payment_status}
+
+
 @settlements_router.get("/{settlement_id}", response_model=SettlementOut)
 async def get_settlement(
     settlement_id: str,
@@ -798,7 +915,7 @@ async def invoice_settlement(
         raise HTTPException(status_code=404, detail={"code": "partner.not_found"})
 
     try:
-        document_id, mode = await create_invoice_for_settlement(db, s, partner)
+        document_id, mode, due = await create_invoice_for_settlement(db, s, partner)
     except ValueError as exc:
         code = str(exc)
         if code == "billingo_not_configured":
@@ -814,6 +931,13 @@ async def invoice_settlement(
     s.invoiced = True
     s.billingo_document_id = document_id
     s.billingo_status = mode  # 'proforma' (teszt) | 'invoice' (éles)
+    # Kintlévőség: készpénz/kártya azonnal fizetve; utalásnál határidő fut.
+    if s.payment_method in ("cash", "card"):
+        s.payment_status = "paid"
+        s.paid_at = datetime.now(UTC)
+    else:
+        s.payment_status = "outstanding"
+        s.due_date = due
     await record_audit(
         db, actor=actor, action="settlement.invoice", entity_type="settlement",
         entity_id=str(s.id), detail={"billingo_id": document_id, "mode": mode}, request=request,

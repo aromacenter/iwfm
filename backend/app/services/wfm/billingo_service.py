@@ -12,6 +12,7 @@ API: https://api.billingo.hu/v3 (X-API-KEY fejléc).
 from __future__ import annotations
 
 import logging
+from datetime import date, timedelta
 
 import httpx
 from sqlalchemy import select
@@ -94,11 +95,13 @@ async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> in
 
 async def create_invoice_for_settlement(
     db: AsyncSession, settlement: Settlement, partner: Partner
-) -> tuple[str, str]:
+) -> tuple[str, str, date]:
     """Billingó bizonylat létrehozása az elszámoláshoz.
 
-    Visszatérés: (document_id, mode) — mode: 'proforma' (teszt) | 'invoice'.
-    ValueError('billingo_not_configured'), ha nincs kulcs/blokk-azonosító.
+    Visszatérés: (document_id, mode, due_date) — mode: 'proforma' (teszt) |
+    'invoice'. A fizetési határidő a partner payment_terms_days értéke
+    (alapértelmezés: 8 nap). ValueError('billingo_not_configured'), ha nincs
+    kulcs/blokk-azonosító.
     """
     settings = await get_or_create_settings(db)
     api_key = decrypt_pii(settings.api_key_encrypted)
@@ -131,16 +134,16 @@ async def create_invoice_for_settlement(
 
     billingo_partner_id = await _find_or_create_billingo_partner(api_key, partner)
 
-    from datetime import date, timedelta
-
     today = date.today()
+    terms_days = partner.payment_terms_days if (partner.payment_terms_days or 0) > 0 else 8
+    due = today + timedelta(days=terms_days)
     doc_type = "proforma" if settings.test_mode else "invoice"
     body = {
         "partner_id": billingo_partner_id,
         "block_id": settings.block_id,
         "type": doc_type,
         "fulfillment_date": today.isoformat(),
-        "due_date": (today + timedelta(days=8)).isoformat(),
+        "due_date": due.isoformat(),
         "payment_method": PAYMENT_METHOD_MAP.get(settlement.payment_method, "cash"),
         "language": "hu",
         "currency": "HUF",
@@ -148,7 +151,20 @@ async def create_invoice_for_settlement(
         "items": items,
     }
     created = await _api(api_key, "POST", "/documents", body)
-    return str(created.get("id", "")), doc_type
+    return str(created.get("id", "")), doc_type, due
+
+
+async def fetch_payment_status(db: AsyncSession, document_id: str) -> str | None:
+    """A Billingó-bizonylat fizetési státusza (pl. 'paid', 'no_payment',
+    'partially_paid'). None, ha a válaszban nincs státusz.
+    ValueError('billingo_not_configured'), ha nincs API-kulcs."""
+    settings = await get_or_create_settings(db)
+    api_key = decrypt_pii(settings.api_key_encrypted)
+    if not settings.enabled or not api_key:
+        raise ValueError("billingo_not_configured")
+    data = await _api(api_key, "GET", f"/documents/{document_id}")
+    status = data.get("payment_status")
+    return str(status) if status else None
 
 
 async def test_connection(db: AsyncSession) -> dict:

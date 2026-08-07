@@ -34,12 +34,25 @@ interface Summary {
   count: number;
 }
 
+interface Receivable {
+  id: string;
+  partner_name: string | null;
+  payment_method: "cash" | "card" | "transfer";
+  total_gross: number;
+  billingo_document_id: string | null;
+  due_date: string | null;
+  days_overdue: number;
+  created_at: string;
+}
+
 const PAYMENTS = ["cash", "card", "transfer"] as const;
 
 export default function UzletkotoPage() {
   const { t, lang } = useT();
   const { toast, confirm } = useUI();
-  const canDelete = usePerms().can("delete");
+  const { can } = usePerms();
+  const canDelete = can("delete");
+  const canInvoice = can("invoicing");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState("");
@@ -47,6 +60,7 @@ export default function UzletkotoPage() {
   const [dateTo, setDateTo] = useState("");
   const [rows, setRows] = useState<Settlement[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [receivables, setReceivables] = useState<Receivable[]>([]);
 
   const fmt = (dt: string) =>
     new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "short" });
@@ -65,6 +79,39 @@ export default function UzletkotoPage() {
     api.get<Summary>(`/api/settlements/summary?${params}`).then(setSummary).catch(() => {});
   }, [agentId, dateFrom, dateTo]);
   useEffect(load, [load]);
+
+  const loadReceivables = useCallback(() => {
+    if (!canInvoice) return;
+    api.get<Receivable[]>("/api/settlements/receivables").then(setReceivables).catch(() => {});
+  }, [canInvoice]);
+  useEffect(loadReceivables, [loadReceivables]);
+
+  async function markPaid(r: Receivable) {
+    if (!(await confirm(t("recv.markPaidConfirm", { name: r.partner_name ?? "?", gross: r.total_gross.toLocaleString("hu-HU") })))) return;
+    try {
+      await api.post(`/api/settlements/${r.id}/mark-paid`);
+      toast(t("recv.markedPaid"), "success");
+      loadReceivables();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function syncPayment(r: Receivable) {
+    try {
+      const res = await api.post<{ billingo_payment_status: string | null; payment_status: string }>(
+        `/api/settlements/${r.id}/sync-payment`,
+      );
+      if (res.payment_status === "paid") {
+        toast(t("recv.syncedPaid"), "success");
+      } else {
+        toast(t("recv.syncedNotPaid", { status: res.billingo_payment_status ?? "?" }), "info");
+      }
+      loadReceivables();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   function toggleSelect(id: string) {
     setSelected((s) => {
@@ -188,6 +235,71 @@ export default function UzletkotoPage() {
           </tbody>
         </table>
       </div>
+
+      {canInvoice && receivables.length > 0 && (
+        <div className="mb-6">
+          <h2 className="mb-2 font-semibold">{t("recv.title", { count: receivables.length })}</h2>
+          <div className="overflow-x-auto rounded-2xl border border-red-200 bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-red-200 bg-red-50 text-left text-xs uppercase text-red-700">
+                  <th className="px-4 py-3">{t("cons.partner")}</th>
+                  <th className="px-4 py-3">{t("cons.date")}</th>
+                  <th className="px-4 py-3">{t("recv.dueDate")}</th>
+                  <th className="px-4 py-3">{t("recv.overdue")}</th>
+                  <th className="px-4 py-3">{t("cons.amountGross")}</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {receivables.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-100 last:border-0">
+                    <td className="px-4 py-3 font-medium">{r.partner_name}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{fmt(r.created_at)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {r.due_date ? new Date(r.due_date).toLocaleDateString(lang === "hu" ? "hu-HU" : "en-GB") : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.days_overdue > 0 ? (
+                        <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                          {t("recv.overdueDays", { days: r.days_overdue })}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">{t("recv.notYetDue")}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-medium">{ft(r.total_gross)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {r.billingo_document_id && (
+                          <button
+                            onClick={() => syncPayment(r)}
+                            title={t("recv.syncTitle")}
+                            className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                          >
+                            {t("recv.sync")}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => markPaid(r)}
+                          className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                        >
+                          {t("recv.markPaid")}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-red-50 font-semibold text-red-800">
+                  <td className="px-4 py-3" colSpan={4}>{t("recv.totalOutstanding")}</td>
+                  <td className="px-4 py-3">{ft(receivables.reduce((sum, r) => sum + r.total_gross, 0))}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {summary && (
         <>

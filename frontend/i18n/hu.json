@@ -232,6 +232,21 @@
     "emailSent": "Bizonylat elküldve emailben.",
     "emailSentAt": "Elküldve: {at}"
   },
+  "recv": {
+    "title": "Kintlévőségek ({count})",
+    "dueDate": "Fizetési határidő",
+    "overdue": "Késés",
+    "overdueDays": "{days} napja lejárt",
+    "notYetDue": "határidőn belül",
+    "markPaid": "Fizetve",
+    "markPaidConfirm": "Fizetettnek jelölöd? {name} — {gross} Ft (bruttó).",
+    "markedPaid": "Fizetettnek jelölve.",
+    "sync": "Billingó frissítés",
+    "syncTitle": "Fizetési státusz lekérése a Billingóból",
+    "syncedPaid": "A Billingó szerint fizetve — státusz frissítve.",
+    "syncedNotPaid": "A Billingó szerint még nincs fizetve ({status}).",
+    "totalOutstanding": "Összes kintlévőség"
+  },
   "service": {
     "title": "Szerviz",
     "new": "Új szervizjegy",
@@ -803,6 +818,9 @@
     "settlement.no_items": "Nincs számlázható tétel (nulla fogyás).",
     "settlement.no_email": "Nincs email-cím — add meg a címzettet, vagy rögzíts kapcsolattartói emailt a partnernél.",
     "settlement.bad_signature": "Érvénytelen aláírás-adat — próbáld újra.",
+    "settlement.not_invoiced": "Ez az elszámolás még nincs kiszámlázva.",
+    "settlement.already_paid": "Ez az elszámolás már fizetettnek van jelölve.",
+    "settlement.sync_failed": "A Billingó fizetési státusz lekérése nem sikerült.",
     "service.not_found": "A szervizjegy nem található.",
     "service.bad_status": "Érvénytelen jegy-státusz.",
     "service.bad_kind": "Érvénytelen jegy-típus.",

@@ -232,6 +232,21 @@
     "emailSent": "Receipt sent by email.",
     "emailSentAt": "Sent: {at}"
   },
+  "recv": {
+    "title": "Receivables ({count})",
+    "dueDate": "Due date",
+    "overdue": "Overdue",
+    "overdueDays": "{days} days overdue",
+    "notYetDue": "within terms",
+    "markPaid": "Paid",
+    "markPaidConfirm": "Mark as paid? {name} — {gross} HUF (gross).",
+    "markedPaid": "Marked as paid.",
+    "sync": "Billingó refresh",
+    "syncTitle": "Fetch payment status from Billingó",
+    "syncedPaid": "Paid according to Billingó — status updated.",
+    "syncedNotPaid": "Not yet paid according to Billingó ({status}).",
+    "totalOutstanding": "Total outstanding"
+  },
   "service": {
     "title": "Service",
     "new": "New ticket",
@@ -803,6 +818,9 @@
     "settlement.no_items": "Nothing to invoice (zero consumption).",
     "settlement.no_email": "No email address — enter a recipient or add a contact email to the partner.",
     "settlement.bad_signature": "Invalid signature data — please try again.",
+    "settlement.not_invoiced": "This settlement has not been invoiced yet.",
+    "settlement.already_paid": "This settlement is already marked as paid.",
+    "settlement.sync_failed": "Fetching the Billingó payment status failed.",
     "service.not_found": "Service ticket not found.",
     "service.bad_status": "Invalid ticket status.",
     "service.bad_kind": "Invalid ticket kind.",
