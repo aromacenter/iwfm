@@ -10,6 +10,16 @@ import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
 
+interface ConsStats {
+  monthly_revenue: { month: string; gross: number; count: number }[];
+  top_partners: { name: string; gross: number; count: number }[];
+  agent_ranking: { name: string; gross: number; count: number }[];
+  by_payment: Record<string, { count: number; gross: number }>;
+  outstanding_total: number;
+  open_service_tickets: number;
+  low_stock_count: number;
+}
+
 interface DashboardData {
   todays_tasks: { id: string; title: string; employee_name: string; status: string }[];
   pending_time_off: {
@@ -29,13 +39,17 @@ interface DashboardData {
 
 export default function VezerlopultPage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [stats, setStats] = useState<ConsStats | null>(null);
   const { t, lang } = useT();
   const { toast } = useUI();
 
   const load = useCallback(() => {
     api.get<DashboardData>("/api/dashboard").then(setData).catch(() => {});
+    api.get<ConsStats>("/api/dashboard/consignment-stats").then(setStats).catch(() => {});
   }, []);
   useEffect(load, [load]);
+
+  const ft = (n: number) => `${n.toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
 
   async function decide(id: string, status: "approved" | "rejected") {
     try {
@@ -217,6 +231,113 @@ export default function VezerlopultPage() {
           )}
         </section>
       </div>
+
+      {stats && (
+        <>
+          <h2 className="mb-3 mt-8 text-lg font-bold">{t("dash.consTitle")}</h2>
+
+          <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xs uppercase text-slate-500">{t("dash.statThisMonth")}</p>
+              <p className="mt-1 text-2xl font-bold">
+                {ft(stats.monthly_revenue[stats.monthly_revenue.length - 1]?.gross ?? 0)}
+              </p>
+            </div>
+            <Link href="/uzletkoto" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-red-300">
+              <p className="text-xs uppercase text-slate-500">{t("dash.statOutstanding")}</p>
+              <p className={`mt-1 text-2xl font-bold ${stats.outstanding_total > 0 ? "text-red-600" : ""}`}>
+                {ft(stats.outstanding_total)}
+              </p>
+            </Link>
+            <Link href="/szerviz" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-blue-300">
+              <p className="text-xs uppercase text-slate-500">{t("dash.statOpenTickets")}</p>
+              <p className="mt-1 text-2xl font-bold">{stats.open_service_tickets}</p>
+            </Link>
+            <Link href="/elszamolas" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-rose-300">
+              <p className="text-xs uppercase text-slate-500">{t("dash.statLowStock")}</p>
+              <p className={`mt-1 text-2xl font-bold ${stats.low_stock_count > 0 ? "text-rose-600" : ""}`}>
+                {stats.low_stock_count}
+              </p>
+            </Link>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+              <h3 className="mb-4 font-semibold">{t("dash.monthlyRevenue")}</h3>
+              {(() => {
+                const max = Math.max(...stats.monthly_revenue.map((m) => m.gross), 1);
+                return (
+                  <div className="flex h-40 items-end gap-1.5">
+                    {stats.monthly_revenue.map((m) => (
+                      <div key={m.month} className="group flex flex-1 flex-col items-center gap-1">
+                        <div
+                          title={`${m.month}: ${ft(m.gross)} (${m.count})`}
+                          className="w-full rounded-t bg-indigo-500 transition-colors group-hover:bg-indigo-600"
+                          style={{ height: `${Math.max((m.gross / max) * 100, m.gross > 0 ? 4 : 1)}%` }}
+                        />
+                        <span className="text-[10px] text-slate-400">{m.month.slice(5)}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="mb-3 font-semibold">{t("dash.topPartners")}</h3>
+              {stats.top_partners.length === 0 ? (
+                <p className="text-sm text-slate-400">{t("dash.noStatsData")}</p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {stats.top_partners.map((p, i) => (
+                    <li key={p.name} className="flex items-center justify-between">
+                      <span>
+                        <span className="mr-2 inline-block w-5 text-center font-bold text-slate-400">{i + 1}.</span>
+                        <span className="font-medium">{p.name}</span>
+                        <span className="ml-1 text-xs text-slate-400">({p.count})</span>
+                      </span>
+                      <span className="font-semibold">{ft(p.gross)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="mb-3 font-semibold">{t("dash.agentRanking")}</h3>
+              {stats.agent_ranking.length === 0 ? (
+                <p className="text-sm text-slate-400">{t("dash.noStatsData")}</p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {stats.agent_ranking.map((a, i) => (
+                    <li key={a.name} className="flex items-center justify-between">
+                      <span>
+                        <span className="mr-2 inline-block w-5 text-center font-bold text-slate-400">{i + 1}.</span>
+                        <span className="font-medium">{a.name}</span>
+                        <span className="ml-1 text-xs text-slate-400">({a.count})</span>
+                      </span>
+                      <span className="font-semibold">{ft(a.gross)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+              <h3 className="mb-3 font-semibold">{t("dash.paymentSplit")}</h3>
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                {(["cash", "card", "transfer"] as const).map((m) => (
+                  <div key={m} className="rounded-xl bg-slate-50 p-3 text-center">
+                    <p className="text-xs uppercase text-slate-500">{t(`cons.payments.${m}`)}</p>
+                    <p className="mt-1 font-bold">{ft(stats.by_payment[m]?.gross ?? 0)}</p>
+                    <p className="text-xs text-slate-400">{stats.by_payment[m]?.count ?? 0} db</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </>
+      )}
     </AppShell>
   );
 }

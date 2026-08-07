@@ -368,6 +368,23 @@ async def test_due_settlements(client, manager):
     assert "Kávézó Bt." not in [d["name"] for d in due1]
 
 
+async def test_consignment_stats(client, manager):
+    """Vezérlőpult-statisztika: havi bevétel, top partner, üzletkötő, megoszlás."""
+    _, mgr = manager
+    await _setup_settlement(client, mgr)  # 6350 Ft bruttó, cash
+
+    stats = (await client.get("/api/dashboard/consignment-stats", headers=mgr)).json()
+    assert len(stats["monthly_revenue"]) == 12
+    assert abs(stats["monthly_revenue"][-1]["gross"] - 6350.0) < 0.01  # e havi
+    assert stats["top_partners"][0]["name"] == "Kávézó Bt."
+    assert len(stats["agent_ranking"]) == 1
+    assert stats["by_payment"]["cash"]["count"] == 1
+    assert stats["by_payment"]["card"]["count"] == 0
+    assert stats["outstanding_total"] == 0
+    assert stats["open_service_tickets"] == 0
+    assert stats["low_stock_count"] == 0
+
+
 async def test_low_stock_alert(client, manager):
     """Küszöb alatti készlet jelez; küszöb nélküli termék sosem."""
     _, mgr = manager
