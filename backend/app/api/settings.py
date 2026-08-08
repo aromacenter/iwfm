@@ -496,6 +496,50 @@ async def update_billingo_settings(
     return _billingo_out(row)
 
 
+# ─── Ügyfél-támogatás (QR-oldal tudásbázisa) ────────────────────────────────
+
+
+class SupportSettingsBody(BaseModel):
+    knowledge_base: str | None = Field(default=None, max_length=100_000)
+
+
+@router.get("/support")
+async def get_support_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    from app.models import SupportSettings
+
+    row = (
+        await db.execute(select(SupportSettings).where(SupportSettings.id == 1))
+    ).scalar_one_or_none()
+    return {"knowledge_base": row.knowledge_base if row else None}
+
+
+@router.put("/support")
+async def update_support_settings(
+    body: SupportSettingsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    from app.models import SupportSettings
+
+    row = (
+        await db.execute(select(SupportSettings).where(SupportSettings.id == 1))
+    ).scalar_one_or_none()
+    if row is None:
+        row = SupportSettings(id=1)
+        db.add(row)
+    row.knowledge_base = body.knowledge_base
+    await record_audit(
+        db, actor=actor, action="settings.support_update", entity_type="settings",
+        entity_id="support", request=request,
+    )
+    await db.commit()
+    return {"knowledge_base": row.knowledge_base}
+
+
 # ─── Jogosultságok (szerepkör × funkció mátrix) ─────────────────────────────
 
 

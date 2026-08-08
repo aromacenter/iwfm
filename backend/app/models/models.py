@@ -518,6 +518,8 @@ class Asset(Base):
     counter: Mapped[int | None] = mapped_column(Integer, nullable=True)  # számláló-állás
     norm: Mapped[float | None] = mapped_column(Float, nullable=True)  # norma
     tangible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # tárgyi eszköz
+    # QR-címke: kitalálhatatlan token a nyilvános támogatási oldalhoz.
+    qr_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="in_stock")
     partner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True
@@ -795,6 +797,38 @@ class ServiceTicket(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class TicketAttachment(Base):
+    """Szervizjegyhez csatolt kép (ügyfél-bejelentésből vagy belső feltöltésből).
+    A kép bináris adata a DB-ben él (kis darabszám, egyszerű mentés/backup)."""
+
+    __tablename__ = "ticket_attachments"
+    __table_args__ = (Index("ix_ticket_attachments_ticket", "ticket_id"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    ticket_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("service_tickets.id", ondelete="CASCADE"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(256), nullable=False)
+    mime: Mapped[str] = mapped_column(String(64), nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SupportSettings(Base):
+    """Ügyfél-támogatás beállításai — egyetlen sor (id=1). A tudásbázis szabad
+    szöveg (markdown), ebből válaszol az AI chat a nyilvános QR-oldalon."""
+
+    __tablename__ = "support_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    knowledge_base: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

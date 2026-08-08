@@ -60,6 +60,19 @@ export async function downloadFile(path: string, filename: string) {
   triggerDownload(blob, filename);
 }
 
+/** POST-kéréssel előállított fájl letöltése (pl. tömeges QR-címkeív). */
+export async function downloadFilePost(path: string, body: unknown, filename: string) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new ApiError(res.status, `http.${res.status}`, null);
+  const blob = await res.blob();
+  triggerDownload(blob, filename);
+}
+
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

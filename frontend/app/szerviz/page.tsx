@@ -106,6 +106,7 @@ export default function SzervizPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
   const [form, setForm] = useState<FormState | null>(null);
+  const [attachments, setAttachments] = useState<{ id: string; filename: string }[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +140,10 @@ export default function SzervizPage() {
 
   function openEdit(tk: Ticket) {
     setError(null);
+    setAttachments([]);
+    api.get<{ id: string; filename: string }[]>(`/api/service/${tk.id}/attachments`)
+      .then(setAttachments)
+      .catch(() => {});
     setForm({
       id: tk.id,
       title: tk.title,
@@ -501,6 +506,23 @@ export default function SzervizPage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
+            {form.id && attachments.length > 0 && (
+              <div className="text-sm">
+                <p className="mb-1">{t("service.attachments")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map((a) => (
+                    <a key={a.id} href={`/api/service/attachments/${a.id}`} target="_blank" rel="noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/service/attachments/${a.id}`}
+                        alt={a.filename}
+                        className="h-20 w-20 rounded-lg border border-slate-200 object-cover hover:opacity-80"
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             {form.id && (
               <>
                 <label className="block text-sm">

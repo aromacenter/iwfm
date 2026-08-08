@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
-import { api, ApiError, errorMessage } from "@/lib/api";
+import { api, ApiError, downloadFile, downloadFilePost, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -153,6 +153,23 @@ export default function GepekPage() {
     });
   }
 
+  async function downloadQrLabel(a: Asset) {
+    try {
+      await downloadFile(`/api/assets/${a.id}/qr-label`, `QR-${a.barcode}.pdf`);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function downloadQrLabels() {
+    if (selected.size === 0) return;
+    try {
+      await downloadFilePost("/api/assets/qr-labels", { ids: [...selected] }, "QR-cimkek.pdf");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function bulkDelete() {
     if (selected.size === 0) return;
     if (!(await confirm(t("bulk.confirm", { count: selected.size })))) return;
@@ -290,6 +307,14 @@ export default function GepekPage() {
             {t("bulk.deleteSelected", { count: selected.size })}
           </button>
         )}
+        {selected.size > 0 && (
+          <button
+            onClick={downloadQrLabels}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
+          >
+            {t("inv.qrLabels", { count: selected.size })}
+          </button>
+        )}
         <Link href="/partnerek" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">
           {t("inv.partners")}
         </Link>
@@ -374,6 +399,9 @@ export default function GepekPage() {
                         {t("inv.deploy")}
                       </button>
                     ) : null}
+                    <button onClick={() => downloadQrLabel(a)} title={t("inv.qrLabel")} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
+                      QR
+                    </button>
                     <button onClick={() => openHistory(a)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
                       {t("inv.history")}
                     </button>

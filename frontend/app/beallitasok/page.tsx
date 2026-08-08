@@ -50,7 +50,7 @@ const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-
 
 export default function BeallitasokPage() {
   const { t } = useT();
-  const { confirm } = useUI();
+  const { confirm, toast } = useUI();
 
   // --- Email ---
   const [email, setEmail] = useState({
@@ -99,6 +99,8 @@ export default function BeallitasokPage() {
   const [billingoHasKey, setBillingoHasKey] = useState(false);
   const [billingoMsg, setBillingoMsg] = useState<string | null>(null);
   const [billingoBusy, setBillingoBusy] = useState(false);
+  const [knowledgeBase, setKnowledgeBase] = useState("");
+  const [kbBusy, setKbBusy] = useState(false);
 
   // --- Munkalap-PDF testreszabás ---
   const [ws, setWs] = useState({
@@ -175,6 +177,10 @@ export default function BeallitasokPage() {
         });
         setBillingoHasKey(s.has_api_key);
       })
+      .catch(() => {});
+    api
+      .get<{ knowledge_base: string | null }>("/api/settings/support")
+      .then((s) => setKnowledgeBase(s.knowledge_base ?? ""))
       .catch(() => {});
     api
       .get<WorksheetSettings>("/api/settings/worksheet")
@@ -316,6 +322,19 @@ export default function BeallitasokPage() {
       setPermMsg(errorMessage(err));
     } finally {
       setPermBusy(false);
+    }
+  }
+
+  async function saveKnowledgeBase(e: React.FormEvent) {
+    e.preventDefault();
+    setKbBusy(true);
+    try {
+      await api.put("/api/settings/support", { knowledge_base: knowledgeBase || null });
+      toast(t("settings.kbSaved"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setKbBusy(false);
     }
   }
 
@@ -587,6 +606,25 @@ export default function BeallitasokPage() {
               {t("settings.billingoTest")}
             </button>
           </div>
+        </form>
+
+        {/* Ügyfél-támogatás tudásbázis (QR-oldal AI chat) */}
+        <form
+          onSubmit={saveKnowledgeBase}
+          className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        >
+          <h2 className="font-semibold">{t("settings.kbTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.kbHint")}</p>
+          <textarea
+            value={knowledgeBase}
+            onChange={(e) => setKnowledgeBase(e.target.value)}
+            rows={10}
+            placeholder={t("settings.kbPlaceholder")}
+            className={`${inputCls} font-mono text-xs`}
+          />
+          <button disabled={kbBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            {kbBusy ? t("common.saving") : t("common.save")}
+          </button>
         </form>
 
         {/* Email értesítések */}

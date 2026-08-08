@@ -11,14 +11,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_perm
 from app.db import get_db
-from app.models import Asset, Partner, ServiceTicket, User
+from app.models import Asset, Partner, ServiceTicket, TicketAttachment, User
 
 router = APIRouter()
 
@@ -385,6 +385,50 @@ async def update_ticket(
     return _out(tk)
 
 
+@router.get("/attachments/{attachment_id}")
+async def get_attachment(
+    attachment_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("service")),
+):
+    """Csatolt kép letöltése/megjelenítése."""
+    try:
+        aid = uuid.UUID(attachment_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "service.not_found"})
+    att = (
+        await db.execute(select(TicketAttachment).where(TicketAttachment.id == aid))
+    ).scalar_one_or_none()
+    if att is None:
+        raise HTTPException(status_code=404, detail={"code": "service.not_found"})
+    return Response(
+        content=bytes(att.data),
+        media_type=att.mime,
+        headers={"Content-Disposition": f'inline; filename="{att.filename}"'},
+    )
+
+
+@router.get("/{ticket_id}/attachments")
+async def list_attachments(
+    ticket_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("service")),
+):
+    """A jegyhez csatolt képek metaadatai (a kép a /attachments/{id} úton jön)."""
+    tk = await _get_ticket_or_404(db, ticket_id)
+    rows = (
+        await db.execute(
+            select(TicketAttachment)
+            .where(TicketAttachment.ticket_id == tk.id)
+            .order_by(TicketAttachment.created_at)
+        )
+    ).scalars().all()
+    return [
+        {"id": str(a.id), "filename": a.filename, "mime": a.mime, "size": len(a.data)}
+        for a in rows
+    ]
+
+
 class BulkDeleteBody(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=1000)
 
@@ -407,6 +451,7 @@ async def bulk_delete_tickets(
         ).scalar_one_or_none()
         if tk is None:
             continue
+        await db.execute(sa_delete(TicketAttachment).where(TicketAttachment.ticket_id == tid))
         await db.delete(tk)
         deleted += 1
     await record_audit(

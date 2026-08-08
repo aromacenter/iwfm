@@ -22,6 +22,7 @@ from app.api import (
     payroll,
     portal,
     service,
+    support,
     settings as settings_api,
     shifts,
     tasks,
@@ -122,6 +123,15 @@ def _ensure_employee_code_column(sync_conn) -> None:
             )
         )
 
+    # v0.14 — gép QR-token a nyilvános támogatási oldalhoz
+    ensure_column("assets", "qr_token", "VARCHAR(64)")
+    if "assets" in tables:
+        sync_conn.execute(
+            sql_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_assets_qr_token ON assets (qr_token)"
+            )
+        )
+
     # v0.8 — gépek (assets) törzsadat-bővítés
     ensure_column("assets", "manufacturer", "VARCHAR(128)")
     ensure_column("assets", "article_number", "VARCHAR(64)")
@@ -212,6 +222,8 @@ def create_app() -> FastAPI:
     app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
     app.include_router(portal.router, prefix="/api/portal", tags=["portal"])
     app.include_router(portal.manage_router, prefix="/api/partners", tags=["portal"])
+    app.include_router(support.labels_router, prefix="/api/assets", tags=["support"])
+    app.include_router(support.public_router, prefix="/api/support", tags=["support"])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
 
