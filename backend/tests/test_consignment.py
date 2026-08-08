@@ -158,8 +158,9 @@ async def test_billingo_settings_roundtrip(client, admin):
     assert "api_key" not in body  # a kulcs sosem megy vissza
 
 
-async def test_bulk_delete_products_and_stock_guard(client, manager, admin):
-    """Termék tömeges törlés: kint lévő készletű blokkolva, üres törölhető."""
+async def test_bulk_delete_products_removes_stock(client, manager, admin):
+    """Termék tömeges törlés: kint lévő készletű is törölhető — a partner-
+    készlet nyilvántartása is törlődik, a korábbi elszámolások megmaradnak."""
     _, mgr = manager
     _, adm = admin
     partner = await make_partner(client, mgr, name="Raktáras Bt.")
@@ -178,12 +179,12 @@ async def test_bulk_delete_products_and_stock_guard(client, manager, admin):
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body["deleted"] == 1
-    assert len(body["blocked"]) == 1
-    assert body["blocked"][0]["code"] == "product.has_stock"
+    assert body["deleted"] == 2
+    assert body["blocked"] == []
 
-    names = {p["name"] for p in (await client.get("/api/products", headers=mgr)).json()}
-    assert "Üres termék" not in names and "Kint lévő kávé" in names
+    assert (await client.get("/api/products", headers=mgr)).json() == []
+    # a partner készletnézete is kiürült
+    assert (await client.get(f"/api/partners/{partner['id']}/stock", headers=mgr)).json() == []
 
 
 async def test_bulk_delete_partner_guards(client, manager, admin):

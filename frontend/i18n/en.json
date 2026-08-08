@@ -212,6 +212,7 @@
     "dateTo": "To",
     "summaryByPayment": "Summary by payment method",
     "count": "Count",
+    "productDeleteConfirm": "Delete the {count} selected product(s)? Their stock records at partners and movement history will also be removed; past settlements are kept. This cannot be undone.",
     "lowStockThreshold": "Alert threshold (kg)",
     "noAlert": "no alert",
     "settlementSaved": "Settlement recorded — total: {gross} HUF (gross).",

@@ -212,6 +212,7 @@
     "dateTo": "Eddig",
     "summaryByPayment": "Összesítés fizetési módonként",
     "count": "Darab",
+    "productDeleteConfirm": "Biztosan törlöd a kijelölt {count} terméket? A partnereknél nyilvántartott készlete és a mozgástörténete is törlődik; a korábbi elszámolások megmaradnak. Ez nem vonható vissza.",
     "lowStockThreshold": "Riasztási küszöb (kg)",
     "noAlert": "nincs riasztás",
     "settlementSaved": "Elszámolás rögzítve — összeg: {gross} Ft (bruttó).",

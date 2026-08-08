@@ -191,14 +191,13 @@ async def bulk_delete_products(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("delete")),
 ):
-    """Termékek (tömeges) törlése. Ha egy termékből még van kint készlet
-    valamelyik partnernél (>0), nem törölhető — előbb el kell számolni
-    (blocked listában jelezzük, a többi törlődik). Az elszámolás-tételek
-    pillanatkép-nevet őriznek, így a korábbi elszámolások olvashatók maradnak."""
+    """Termékek (tömeges) törlése. A kint lévő partner-készlet nyilvántartása
+    és a mozgástörténet is törlődik a termékkel együtt (a törlés-megerősítő
+    figyelmeztet erre); az elszámolás-tételek pillanatkép-nevet őriznek, így a
+    korábbi elszámolások olvashatók maradnak."""
     from app.models import SettlementLine
 
     deleted = 0
-    blocked: list[dict] = []
     for raw in body.ids:
         try:
             pid = uuid.UUID(raw)
@@ -208,16 +207,6 @@ async def bulk_delete_products(
             await db.execute(select(Product).where(Product.id == pid))
         ).scalar_one_or_none()
         if product is None:
-            continue
-        has_stock = (
-            await db.execute(
-                select(PartnerStock.id)
-                .where(PartnerStock.product_id == pid, PartnerStock.quantity > 0)
-                .limit(1)
-            )
-        ).first()
-        if has_stock is not None:
-            blocked.append({"id": str(pid), "name": product.name, "code": "product.has_stock"})
             continue
         # függő rekordok explicit takarítása (SQLite-on nincs FK-cascade garancia)
         await db.execute(sa_delete(PartnerStock).where(PartnerStock.product_id == pid))
@@ -230,10 +219,10 @@ async def bulk_delete_products(
         deleted += 1
     await record_audit(
         db, actor=actor, action="product.bulk_delete", entity_type="product",
-        detail={"deleted": deleted, "blocked": len(blocked)}, request=request,
+        detail={"deleted": deleted}, request=request,
     )
     await db.commit()
-    return {"deleted": deleted, "blocked": blocked}
+    return {"deleted": deleted, "blocked": []}
 
 
 # ─── Partner-készlet (külső raktár) ──────────────────────────────────────────

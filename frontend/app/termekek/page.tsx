@@ -75,7 +75,7 @@ export default function TermekekPage() {
 
   async function bulkDelete() {
     if (selected.size === 0) return;
-    if (!(await confirm(t("bulk.confirm", { count: selected.size })))) return;
+    if (!(await confirm(t("cons.productDeleteConfirm", { count: selected.size })))) return;
     try {
       const res = await api.post<{ deleted: number; blocked: { name: string; code: string }[] }>(
         "/api/products/bulk-delete",
