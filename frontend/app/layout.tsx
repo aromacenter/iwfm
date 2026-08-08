@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LanguageProvider } from "@/lib/i18n";
+import { PermissionsProvider } from "@/lib/perms";
 import { UIProvider } from "@/lib/ui";
 import "./globals.css";
 
@@ -30,7 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen antialiased">
         <LanguageProvider>
-          <UIProvider>{children}</UIProvider>
+          <UIProvider>
+            <PermissionsProvider>{children}</PermissionsProvider>
+          </UIProvider>
         </LanguageProvider>
       </body>
     </html>

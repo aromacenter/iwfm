@@ -267,14 +267,16 @@ export default function VezerlopultPage() {
               {(() => {
                 const max = Math.max(...stats.monthly_revenue.map((m) => m.gross), 1);
                 return (
-                  <div className="flex h-40 items-end gap-1.5">
+                  <div className="flex h-40 gap-1.5">
                     {stats.monthly_revenue.map((m) => (
-                      <div key={m.month} className="group flex flex-1 flex-col items-center gap-1">
-                        <div
-                          title={`${m.month}: ${ft(m.gross)} (${m.count})`}
-                          className="w-full rounded-t bg-indigo-500 transition-colors group-hover:bg-indigo-600"
-                          style={{ height: `${Math.max((m.gross / max) * 100, m.gross > 0 ? 4 : 1)}%` }}
-                        />
+                      <div key={m.month} className="group flex h-full flex-1 flex-col items-center gap-1">
+                        <div className="flex w-full flex-1 items-end">
+                          <div
+                            title={`${m.month}: ${ft(m.gross)} (${m.count})`}
+                            className="w-full rounded-t bg-indigo-500 transition-colors group-hover:bg-indigo-600"
+                            style={{ height: `${Math.max((m.gross / max) * 100, m.gross > 0 ? 4 : 1)}%` }}
+                          />
+                        </div>
                         <span className="text-[10px] text-slate-400">{m.month.slice(5)}</span>
                       </div>
                     ))}

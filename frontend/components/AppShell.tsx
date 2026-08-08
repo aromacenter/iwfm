@@ -8,7 +8,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
-import { PermissionsContext } from "@/lib/perms";
 import type { AuthUser } from "@/lib/types";
 
 interface NavItem {
@@ -253,7 +252,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <main className="min-w-0 flex-1">
         <div className="mx-auto max-w-6xl px-4 py-6">
-          <PermissionsContext.Provider value={perms}>{children}</PermissionsContext.Provider>
+          {children}
         </div>
       </main>
 
