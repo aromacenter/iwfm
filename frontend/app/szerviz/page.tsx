@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -320,12 +321,20 @@ export default function SzervizPage() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <IconLegend
+        items={[
+          { icon: "▶️", label: t("service.start") },
+          { icon: "✅", label: t("service.finish") },
+          { icon: "🚫", label: t("service.cancel") },
+          { icon: "🔄", label: t("service.reopen") },
+        ]}
+      />
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+            <tr className="text-left text-xs uppercase text-slate-500">
               {canDelete && (
-                <th className="w-8 px-3 py-3">
+                <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                   <input
                     type="checkbox"
                     checked={tickets.length > 0 && tickets.every((tk) => selected.has(tk.id))}
@@ -336,14 +345,11 @@ export default function SzervizPage() {
                   />
                 </th>
               )}
-              <th className="px-4 py-3">{t("service.ticketNo")}</th>
-              <th className="px-4 py-3">{t("service.titleCol")}</th>
-              <th className="px-4 py-3">{t("service.kind")}</th>
-              <th className="px-4 py-3">{t("service.machine")}</th>
-              <th className="px-4 py-3">{t("service.assignee")}</th>
-              <th className="px-4 py-3">{t("service.priority")}</th>
-              <th className="px-4 py-3">{t("service.status")}</th>
-              <th className="px-4 py-3"></th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("service.titleCol")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("service.machine")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("service.assignee")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("service.status")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
@@ -359,20 +365,25 @@ export default function SzervizPage() {
                     />
                   </td>
                 )}
-                <td className="px-4 py-3 font-mono text-xs">{tk.ticket_no}</td>
                 <td className="px-4 py-3">
                   <button onClick={() => openEdit(tk)} className="font-medium text-indigo-700 hover:underline">
                     {tk.title}
                   </button>
-                  <div className="text-xs text-slate-400">{fmt(tk.created_at)}</div>
+                  <div className="text-xs text-slate-400">
+                    <span className="font-mono">{tk.ticket_no}</span> · {fmt(tk.created_at)} ·{" "}
+                    {t(`service.kinds.${tk.kind}`)}
+                    {tk.priority !== "normal" && (
+                      <span className={`ml-1 ${PRIORITY_STYLE[tk.priority]}`}>
+                        · {t(`service.priorities.${tk.priority}`)}
+                      </span>
+                    )}
+                  </div>
                 </td>
-                <td className="px-4 py-3">{t(`service.kinds.${tk.kind}`)}</td>
                 <td className="px-4 py-3">
                   {tk.asset_label ?? "—"}
                   {tk.partner_label && <div className="text-xs text-slate-400">{tk.partner_label}</div>}
                 </td>
                 <td className="px-4 py-3">{tk.assigned_to_name ?? "—"}</td>
-                <td className={`px-4 py-3 ${PRIORITY_STYLE[tk.priority]}`}>{t(`service.priorities.${tk.priority}`)}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[tk.status]}`}>
                     {t(`service.statuses.${tk.status}`)}
@@ -383,33 +394,37 @@ export default function SzervizPage() {
                     {tk.status === "open" && (
                       <button
                         onClick={() => setStatus(tk, "in_progress")}
-                        className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                        title={t("service.start")}
+                        className="rounded border border-blue-300 px-2 py-1 text-sm leading-none hover:bg-blue-50"
                       >
-                        {t("service.start")}
+                        ▶️
                       </button>
                     )}
                     {(tk.status === "open" || tk.status === "in_progress") && (
                       <>
                         <button
                           onClick={() => setStatus(tk, "done")}
-                          className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                          title={t("service.finish")}
+                          className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none hover:bg-emerald-50"
                         >
-                          {t("service.finish")}
+                          ✅
                         </button>
                         <button
                           onClick={() => setStatus(tk, "cancelled")}
-                          className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
+                          title={t("service.cancel")}
+                          className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                         >
-                          {t("service.cancel")}
+                          🚫
                         </button>
                       </>
                     )}
                     {(tk.status === "done" || tk.status === "cancelled") && (
                       <button
                         onClick={() => setStatus(tk, "open")}
-                        className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
+                        title={t("service.reopen")}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                       >
-                        {t("service.reopen")}
+                        🔄
                       </button>
                     )}
                   </div>
@@ -418,7 +433,7 @@ export default function SzervizPage() {
             ))}
             {tickets.length === 0 && (
               <tr>
-                <td colSpan={canDelete ? 9 : 8} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={canDelete ? 6 : 5} className="px-4 py-10 text-center text-slate-400">
                   {t("service.empty")}
                 </td>
               </tr>

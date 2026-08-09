@@ -1,5 +1,6 @@
 {
   "common": {
+    "icons": "Icons:",
     "loading": "Loading…",
     "save": "Save",
     "saving": "Saving…",
@@ -234,7 +235,8 @@
     "emailBtn": "Email receipt",
     "emailPrompt": "Recipient email address",
     "emailSent": "Receipt sent by email.",
-    "emailSentAt": "Sent: {at}"
+    "emailSentAt": "Sent: {at}",
+    "legendDone": "already done (signed / sent)"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -482,6 +484,7 @@
     "email": "Email",
     "hireDate": "Hired",
     "weeklyHours": "Weekly hrs",
+    "sensitiveCol": "Sensitive data",
     "taxId": "Tax ID",
     "taj": "Social security",
     "bankAccount": "Bank account",
@@ -968,6 +971,8 @@
     "colIds": "Identifiers",
     "colPlace": "Partner / location",
     "qrLabels": "QR labels ({count})",
+    "qrLabelsAll": "QR labels (all: {count})",
+    "qrLabelsHint": "Label sheet PDF for the selected machines — with no selection, for every machine in the list",
     "empty": "No assets yet. Add the first one!",
     "newAssetTitle": "Add new asset",
     "editAssetTitle": "Edit asset",

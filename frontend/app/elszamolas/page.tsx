@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
+import IconLegend from "@/components/IconLegend";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, ApiError, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -619,12 +620,20 @@ export default function ElszamolasPage() {
           </button>
         )}
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <IconLegend
+        items={[
+          { icon: "📄", label: t("cons.receiptPdf") },
+          { icon: "✍", label: t("cons.signBtn") },
+          { icon: "✉", label: t("cons.emailBtn") },
+          { icon: "✓", label: t("cons.legendDone") },
+        ]}
+      />
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+            <tr className="text-left text-xs uppercase text-slate-500">
               {canDelete && (
-              <th className="w-8 px-3 py-3">
+              <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                 <input
                   type="checkbox"
                   checked={history.length > 0 && history.every((s) => selected.has(s.id))}
@@ -635,12 +644,11 @@ export default function ElszamolasPage() {
                 />
               </th>
               )}
-              <th className="px-4 py-3">{t("cons.date")}</th>
-              <th className="px-4 py-3">{t("cons.partner")}</th>
-              <th className="px-4 py-3">{t("cons.settledBy")}</th>
-              <th className="px-4 py-3">{t("cons.payment")}</th>
-              <th className="px-4 py-3">{t("cons.total")}</th>
-              <th className="px-4 py-3"></th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.date")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.partner")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.payment")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("cons.total")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
@@ -657,26 +665,28 @@ export default function ElszamolasPage() {
                 </td>
                 )}
                 <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
-                <td className="px-4 py-3">{s.partner_name}</td>
-                <td className="px-4 py-3 text-slate-500">{s.settled_by_name}</td>
+                <td className="px-4 py-3">
+                  <div className="font-medium">{s.partner_name}</div>
+                  <div className="text-xs text-slate-400">{s.settled_by_name}</div>
+                </td>
                 <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
-                <td className="px-4 py-3 font-medium">{ft(s.total_gross)}</td>
+                <td className="px-4 py-3 text-right font-medium">{ft(s.total_gross)}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1.5">
                     <button
                       onClick={() => downloadReceipt(s)}
                       title={t("cons.receiptPdf")}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                      className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                     >
-                      PDF
+                      📄
                     </button>
                     {s.has_signature ? (
-                      <span title={t("cons.signed")} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">✍ ✓</span>
+                      <span title={t("cons.signed")} className="rounded bg-slate-100 px-2 py-1 text-sm leading-none text-slate-600">✍✓</span>
                     ) : (
                       <button
                         onClick={() => { setSigning(s); setSignature(null); }}
                         title={t("cons.signBtn")}
-                        className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                        className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                       >
                         ✍
                       </button>
@@ -684,9 +694,9 @@ export default function ElszamolasPage() {
                     <button
                       onClick={() => emailReceipt(s)}
                       title={s.receipt_sent_at ? t("cons.emailSentAt", { at: fmt(s.receipt_sent_at) }) : t("cons.emailBtn")}
-                      className={`rounded border px-2 py-1 text-xs hover:bg-slate-100 ${s.receipt_sent_at ? "border-emerald-300 text-emerald-700" : "border-slate-300"}`}
+                      className={`rounded border px-2 py-1 text-sm leading-none hover:bg-slate-100 ${s.receipt_sent_at ? "border-emerald-300 text-emerald-700" : "border-slate-300"}`}
                     >
-                      ✉{s.receipt_sent_at ? " ✓" : ""}
+                      ✉{s.receipt_sent_at ? "✓" : ""}
                     </button>
                     {s.invoiced ? (
                       <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
@@ -705,7 +715,7 @@ export default function ElszamolasPage() {
               </tr>
             ))}
             {history.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
             )}
           </tbody>
         </table>

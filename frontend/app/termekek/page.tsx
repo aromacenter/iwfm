@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -143,12 +144,13 @@ export default function TermekekPage() {
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <IconLegend items={[{ icon: "✏️", label: t("common.edit") }]} />
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+            <tr className="text-left text-xs uppercase text-slate-500">
               {canDelete && (
-              <th className="w-8 px-3 py-3">
+              <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                 <input
                   type="checkbox"
                   checked={products.length > 0 && products.every((p) => selected.has(p.id))}
@@ -159,12 +161,12 @@ export default function TermekekPage() {
                 />
               </th>
               )}
-              <th className="px-4 py-3">{t("cons.name")}</th>
-              <th className="px-4 py-3">{t("cons.unit")}</th>
-              <th className="px-4 py-3">{t("cons.gramsPerPortion")}</th>
-              <th className="px-4 py-3">{t("cons.pricePerPortion")}</th>
-              <th className="px-4 py-3">{t("cons.vat")}</th>
-              <th className="px-4 py-3"></th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.name")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.gramsPerPortion")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.pricePerPortion")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.vat")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.lowStockThreshold")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
@@ -181,18 +183,23 @@ export default function TermekekPage() {
                 </td>
                 )}
                 <td className="px-4 py-3">
-                  <span className="font-medium">{p.name}</span>
-                  {!p.is_active && (
-                    <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs">{t("partners.inactive")}</span>
-                  )}
+                  <div className="font-medium">
+                    {p.name}
+                    {!p.is_active && (
+                      <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-normal">{t("partners.inactive")}</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-400">{p.unit}</div>
                 </td>
-                <td className="px-4 py-3 text-slate-500">{p.unit}</td>
                 <td className="px-4 py-3">{p.grams_per_portion} g</td>
-                <td className="px-4 py-3">{p.price_per_portion.toLocaleString("hu-HU")} Ft</td>
+                <td className="px-4 py-3 font-medium">{p.price_per_portion.toLocaleString("hu-HU")} Ft</td>
                 <td className="px-4 py-3 text-slate-500">{p.vat_percent}%</td>
+                <td className="px-4 py-3 text-slate-500">
+                  {p.low_stock_threshold != null ? `${p.low_stock_threshold} ${p.unit}` : "—"}
+                </td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => edit(p)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
-                    {t("common.edit")}
+                  <button onClick={() => edit(p)} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                    ✏️
                   </button>
                 </td>
               </tr>

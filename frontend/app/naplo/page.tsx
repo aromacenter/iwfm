@@ -96,16 +96,16 @@ export default function NaploPage() {
         </label>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-              <th className="px-4 py-3">{t("audit.when")}</th>
-              <th className="px-4 py-3">{t("audit.who")}</th>
-              <th className="px-4 py-3">{t("audit.action")}</th>
-              <th className="px-4 py-3">{t("audit.entity")}</th>
-              <th className="px-4 py-3">{t("audit.detail")}</th>
-              <th className="px-4 py-3">IP</th>
+            <tr className="text-left text-xs uppercase text-slate-500">
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.when")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.who")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.action")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.entity")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.detail")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">IP</th>
             </tr>
           </thead>
           <tbody>

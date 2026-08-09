@@ -1,5 +1,6 @@
 {
   "common": {
+    "icons": "Ikonok:",
     "loading": "Betöltés…",
     "save": "Mentés",
     "saving": "Mentés…",
@@ -234,7 +235,8 @@
     "emailBtn": "Bizonylat küldése emailben",
     "emailPrompt": "Címzett email-címe",
     "emailSent": "Bizonylat elküldve emailben.",
-    "emailSentAt": "Elküldve: {at}"
+    "emailSentAt": "Elküldve: {at}",
+    "legendDone": "már megtörtént (aláírva / elküldve)"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -482,6 +484,7 @@
     "email": "Email",
     "hireDate": "Belépés",
     "weeklyHours": "Heti óra",
+    "sensitiveCol": "Érzékeny adatok",
     "taxId": "Adóazonosító",
     "taj": "TAJ",
     "bankAccount": "Bankszámla",
@@ -968,6 +971,8 @@
     "colIds": "Azonosítók",
     "colPlace": "Partner / hely",
     "qrLabels": "QR-címkék ({count})",
+    "qrLabelsAll": "QR-címkék (mind: {count})",
+    "qrLabelsHint": "Címkeív PDF a kijelölt gépekhez — kijelölés nélkül a lista összes gépéhez",
     "empty": "Nincs eszköz. Vedd fel az elsőt!",
     "newAssetTitle": "Új eszköz felvétele",
     "editAssetTitle": "Eszköz szerkesztése",

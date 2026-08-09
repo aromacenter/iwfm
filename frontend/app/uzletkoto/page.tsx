@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -178,12 +179,12 @@ export default function UzletkotoPage() {
         )}
       </div>
 
-      <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+            <tr className="text-left text-xs uppercase text-slate-500">
               {canDelete && (
-              <th className="w-8 px-3 py-3">
+              <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                 <input
                   type="checkbox"
                   checked={rows.length > 0 && rows.every((s) => selected.has(s.id))}
@@ -194,13 +195,11 @@ export default function UzletkotoPage() {
                 />
               </th>
               )}
-              <th className="px-4 py-3">{t("cons.date")}</th>
-              <th className="px-4 py-3">{t("cons.partner")}</th>
-              <th className="px-4 py-3">{t("cons.settledBy")}</th>
-              <th className="px-4 py-3">{t("cons.payment")}</th>
-              <th className="px-4 py-3">{t("cons.amountNet")}</th>
-              <th className="px-4 py-3">{t("cons.amountGross")}</th>
-              <th className="px-4 py-3">{t("cons.invoiced")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.date")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.partner")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.payment")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("cons.amountGross")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.invoiced")}</th>
             </tr>
           </thead>
           <tbody>
@@ -217,11 +216,15 @@ export default function UzletkotoPage() {
                 </td>
                 )}
                 <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
-                <td className="px-4 py-3">{s.partner_name}</td>
-                <td className="px-4 py-3 text-slate-500">{s.settled_by_name}</td>
+                <td className="px-4 py-3">
+                  <div className="font-medium">{s.partner_name}</div>
+                  <div className="text-xs text-slate-400">{s.settled_by_name}</div>
+                </td>
                 <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
-                <td className="px-4 py-3">{ft(s.total_net)}</td>
-                <td className="px-4 py-3 font-medium">{ft(s.total_gross)}</td>
+                <td className="px-4 py-3 text-right">
+                  <div className="font-medium">{ft(s.total_gross)}</div>
+                  <div className="text-xs text-slate-400">{t("cons.amountNet")}: {ft(s.total_net)}</div>
+                </td>
                 <td className="px-4 py-3">
                   <span className={`rounded px-2 py-0.5 text-xs font-medium ${s.invoiced ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
                     {s.invoiced ? t("cons.invoiced") : t("cons.notInvoiced")}
@@ -230,7 +233,7 @@ export default function UzletkotoPage() {
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
             )}
           </tbody>
         </table>
@@ -239,6 +242,12 @@ export default function UzletkotoPage() {
       {canInvoice && receivables.length > 0 && (
         <div className="mb-6">
           <h2 className="mb-2 font-semibold">{t("recv.title", { count: receivables.length })}</h2>
+          <IconLegend
+            items={[
+              { icon: "✅", label: t("recv.markPaid") },
+              { icon: "🔄", label: t("recv.sync") },
+            ]}
+          />
           <div className="overflow-x-auto rounded-2xl border border-red-200 bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead>
@@ -275,16 +284,17 @@ export default function UzletkotoPage() {
                           <button
                             onClick={() => syncPayment(r)}
                             title={t("recv.syncTitle")}
-                            className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                            className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                           >
-                            {t("recv.sync")}
+                            🔄
                           </button>
                         )}
                         <button
                           onClick={() => markPaid(r)}
-                          className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                          title={t("recv.markPaid")}
+                          className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none hover:bg-emerald-50"
                         >
-                          {t("recv.markPaid")}
+                          ✅
                         </button>
                       </div>
                     </td>

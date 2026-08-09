@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import IconLegend from "@/components/IconLegend";
 import { api, ApiError, downloadFile, downloadFilePost, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -162,9 +163,11 @@ export default function GepekPage() {
   }
 
   async function downloadQrLabels() {
-    if (selected.size === 0) return;
+    // kijelölés nélkül a szűrt lista ÖSSZES gépére készül címkeív
+    const ids = selected.size > 0 ? [...selected] : assets.map((a) => a.id);
+    if (ids.length === 0) return;
     try {
-      await downloadFilePost("/api/assets/qr-labels", { ids: [...selected] }, "QR-cimkek.pdf");
+      await downloadFilePost("/api/assets/qr-labels", { ids }, "QR-cimkek.pdf");
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -299,7 +302,7 @@ export default function GepekPage() {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-        {selected.size > 0 && (
+        {canDelete && selected.size > 0 && (
           <button
             onClick={bulkDelete}
             className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
@@ -307,12 +310,15 @@ export default function GepekPage() {
             {t("bulk.deleteSelected", { count: selected.size })}
           </button>
         )}
-        {selected.size > 0 && (
+        {assets.length > 0 && (
           <button
             onClick={downloadQrLabels}
+            title={t("inv.qrLabelsHint")}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
           >
-            {t("inv.qrLabels", { count: selected.size })}
+            {selected.size > 0
+              ? t("inv.qrLabels", { count: selected.size })
+              : t("inv.qrLabelsAll", { count: assets.length })}
           </button>
         )}
         <Link href="/partnerek" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">
@@ -329,13 +335,21 @@ export default function GepekPage() {
         </p>
       )}
 
+      <IconLegend
+        items={[
+          { icon: "📤", label: t("inv.deploy") },
+          { icon: "📥", label: t("inv.returnBtn") },
+          { icon: "🔳", label: t("inv.qrLabel") },
+          { icon: "🕘", label: t("inv.history") },
+          { icon: "✏️", label: t("common.edit") },
+        ]}
+      />
       {/* Nincs vízszintes görgetés: összevont oszlopok; a fejléc ragadós, hogy
           hosszú listánál is látható maradjon. */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase text-slate-500">
-              {canDelete && (
               <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                 <input
                   type="checkbox"
@@ -346,7 +360,6 @@ export default function GepekPage() {
                   className="h-4 w-4"
                 />
               </th>
-              )}
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colMachine")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colIds")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colPlace")}</th>
@@ -358,7 +371,6 @@ export default function GepekPage() {
           <tbody>
             {assets.map((a) => (
               <tr key={a.id} className="border-b border-slate-100 last:border-0">
-                {canDelete && (
                 <td className="px-3 py-3">
                   <input
                     type="checkbox"
@@ -367,7 +379,6 @@ export default function GepekPage() {
                     className="h-4 w-4"
                   />
                 </td>
-                )}
                 <td className="px-4 py-3">
                   <div className="font-medium">{a.name}</div>
                   <div className="font-mono text-xs font-semibold text-indigo-700">{a.barcode}</div>

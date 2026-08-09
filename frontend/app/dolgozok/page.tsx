@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import IconLegend from "@/components/IconLegend";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -259,20 +260,24 @@ export default function DolgozokPage() {
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {isAdmin && (
+        <IconLegend
+          items={[
+            { icon: "👁", label: t("emp.reveal") },
+            { icon: "✏️", label: t("common.edit") },
+            { icon: "🔑", label: t("account.resetPassword") },
+          ]}
+        />
+      )}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-              <th className="px-4 py-3">{t("emp.name")}</th>
-              <th className="px-4 py-3">{t("emp.code")}</th>
-              <th className="px-4 py-3">{t("emp.jobTitle")}</th>
-              <th className="px-4 py-3">{t("emp.email")}</th>
-              <th className="px-4 py-3">{t("emp.hireDate")}</th>
-              <th className="px-4 py-3">{t("emp.weeklyHours")}</th>
-              <th className="px-4 py-3">{t("emp.taxId")}</th>
-              <th className="px-4 py-3">{t("emp.taj")}</th>
-              <th className="px-4 py-3">{t("emp.bankAccount")}</th>
-              <th className="px-4 py-3"></th>
+            <tr className="text-left text-xs uppercase text-slate-500">
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("emp.name")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("emp.email")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("emp.weeklyHours")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("emp.sensitiveCol")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
@@ -286,6 +291,10 @@ export default function DolgozokPage() {
                       {emp.status === "inactive" && (
                         <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs">{t("emp.inactive")}</span>
                       )}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      <span className="font-mono font-semibold text-indigo-700">{emp.employee_code ?? "—"}</span>
+                      {emp.job_title && <> · {emp.job_title}</>}
                     </div>
                     {(emp.skills ?? []).length > 0 && (
                       <div className="group relative mt-0.5 inline-flex w-fit cursor-default items-center gap-1 text-xs text-slate-400">
@@ -308,39 +317,41 @@ export default function DolgozokPage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 font-mono text-sm font-semibold text-indigo-700">
-                    {emp.employee_code ?? "—"}
+                  <td className="px-4 py-3 text-slate-500">
+                    <div>{emp.email ?? "—"}</div>
+                    <div className="text-xs text-slate-400">{t("emp.hireDate")}: {emp.hire_date}</div>
                   </td>
-                  <td className="px-4 py-3">{emp.job_title ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-500">{emp.email ?? "—"}</td>
-                  <td className="px-4 py-3">{emp.hire_date}</td>
-                  <td className="px-4 py-3">{emp.weekly_hours}h</td>
-                  <td className="px-4 py-3 font-mono text-xs">{rev?.tax_id ?? emp.tax_id_masked ?? "—"}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{rev?.taj ?? emp.taj_masked ?? "—"}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{rev?.bank_account ?? emp.bank_account_masked ?? "—"}</td>
+                  <td className="px-4 py-3 text-right">{emp.weekly_hours}h</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                    <div><span className="font-sans text-slate-400">{t("emp.taxId")}: </span>{rev?.tax_id ?? emp.tax_id_masked ?? "—"}</div>
+                    <div><span className="font-sans text-slate-400">{t("emp.taj")}: </span>{rev?.taj ?? emp.taj_masked ?? "—"}</div>
+                    <div><span className="font-sans text-slate-400">{t("emp.bankAccount")}: </span>{rev?.bank_account ?? emp.bank_account_masked ?? "—"}</div>
+                  </td>
                   <td className="px-4 py-3 text-right">
                     {isAdmin && (
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-1.5">
                         {!rev && (emp.tax_id_masked || emp.taj_masked) && (
                           <button
                             onClick={() => reveal(emp.id)}
-                            className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                            className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                             title={t("emp.revealTitle")}
                           >
-                            {t("emp.reveal")}
+                            👁
                           </button>
                         )}
                         <button
                           onClick={() => openEdit(emp)}
-                          className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                          title={t("common.edit")}
+                          className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                         >
-                          {t("common.edit")}
+                          ✏️
                         </button>
                         <button
                           onClick={() => resetPassword(emp.id)}
-                          className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                          title={t("account.resetPassword")}
+                          className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                         >
-                          {t("account.resetPassword")}
+                          🔑
                         </button>
                       </div>
                     )}
@@ -350,7 +361,7 @@ export default function DolgozokPage() {
             })}
             {employees.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
                   {t("emp.empty")}
                 </td>
               </tr>
