@@ -32,7 +32,10 @@ from app.core.config import get_settings
 from app.db import get_db
 from app.models import (
     Asset,
+    AssetMovement,
     Partner,
+    Product,
+    ProductOrder,
     ServiceTicket,
     SupportSettings,
     TicketAttachment,
@@ -197,18 +200,28 @@ async def _asset_partner(db: AsyncSession, asset: Asset) -> Partner | None:
 
 @public_router.get("/{token}")
 async def support_info(token: str, db: AsyncSession = Depends(get_db)):
-    """A QR-oldal induló adatai: gép + ügyfél (előtöltéshez)."""
+    """A QR-oldal induló adatai: gép + ügyfél (előtöltéshez), aktuális
+    számláló-állás és a rendelhető termékek (nevek, árak nélkül)."""
     asset = await _asset_by_token(db, token)
     partner = await _asset_partner(db, asset)
+    products = (
+        await db.execute(
+            select(Product).where(Product.is_active.is_(True)).order_by(Product.name)
+        )
+    ).scalars().all()
     return {
         "asset_name": asset.name,
         "barcode": asset.barcode,
         "serial_number": asset.serial_number,
         "location_type": asset.location_type,
+        "counter": asset.counter,
         "partner_name": partner.name if partner else None,
         "partner_code": partner.partner_code if partner else None,
         "contact_name": partner.contact_name if partner else None,
         "contact_phone": partner.contact_phone if partner else None,
+        "products": [
+            {"id": str(p.id), "name": p.name, "unit": p.unit} for p in products
+        ],
     }
 
 
@@ -283,6 +296,123 @@ async def create_support_ticket(
     return {"ticket_no": ticket.ticket_no}
 
 
+class CounterBody(BaseModel):
+    counter: int = Field(ge=0, le=100_000_000)
+    reporter_name: str | None = Field(default=None, max_length=256)
+
+
+@public_router.post("/{token}/counter")
+async def report_counter(
+    token: str,
+    body: CounterBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Számláló-állás bejelentése a QR-oldalról: a gép adatlapján frissül a
+    számláló, az előzményekbe régi → új bejegyzés kerül a bejelentő nevével."""
+    ip = request.client.host if request.client else "?"
+    if _rate_limited(f"counter:{ip}", 10):
+        raise HTTPException(status_code=429, detail={"code": "support.rate_limited"})
+
+    asset = await _asset_by_token(db, token)
+    old = asset.counter
+    reporter = (body.reporter_name or "").strip() or "QR-oldali bejelentés"
+    detail = f"Számláló: {old if old is not None else '—'} → {body.counter} · bejelentette: {reporter}"
+    if old is not None and body.counter < old:
+        detail += " (csökkenés!)"
+
+    asset.counter = body.counter
+    db.add(AssetMovement(asset_id=asset.id, action="counter", detail=detail[:512]))
+    await record_audit(
+        db, actor=None, action="support.counter", entity_type="asset",
+        entity_id=asset.barcode,
+        detail={"old": old, "new": body.counter, "reporter": reporter}, request=request,
+    )
+    await db.commit()
+    return {"old_counter": old, "new_counter": body.counter}
+
+
+class OrderItem(BaseModel):
+    product_id: str
+    quantity: float = Field(gt=0, le=1000)
+
+
+class OrderBody(BaseModel):
+    items: list[OrderItem] = Field(min_length=1, max_length=10)
+    note: str | None = Field(default=None, max_length=1000)
+    contact_name: str | None = Field(default=None, max_length=256)
+    contact_phone: str | None = Field(default=None, max_length=64)
+
+
+async def _next_order_no(db: AsyncSession) -> str:
+    last = (
+        await db.execute(
+            select(ProductOrder.order_no)
+            .where(ProductOrder.order_no.like("R-%"))
+            .order_by(ProductOrder.order_no.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    number = 0
+    if last:
+        try:
+            number = int(last.split("-", 1)[1])
+        except (IndexError, ValueError):
+            number = 0
+    return f"R-{number + 1:04d}"
+
+
+@public_router.post("/{token}/order", status_code=201)
+async def create_order(
+    token: str,
+    body: OrderBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Termékrendelés a QR-oldalról → az üzletkötő az Elszámolás oldalon látja."""
+    ip = request.client.host if request.client else "?"
+    if _rate_limited(f"order:{ip}", 5):
+        raise HTTPException(status_code=429, detail={"code": "support.rate_limited"})
+
+    asset = await _asset_by_token(db, token)
+    partner = await _asset_partner(db, asset)
+
+    items = []
+    for item in body.items:
+        try:
+            pid = uuid.UUID(item.product_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"code": "support.bad_product"})
+        product = (
+            await db.execute(
+                select(Product).where(Product.id == pid, Product.is_active.is_(True))
+            )
+        ).scalar_one_or_none()
+        if product is None:
+            raise HTTPException(status_code=422, detail={"code": "support.bad_product"})
+        items.append({"name": product.name, "quantity": item.quantity, "unit": product.unit})
+
+    order = ProductOrder(
+        order_no=await _next_order_no(db),
+        partner_id=partner.id if partner else None,
+        partner_label=partner.name if partner else f"QR: {asset.name} ({asset.barcode})",
+        asset_id=asset.id,
+        items=items,
+        note=(body.note or "").strip() or None,
+        contact_name=(body.contact_name or "").strip() or None,
+        contact_phone=(body.contact_phone or "").strip() or None,
+    )
+    db.add(order)
+    await db.flush()
+    await record_audit(
+        db, actor=None, action="support.order", entity_type="product_order",
+        entity_id=order.order_no,
+        detail={"partner": order.partner_label, "items": len(items)}, request=request,
+    )
+    await db.commit()
+    return {"order_no": order.order_no}
+
+
 class ChatMessage(BaseModel):
     role: str  # 'user' | 'assistant'
     content: str = Field(min_length=1, max_length=2000)
@@ -290,6 +420,31 @@ class ChatMessage(BaseModel):
 
 class SupportChatBody(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=12)
+
+
+async def _load_kb(db: AsyncSession) -> str:
+    """A teljes tudás összeállítása: a Beállításokban tárolt tudásbázis-szöveg
+    + a kézzel rögzített, bevált megoldások (KnowledgeEntry) „## " szekciókká
+    formázva — így a gépre szűrés ezekre is működik."""
+    from app.models import KnowledgeEntry
+
+    row = (
+        await db.execute(select(SupportSettings).where(SupportSettings.id == 1))
+    ).scalar_one_or_none()
+    kb = (row.knowledge_base or "").strip() if row else ""
+
+    entries = (
+        await db.execute(
+            select(KnowledgeEntry).order_by(KnowledgeEntry.machine_label, KnowledgeEntry.title)
+        )
+    ).scalars().all()
+    if entries:
+        rendered = "\n\n".join(
+            f"## {e.machine_label} — {e.title} (bevált házi megoldás)\n{e.content}"
+            for e in entries
+        )
+        kb = f"{kb}\n\n{rendered}".strip() if kb else rendered
+    return kb
 
 
 def _relevant_kb(kb: str, terms: list[str]) -> str:
@@ -353,10 +508,7 @@ async def support_chat(
 
     asset = await _asset_by_token(db, token)
     partner = await _asset_partner(db, asset)
-    kb_row = (
-        await db.execute(select(SupportSettings).where(SupportSettings.id == 1))
-    ).scalar_one_or_none()
-    kb = (kb_row.knowledge_base or "").strip() if kb_row else ""
+    kb = await _load_kb(db)
 
     # A QR-ból beazonosított gép gyártója/típusa alapján a tudásbázis releváns
     # szekcióit válogatjuk be (pl. Jura XJ6 → Jura + általános szekciók).

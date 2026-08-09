@@ -500,7 +500,8 @@ async def update_billingo_settings(
 
 
 class SupportSettingsBody(BaseModel):
-    knowledge_base: str | None = Field(default=None, max_length=100_000)
+    knowledge_base: str | None = Field(default=None, max_length=500_000)
+    auto_kb: bool = True
 
 
 @router.get("/support")
@@ -513,7 +514,10 @@ async def get_support_settings(
     row = (
         await db.execute(select(SupportSettings).where(SupportSettings.id == 1))
     ).scalar_one_or_none()
-    return {"knowledge_base": row.knowledge_base if row else None}
+    return {
+        "knowledge_base": row.knowledge_base if row else None,
+        "auto_kb": row.auto_kb if row else True,
+    }
 
 
 @router.put("/support")
@@ -532,12 +536,13 @@ async def update_support_settings(
         row = SupportSettings(id=1)
         db.add(row)
     row.knowledge_base = body.knowledge_base
+    row.auto_kb = body.auto_kb
     await record_audit(
         db, actor=actor, action="settings.support_update", entity_type="settings",
-        entity_id="support", request=request,
+        entity_id="support", detail={"auto_kb": body.auto_kb}, request=request,
     )
     await db.commit()
-    return {"knowledge_base": row.knowledge_base}
+    return {"knowledge_base": row.knowledge_base, "auto_kb": row.auto_kb}
 
 
 # ─── Jogosultságok (szerepkör × funkció mátrix) ─────────────────────────────

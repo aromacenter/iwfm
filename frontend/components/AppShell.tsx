@@ -31,6 +31,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/feladatok", key: "nav.tasks", perm: "tasks" },
       { href: "/szerviz", key: "nav.service", perm: "service" },
+      { href: "/tudasbazis", key: "nav.kb", perm: "service" },
       { href: "/beosztas", key: "nav.schedule", perm: "schedule" },
       { href: "/jelenlet", key: "nav.attendance", perm: "attendance" },
       { href: "/tavollet", key: "nav.timeOff", perm: "timeoff" },

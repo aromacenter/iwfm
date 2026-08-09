@@ -120,6 +120,79 @@ def test_relevant_kb_filters_by_machine():
     assert _relevant_kb("csak sima szoveg", ["Jura"]) == "csak sima szoveg"
 
 
+async def test_counter_report_updates_asset_and_history(client, manager):
+    """Számláló-bejelentés: a gép adatlapján frissül, az előzményekbe
+    régi → új + bejelentő kerül."""
+    _, mgr = manager
+    asset, token = await _asset_with_token(client, mgr)  # counter nélkül jött létre?
+
+    res = await client.post(
+        f"/api/support/{token}/counter",
+        json={"counter": 12500, "reporter_name": "Kis Júlia"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["new_counter"] == 12500
+
+    detail = (await client.get(f"/api/assets/{asset['id']}", headers=mgr)).json()
+    assert detail["counter"] == 12500
+    moves = detail.get("movements") or []
+    counter_moves = [m for m in moves if m["action"] == "counter"]
+    assert counter_moves, moves
+    assert "12500" in counter_moves[0]["detail"]
+    assert "Kis Júlia" in counter_moves[0]["detail"]
+
+    # az info végpont a friss állást adja
+    info = (await client.get(f"/api/support/{token}")).json()
+    assert info["counter"] == 12500
+
+
+async def test_order_from_qr_page(client, manager):
+    """Termékrendelés a QR-oldalról: R-sorszám, a belső listában megjelenik,
+    teljesítettre zárható."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    _asset, token = await _asset_with_token(client, mgr)
+    product = await make_product(client, mgr, name="Rendelhető kávé")
+
+    info = (await client.get(f"/api/support/{token}")).json()
+    assert any(p["name"] == "Rendelhető kávé" for p in info["products"])
+
+    res = await client.post(
+        f"/api/support/{token}/order",
+        json={
+            "items": [{"product_id": product["id"], "quantity": 3}],
+            "note": "Hétvégére elfogy",
+            "contact_name": "Kis Júlia",
+        },
+    )
+    assert res.status_code == 201, res.text
+    order_no = res.json()["order_no"]
+    assert order_no == "R-0001"
+
+    listed = (await client.get("/api/orders?status=open", headers=mgr)).json()
+    assert len(listed) == 1
+    order = listed[0]
+    assert order["items"][0]["name"] == "Rendelhető kávé"
+    assert order["items"][0]["quantity"] == 3
+    assert order["note"] == "Hétvégére elfogy"
+
+    done = await client.patch(
+        f"/api/orders/{order['id']}", json={"status": "done"}, headers=mgr
+    )
+    assert done.status_code == 200
+    assert done.json()["status"] == "done"
+    assert (await client.get("/api/orders?status=open", headers=mgr)).json() == []
+
+    # érvénytelen termék → 422
+    bad = await client.post(
+        f"/api/support/{token}/order",
+        json={"items": [{"product_id": "00000000-0000-0000-0000-000000000000", "quantity": 1}]},
+    )
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["code"] == "support.bad_product"
+
+
 async def test_support_chat_requires_ai(client, manager):
     _, mgr = manager
     _asset, token = await _asset_with_token(client, mgr)

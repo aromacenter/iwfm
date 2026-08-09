@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import delete as sa_delete, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -519,6 +519,7 @@ async def get_asset(
 async def create_asset(
     body: AssetBody,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("machines")),
 ):
@@ -552,6 +553,10 @@ async def create_asset(
         entity_id=a.barcode, request=request,
     )
     await db.commit()
+    # Új géptípusnál a tudásbázis automatikus bővítése a háttérben (best-effort)
+    from app.services.wfm.kb_auto import ensure_machine_kb
+
+    background_tasks.add_task(ensure_machine_kb, a.manufacturer, a.name)
     return _asset_out(a)
 
 

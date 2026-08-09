@@ -63,13 +63,13 @@ def _draw_label(c: pdf_canvas.Canvas, item: dict, x: float, y: float) -> None:
         c.drawString(text_x, text_y, str(item["partner_name"])[:24])
         c.setFillColorRGB(0, 0, 0)
 
-    # alsó sáv: felszólítás + rövid link
-    c.setFont(FONT_BOLD, 10)
-    c.drawString(x + pad, y + 14 * mm, "Hiba esetén olvassa be a QR-kódot!")
-    c.setFont(FONT, 7.5)
-    c.setFillColorRGB(0.35, 0.4, 0.5)
-    c.drawString(x + pad, y + 9 * mm, "Azonnali segítség (AI) vagy szervizigény bejelentése")
-    c.drawString(x + pad, y + 5 * mm, str(item["url"])[:64])
+    # alsó sáv: felszólítás + a QR-oldal funkciói (link nélkül)
+    c.setFont(FONT_BOLD, 10.5)
+    c.drawString(x + pad, y + 15 * mm, "Olvassa be a QR-kódot a telefonjával!")
+    c.setFont(FONT, 8)
+    c.setFillColorRGB(0.3, 0.35, 0.45)
+    c.drawString(x + pad, y + 10 * mm, "Hibabejelentés fotóval  ·  Azonnali segítség a géphez")
+    c.drawString(x + pad, y + 5.5 * mm, "Kávérendelés  ·  Számláló-állás bejelentése")
     c.setFillColorRGB(0, 0, 0)
 
 

@@ -829,6 +829,62 @@ class SupportSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     knowledge_base: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Új gép rögzítésekor az AI automatikusan generál hibakód-szekciót a
+    # tudásbázisba, ha a gyártó+típus még nem szerepel benne.
+    auto_kb: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class ProductOrder(Base):
+    """A partner termékrendelése a nyilvános QR-oldalról. Az üzletkötő az
+    Elszámolás oldalon látja, és a következő látogatáskor teljesíti."""
+
+    __tablename__ = "product_orders"
+    __table_args__ = (
+        CheckConstraint("status IN ('open','done','cancelled')", name="ck_order_status"),
+        Index("ix_orders_status", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    order_no: Mapped[str] = mapped_column(String(16), nullable=False)  # R-0001
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True
+    )
+    partner_label: Mapped[str | None] = mapped_column(String(256), nullable=True)  # pillanatkép
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
+    )
+    items: Mapped[list] = mapped_column(JSON, nullable=False)  # [{name, quantity, unit}]
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    contact_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeEntry(Base):
+    """Kézzel rögzített, bevált megoldás egy géptípushoz (házi tudás, ami
+    nincs benne a kézikönyvekben). A QR-oldali AI chat a tudásbázis-szöveg
+    mellett ezekből is válaszol — a machine_label alapján a gépre szűrve."""
+
+    __tablename__ = "knowledge_entries"
+    __table_args__ = (Index("ix_knowledge_machine", "machine_label"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_label: Mapped[str] = mapped_column(String(256), nullable=False)  # pl. "Jura XJ6"
+    title: Mapped[str] = mapped_column(String(256), nullable=False)  # pl. "E8 gyakori oka nálunk"
+    content: Mapped[str] = mapped_column(Text, nullable=False)  # a bevált megoldás
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")  # manual|ai
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

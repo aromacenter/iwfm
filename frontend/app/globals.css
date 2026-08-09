@@ -54,6 +54,12 @@ body {
 .dark .text-slate-900 {
   color: #e2e8f0 !important;
 }
+.dark .text-slate-800 {
+  color: #dbe3ee !important;
+}
+.dark .text-slate-950 {
+  color: #e8edf5 !important;
+}
 .dark .text-slate-700 {
   color: #cbd5e1 !important;
 }

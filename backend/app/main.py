@@ -18,7 +18,9 @@ from app.api import (
     import_export,
     inventory,
     kiosk,
+    knowledge,
     me,
+    orders,
     payroll,
     portal,
     service,
@@ -123,6 +125,9 @@ def _ensure_employee_code_column(sync_conn) -> None:
             )
         )
 
+    # v0.15 — automatikus tudásbázis-bővítés kapcsolója
+    ensure_column("support_settings", "auto_kb", "BOOLEAN NOT NULL DEFAULT TRUE")
+
     # v0.14 — gép QR-token a nyilvános támogatási oldalhoz
     ensure_column("assets", "qr_token", "VARCHAR(64)")
     if "assets" in tables:
@@ -224,6 +229,8 @@ def create_app() -> FastAPI:
     app.include_router(portal.manage_router, prefix="/api/partners", tags=["portal"])
     app.include_router(support.labels_router, prefix="/api/assets", tags=["support"])
     app.include_router(support.public_router, prefix="/api/support", tags=["support"])
+    app.include_router(knowledge.router, prefix="/api/knowledge", tags=["knowledge"])
+    app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
 

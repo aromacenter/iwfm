@@ -19,7 +19,7 @@ import csv
 import io
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -257,9 +257,11 @@ def _coerce(value: str, field: dict) -> object:
 async def run_import(
     body: ImportBody,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("import_export")),
 ):
+    new_machine_combos: set[tuple[str, str]] = set()
     if body.entity not in ENTITY_FIELDS:
         raise HTTPException(status_code=422, detail={"code": "impex.bad_entity"})
     fields = {f["key"]: f for f in ENTITY_FIELDS[body.entity]}
@@ -348,6 +350,7 @@ async def run_import(
                 existing_keys.discard(key.lower())
                 continue
             asset = Asset(**values, created_by=actor.id)
+            new_machine_combos.add((asset.manufacturer or "", asset.name or ""))
             if partner is not None:
                 asset.status = "deployed"
                 asset.partner_id = partner.id
@@ -392,6 +395,15 @@ async def run_import(
         request=request,
     )
     await db.commit()
+
+    # Új géptípusoknál tudásbázis-bővítés a háttérben (importonként max. 10
+    # kombináció, hogy a tömeges import ne indítson AI-hívás-lavinát).
+    if new_machine_combos:
+        from app.services.wfm.kb_auto import ensure_machine_kb
+
+        for manufacturer, name in sorted(new_machine_combos)[:10]:
+            background_tasks.add_task(ensure_machine_kb, manufacturer, name)
+
     return {"created": created, "skipped": skipped, "errors": errors[:100], "total": len(data_rows)}
 
 

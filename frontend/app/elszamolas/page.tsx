@@ -60,6 +60,17 @@ interface PartnerPrice {
   price_per_portion: number | null;
 }
 
+interface Order {
+  id: string;
+  order_no: string;
+  partner_label: string | null;
+  items: { name: string; quantity: number; unit: string }[];
+  note: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  created_at: string;
+}
+
 interface LowStock {
   partner_id: string;
   partner_name: string;
@@ -126,6 +137,7 @@ export default function ElszamolasPage() {
   const [due, setDue] = useState<DuePartner[]>([]);
   const [showDue, setShowDue] = useState(true);
   const [lowStock, setLowStock] = useState<LowStock[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [signing, setSigning] = useState<Settlement | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
   const [prices, setPrices] = useState<PartnerPrice[] | null>(null); // null = modal zárva
@@ -159,7 +171,18 @@ export default function ElszamolasPage() {
   const loadDue = useCallback(() => {
     api.get<DuePartner[]>("/api/settlements/due?days=30").then(setDue).catch(() => {});
     api.get<LowStock[]>("/api/products/low-stock").then(setLowStock).catch(() => {});
+    api.get<Order[]>("/api/orders?status=open").then(setOrders).catch(() => {});
   }, []);
+
+  async function setOrderStatus(o: Order, status: "done" | "cancelled") {
+    try {
+      await api.patch(`/api/orders/${o.id}`, { status });
+      toast(t(status === "done" ? "orders.markedDone" : "orders.markedCancelled"), "success");
+      loadDue();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   useEffect(loadStock, [loadStock]);
   useEffect(loadHistory, [loadHistory]);
@@ -471,6 +494,64 @@ export default function ElszamolasPage() {
                 {r.partner_name} · {r.product_name}: <span className="font-semibold">{r.quantity} {r.unit}</span>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {orders.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 shadow-sm">
+          <p className="px-4 py-3 font-semibold text-emerald-900">{t("orders.title", { count: orders.length })}</p>
+          <div className="overflow-x-auto border-t border-emerald-200">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-emerald-700">
+                  <th className="px-4 py-2">{t("orders.orderNo")}</th>
+                  <th className="px-4 py-2">{t("cons.partner")}</th>
+                  <th className="px-4 py-2">{t("orders.items")}</th>
+                  <th className="px-4 py-2">{t("orders.contact")}</th>
+                  <th className="px-4 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id} className="border-t border-emerald-100 align-top">
+                    <td className="px-4 py-2 font-mono text-xs text-emerald-900">
+                      {o.order_no}
+                      <div className="font-sans text-emerald-700">{fmt(o.created_at)}</div>
+                    </td>
+                    <td className="px-4 py-2 font-medium text-emerald-950">{o.partner_label ?? "—"}</td>
+                    <td className="px-4 py-2 text-emerald-900">
+                      {o.items.map((it, i) => (
+                        <div key={i}>{it.name}: <span className="font-semibold">{it.quantity} {it.unit}</span></div>
+                      ))}
+                      {o.note && <div className="text-xs text-emerald-700">„{o.note}”</div>}
+                    </td>
+                    <td className="px-4 py-2 text-emerald-800">
+                      {o.contact_name ?? "—"}
+                      {o.contact_phone && <div className="text-xs">{o.contact_phone}</div>}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setOrderStatus(o, "done")}
+                          title={t("orders.markDone")}
+                          className="rounded border border-emerald-400 px-2 py-1 text-sm leading-none hover:bg-emerald-100"
+                        >
+                          ✅
+                        </button>
+                        <button
+                          onClick={() => setOrderStatus(o, "cancelled")}
+                          title={t("orders.cancel")}
+                          className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                        >
+                          🚫
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

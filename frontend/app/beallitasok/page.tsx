@@ -100,6 +100,7 @@ export default function BeallitasokPage() {
   const [billingoMsg, setBillingoMsg] = useState<string | null>(null);
   const [billingoBusy, setBillingoBusy] = useState(false);
   const [knowledgeBase, setKnowledgeBase] = useState("");
+  const [autoKb, setAutoKb] = useState(true);
   const [kbBusy, setKbBusy] = useState(false);
 
   // --- Munkalap-PDF testreszabás ---
@@ -179,8 +180,11 @@ export default function BeallitasokPage() {
       })
       .catch(() => {});
     api
-      .get<{ knowledge_base: string | null }>("/api/settings/support")
-      .then((s) => setKnowledgeBase(s.knowledge_base ?? ""))
+      .get<{ knowledge_base: string | null; auto_kb: boolean }>("/api/settings/support")
+      .then((s) => {
+        setKnowledgeBase(s.knowledge_base ?? "");
+        setAutoKb(s.auto_kb);
+      })
       .catch(() => {});
     api
       .get<WorksheetSettings>("/api/settings/worksheet")
@@ -329,7 +333,7 @@ export default function BeallitasokPage() {
     e.preventDefault();
     setKbBusy(true);
     try {
-      await api.put("/api/settings/support", { knowledge_base: knowledgeBase || null });
+      await api.put("/api/settings/support", { knowledge_base: knowledgeBase || null, auto_kb: autoKb });
       toast(t("settings.kbSaved"), "success");
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -615,6 +619,16 @@ export default function BeallitasokPage() {
         >
           <h2 className="font-semibold">{t("settings.kbTitle")}</h2>
           <p className="text-xs text-slate-500">{t("settings.kbHint")}</p>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoKb}
+              onChange={(e) => setAutoKb(e.target.checked)}
+              className="h-4 w-4"
+            />
+            {t("settings.kbAuto")}
+          </label>
+          <p className="text-xs text-slate-500">{t("settings.kbAutoHint")}</p>
           <textarea
             value={knowledgeBase}
             onChange={(e) => setKnowledgeBase(e.target.value)}
