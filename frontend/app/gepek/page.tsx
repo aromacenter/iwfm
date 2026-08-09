@@ -329,12 +329,14 @@ export default function GepekPage() {
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* Nincs vízszintes görgetés: összevont oszlopok; a fejléc ragadós, hogy
+          hosszú listánál is látható maradjon. */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+            <tr className="text-left text-xs uppercase text-slate-500">
               {canDelete && (
-              <th className="w-8 px-3 py-3">
+              <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                 <input
                   type="checkbox"
                   checked={assets.length > 0 && assets.every((a) => selected.has(a.id))}
@@ -345,17 +347,12 @@ export default function GepekPage() {
                 />
               </th>
               )}
-              <th className="px-4 py-3">{t("inv.barcode")}</th>
-              <th className="px-4 py-3">{t("inv.manufacturer")}</th>
-              <th className="px-4 py-3">{t("inv.type")}</th>
-              <th className="px-4 py-3">{t("inv.articleNo")}</th>
-              <th className="px-4 py-3">{t("inv.serial")}</th>
-              <th className="px-4 py-3">{t("inv.partner")}</th>
-              <th className="px-4 py-3">{t("inv.locationType")}</th>
-              <th className="px-4 py-3">{t("inv.counter")}</th>
-              <th className="px-4 py-3">{t("inv.norm")}</th>
-              <th className="px-4 py-3">{t("inv.status")}</th>
-              <th className="px-4 py-3"></th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colMachine")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colIds")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colPlace")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("inv.counter")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.status")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
@@ -371,49 +368,64 @@ export default function GepekPage() {
                   />
                 </td>
                 )}
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-700">{a.barcode}</td>
-                <td className="px-4 py-3 text-slate-500">{a.manufacturer ?? "—"}</td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{a.name}</div>
-                  {a.tangible && <div className="text-xs text-slate-400">{t("inv.tangible")}</div>}
+                  <div className="font-mono text-xs font-semibold text-indigo-700">{a.barcode}</div>
+                  <div className="text-xs text-slate-400">
+                    {a.manufacturer ?? ""}{a.manufacturer && a.tangible ? " · " : ""}{a.tangible ? t("inv.tangible") : ""}
+                  </div>
                 </td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{a.article_number ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{a.serial_number ?? "—"}</td>
-                <td className="px-4 py-3">{a.partner_name ?? <span className="text-slate-300">—</span>}</td>
-                <td className="px-4 py-3 text-slate-500">{a.location_type ?? "—"}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{a.counter ?? "—"}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{a.norm ?? "—"}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                  <div>
+                    <span className="font-sans text-slate-400">{t("inv.articleNo")}: </span>
+                    {a.article_number ?? "—"}
+                  </div>
+                  <div>
+                    <span className="font-sans text-slate-400">{t("inv.serial")}: </span>
+                    {a.serial_number ?? "—"}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div>{a.partner_name ?? <span className="text-slate-300">—</span>}</div>
+                  {a.location_type && <div className="text-xs text-slate-400">{a.location_type}</div>}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="tabular-nums font-medium">{a.counter ?? "—"}</div>
+                  <div className="text-xs tabular-nums text-slate-400">
+                    {a.norm != null ? `${t("inv.norm")}: ${a.norm}` : ""}
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status]}`}>
                     {t(`inv.statuses.${a.status}`)}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-1.5">
                     {a.status === "deployed" ? (
-                      <button onClick={() => returnAsset(a)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
-                        {t("inv.returnBtn")}
+                      <button onClick={() => returnAsset(a)} title={t("inv.returnBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                        📥
                       </button>
                     ) : a.status !== "retired" ? (
-                      <button onClick={() => { setError(null); setDeploy({ partner_id: "", note: "" }); setDeployFor(a); }} className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700">
-                        {t("inv.deploy")}
+                      <button onClick={() => { setError(null); setDeploy({ partner_id: "", note: "" }); setDeployFor(a); }} title={t("inv.deploy")} className="rounded bg-emerald-600 px-2 py-1 text-sm leading-none hover:bg-emerald-700">
+                        📤
                       </button>
                     ) : null}
-                    <button onClick={() => downloadQrLabel(a)} title={t("inv.qrLabel")} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
-                      QR
+                    <button onClick={() => downloadQrLabel(a)} title={t("inv.qrLabel")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                      🔳
                     </button>
-                    <button onClick={() => openHistory(a)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
-                      {t("inv.history")}
+                    <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                      🕘
                     </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, notes: a.notes ?? "", status: a.status }); }} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
-                      {t("common.edit")}
+                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                      ✏️
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
             {assets.length === 0 && (
-              <tr><td colSpan={12} className="px-4 py-10 text-center text-slate-400">{t("inv.empty")}</td></tr>
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("inv.empty")}</td></tr>
             )}
           </tbody>
         </table>
