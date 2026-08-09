@@ -99,6 +99,27 @@ async def test_support_ticket_with_photo(client, manager):
     assert bad.json()["detail"]["code"] == "support.bad_photo"
 
 
+def test_relevant_kb_filters_by_machine():
+    """A tudásbázisból a gép gyártójához illő + általános szekciók maradnak."""
+    from app.api.support import _relevant_kb
+
+    kb = (
+        "# Cím\n\n"
+        "## Jura XJ6 — Error 8\nJura teendő.\n\n"
+        "## Saeco — E01\nSaeco teendő.\n\n"
+        "## Schaerer — 163\nSchaerer teendő.\n\n"
+        "## Általános — gyenge kávé\nÁltalános teendő.\n"
+    )
+    picked = _relevant_kb(kb, ["Jura", "XJ6", "Impressa"])
+    assert "Jura XJ6" in picked and "Általános" in picked
+    assert "Saeco" not in picked and "Schaerer" not in picked
+
+    # ismeretlen gyártó → nincs specifikus találat → teljes tudásbázis marad
+    assert _relevant_kb(kb, ["Nivona"]) == kb
+    # szekcionálatlan szöveg → változatlan
+    assert _relevant_kb("csak sima szoveg", ["Jura"]) == "csak sima szoveg"
+
+
 async def test_support_chat_requires_ai(client, manager):
     _, mgr = manager
     _asset, token = await _asset_with_token(client, mgr)

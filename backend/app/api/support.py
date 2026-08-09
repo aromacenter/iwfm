@@ -292,6 +292,48 @@ class SupportChatBody(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=12)
 
 
+def _relevant_kb(kb: str, terms: list[str]) -> str:
+    """A tudásbázis „## " szekcióiból a gépre illők kiválogatása.
+
+    Egy szekció akkor releváns, ha a címsora tartalmazza valamelyik keresett
+    kifejezést (gyártó, típus-szavak), vagy általános érvényű. Ha a szűrés
+    után túl kevés maradna (pl. a tudásbázis nem szekcionált), a teljes
+    szöveget adjuk vissza — inkább több kontextus, mint kevesebb."""
+    lowered_terms = [t.lower() for t in terms if t and len(t) >= 3]
+    if not lowered_terms or "## " not in kb:
+        return kb
+
+    sections: list[tuple[str, str]] = []  # (címsor, teljes szekció-szöveg)
+    current_head = ""
+    current: list[str] = []
+    for line in kb.splitlines():
+        if line.startswith("## "):
+            if current:
+                sections.append((current_head, "\n".join(current)))
+            current_head = line[3:].strip().lower()
+            current = [line]
+        else:
+            current.append(line)
+    if current:
+        sections.append((current_head, "\n".join(current)))
+
+    def is_general(head: str) -> bool:
+        return "általános" in head or "altalanos" in head or head == ""
+
+    picked = [
+        body
+        for head, body in sections
+        if is_general(head) or any(term in head for term in lowered_terms)
+    ]
+    matched_specific = any(
+        not is_general(head) and any(term in head for term in lowered_terms)
+        for head, body in sections
+    )
+    if not matched_specific:
+        return kb  # nincs gép-specifikus találat → teljes tudásbázis
+    return "\n".join(picked)
+
+
 @public_router.post("/{token}/chat")
 async def support_chat(
     token: str,
@@ -316,21 +358,32 @@ async def support_chat(
     ).scalar_one_or_none()
     kb = (kb_row.knowledge_base or "").strip() if kb_row else ""
 
+    # A QR-ból beazonosított gép gyártója/típusa alapján a tudásbázis releváns
+    # szekcióit válogatjuk be (pl. Jura XJ6 → Jura + általános szekciók).
+    terms = [asset.manufacturer or ""] + (asset.name or "").split()
+    kb_for_machine = _relevant_kb(kb, terms) if kb else ""
+
     transcript = "\n".join(
         f"{'Ügyfél' if m.role == 'user' else 'Asszisztens'}: {m.content.strip()}"
         for m in body.messages[-8:]
     )
+    machine_line = f"{asset.manufacturer + ' ' if asset.manufacturer else ''}{asset.name}"
     prompt = (
         "Te egy kávégép-üzemeltető cég ügyfélszolgálati asszisztense vagy. "
         "Magyarul, röviden, lépésenként segíts a gép hibájának elhárításában a "
-        "TUDÁSBÁZIS alapján. Ha a tudásbázisból nem oldható meg a probléma, "
-        "vagy fizikai beavatkozás/alkatrészcsere kell, javasold udvariasan a "
+        "TUDÁSBÁZIS alapján. A tudásbázisból mindig a LENT AZONOSÍTOTT gép "
+        "gyártójához/típusához tartozó részt alkalmazd; ha egy hibakód ennél a "
+        "típusnál mást jelent, mint másik gyártónál, a gép típusa szerint "
+        "válaszolj. Ha a tudásbázisból nem oldható meg a probléma, vagy "
+        "fizikai beavatkozás/alkatrészcsere kell, javasold udvariasan a "
         "szervizigény bejelentését ezen az oldalon (erre külön gomb van). "
         "Ne találj ki tényeket a gépről.\n\n"
-        f"GÉP: {asset.name} · kód: {asset.barcode}"
+        f"AZONOSÍTOTT GÉP (a QR-kód alapján): {machine_line} · kód: {asset.barcode}"
         + (f" · gyári szám: {asset.serial_number}" if asset.serial_number else "")
+        + (f" · helye: {asset.location_type}" if asset.location_type else "")
         + (f"\nÜGYFÉL: {partner.name}" if partner else "")
-        + f"\n\nTUDÁSBÁZIS:\n{kb or '(üres — általános kávégép-ismeretek alapján segíts)'}"
+        + f"\n\nTUDÁSBÁZIS (erre a gépre szűrve):\n"
+        + (kb_for_machine or "(üres — általános kávégép-ismeretek alapján segíts)")
         + f"\n\nEDDIGI BESZÉLGETÉS:\n{transcript}\n\nAsszisztens:"
     )
 
