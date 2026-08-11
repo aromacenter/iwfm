@@ -17,6 +17,7 @@ interface Partner {
   id: string;
   partner_code: string | null;
   name: string;
+  company_name: string | null;
   partner_type: PartnerType;
   tax_number: string | null;
   eu_tax_number: string | null;
@@ -46,6 +47,7 @@ const EMPTY = {
   id: "",
   partner_code: "",
   name: "",
+  company_name: "",
   partner_type: "customer" as PartnerType,
   tax_number: "",
   eu_tax_number: "",
@@ -101,6 +103,7 @@ export default function PartnerekPage() {
       if (!q) return true;
       return (
         p.name.toLowerCase().includes(q) ||
+        (p.company_name ?? "").toLowerCase().includes(q) ||
         (p.partner_code ?? "").toLowerCase().includes(q) ||
         (p.tax_number ?? "").toLowerCase().includes(q) ||
         (p.contact_name ?? "").toLowerCase().includes(q) ||
@@ -130,6 +133,7 @@ export default function PartnerekPage() {
       id: p.id,
       partner_code: p.partner_code ?? "",
       name: p.name,
+      company_name: p.company_name ?? "",
       partner_type: p.partner_type,
       tax_number: p.tax_number ?? "",
       eu_tax_number: p.eu_tax_number ?? "",
@@ -194,6 +198,7 @@ export default function PartnerekPage() {
     try {
       const body = {
         name: form.name,
+        company_name: form.company_name || null,
         partner_type: form.partner_type,
         tax_number: form.tax_number || null,
         eu_tax_number: form.eu_tax_number || null,
@@ -225,6 +230,44 @@ export default function PartnerekPage() {
       setError(errorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Közhiteles cégadat-lekérés adószámból (EU VIES): hivatalos cégnév +
+  // székhely. Csak az üres mezőket tölti ki, kézi értéket nem ír felül.
+  const [lookupBusy, setLookupBusy] = useState(false);
+
+  async function taxLookup() {
+    if (!form || !form.tax_number.trim()) return;
+    setLookupBusy(true);
+    try {
+      const res = await api.get<{
+        found: boolean;
+        company_name?: string | null;
+        address_zip?: string | null;
+        address_city?: string | null;
+        address_street?: string | null;
+      }>(`/api/partners/tax-lookup?tax_number=${encodeURIComponent(form.tax_number.trim())}`);
+      if (!res.found) {
+        toast(t("partners.lookupNotFound"), "error");
+        return;
+      }
+      setForm((f) =>
+        f
+          ? {
+              ...f,
+              company_name: f.company_name || res.company_name || "",
+              address_zip: f.address_zip || res.address_zip || "",
+              address_city: f.address_city || res.address_city || "",
+              address_street: f.address_street || res.address_street || "",
+            }
+          : f,
+      );
+      toast(t("partners.lookupDone"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setLookupBusy(false);
     }
   }
 
@@ -350,6 +393,9 @@ export default function PartnerekPage() {
                 )}
                 <td className="px-4 py-3">
                   <div className="font-medium">{p.name}</div>
+                  {p.company_name && p.company_name !== p.name && (
+                    <div className="text-xs text-slate-400">{p.company_name}</div>
+                  )}
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-mono text-xs font-semibold text-indigo-700">{p.partner_code ?? "—"}</span>
                     <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${TYPE_COLORS[p.partner_type]}`}>
@@ -438,6 +484,18 @@ export default function PartnerekPage() {
 
             <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
               <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("partners.legalSection")}</legend>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-56 flex-1">{field(t("partners.companyName"), "company_name")}</div>
+                <button
+                  type="button"
+                  onClick={taxLookup}
+                  disabled={lookupBusy || !form.tax_number.trim()}
+                  title={t("partners.lookupHint")}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-50"
+                >
+                  {lookupBusy ? t("common.loading") : t("partners.lookupBtn")}
+                </button>
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {field(t("partners.taxNumber"), "tax_number", { mono: true })}
                 {field(t("partners.euTaxNumber"), "eu_tax_number", { mono: true })}

@@ -53,6 +53,7 @@ def compose_address(
 
 class PartnerBody(BaseModel):
     name: str = Field(min_length=1, max_length=256)
+    company_name: str | None = Field(default=None, max_length=256)
     partner_type: str = Field(default="customer")
     tax_number: str | None = Field(default=None, max_length=32)
     eu_tax_number: str | None = Field(default=None, max_length=32)
@@ -104,6 +105,7 @@ class PartnerOut(BaseModel):
     id: str
     partner_code: str | None
     name: str
+    company_name: str | None
     partner_type: str
     tax_number: str | None
     eu_tax_number: str | None
@@ -134,6 +136,7 @@ def _partner_out(p: Partner, asset_count: int = 0) -> PartnerOut:
         id=str(p.id),
         partner_code=p.partner_code,
         name=p.name,
+        company_name=p.company_name,
         partner_type=p.partner_type,
         tax_number=p.tax_number,
         eu_tax_number=p.eu_tax_number,
@@ -189,6 +192,56 @@ async def list_partners(
         ).all()
     )
     return [_partner_out(p, int(counts.get(p.id, 0))) for p in partners]
+
+
+@router.get("/tax-lookup")
+async def tax_lookup(
+    tax_number: str = Query(min_length=8, max_length=32),
+    _: User = Depends(require_perm("partners")),
+):
+    """Közhiteles cégadat-lekérés adószám alapján (EU VIES). A magyar adószám
+    első 8 jegyével kérdezünk; a válaszból hivatalos cégnév + székhely jön.
+    Cégjegyzékszám/e-mail nincs ingyenes közhiteles forrásban."""
+    import re as _re
+
+    import httpx
+
+    digits = _re.sub(r"\D", "", tax_number)
+    if len(digits) < 8:
+        raise HTTPException(status_code=422, detail={"code": "partner.bad_tax_number"})
+    vat = digits[:8]
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(
+                f"https://ec.europa.eu/taxation_customs/vies/rest-api/ms/HU/vat/{vat}"
+            )
+            res.raise_for_status()
+            data = res.json()
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail={"code": "partner.lookup_failed"})
+    if not data.get("isValid"):
+        return {"found": False}
+
+    name = (data.get("name") or "").strip() or None
+    raw_address = (data.get("address") or "").replace("\n", " ").strip() or None
+    # Cím best-effort bontása: "FŐ UTCA 1. 1011 BUDAPEST" → irsz + város + utca
+    zip_code = city = street = None
+    if raw_address:
+        m = _re.search(r"\b(\d{4})\b\s+(.+)$", raw_address)
+        if m:
+            zip_code = m.group(1)
+            city = m.group(2).strip().title() or None
+            street = raw_address[: m.start()].strip(" ,") or None
+        else:
+            street = raw_address
+    return {
+        "found": True,
+        "company_name": name,
+        "address": raw_address,
+        "address_zip": zip_code,
+        "address_city": city,
+        "address_street": street,
+    }
 
 
 @router.post("", response_model=PartnerOut, status_code=201)
@@ -312,6 +365,7 @@ class AssetBody(BaseModel):
     counter: int | None = Field(default=None, ge=0)
     norm: float | None = Field(default=None, ge=0)
     tangible: bool = False
+    customer_owned: bool = False  # az ügyfél saját gépe
     notes: str | None = None
 
 
@@ -328,6 +382,7 @@ class AssetPatch(BaseModel):
     counter: int | None = Field(default=None, ge=0)
     norm: float | None = Field(default=None, ge=0)
     tangible: bool | None = None
+    customer_owned: bool | None = None
     notes: str | None = None
     status: str | None = None  # csak in_stock|maintenance|retired (deploy külön)
 
@@ -363,6 +418,7 @@ class AssetOut(BaseModel):
     counter: int | None
     norm: float | None
     tangible: bool
+    customer_owned: bool
     status: str
     partner_id: str | None
     partner_name: str | None
@@ -386,6 +442,7 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         counter=a.counter,
         norm=a.norm,
         tangible=a.tangible,
+        customer_owned=a.customer_owned,
         status=a.status,
         partner_id=str(a.partner_id) if a.partner_id else None,
         partner_name=partner_name,
@@ -450,9 +507,16 @@ async def list_assets(
                 Asset.manufacturer.ilike(like), Asset.article_number.ilike(like))
         )
     if status:
-        if status not in ASSET_STATUSES:
+        # 'customer' = az ügyfél saját gépei (bármilyen állapotban);
+        # 'deployed' = csak a SAJÁT kihelyezett gépeink.
+        if status == "customer":
+            query = query.where(Asset.customer_owned.is_(True))
+        elif status == "deployed":
+            query = query.where(Asset.status == "deployed", Asset.customer_owned.is_(False))
+        elif status in ASSET_STATUSES:
+            query = query.where(Asset.status == status)
+        else:
             raise HTTPException(status_code=422, detail={"code": "asset.bad_status"})
-        query = query.where(Asset.status == status)
     if partner_id:
         try:
             query = query.where(Asset.partner_id == uuid.UUID(partner_id))
@@ -542,6 +606,7 @@ async def create_asset(
         counter=body.counter,
         norm=body.norm,
         tangible=body.tangible,
+        customer_owned=body.customer_owned,
         notes=body.notes,
         created_by=actor.id,
     )

@@ -128,6 +128,22 @@ def _ensure_employee_code_column(sync_conn) -> None:
     # v0.15 — automatikus tudásbázis-bővítés kapcsolója
     ensure_column("support_settings", "auto_kb", "BOOLEAN NOT NULL DEFAULT TRUE")
 
+    # v0.16 — ügyfél saját gépe (nem kihelyezett saját eszköz) + hivatalos
+    # cégnév a partnereken. Backfill az Xpresso-importból: a gép-notes
+    # "Xpresso hely: Ügyfél..." jelölése alapján.
+    ensure_column("assets", "customer_owned", "BOOLEAN NOT NULL DEFAULT FALSE")
+    ensure_column("partners", "company_name", "VARCHAR(256)")
+    if "assets" in tables:
+        false_lit = "FALSE" if sync_conn.dialect.name == "postgresql" else "0"
+        true_lit = "TRUE" if sync_conn.dialect.name == "postgresql" else "1"
+        sync_conn.execute(
+            sql_text(
+                f"UPDATE assets SET customer_owned = {true_lit} "
+                f"WHERE customer_owned = {false_lit} "
+                "AND notes LIKE '%Xpresso hely: Ügyfél%'"
+            )
+        )
+
     # v0.14 — gép QR-token a nyilvános támogatási oldalhoz
     ensure_column("assets", "qr_token", "VARCHAR(64)")
     if "assets" in tables:
@@ -172,6 +188,38 @@ async def lifespan(app: FastAPI):
         filled_partners = await backfill_partner_codes(session)
         if filled_partners:
             logger.info("Backfilled %d partner codes", filled_partners)
+
+        # v0.16 backfill: az Xpresso-importnál a hivatalos cégnév a notes
+        # "Cégnév: X" sorába került — átemeljük a company_name mezőbe, és a
+        # sort kivesszük a megjegyzésből (idempotens: utána nincs találat).
+        from sqlalchemy import select as sa_select
+
+        from app.models import Partner
+
+        rows = (
+            (
+                await session.execute(
+                    sa_select(Partner).where(
+                        Partner.company_name.is_(None),
+                        Partner.notes.like("%Cégnév: %"),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for p in rows:
+            lines = (p.notes or "").splitlines()
+            kept: list[str] = []
+            for line in lines:
+                if p.company_name is None and line.strip().startswith("Cégnév: "):
+                    p.company_name = line.strip()[len("Cégnév: "):][:256] or None
+                else:
+                    kept.append(line)
+            p.notes = "\n".join(kept).strip() or None
+        if rows:
+            await session.commit()
+            logger.info("Backfilled company_name for %d partners", len(rows))
     yield
     await engine.dispose()
 

@@ -255,3 +255,96 @@ async def test_partner_bad_type(client, manager):
         "/api/partners", json={"name": "X", "partner_type": "nope"}, headers=mgr
     )
     assert res.status_code == 422
+
+
+async def test_customer_owned_machine_and_filter(client, manager):
+    """Ügyfél saját gépe: külön jelölés + a 'customer' szűrő csak ezeket adja,
+    a 'deployed' szűrő pedig csak a saját kihelyezett gépeket."""
+    _, mgr = manager
+    partner = await make_partner(client, mgr, name="Szűrős Kávézó")
+
+    own = await client.post(
+        "/api/assets", json=asset_payload(barcode="OWN-1", name="Saját gép"), headers=mgr
+    )
+    cust = await client.post(
+        "/api/assets",
+        json=asset_payload(barcode="CUST-1", name="Ügyfél gépe", customer_owned=True),
+        headers=mgr,
+    )
+    assert cust.status_code == 201, cust.text
+    assert cust.json()["customer_owned"] is True
+
+    for asset in (own.json(), cust.json()):
+        dep = await client.post(
+            f"/api/assets/{asset['id']}/deploy",
+            json={"partner_id": partner["id"]},
+            headers=mgr,
+        )
+        assert dep.status_code == 200, dep.text
+
+    deployed = (await client.get("/api/assets?status=deployed", headers=mgr)).json()
+    assert [a["barcode"] for a in deployed] == ["OWN-1"]
+    customer = (await client.get("/api/assets?status=customer", headers=mgr)).json()
+    assert [a["barcode"] for a in customer] == ["CUST-1"]
+
+    # PATCH-csel átbillenthető
+    res = await client.patch(
+        f"/api/assets/{own.json()['id']}", json={"customer_owned": True}, headers=mgr
+    )
+    assert res.status_code == 200
+    assert res.json()["customer_owned"] is True
+
+
+async def test_partner_company_name_roundtrip(client, manager):
+    """Hivatalos cégnév: mentés + visszaolvasás, a name (fantázianév) mellett."""
+    _, mgr = manager
+    res = await client.post(
+        "/api/partners",
+        json={"name": "Erzsébet körút Dohánybolt", "company_name": "Zália Bt."},
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["company_name"] == "Zália Bt."
+
+    upd = await client.patch(
+        f"/api/partners/{body['id']}",
+        json={"name": body["name"], "company_name": "Zália Kereskedelmi Bt."},
+        headers=mgr,
+    )
+    assert upd.status_code == 200
+    assert upd.json()["company_name"] == "Zália Kereskedelmi Bt."
+
+
+async def test_tax_lookup_vies(client, manager, monkeypatch):
+    """VIES-lekérés: a válaszból cégnév + bontott székhely jön (mockolt HTTP)."""
+    import httpx
+
+    real_get = httpx.AsyncClient.get
+
+    async def fake_get(self, url, **kw):
+        if "ec.europa.eu" not in str(url):
+            return await real_get(self, url, **kw)  # a teszt-kliens hívásai
+        assert "/ms/HU/vat/24336541" in str(url)
+        return httpx.Response(
+            200,
+            json={
+                "isValid": True,
+                "name": "Zália Bt.",
+                "address": "ERZSÉBET KÖRÚT 1. 1073 BUDAPEST",
+            },
+            request=httpx.Request("GET", str(url)),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    _, mgr = manager
+    res = await client.get(
+        "/api/partners/tax-lookup?tax_number=24336541-2-43", headers=mgr
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["found"] is True
+    assert body["company_name"] == "Zália Bt."
+    assert body["address_zip"] == "1073"
+    assert body["address_city"] == "Budapest"
+    assert "ERZSÉBET" in body["address_street"]

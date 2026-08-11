@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
+import PartnerPicker from "@/components/PartnerPicker";
 import { api, ApiError, downloadFile, downloadFilePost, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -45,6 +46,7 @@ interface Asset {
   counter: number | null;
   norm: number | null;
   tangible: boolean;
+  customer_owned: boolean;
   status: "in_stock" | "deployed" | "maintenance" | "retired";
   partner_id: string | null;
   partner_name: string | null;
@@ -71,6 +73,7 @@ const EMPTY_ASSET = {
   counter: "",
   norm: "",
   tangible: false,
+  customer_owned: false,
   notes: "",
   status: "in_stock",
 };
@@ -211,6 +214,7 @@ export default function GepekPage() {
         counter: assetForm.counter !== "" ? Number(assetForm.counter) : null,
         norm: assetForm.norm !== "" ? Number(assetForm.norm) : null,
         tangible: assetForm.tangible,
+        customer_owned: assetForm.customer_owned,
         notes: assetForm.notes || null,
       };
       if (assetForm.id) await api.patch(`/api/assets/${assetForm.id}`, body);
@@ -292,16 +296,18 @@ export default function GepekPage() {
         />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
           <option value="">{t("inv.allStatuses")}</option>
-          {(["in_stock", "deployed", "maintenance", "retired"] as const).map((s) => (
+          {(["in_stock", "deployed", "customer", "maintenance", "retired"] as const).map((s) => (
             <option key={s} value={s}>{t(`inv.statuses.${s}`)}</option>
           ))}
         </select>
-        <select value={partnerFilter} onChange={(e) => setPartnerFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
-          <option value="">{t("inv.allPartners")}</option>
-          {partners.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <PartnerPicker
+          partners={partners}
+          value={partnerFilter}
+          onChange={setPartnerFilter}
+          placeholder={t("inv.allPartners")}
+          includeInactive
+          className="w-64 max-w-full"
+        />
         {canDelete && selected.size > 0 && (
           <button
             onClick={bulkDelete}
@@ -407,9 +413,15 @@ export default function GepekPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status]}`}>
-                    {t(`inv.statuses.${a.status}`)}
-                  </span>
+                  {a.customer_owned && a.status === "deployed" ? (
+                    <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
+                      {t("inv.statuses.customer")}
+                    </span>
+                  ) : (
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status]}`}>
+                      {t(`inv.statuses.${a.status}`)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1.5">
@@ -428,7 +440,7 @@ export default function GepekPage() {
                     <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       🕘
                     </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, customer_owned: a.customer_owned, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       ✏️
                     </button>
                   </div>
@@ -496,6 +508,10 @@ export default function GepekPage() {
               <input type="checkbox" checked={assetForm.tangible} onChange={(e) => setAssetForm({ ...assetForm, tangible: e.target.checked })} className="h-4 w-4" />
               {t("inv.tangible")}
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={assetForm.customer_owned} onChange={(e) => setAssetForm({ ...assetForm, customer_owned: e.target.checked })} className="h-4 w-4" />
+              {t("inv.customerOwned")}
+            </label>
             <label className="block text-sm">
               {t("inv.notes")}
               <textarea value={assetForm.notes} onChange={(e) => setAssetForm({ ...assetForm, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
@@ -517,12 +533,14 @@ export default function GepekPage() {
             <p className="text-sm text-slate-500">{deployFor.name} · <span className="font-mono">{deployFor.barcode}</span></p>
             <label className="block text-sm">
               {t("inv.deployTo")}
-              <select required value={deploy.partner_id} onChange={(e) => setDeploy({ ...deploy, partner_id: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
-                <option value="">{t("inv.choosePartner")}</option>
-                {partners.filter((p) => p.is_active).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+              <PartnerPicker
+                partners={partners}
+                value={deploy.partner_id}
+                onChange={(id) => setDeploy({ ...deploy, partner_id: id })}
+                placeholder={t("inv.choosePartner")}
+                required
+                className="mt-1"
+              />
             </label>
             <label className="block text-sm">
               {t("inv.deployNote")}

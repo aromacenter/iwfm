@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
+import PartnerPicker from "@/components/PartnerPicker";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, ApiError, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -16,7 +17,12 @@ import { useUI } from "@/lib/ui";
 interface Partner {
   id: string;
   name: string;
+  partner_code: string | null;
+  tax_number: string | null;
+  contact_name: string | null;
   contact_email: string | null;
+  contact_phone: string | null;
+  address_city: string | null;
   is_active: boolean;
 }
 
@@ -452,16 +458,12 @@ export default function ElszamolasPage() {
             {t("offline.pending", { count: pendingOffline })}
           </button>
         )}
-        <select
+        <PartnerPicker
+          partners={partners}
           value={partnerId}
-          onChange={(e) => setPartnerId(e.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-        >
-          <option value="">{t("cons.choosePartner")}</option>
-          {partners.filter((p) => p.is_active).map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+          onChange={setPartnerId}
+          className="w-80 max-w-full"
+        />
         {partnerId && (
           <button
             onClick={() => { setError(null); setReplenish({ product_id: activeProducts[0]?.id ?? "", quantity: "" }); }}

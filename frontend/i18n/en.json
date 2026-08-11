@@ -1,4 +1,11 @@
 {
+  "picker": {
+    "placeholder": "Search: name, PT code, tax number, city…",
+    "clear": "Clear",
+    "noResults": "No matches.",
+    "inactive": "Inactive",
+    "more": "…and {count} more — refine your search"
+  },
   "common": {
     "icons": "Icons:",
     "loading": "Loading…",
@@ -137,6 +144,8 @@
       "counter": "Counter",
       "norm": "Norm",
       "tangible": "Tangible (true/false)",
+      "customer_owned": "Customer-owned (true/false)",
+      "company_name": "Legal company name",
       "partner_type": "Type (customer/supplier)",
       "tax_number": "Tax number",
       "eu_tax_number": "EU VAT number",
@@ -435,7 +444,12 @@
     "new": "New partner",
     "newTitle": "New partner",
     "editTitle": "Edit partner",
-    "name": "Company name",
+    "name": "Name (trade name)",
+    "companyName": "Legal company name",
+    "lookupBtn": "🔎 Fetch company data",
+    "lookupHint": "Fetch legal name + registered address by tax number (EU VIES)",
+    "lookupDone": "Company data filled in (VIES).",
+    "lookupNotFound": "Tax number not found in VIES.",
     "type": "Type",
     "taxNumber": "Tax number",
     "euTaxNumber": "EU VAT number",
@@ -1006,6 +1020,7 @@
     "counter": "Counter",
     "norm": "Norm",
     "tangible": "Tangible asset",
+    "customerOwned": "Customer-owned machine (service only)",
     "allStatuses": "All statuses",
     "allPartners": "All partners",
     "barcode": "Barcode",
@@ -1062,6 +1077,7 @@
     "statuses": {
       "in_stock": "In stock",
       "deployed": "Deployed",
+      "customer": "Customer's machine",
       "maintenance": "Maintenance",
       "retired": "Retired"
     }

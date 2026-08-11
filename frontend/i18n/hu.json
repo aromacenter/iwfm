@@ -1,4 +1,11 @@
 {
+  "picker": {
+    "placeholder": "Keresés: név, PT-kód, adószám, város…",
+    "clear": "Törlés",
+    "noResults": "Nincs találat.",
+    "inactive": "Inaktív",
+    "more": "…és még {count} találat — pontosítsd a keresést"
+  },
   "common": {
     "icons": "Ikonok:",
     "loading": "Betöltés…",
@@ -137,6 +144,8 @@
       "counter": "Számláló",
       "norm": "Norma",
       "tangible": "Tárgyi (igaz/hamis)",
+      "customer_owned": "Ügyfél gépe (igaz/hamis)",
+      "company_name": "Hivatalos cégnév",
       "partner_type": "Típus (vevő/szállító)",
       "tax_number": "Adószám",
       "eu_tax_number": "Közösségi adószám",
@@ -435,7 +444,12 @@
     "new": "Új partner",
     "newTitle": "Új partner",
     "editTitle": "Partner szerkesztése",
-    "name": "Cégnév",
+    "name": "Név (fantázianév)",
+    "companyName": "Hivatalos cégnév",
+    "lookupBtn": "🔎 Cégadatok lekérése",
+    "lookupHint": "Hivatalos cégnév + székhely lekérése az adószám alapján (EU VIES)",
+    "lookupDone": "Cégadatok kitöltve (VIES).",
+    "lookupNotFound": "Az adószám nem található a VIES-ben.",
     "type": "Típus",
     "taxNumber": "Adószám",
     "euTaxNumber": "Közösségi adószám",
@@ -1006,6 +1020,7 @@
     "counter": "Számláló",
     "norm": "Norma",
     "tangible": "Tárgyi eszköz",
+    "customerOwned": "Az ügyfél saját gépe (csak szervizeljük)",
     "allStatuses": "Minden állapot",
     "allPartners": "Minden partner",
     "barcode": "Vonalkód",
@@ -1062,6 +1077,7 @@
     "statuses": {
       "in_stock": "Raktáron",
       "deployed": "Kihelyezve",
+      "customer": "Ügyfél gépe",
       "maintenance": "Szervizen",
       "retired": "Selejtezve"
     }

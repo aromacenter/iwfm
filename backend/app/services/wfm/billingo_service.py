@@ -63,10 +63,12 @@ async def _api(
 
 
 async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> int:
-    """Partner keresése névre; ha nincs, létrehozás. Visszaadja a Billingó id-t."""
-    data = await _api(api_key, "GET", f"/partners?query={httpx.QueryParams({'q': partner.name})['q']}")
+    """Partner keresése névre; ha nincs, létrehozás. Visszaadja a Billingó id-t.
+    A számlán a hivatalos cégnév szerepel (company_name), ha meg van adva."""
+    invoice_name = (partner.company_name or "").strip() or partner.name
+    data = await _api(api_key, "GET", f"/partners?query={httpx.QueryParams({'q': invoice_name})['q']}")
     for item in data.get("data", []):
-        if item.get("name", "").strip().lower() == partner.name.strip().lower():
+        if item.get("name", "").strip().lower() == invoice_name.strip().lower():
             return int(item["id"])
 
     # Strukturált számlázási cím előnyben; visszaesés a székhelyre / egysorosra.
@@ -79,7 +81,7 @@ async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> in
         ) if x
     ) or (partner.billing_address or partner.address or "-")
     body = {
-        "name": partner.name,
+        "name": invoice_name,
         "address": {
             "country_code": "HU",
             "post_code": zip_,

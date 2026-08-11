@@ -43,6 +43,7 @@ PARTNER_TYPES = ("customer", "supplier", "both")
 ENTITY_FIELDS: dict[str, list[dict]] = {
     "partners": [
         {"key": "name", "required": True, "max_len": 256, "type": "str"},
+        {"key": "company_name", "required": False, "max_len": 256, "type": "str"},
         {"key": "partner_type", "required": False, "max_len": 16, "type": "partner_type"},
         {"key": "tax_number", "required": False, "max_len": 32, "type": "str"},
         {"key": "eu_tax_number", "required": False, "max_len": 32, "type": "str"},
@@ -84,6 +85,7 @@ ENTITY_FIELDS: dict[str, list[dict]] = {
         {"key": "counter", "required": False, "max_len": None, "type": "int"},
         {"key": "norm", "required": False, "max_len": None, "type": "float"},
         {"key": "tangible", "required": False, "max_len": None, "type": "bool"},
+        {"key": "customer_owned", "required": False, "max_len": None, "type": "bool"},
         {"key": "notes", "required": False, "max_len": None, "type": "str"},
     ],
 }
@@ -458,13 +460,15 @@ async def run_export(
         ).all()
         headers = [
             "barcode", "manufacturer", "name", "article_number", "serial_number",
-            "partner_name", "location_type", "counter", "norm", "tangible", "status",
+            "partner_name", "location_type", "counter", "norm", "tangible",
+            "customer_owned", "status",
         ]
         data = [
             [
                 a.barcode, a.manufacturer, a.name, a.article_number, a.serial_number,
                 pname, a.location_type, a.counter, a.norm,
-                "True" if a.tangible else "False", a.status,
+                "True" if a.tangible else "False",
+                "True" if a.customer_owned else "False", a.status,
             ]
             for a, pname in result
         ]

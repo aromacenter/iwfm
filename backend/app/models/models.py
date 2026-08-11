@@ -449,7 +449,9 @@ class Partner(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     # Rövid, ember-olvasható ügyfél-azonosító (PT-0001) — automatikusan generált.
     partner_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)  # név / fantázianév
+    # Hivatalos cégnév (számlázáshoz) — ha üres, a name-et használjuk.
+    company_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     # vevő (customer) | szállító (supplier) | mindkettő (both)
     partner_type: Mapped[str] = mapped_column(String(16), nullable=False, default="customer")
     tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)  # adószám
@@ -518,6 +520,8 @@ class Asset(Base):
     counter: Mapped[int | None] = mapped_column(Integer, nullable=True)  # számláló-állás
     norm: Mapped[float | None] = mapped_column(Float, nullable=True)  # norma
     tangible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # tárgyi eszköz
+    # Az ügyfél SAJÁT gépe (mi csak szervizeljük) — nem "kihelyezett" saját eszköz.
+    customer_owned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # QR-címke: kitalálhatatlan token a nyilvános támogatási oldalhoz.
     qr_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="in_stock")
