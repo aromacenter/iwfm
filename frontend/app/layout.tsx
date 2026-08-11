@@ -20,7 +20,9 @@ const THEME_INIT = `(function(){try{var t=localStorage.getItem('iwfm-theme');var
 
 // Service worker regisztráció (PWA): statikus asset-gyorsítótár + offline
 // tartalék. Az /api forgalomhoz a SW nem nyúl.
-const SW_INIT = `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}`;
+// Localhoston (dev) nem regisztrálunk: a dev-chunkok nem hash-eltek, a
+// cache-first SW régi kódot szolgálna ki szerkesztés után.
+const SW_INIT = `if('serviceWorker' in navigator && location.hostname!=='localhost' && location.hostname!=='127.0.0.1'){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
