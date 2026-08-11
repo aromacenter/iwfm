@@ -1,4 +1,20 @@
 {
+  "assistant": {
+    "title": "Iwfm assistant",
+    "open": "Open AI assistant",
+    "clear": "Clear conversation",
+    "hello": "Hi! How can I help?",
+    "examples": "For example, you can say (typed or dictated):",
+    "ex1": "\"Create a service ticket for machine 36253288327: no coffee dispensed\"",
+    "ex2": "\"How much stock does Gödöllő cukrászda have?\"",
+    "ex3": "\"Fill my worksheet: descaling, 2 hours, 1 filter\"",
+    "ex4": "\"Open the service page\"",
+    "placeholder": "Type or dictate… (Enter = send)",
+    "thinking": "Working on it…",
+    "listening": "Listening — speak, text goes into the field",
+    "micHint": "Dictate with microphone",
+    "notConfigured": "The AI assistant needs an API key first: Settings → AI. Then I can help with anything here."
+  },
   "picker": {
     "placeholder": "Search: name, PT code, tax number, city…",
     "clear": "Clear",
@@ -38,6 +54,8 @@
     "myTasks": "Tasks",
     "inventory": "Machines",
     "openMenu": "Open menu",
+    "moveUp": "Move section up",
+    "moveDown": "Move section down",
     "theme": "Theme",
     "themes": {
       "light": "Light",

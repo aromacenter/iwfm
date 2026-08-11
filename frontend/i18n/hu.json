@@ -1,4 +1,20 @@
 {
+  "assistant": {
+    "title": "Iwfm asszisztens",
+    "open": "AI-asszisztens megnyitása",
+    "clear": "Beszélgetés törlése",
+    "hello": "Szia! Miben segíthetek?",
+    "examples": "Például mondhatod (gépelve vagy diktálva):",
+    "ex1": "„Vegyél fel szervizjegyet a 36253288327 géphez: nem ad ki kávét”",
+    "ex2": "„Mennyi készlet van a Gödöllő cukrászdánál?”",
+    "ex3": "„Töltsd ki a munkalapomat: vízkőtelenítés, 2 óra, 1 db szűrő”",
+    "ex4": "„Nyisd meg a szerviz oldalt”",
+    "placeholder": "Írj vagy diktálj… (Enter = küldés)",
+    "thinking": "Dolgozom rajta…",
+    "listening": "Hallgatlak — beszélj, a szöveg a mezőbe kerül",
+    "micHint": "Diktálás mikrofonnal",
+    "notConfigured": "Az AI-asszisztenshez előbb API-kulcs kell: Beállítások → AI. Utána itt mindenben segítek."
+  },
   "picker": {
     "placeholder": "Keresés: név, PT-kód, adószám, város…",
     "clear": "Törlés",
@@ -38,6 +54,8 @@
     "myTasks": "Feladatok",
     "inventory": "Gépek",
     "openMenu": "Menü megnyitása",
+    "moveUp": "Szekció feljebb",
+    "moveDown": "Szekció lejjebb",
     "theme": "Téma",
     "themes": {
       "light": "Világos",

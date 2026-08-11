@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import AssistantChat from "@/components/AssistantChat";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
@@ -110,6 +111,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, [router]);
 
+  // Felhasználónkénti szekció-sorrend (▲▼ a csoportcímeken).
+  const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  useEffect(() => {
+    if (!user) return;
+    try {
+      const saved = localStorage.getItem(`iwfm-nav-order:${user.id}`);
+      if (saved) setGroupOrder(JSON.parse(saved) as string[]);
+    } catch {
+      /* sérült mentés — marad az alap sorrend */
+    }
+  }, [user]);
+
+  // A mentett sorrend a LÁTHATÓ szekciókra vonatkozik; az újak a végére kerülnek.
+  function sortBySaved(visible: string[]): string[] {
+    const saved = groupOrder.filter((k) => visible.includes(k));
+    return [...saved, ...visible.filter((k) => !saved.includes(k))];
+  }
+
+  function moveGroup(visibleKeys: string[], labelKey: string, dir: -1 | 1) {
+    if (!user) return;
+    const current = [...visibleKeys];
+    const idx = current.indexOf(labelKey);
+    const to = idx + dir;
+    if (idx < 0 || to < 0 || to >= current.length) return;
+    [current[idx], current[to]] = [current[to], current[idx]];
+    setGroupOrder(current);
+    try {
+      localStorage.setItem(`iwfm-nav-order:${user.id}`, JSON.stringify(current));
+    } catch {
+      /* tárhely-hiba nem kritikus */
+    }
+  }
+
   // Útvonalváltáskor a mobil oldalsáv csukódjon be.
   useEffect(() => setMobileOpen(false), [pathname]);
 
@@ -150,12 +184,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   const perms = user.permissions ?? [];
-  const groups = NAV_GROUPS.map((g) => ({
+  const visibleGroups = NAV_GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((n) =>
       n.perm === "admin-only" ? user.role === "admin" : perms.includes(n.perm),
     ),
   })).filter((g) => g.items.length > 0);
+  const keys = sortBySaved(visibleGroups.map((g) => g.labelKey));
+  const groups = [...visibleGroups].sort(
+    (a, b) => keys.indexOf(a.labelKey) - keys.indexOf(b.labelKey),
+  );
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -164,10 +202,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <img src="/logo.svg" alt="iwfm — Intelligence Workforce Management" className="h-11 w-auto" />
       </div>
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
-        {groups.map((group) => (
-          <div key={group.labelKey}>
-            <p className="px-3 pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {t(group.labelKey)}
+        {groups.map((group, gi) => (
+          <div key={group.labelKey} className="group/nav">
+            <p className="flex items-center justify-between px-3 pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <span>{t(group.labelKey)}</span>
+              <span className="flex gap-0.5 opacity-60 transition-opacity sm:opacity-0 sm:group-hover/nav:opacity-100">
+                {gi > 0 && (
+                  <button
+                    onClick={() => moveGroup(keys, group.labelKey, -1)}
+                    title={t("nav.moveUp")}
+                    className="rounded px-1 leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    ▲
+                  </button>
+                )}
+                {gi < groups.length - 1 && (
+                  <button
+                    onClick={() => moveGroup(keys, group.labelKey, 1)}
+                    title={t("nav.moveDown")}
+                    className="rounded px-1 leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    ▼
+                  </button>
+                )}
+              </span>
             </p>
             <div className="space-y-0.5">
               {group.items.map((item) => {
@@ -256,6 +314,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      <AssistantChat />
 
       {pwOpen && (
         <div

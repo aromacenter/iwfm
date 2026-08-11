@@ -222,7 +222,25 @@ async def tax_lookup(
     if not data.get("isValid"):
         return {"found": False}
 
-    name = (data.get("name") or "").strip() or None
+    suffixes = {"kft": "Kft.", "kft.": "Kft.", "bt": "Bt.", "bt.": "Bt.",
+                "zrt": "Zrt.", "zrt.": "Zrt.", "nyrt": "Nyrt.", "nyrt.": "Nyrt.",
+                "kkt": "Kkt.", "kkt.": "Kkt."}
+    lower_words = {"és", "a", "az"}
+
+    def _pretty(raw: str) -> str:
+        words = raw.strip().split()
+        out = []
+        for i, w in enumerate(words):
+            lw = w.lower()
+            if lw in suffixes:
+                out.append(suffixes[lw])
+            elif lw in lower_words and i > 0:
+                out.append(lw)
+            else:
+                out.append(lw.capitalize())
+        return " ".join(out)
+
+    name = _pretty(data.get("name") or "") or None
     raw_address = (data.get("address") or "").replace("\n", " ").strip() or None
     # Cím best-effort bontása: "FŐ UTCA 1. 1011 BUDAPEST" → irsz + város + utca
     zip_code = city = street = None

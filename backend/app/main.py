@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
+    assistant as assistant_api,
     audit,
     auth,
     consignment,
@@ -281,6 +282,7 @@ def create_app() -> FastAPI:
     app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
+    app.include_router(assistant_api.router, prefix="/api/assistant", tags=["assistant"])
 
     @app.get("/api/health")
     async def health():
