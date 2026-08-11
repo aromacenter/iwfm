@@ -44,6 +44,7 @@ ENTITY_FIELDS: dict[str, list[dict]] = {
     "partners": [
         {"key": "name", "required": True, "max_len": 256, "type": "str"},
         {"key": "company_name", "required": False, "max_len": 256, "type": "str"},
+        {"key": "invoicing_company", "required": False, "max_len": 8, "type": "str"},
         {"key": "partner_type", "required": False, "max_len": 16, "type": "partner_type"},
         {"key": "tax_number", "required": False, "max_len": 32, "type": "str"},
         {"key": "eu_tax_number", "required": False, "max_len": 32, "type": "str"},

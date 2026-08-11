@@ -452,6 +452,9 @@ class Partner(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)  # név / fantázianév
     # Hivatalos cégnév (számlázáshoz) — ha üres, a name-et használjuk.
     company_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Melyik SAJÁT cégünk szerződött vele / számláz neki: xp (X-Presso Coffee
+    # Kft.) | pc (Premium Caffe Kft.) | None (nincs megadva).
+    invoicing_company: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # vevő (customer) | szállító (supplier) | mindkettő (both)
     partner_type: Mapped[str] = mapped_column(String(16), nullable=False, default="customer")
     tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)  # adószám
@@ -587,9 +590,15 @@ class BillingoSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 1. fiók — X-Presso Coffee Kft. (xp)
     api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     block_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # számlatömb
     test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # 2. fiók — Premium Caffe Kft. (pc); a partner szerződött cége dönti el,
+    # melyik fiókkal állítjuk ki a számlát.
+    pc_api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    pc_block_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pc_test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -714,6 +723,8 @@ class Settlement(Base):
     )
     settled_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     settled_by_name: Mapped[str] = mapped_column(String(256), nullable=False)  # pillanatkép
+    # Számlázó cég pillanatképe (a partner szerződött cége rögzítéskor): xp|pc.
+    invoicing_company: Mapped[str | None] = mapped_column(String(8), nullable=True)
     payment_method: Mapped[str] = mapped_column(String(16), nullable=False)  # cash|card|transfer
     total_net: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     total_gross: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

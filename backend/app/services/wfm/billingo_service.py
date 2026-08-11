@@ -32,6 +32,9 @@ PAYMENT_METHOD_MAP = {
 }
 
 
+COMPANIES = {"xp": "X-Presso Coffee Kft.", "pc": "Premium Caffe Kft."}
+
+
 async def get_or_create_settings(db: AsyncSession) -> BillingoSettings:
     row = (
         await db.execute(select(BillingoSettings).where(BillingoSettings.id == 1))
@@ -41,6 +44,14 @@ async def get_or_create_settings(db: AsyncSession) -> BillingoSettings:
         db.add(row)
         await db.flush()
     return row
+
+
+def _account(settings: BillingoSettings, company: str | None) -> tuple[str | None, int | None, bool]:
+    """A céghez tartozó Billingó-fiók: (api_kulcs, számlatömb, teszt_mód).
+    'pc' → Premium Caffe fiók; minden más (xp / nincs megadva) → az 1. fiók."""
+    if company == "pc":
+        return decrypt_pii(settings.pc_api_key_encrypted), settings.pc_block_id, settings.pc_test_mode
+    return decrypt_pii(settings.api_key_encrypted), settings.block_id, settings.test_mode
 
 
 def _vat_label(percent: int) -> str:
@@ -106,8 +117,9 @@ async def create_invoice_for_settlement(
     kulcs/blokk-azonosító.
     """
     settings = await get_or_create_settings(db)
-    api_key = decrypt_pii(settings.api_key_encrypted)
-    if not settings.enabled or not api_key or not settings.block_id:
+    company = settlement.invoicing_company or partner.invoicing_company
+    api_key, block_id, test_mode = _account(settings, company)
+    if not settings.enabled or not api_key or not block_id:
         raise ValueError("billingo_not_configured")
 
     lines = (
@@ -139,10 +151,10 @@ async def create_invoice_for_settlement(
     today = date.today()
     terms_days = partner.payment_terms_days if (partner.payment_terms_days or 0) > 0 else 8
     due = today + timedelta(days=terms_days)
-    doc_type = "proforma" if settings.test_mode else "invoice"
+    doc_type = "proforma" if test_mode else "invoice"
     body = {
         "partner_id": billingo_partner_id,
-        "block_id": settings.block_id,
+        "block_id": block_id,
         "type": doc_type,
         "fulfillment_date": today.isoformat(),
         "due_date": due.isoformat(),
@@ -156,12 +168,15 @@ async def create_invoice_for_settlement(
     return str(created.get("id", "")), doc_type, due
 
 
-async def fetch_payment_status(db: AsyncSession, document_id: str) -> str | None:
+async def fetch_payment_status(
+    db: AsyncSession, document_id: str, company: str | None = None
+) -> str | None:
     """A Billingó-bizonylat fizetési státusza (pl. 'paid', 'no_payment',
-    'partially_paid'). None, ha a válaszban nincs státusz.
+    'partially_paid'). None, ha a válaszban nincs státusz. A ``company``
+    (xp|pc) dönti el, melyik fiókkal kérdezünk.
     ValueError('billingo_not_configured'), ha nincs API-kulcs."""
     settings = await get_or_create_settings(db)
-    api_key = decrypt_pii(settings.api_key_encrypted)
+    api_key, _block, _test = _account(settings, company)
     if not settings.enabled or not api_key:
         raise ValueError("billingo_not_configured")
     data = await _api(api_key, "GET", f"/documents/{document_id}")
@@ -169,10 +184,10 @@ async def fetch_payment_status(db: AsyncSession, document_id: str) -> str | None
     return str(status) if status else None
 
 
-async def test_connection(db: AsyncSession) -> dict:
+async def test_connection(db: AsyncSession, company: str | None = None) -> dict:
     """Kapcsolat-teszt: a számlatömbök lekérése (nem hoz létre semmit)."""
     settings = await get_or_create_settings(db)
-    api_key = decrypt_pii(settings.api_key_encrypted)
+    api_key, _block, _test = _account(settings, company)
     if not api_key:
         raise ValueError("billingo_not_configured")
     data = await _api(api_key, "GET", "/document-blocks?type=invoice")

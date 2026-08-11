@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -435,9 +435,14 @@ async def update_worksheet_settings(
 
 class BillingoSettingsBody(BaseModel):
     enabled: bool = False
+    # 1. fiók — X-Presso Coffee Kft.
     api_key: str | None = Field(default=None, max_length=256)  # üresen: marad a régi
     block_id: int | None = Field(default=None, ge=1)
     test_mode: bool = True
+    # 2. fiók — Premium Caffe Kft.
+    pc_api_key: str | None = Field(default=None, max_length=256)
+    pc_block_id: int | None = Field(default=None, ge=1)
+    pc_test_mode: bool = True
 
 
 class BillingoSettingsOut(BaseModel):
@@ -445,6 +450,9 @@ class BillingoSettingsOut(BaseModel):
     has_api_key: bool
     block_id: int | None
     test_mode: bool
+    pc_has_api_key: bool = False
+    pc_block_id: int | None = None
+    pc_test_mode: bool = True
 
 
 async def _get_or_create_billingo(db: AsyncSession) -> BillingoSettings:
@@ -464,6 +472,9 @@ def _billingo_out(row: BillingoSettings) -> BillingoSettingsOut:
         has_api_key=row.api_key_encrypted is not None,
         block_id=row.block_id,
         test_mode=row.test_mode,
+        pc_has_api_key=row.pc_api_key_encrypted is not None,
+        pc_block_id=row.pc_block_id,
+        pc_test_mode=row.pc_test_mode,
     )
 
 
@@ -488,6 +499,10 @@ async def update_billingo_settings(
     row.test_mode = body.test_mode
     if body.api_key:  # üres = nem változik
         row.api_key_encrypted = encrypt_pii(body.api_key.strip())
+    row.pc_block_id = body.pc_block_id
+    row.pc_test_mode = body.pc_test_mode
+    if body.pc_api_key:  # üres = nem változik
+        row.pc_api_key_encrypted = encrypt_pii(body.pc_api_key.strip())
     await record_audit(
         db, actor=actor, action="settings.billingo_update", entity_type="settings",
         entity_id="billingo", detail={"test_mode": body.test_mode}, request=request,
@@ -608,6 +623,7 @@ async def update_permissions(
 
 @router.post("/billingo/test")
 async def test_billingo(
+    company: str | None = Query(default=None),  # xp (alap) | pc
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role("admin")),
 ):
@@ -615,7 +631,7 @@ async def test_billingo(
     from app.services.wfm.billingo_service import test_connection
 
     try:
-        return await test_connection(db)
+        return await test_connection(db, company)
     except ValueError:
         raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
     except Exception:

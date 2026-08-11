@@ -10,6 +10,7 @@ import IconLegend from "@/components/IconLegend";
 import PartnerPicker from "@/components/PartnerPicker";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, ApiError, downloadFile, errorMessage } from "@/lib/api";
+import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT } from "@/lib/companies";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -49,6 +50,7 @@ interface Settlement {
   partner_id: string;
   partner_name: string | null;
   settled_by_name: string;
+  invoicing_company: "xp" | "pc" | null;
   payment_method: "cash" | "card" | "transfer";
   total_net: number;
   total_gross: number;
@@ -139,6 +141,7 @@ export default function ElszamolasPage() {
   const [payment, setPayment] = useState<(typeof PAYMENTS)[number]>("cash");
   const [note, setNote] = useState("");
   const [history, setHistory] = useState<Settlement[]>([]);
+  const [companyFilter, setCompanyFilter] = useState("");
   const [replenish, setReplenish] = useState<{ product_id: string; quantity: string } | null>(null);
   const [due, setDue] = useState<DuePartner[]>([]);
   const [showDue, setShowDue] = useState(true);
@@ -170,9 +173,12 @@ export default function ElszamolasPage() {
   }, [partnerId]);
 
   const loadHistory = useCallback(() => {
-    const params = partnerId ? `?partner_id=${partnerId}` : "";
-    api.get<Settlement[]>(`/api/settlements${params}`).then(setHistory).catch(() => {});
-  }, [partnerId]);
+    const params = new URLSearchParams();
+    if (partnerId) params.set("partner_id", partnerId);
+    if (companyFilter) params.set("company", companyFilter);
+    const qs = params.toString();
+    api.get<Settlement[]>(`/api/settlements${qs ? `?${qs}` : ""}`).then(setHistory).catch(() => {});
+  }, [partnerId, companyFilter]);
 
   const loadDue = useCallback(() => {
     api.get<DuePartner[]>("/api/settlements/due?days=30").then(setDue).catch(() => {});
@@ -694,6 +700,15 @@ export default function ElszamolasPage() {
 
       <div className="mb-2 flex items-center gap-3">
         <h2 className="font-semibold">{t("cons.history")}</h2>
+        <select
+          value={companyFilter}
+          onChange={(e) => setCompanyFilter(e.target.value)}
+          className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"
+        >
+          <option value="">{t("partners.allCompanies")}</option>
+          <option value="xp">{COMPANY_SHORT.xp}</option>
+          <option value="pc">{COMPANY_SHORT.pc}</option>
+        </select>
         {selected.size > 0 && (
           <button
             onClick={bulkDelete}
@@ -750,7 +765,17 @@ export default function ElszamolasPage() {
                 <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{s.partner_name}</div>
-                  <div className="text-xs text-slate-400">{s.settled_by_name}</div>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <span>{s.settled_by_name}</span>
+                    {s.invoicing_company && (
+                      <span
+                        title={COMPANIES[s.invoicing_company]}
+                        className={`rounded px-1 py-0.5 text-[10px] font-medium ${COMPANY_CHIP[s.invoicing_company]}`}
+                      >
+                        {COMPANY_SHORT[s.invoicing_company]}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
                 <td className="px-4 py-3 text-right font-medium">{ft(s.total_gross)}</td>

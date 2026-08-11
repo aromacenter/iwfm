@@ -129,6 +129,16 @@ def _ensure_employee_code_column(sync_conn) -> None:
     # v0.15 — automatikus tudásbázis-bővítés kapcsolója
     ensure_column("support_settings", "auto_kb", "BOOLEAN NOT NULL DEFAULT TRUE")
 
+    # v0.17 — két számlázó cég: a partner szerződött cége (xp = X-Presso
+    # Coffee Kft., pc = Premium Caffe Kft.), pillanatkép az elszámoláson,
+    # második Billingó-fiók a Premium Caffe-nak.
+    ensure_column("partners", "invoicing_company", "VARCHAR(8)")
+    ensure_column("settlements", "invoicing_company", "VARCHAR(8)")
+    _blob = "BYTEA" if sync_conn.dialect.name == "postgresql" else "BLOB"
+    ensure_column("billingo_settings", "pc_api_key_encrypted", _blob)
+    ensure_column("billingo_settings", "pc_block_id", "INTEGER")
+    ensure_column("billingo_settings", "pc_test_mode", "BOOLEAN NOT NULL DEFAULT TRUE")
+
     # v0.16 — ügyfél saját gépe (nem kihelyezett saját eszköz) + hivatalos
     # cégnév a partnereken. Backfill az Xpresso-importból: a gép-notes
     # "Xpresso hely: Ügyfél..." jelölése alapján.

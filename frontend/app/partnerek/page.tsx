@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
+import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT, type CompanyKey } from "@/lib/companies";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -18,6 +19,7 @@ interface Partner {
   partner_code: string | null;
   name: string;
   company_name: string | null;
+  invoicing_company: CompanyKey | null;
   partner_type: PartnerType;
   tax_number: string | null;
   eu_tax_number: string | null;
@@ -48,6 +50,7 @@ const EMPTY = {
   partner_code: "",
   name: "",
   company_name: "",
+  invoicing_company: "",
   partner_type: "customer" as PartnerType,
   tax_number: "",
   eu_tax_number: "",
@@ -86,6 +89,7 @@ export default function PartnerekPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
   const [form, setForm] = useState<typeof EMPTY | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -100,6 +104,8 @@ export default function PartnerekPage() {
     const q = search.trim().toLowerCase();
     return partners.filter((p) => {
       if (typeFilter && p.partner_type !== typeFilter) return false;
+      if (companyFilter === "none" && p.invoicing_company) return false;
+      if (companyFilter && companyFilter !== "none" && p.invoicing_company !== companyFilter) return false;
       if (!q) return true;
       return (
         p.name.toLowerCase().includes(q) ||
@@ -110,7 +116,7 @@ export default function PartnerekPage() {
         (p.contact_email ?? "").toLowerCase().includes(q)
       );
     });
-  }, [partners, search, typeFilter]);
+  }, [partners, search, typeFilter, companyFilter]);
 
   async function copyPortalLink(p: Partner) {
     try {
@@ -134,6 +140,7 @@ export default function PartnerekPage() {
       partner_code: p.partner_code ?? "",
       name: p.name,
       company_name: p.company_name ?? "",
+      invoicing_company: p.invoicing_company ?? "",
       partner_type: p.partner_type,
       tax_number: p.tax_number ?? "",
       eu_tax_number: p.eu_tax_number ?? "",
@@ -199,6 +206,7 @@ export default function PartnerekPage() {
       const body = {
         name: form.name,
         company_name: form.company_name || null,
+        invoicing_company: form.invoicing_company || null,
         partner_type: form.partner_type,
         tax_number: form.tax_number || null,
         eu_tax_number: form.eu_tax_number || null,
@@ -333,6 +341,16 @@ export default function PartnerekPage() {
             <option key={tp} value={tp}>{t(`partners.types.${tp}`)}</option>
           ))}
         </select>
+        <select
+          value={companyFilter}
+          onChange={(e) => setCompanyFilter(e.target.value)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value="">{t("partners.allCompanies")}</option>
+          <option value="xp">{COMPANY_SHORT.xp}</option>
+          <option value="pc">{COMPANY_SHORT.pc}</option>
+          <option value="none">{t("partners.noCompany")}</option>
+        </select>
         {selected.size > 0 && (
           <button
             onClick={bulkDelete}
@@ -401,6 +419,14 @@ export default function PartnerekPage() {
                     <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${TYPE_COLORS[p.partner_type]}`}>
                       {t(`partners.types.${p.partner_type}`)}
                     </span>
+                    {p.invoicing_company && (
+                      <span
+                        title={COMPANIES[p.invoicing_company]}
+                        className={`rounded px-1.5 py-0.5 text-xs font-medium ${COMPANY_CHIP[p.invoicing_company]}`}
+                      >
+                        {COMPANY_SHORT[p.invoicing_company]}
+                      </span>
+                    )}
                     {!p.is_active && (
                       <span className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">{t("partners.inactive")}</span>
                     )}
@@ -484,6 +510,18 @@ export default function PartnerekPage() {
 
             <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
               <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("partners.legalSection")}</legend>
+              <label className="block text-sm">
+                {t("partners.invoicingCompany")}
+                <select
+                  value={form.invoicing_company}
+                  onChange={(e) => setForm({ ...form, invoicing_company: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                >
+                  <option value="">{t("partners.noCompany")}</option>
+                  <option value="xp">{COMPANIES.xp}</option>
+                  <option value="pc">{COMPANIES.pc}</option>
+                </select>
+              </label>
               <div className="flex flex-wrap items-end gap-3">
                 <div className="min-w-56 flex-1">{field(t("partners.companyName"), "company_name")}</div>
                 <button

@@ -499,6 +499,7 @@ class SettlementOut(BaseModel):
     partner_id: str
     partner_name: str | None
     settled_by_name: str
+    invoicing_company: str | None = None  # xp | pc
     payment_method: str
     total_net: float
     total_gross: float
@@ -541,6 +542,7 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         partner_id=str(s.partner_id),
         partner_name=partner_name,
         settled_by_name=s.settled_by_name,
+        invoicing_company=s.invoicing_company,
         payment_method=s.payment_method,
         total_net=s.total_net,
         total_gross=s.total_gross,
@@ -586,6 +588,7 @@ async def create_settlement(
         partner_id=partner.id,
         settled_by_user_id=actor.id,
         settled_by_name=actor.display_name,
+        invoicing_company=partner.invoicing_company,
         payment_method=body.payment_method,
         total_net=0.0,
         total_gross=0.0,
@@ -672,6 +675,7 @@ async def create_settlement(
 async def list_settlements(
     partner_id: str | None = Query(default=None),
     settled_by: str | None = Query(default=None),  # user_id
+    company: str | None = Query(default=None),  # xp | pc — cégenkénti bontás
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
@@ -682,6 +686,10 @@ async def list_settlements(
         .join(Partner, Partner.id == Settlement.partner_id)
         .order_by(Settlement.created_at.desc())
     )
+    if company:
+        if company not in ("xp", "pc"):
+            raise HTTPException(status_code=422, detail={"code": "settlement.bad_company"})
+        query = query.where(Settlement.invoicing_company == company)
     if partner_id:
         try:
             query = query.where(Settlement.partner_id == uuid.UUID(partner_id))
@@ -833,30 +841,41 @@ def _payment_filters(query, settled_by, date_from, date_to):
 @settlements_router.get("/summary")
 async def settlement_summary(
     settled_by: str | None = Query(default=None),
+    company: str | None = Query(default=None),  # xp | pc — cégenkénti bontás
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("agent_report")),
 ):
     """Fizetési módonkénti összesítés (üzletkötő-elszámoláshoz): darab + nettó +
-    bruttó, valamint a teljes összeg."""
+    bruttó, a teljes összeg, valamint számlázó cégenkénti bontás."""
     query = _payment_filters(select(Settlement), settled_by, date_from, date_to)
+    if company:
+        if company not in ("xp", "pc"):
+            raise HTTPException(status_code=422, detail={"code": "settlement.bad_company"})
+        query = query.where(Settlement.invoicing_company == company)
     settlements = (await db.execute(query)).scalars().all()
 
     by_payment = {m: {"count": 0, "net": 0.0, "gross": 0.0} for m in PAYMENT_METHODS}
+    by_company = {c: {"count": 0, "net": 0.0, "gross": 0.0} for c in ("xp", "pc", "none")}
     for s in settlements:
         bucket = by_payment.get(s.payment_method)
         if bucket is not None:
             bucket["count"] += 1
             bucket["net"] += s.total_net
             bucket["gross"] += s.total_gross
+        cbucket = by_company[s.invoicing_company if s.invoicing_company in ("xp", "pc") else "none"]
+        cbucket["count"] += 1
+        cbucket["net"] += s.total_net
+        cbucket["gross"] += s.total_gross
 
-    for bucket in by_payment.values():
+    for bucket in (*by_payment.values(), *by_company.values()):
         bucket["net"] = _money(bucket["net"])
         bucket["gross"] = _money(bucket["gross"])
 
     return {
         "by_payment": by_payment,
+        "by_company": by_company,
         "total_net": _money(sum(s.total_net for s in settlements)),
         "total_gross": _money(sum(s.total_gross for s in settlements)),
         "count": len(settlements),
@@ -1026,7 +1045,7 @@ async def sync_settlement_payment(
     if not s.invoiced or not s.billingo_document_id:
         raise HTTPException(status_code=422, detail={"code": "settlement.not_invoiced"})
     try:
-        status = await fetch_payment_status(db, s.billingo_document_id)
+        status = await fetch_payment_status(db, s.billingo_document_id, s.invoicing_company)
     except ValueError:
         raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
     except Exception:

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
+import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT, type CompanyKey } from "@/lib/companies";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -21,6 +22,7 @@ interface Settlement {
   id: string;
   partner_name: string | null;
   settled_by_name: string;
+  invoicing_company: CompanyKey | null;
   payment_method: "cash" | "card" | "transfer";
   total_net: number;
   total_gross: number;
@@ -30,6 +32,7 @@ interface Settlement {
 
 interface Summary {
   by_payment: Record<string, { count: number; net: number; gross: number }>;
+  by_company: Record<string, { count: number; net: number; gross: number }>;
   total_net: number;
   total_gross: number;
   count: number;
@@ -57,6 +60,7 @@ export default function UzletkotoPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState("");
+  const [company, setCompany] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [rows, setRows] = useState<Settlement[]>([]);
@@ -74,11 +78,12 @@ export default function UzletkotoPage() {
   const load = useCallback(() => {
     const params = new URLSearchParams();
     if (agentId) params.set("settled_by", agentId);
+    if (company) params.set("company", company);
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
     api.get<Settlement[]>(`/api/settlements?${params}`).then(setRows).catch(() => {});
     api.get<Summary>(`/api/settlements/summary?${params}`).then(setSummary).catch(() => {});
-  }, [agentId, dateFrom, dateTo]);
+  }, [agentId, company, dateFrom, dateTo]);
   useEffect(load, [load]);
 
   const loadReceivables = useCallback(() => {
@@ -161,6 +166,15 @@ export default function UzletkotoPage() {
             </option>
           ))}
         </select>
+        <select
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value="">{t("partners.allCompanies")}</option>
+          <option value="xp">{COMPANY_SHORT.xp}</option>
+          <option value="pc">{COMPANY_SHORT.pc}</option>
+        </select>
         <label className="flex items-center gap-2 text-sm text-slate-600">
           {t("cons.dateFrom")}
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5" />
@@ -218,7 +232,17 @@ export default function UzletkotoPage() {
                 <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{s.partner_name}</div>
-                  <div className="text-xs text-slate-400">{s.settled_by_name}</div>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <span>{s.settled_by_name}</span>
+                    {s.invoicing_company && (
+                      <span
+                        title={COMPANIES[s.invoicing_company]}
+                        className={`rounded px-1 py-0.5 text-[10px] font-medium ${COMPANY_CHIP[s.invoicing_company]}`}
+                      >
+                        {COMPANY_SHORT[s.invoicing_company]}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
                 <td className="px-4 py-3 text-right">
@@ -333,6 +357,20 @@ export default function UzletkotoPage() {
                     <td className="px-4 py-3">{ft(summary.by_payment[m]?.gross ?? 0)}</td>
                   </tr>
                 ))}
+                {(["xp", "pc"] as const).map((c) =>
+                  summary.by_company?.[c]?.count ? (
+                    <tr key={c} className="border-b border-slate-100 text-slate-600 last:border-0">
+                      <td className="px-4 py-3">
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${COMPANY_CHIP[c]}`}>
+                          {COMPANIES[c]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">{summary.by_company[c].count}</td>
+                      <td className="px-4 py-3">{ft(summary.by_company[c].net)}</td>
+                      <td className="px-4 py-3">{ft(summary.by_company[c].gross)}</td>
+                    </tr>
+                  ) : null,
+                )}
                 <tr className="bg-slate-50 font-semibold">
                   <td className="px-4 py-3">{t("cons.total")}</td>
                   <td className="px-4 py-3">{summary.count}</td>

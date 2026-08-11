@@ -38,6 +38,8 @@ ASSET_STATUSES = ("in_stock", "deployed", "maintenance", "retired")
 
 
 PARTNER_TYPES = ("customer", "supplier", "both")
+# Saját számlázó cégeink (a partner szerződött cége): xp | pc
+INVOICING_COMPANIES = ("xp", "pc")
 
 
 def compose_address(
@@ -54,6 +56,7 @@ def compose_address(
 class PartnerBody(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     company_name: str | None = Field(default=None, max_length=256)
+    invoicing_company: str | None = None  # xp | pc | None
     partner_type: str = Field(default="customer")
     tax_number: str | None = Field(default=None, max_length=32)
     eu_tax_number: str | None = Field(default=None, max_length=32)
@@ -84,6 +87,15 @@ class PartnerBody(BaseModel):
             raise ValueError("partner.bad_type")
         return v
 
+    @field_validator("invoicing_company")
+    @classmethod
+    def _check_company(cls, v: str | None) -> str | None:
+        if v in (None, ""):
+            return None
+        if v not in INVOICING_COMPANIES:
+            raise ValueError("partner.bad_company")
+        return v
+
     def resolved(self) -> dict:
         """Mezők úgy, hogy az egysoros címek a strukturált részekből álljanak
         össze, ha azok (bármelyike) ki van töltve."""
@@ -106,6 +118,7 @@ class PartnerOut(BaseModel):
     partner_code: str | None
     name: str
     company_name: str | None
+    invoicing_company: str | None
     partner_type: str
     tax_number: str | None
     eu_tax_number: str | None
@@ -137,6 +150,7 @@ def _partner_out(p: Partner, asset_count: int = 0) -> PartnerOut:
         partner_code=p.partner_code,
         name=p.name,
         company_name=p.company_name,
+        invoicing_company=p.invoicing_company,
         partner_type=p.partner_type,
         tax_number=p.tax_number,
         eu_tax_number=p.eu_tax_number,
