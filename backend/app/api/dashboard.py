@@ -71,19 +71,24 @@ async def partner_performance(
             )
         ).all()
     }
-    tickets = {
-        pid: int(cnt)
-        for pid, cnt in (
-            await db.execute(
-                select(ServiceTicket.partner_id, func.count())
-                .where(
-                    ServiceTicket.partner_id.is_not(None),
-                    ServiceTicket.created_at >= since,
-                )
-                .group_by(ServiceTicket.partner_id)
+    tickets: dict = {}
+    service_cost: dict = {}
+    for pid, parts, labor in (
+        await db.execute(
+            select(ServiceTicket.partner_id, ServiceTicket.parts, ServiceTicket.labor_fee)
+            .where(
+                ServiceTicket.partner_id.is_not(None),
+                ServiceTicket.created_at >= since,
             )
-        ).all()
-    }
+        )
+    ).all():
+        tickets[pid] = tickets.get(pid, 0) + 1
+        cost = float(labor or 0) + sum(
+            float(p.get("qty", 0)) * float(p.get("unit_price", 0))
+            for p in (parts or [])
+            if isinstance(p, dict)
+        )
+        service_cost[pid] = service_cost.get(pid, 0.0) + cost
     partners = {
         p.id: p
         for p in (
@@ -107,10 +112,59 @@ async def partner_performance(
             "settlements": cnt,
             "machines": machines.get(pid, 0),
             "tickets": tickets.get(pid, 0),
+            "service_cost": round(service_cost.get(pid, 0.0)),
             "per_visit": round(gross / cnt) if cnt else 0,
         })
     rows.sort(key=lambda r: -r["gross"])
     return {"top": rows[:15], "bottom": [r for r in reversed(rows[-15:])] if len(rows) > 15 else []}
+
+
+@router.get("/coverage")
+async def coverage_by_city(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("dashboard")),
+):
+    """Lefedettség településenként: aktív partnerek, kihelyezett gépek és 12
+    havi bruttó bevétel — hol sűrű és hol vékony a jelenlét."""
+    from app.models import Asset
+
+    since = datetime.now() - timedelta(days=365)
+    partners = (
+        await db.execute(select(Partner).where(Partner.is_active.is_(True)))
+    ).scalars().all()
+    city_of = {p.id: (p.address_city or "").strip().title() or "Ismeretlen" for p in partners}
+
+    machines: dict = {}
+    for pid, cnt in (
+        await db.execute(
+            select(Asset.partner_id, func.count())
+            .where(Asset.partner_id.is_not(None), Asset.status == "deployed")
+            .group_by(Asset.partner_id)
+        )
+    ).all():
+        machines[pid] = int(cnt)
+    revenue: dict = {}
+    for pid, gross in (
+        await db.execute(
+            select(Settlement.partner_id, func.sum(Settlement.total_gross))
+            .where(Settlement.created_at >= since)
+            .group_by(Settlement.partner_id)
+        )
+    ).all():
+        revenue[pid] = float(gross or 0)
+
+    cities: dict[str, dict] = {}
+    for p in partners:
+        c = cities.setdefault(
+            city_of[p.id], {"city": city_of[p.id], "partners": 0, "machines": 0, "gross": 0.0}
+        )
+        c["partners"] += 1
+        c["machines"] += machines.get(p.id, 0)
+        c["gross"] += revenue.get(p.id, 0.0)
+    rows = sorted(cities.values(), key=lambda r: -r["gross"])
+    for r in rows:
+        r["gross"] = round(r["gross"])
+    return rows[:60]
 
 
 @router.get("/consignment-stats")

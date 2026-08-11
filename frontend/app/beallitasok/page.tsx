@@ -380,6 +380,62 @@ export default function BeallitasokPage() {
     }
   }
 
+  const [notif, setNotif] = useState({
+    daily_enabled: false, recipients: "", send_hour: "6",
+    weekly_backup: false, auto_receipt: false,
+  });
+  const [notifMsg, setNotifMsg] = useState<string | null>(null);
+  const [notifBusy, setNotifBusy] = useState(false);
+
+  useEffect(() => {
+    api
+      .get<{
+        daily_enabled: boolean; recipients: string | null; send_hour: number;
+        weekly_backup: boolean; auto_receipt: boolean;
+      }>("/api/settings/notifications")
+      .then((s) => setNotif({
+        daily_enabled: s.daily_enabled,
+        recipients: s.recipients ?? "",
+        send_hour: String(s.send_hour),
+        weekly_backup: s.weekly_backup,
+        auto_receipt: s.auto_receipt,
+      }))
+      .catch(() => {});
+  }, []);
+
+  async function saveNotifications(e: React.FormEvent) {
+    e.preventDefault();
+    setNotifBusy(true);
+    setNotifMsg(null);
+    try {
+      await api.put("/api/settings/notifications", {
+        daily_enabled: notif.daily_enabled,
+        recipients: notif.recipients || null,
+        send_hour: Number(notif.send_hour) || 6,
+        weekly_backup: notif.weekly_backup,
+        auto_receipt: notif.auto_receipt,
+      });
+      setNotifMsg(t("common.saved"));
+    } catch (err) {
+      setNotifMsg(errorMessage(err));
+    } finally {
+      setNotifBusy(false);
+    }
+  }
+
+  async function testDigest() {
+    setNotifBusy(true);
+    setNotifMsg(null);
+    try {
+      const res = await api.post<{ sent: number }>("/api/settings/notifications/test");
+      setNotifMsg(t("notif.testSent", { count: res.sent }));
+    } catch (err) {
+      setNotifMsg(errorMessage(err));
+    } finally {
+      setNotifBusy(false);
+    }
+  }
+
   const [backupBusy, setBackupBusy] = useState(false);
 
   async function downloadBackup() {
@@ -1062,6 +1118,51 @@ export default function BeallitasokPage() {
             {t("settings.saveAi")}
           </button>
         </div>
+
+        {/* Értesítések (csak admin) */}
+        <form
+          onSubmit={saveNotifications}
+          className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        >
+          <h2 className="font-semibold">{t("notif.title")}</h2>
+          <p className="text-xs text-slate-500">{t("notif.hint")}</p>
+          <label className="block text-sm">
+            {t("notif.recipients")}
+            <input
+              value={notif.recipients}
+              onChange={(e) => setNotif({ ...notif, recipients: e.target.value })}
+              placeholder="pl. vezeto@ceg.hu, uzletkoto@ceg.hu"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={notif.daily_enabled} onChange={(e) => setNotif({ ...notif, daily_enabled: e.target.checked })} className="h-4 w-4" />
+              {t("notif.daily")}
+            </label>
+            <label className="flex items-center gap-2">
+              {t("notif.hour")}
+              <input type="number" min={0} max={23} value={notif.send_hour} onChange={(e) => setNotif({ ...notif, send_hour: e.target.value })} className="w-16 rounded-lg border border-slate-300 px-2 py-1" />
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={notif.weekly_backup} onChange={(e) => setNotif({ ...notif, weekly_backup: e.target.checked })} className="h-4 w-4" />
+              {t("notif.weeklyBackup")}
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={notif.auto_receipt} onChange={(e) => setNotif({ ...notif, auto_receipt: e.target.checked })} className="h-4 w-4" />
+              {t("notif.autoReceipt")}
+            </label>
+          </div>
+          {notifMsg && <p className="text-sm text-slate-600">{notifMsg}</p>}
+          <div className="flex gap-2">
+            <button disabled={notifBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {notifBusy ? t("common.saving") : t("common.save")}
+            </button>
+            <button type="button" onClick={testDigest} disabled={notifBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
+              {t("notif.testBtn")}
+            </button>
+          </div>
+        </form>
 
         {/* Adatbázis-mentés (csak admin) */}
         <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

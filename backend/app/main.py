@@ -130,6 +130,13 @@ def _ensure_employee_code_column(sync_conn) -> None:
     # v0.15 — automatikus tudásbázis-bővítés kapcsolója
     ensure_column("support_settings", "auto_kb", "BOOLEAN NOT NULL DEFAULT TRUE")
 
+    # v0.18 — szerződés-mezők a gépeken + szerviz-költség a jegyeken
+    ensure_column("assets", "contract_min_portions", "INTEGER")
+    ensure_column("assets", "contract_below_min_price", "FLOAT")
+    ensure_column("assets", "rent_fee", "FLOAT")
+    ensure_column("service_tickets", "parts", "JSONB" if sync_conn.dialect.name == "postgresql" else "JSON")
+    ensure_column("service_tickets", "labor_fee", "FLOAT")
+
     # v0.17 — két számlázó cég: a partner szerződött cége (xp = X-Presso
     # Coffee Kft., pc = Premium Caffe Kft.), pillanatkép az elszámoláson,
     # második Billingó-fiók a Premium Caffe-nak.
@@ -232,7 +239,65 @@ async def lifespan(app: FastAPI):
         if rows:
             await session.commit()
             logger.info("Backfilled company_name for %d partners", len(rows))
+
+        # v0.18 backfill: az Xpresso-importnál a szerződéses feltételek a gép
+        # notes "Szerződés (import): ..." sorába kerültek — mezőkbe emeljük.
+        # A régi árak bruttók voltak → nettó = /1.27 (az eredeti sor megmarad).
+        import re as _re
+
+        from app.models import Asset as _Asset
+
+        contract_rows = (
+            (
+                await session.execute(
+                    sa_select(_Asset).where(
+                        _Asset.rent_fee.is_(None),
+                        _Asset.contract_min_portions.is_(None),
+                        _Asset.notes.like("%Szerződés (import):%"),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        filled_contracts = 0
+        for a in contract_rows:
+            line = next(
+                (ln for ln in (a.notes or "").splitlines() if "Szerződés (import):" in ln), ""
+            )
+            m_min = _re.search(r"min\.\s*(\d+)\s*adag", line)
+            m_below = _re.search(r"min\. alatti adagár\s*([\d\s]+)\s*Ft", line)
+            m_rent = _re.search(r"bérleti díj\s*([\d\s]+)\s*Ft", line)
+            changed = False
+            if m_min:
+                a.contract_min_portions = int(m_min.group(1))
+                changed = True
+            if m_below:
+                a.contract_below_min_price = round(
+                    float(m_below.group(1).replace(" ", "")) / 1.27, 2
+                )
+                changed = True
+            if m_rent:
+                a.rent_fee = round(float(m_rent.group(1).replace(" ", "")) / 1.27, 2)
+                changed = True
+            if changed:
+                filled_contracts += 1
+        if filled_contracts:
+            await session.commit()
+            logger.info("Backfilled contract terms for %d assets", filled_contracts)
+
+    # Értesítési háttérhurok (napi összefoglaló + heti mentés) — tesztben nem fut.
+    import asyncio as _asyncio
+    import os as _os
+
+    notify_task = None
+    if not _os.getenv("WFM_DISABLE_SCHEDULER"):
+        from app.services.wfm.notifier import notification_loop
+
+        notify_task = _asyncio.create_task(notification_loop())
     yield
+    if notify_task is not None:
+        notify_task.cancel()
     await engine.dispose()
 
 

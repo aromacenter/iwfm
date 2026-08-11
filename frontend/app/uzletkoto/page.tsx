@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
-import { api, errorMessage } from "@/lib/api";
+import { api, downloadFile, errorMessage } from "@/lib/api";
 import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT, type CompanyKey } from "@/lib/companies";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -85,6 +85,28 @@ export default function UzletkotoPage() {
     api.get<Summary>(`/api/settlements/summary?${params}`).then(setSummary).catch(() => {});
   }, [agentId, company, dateFrom, dateTo]);
   useEffect(load, [load]);
+
+  // Havi zárás PDF a könyvelőnek (cégenként vagy összesítve)
+  const [reportMonth, setReportMonth] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1); // alapból az előző hónap
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+
+  async function downloadMonthly(companyKey: "" | "xp" | "pc") {
+    const [y, m] = reportMonth.split("-");
+    if (!y || !m) return;
+    const params = new URLSearchParams({ year: y, month: String(Number(m)) });
+    if (companyKey) params.set("company", companyKey);
+    try {
+      await downloadFile(
+        `/api/settlements/monthly-report?${params}`,
+        `zaras-${companyKey || "osszes"}-${y}-${m}.pdf`,
+      );
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   const loadReceivables = useCallback(() => {
     if (!canInvoice) return;
@@ -183,6 +205,18 @@ export default function UzletkotoPage() {
           {t("cons.dateTo")}
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5" />
         </label>
+        <span className="ml-auto flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-1.5">
+          <span className="text-xs font-medium text-slate-500">{t("report.monthly")}</span>
+          <input
+            type="month"
+            value={reportMonth}
+            onChange={(e) => setReportMonth(e.target.value)}
+            className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
+          />
+          <button onClick={() => downloadMonthly("xp")} className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">X-Presso</button>
+          <button onClick={() => downloadMonthly("pc")} className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">Premium</button>
+          <button onClick={() => downloadMonthly("")} className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">{t("report.all")}</button>
+        </span>
         {selected.size > 0 && (
           <button
             onClick={bulkDelete}

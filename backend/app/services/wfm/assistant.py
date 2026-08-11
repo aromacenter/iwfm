@@ -512,6 +512,7 @@ async def _t_create_settlement(db: AsyncSession, actor: User, args: dict):
     from app.api.consignment import (
         _effective_price,
         _partner_price_map,
+        apply_contract_lines,
         portions_from,
     )
     from app.models import Settlement, SettlementLine
@@ -607,6 +608,20 @@ async def _t_create_settlement(db: AsyncSession, actor: User, args: dict):
             ))
         summary.append(f"{product.name}: fogyás {consumed:g} kg ({portions:.0f} adag)")
 
+    total_portions = sum(
+        line.portions
+        for line in (
+            await db.execute(
+                select(SettlementLine).where(SettlementLine.settlement_id == settlement.id)
+            )
+        ).scalars()
+    )
+    extra_net, extra_gross = await apply_contract_lines(db, partner, settlement, total_portions)
+    if extra_net:
+        summary.append(f"szerződéses tételek (bérleti díj / minimum): {extra_net:.0f} Ft nettó")
+    total_net += extra_net
+    total_gross += extra_gross
+
     settlement.total_net = round(total_net, 2)
     settlement.total_gross = round(total_gross, 2)
     await record_audit(
@@ -624,6 +639,12 @@ async def _t_create_settlement(db: AsyncSession, actor: User, args: dict):
         {"kind": "created",
          "label": f"Elszámolás: {partner.name} · {settlement.total_gross:,.0f} Ft".replace(",", " ")},
     )
+
+
+async def _t_daily_summary(db: AsyncSession, actor: User, args: dict):
+    from app.services.wfm.notifier import build_daily_digest
+
+    return {"summary": await build_daily_digest(db)}, None
 
 
 async def _t_navigate(db: AsyncSession, actor: User, args: dict):
@@ -769,6 +790,13 @@ TOOLS: list[dict] = [
             },
         },
         "run": None,  # speciális: own_only a jogosultságtól függ (lásd _execute_tool)
+    },
+    {
+        "name": "daily_summary",
+        "feature": "settlements",
+        "description": "Napi összefoglaló: esedékes elszámolások, hamarosan kifogyó partnerek, nyitott rendelések/szervizjegyek, kintlévőség, fogyás-anomáliák. Használd, ha a felhasználó a napi helyzetről kérdez.",
+        "schema": {"type": "object", "properties": {}},
+        "run": _t_daily_summary,
     },
     {
         "name": "create_settlement",

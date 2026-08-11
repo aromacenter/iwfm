@@ -621,6 +621,88 @@ async def update_permissions(
     }
 
 
+# ─── Értesítések ─────────────────────────────────────────────────────────────
+
+
+class NotificationBody(BaseModel):
+    daily_enabled: bool = False
+    recipients: str | None = Field(default=None, max_length=2000)
+    send_hour: int = Field(default=6, ge=0, le=23)
+    weekly_backup: bool = False
+    auto_receipt: bool = False
+
+
+@router.get("/notifications")
+async def get_notification_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    from app.services.wfm.notifier import get_or_create_settings as _get
+
+    row = await _get(db)
+    await db.commit()
+    return {
+        "daily_enabled": row.daily_enabled,
+        "recipients": row.recipients,
+        "send_hour": row.send_hour,
+        "weekly_backup": row.weekly_backup,
+        "auto_receipt": row.auto_receipt,
+        "last_daily_sent": row.last_daily_sent,
+        "last_backup_sent": row.last_backup_sent,
+    }
+
+
+@router.put("/notifications")
+async def update_notification_settings(
+    body: NotificationBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    from app.services.wfm.notifier import get_or_create_settings as _get
+
+    row = await _get(db)
+    row.daily_enabled = body.daily_enabled
+    row.recipients = (body.recipients or "").strip() or None
+    row.send_hour = body.send_hour
+    row.weekly_backup = body.weekly_backup
+    row.auto_receipt = body.auto_receipt
+    await record_audit(
+        db, actor=actor, action="settings.notifications_update", entity_type="settings",
+        entity_id="notifications", request=request,
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/notifications/test")
+async def send_test_digest(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Próba: a napi összefoglaló azonnali kiküldése a címzetteknek."""
+    from app.services.wfm.email_service import load_smtp_config, send_email
+    from app.services.wfm.notifier import (
+        _recipients,
+        build_daily_digest,
+        get_or_create_settings as _get,
+    )
+
+    row = await _get(db)
+    recipients = _recipients(row)
+    if not recipients:
+        raise HTTPException(status_code=422, detail={"code": "settings.no_recipients"})
+    smtp = await load_smtp_config(db)
+    if smtp is None:
+        raise HTTPException(status_code=422, detail={"code": "settings.smtp_not_configured"})
+    body = await build_daily_digest(db)
+    sent = 0
+    for to in recipients:
+        if await send_email(smtp, to, "Iwfm napi összefoglaló (próba)", body):
+            sent += 1
+    return {"sent": sent}
+
+
 @router.post("/billingo/test")
 async def test_billingo(
     company: str | None = Query(default=None),  # xp (alap) | pc

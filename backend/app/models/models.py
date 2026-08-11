@@ -525,6 +525,10 @@ class Asset(Base):
     tangible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # tárgyi eszköz
     # Az ügyfél SAJÁT gépe (mi csak szervizeljük) — nem "kihelyezett" saját eszköz.
     customer_owned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Szerződéses feltételek (nettó árak, az elszámolás automatikusan számolja):
+    contract_min_portions: Mapped[int | None] = mapped_column(Integer, nullable=True)  # min. adag/hó
+    contract_below_min_price: Mapped[float | None] = mapped_column(Float, nullable=True)  # Ft/adag a különbözetre
+    rent_fee: Mapped[float | None] = mapped_column(Float, nullable=True)  # bérleti díj Ft/hó (nettó)
     # QR-címke: kitalálhatatlan token a nyilvános támogatási oldalhoz.
     qr_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="in_stock")
@@ -807,6 +811,9 @@ class ServiceTicket(Base):
     assigned_to_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     counter_at_service: Mapped[int | None] = mapped_column(Integer, nullable=True)
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Szerviz-költség: felhasznált alkatrészek [{name, qty, unit_price}] + munkadíj (nettó).
+    parts: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    labor_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -902,6 +909,47 @@ class KnowledgeEntry(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class NotificationSettings(Base):
+    """Értesítések — egyetlen sor (id=1). Napi összefoglaló e-mail (esedékes
+    elszámolások, kifogyó készletek, nyitott rendelések, anomáliák), heti
+    automatikus mentés-küldés, és aláírás utáni automatikus bizonylat-email."""
+
+    __tablename__ = "notification_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    daily_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    recipients: Mapped[str | None] = mapped_column(Text, nullable=True)  # e-mailek vesszővel
+    send_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+    weekly_backup: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    auto_receipt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Utolsó sikeres küldések (duplikátum-védelem újraindításkor)
+    last_daily_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)  # ÉÉÉÉ-HH-NN
+    last_backup_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class AssetPhoto(Base):
+    """Fotó egy gépről (kihelyezéskor / szervizkor / állapotrögzítéshez)."""
+
+    __tablename__ = "asset_photos"
+    __table_args__ = (Index("ix_asset_photos_asset", "asset_id"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("assets.id", ondelete="CASCADE"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(256), nullable=False)
+    mime: Mapped[str] = mapped_column(String(64), nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

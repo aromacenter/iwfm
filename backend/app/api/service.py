@@ -55,6 +55,12 @@ class TicketBody(BaseModel):
     assigned_to_user_id: str | None = None
 
 
+class TicketPart(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    qty: float = Field(default=1, ge=0, le=1000)
+    unit_price: float = Field(default=0, ge=0)  # nettó Ft/db
+
+
 class TicketUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=256)
     kind: str | None = None
@@ -64,6 +70,8 @@ class TicketUpdate(BaseModel):
     assigned_to_user_id: str | None = None
     resolution: str | None = Field(default=None, max_length=4000)
     counter_at_service: int | None = Field(default=None, ge=0)
+    parts: list[TicketPart] | None = Field(default=None, max_length=30)
+    labor_fee: float | None = Field(default=None, ge=0)
 
 
 class TicketOut(BaseModel):
@@ -82,6 +90,9 @@ class TicketOut(BaseModel):
     assigned_to_name: str | None
     counter_at_service: int | None
     resolution: str | None
+    parts: list[dict] | None = None
+    labor_fee: float | None = None
+    total_cost: float = 0.0  # alkatrészek + munkadíj (nettó)
     resolved_at: datetime | None
     created_at: datetime
 
@@ -103,6 +114,17 @@ def _out(tk: ServiceTicket) -> TicketOut:
         assigned_to_name=tk.assigned_to_name,
         counter_at_service=tk.counter_at_service,
         resolution=tk.resolution,
+        parts=tk.parts,
+        labor_fee=tk.labor_fee,
+        total_cost=round(
+            (tk.labor_fee or 0)
+            + sum(
+                float(p.get("qty", 0)) * float(p.get("unit_price", 0))
+                for p in (tk.parts or [])
+                if isinstance(p, dict)
+            ),
+            2,
+        ),
         resolved_at=tk.resolved_at,
         created_at=tk.created_at,
     )
@@ -436,6 +458,10 @@ async def update_ticket(
         assignee_id, assignee_name = await _resolve_assignee(db, body.assigned_to_user_id or None)
         tk.assigned_to_user_id = assignee_id
         tk.assigned_to_name = assignee_name
+    if body.parts is not None:
+        tk.parts = [p.model_dump() for p in body.parts]
+    if body.labor_fee is not None:
+        tk.labor_fee = body.labor_fee
     if body.counter_at_service is not None:
         tk.counter_at_service = body.counter_at_service
         # a gép számlálóját is frissítjük, ha nagyobb a rögzített állás

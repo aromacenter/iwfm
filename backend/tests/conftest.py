@@ -24,6 +24,7 @@ async def client(tmp_path, monkeypatch):
     """Fresh app + fresh database for every test."""
     db_path = tmp_path / f"test_{uuid.uuid4().hex}.db"
     monkeypatch.setenv("WFM_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    monkeypatch.setenv("WFM_DISABLE_SCHEDULER", "1")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     get_settings.cache_clear()
     app_db.reset_engine()

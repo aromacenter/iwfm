@@ -398,6 +398,9 @@ class AssetBody(BaseModel):
     norm: float | None = Field(default=None, ge=0)
     tangible: bool = False
     customer_owned: bool = False  # az ügyfél saját gépe
+    contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
+    contract_below_min_price: float | None = Field(default=None, ge=0)
+    rent_fee: float | None = Field(default=None, ge=0)
     notes: str | None = None
 
 
@@ -415,6 +418,9 @@ class AssetPatch(BaseModel):
     norm: float | None = Field(default=None, ge=0)
     tangible: bool | None = None
     customer_owned: bool | None = None
+    contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
+    contract_below_min_price: float | None = Field(default=None, ge=0)
+    rent_fee: float | None = Field(default=None, ge=0)
     notes: str | None = None
     status: str | None = None  # csak in_stock|maintenance|retired (deploy külön)
 
@@ -451,6 +457,9 @@ class AssetOut(BaseModel):
     norm: float | None
     tangible: bool
     customer_owned: bool
+    contract_min_portions: int | None
+    contract_below_min_price: float | None
+    rent_fee: float | None
     status: str
     partner_id: str | None
     partner_name: str | None
@@ -475,6 +484,9 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         norm=a.norm,
         tangible=a.tangible,
         customer_owned=a.customer_owned,
+        contract_min_portions=a.contract_min_portions,
+        contract_below_min_price=a.contract_below_min_price,
+        rent_fee=a.rent_fee,
         status=a.status,
         partner_id=str(a.partner_id) if a.partner_id else None,
         partner_name=partner_name,
@@ -575,6 +587,134 @@ async def asset_by_barcode(
     return _asset_out(a, names.get(a.partner_id))
 
 
+MAX_ASSET_PHOTOS = 10
+_PHOTO_MIMES = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
+
+
+class AssetPhotosBody(BaseModel):
+    photos: list[str] = Field(min_length=1, max_length=5)
+    note: str | None = Field(default=None, max_length=256)
+
+
+@assets_router.get("/photos/{photo_id}")
+async def get_asset_photo(
+    photo_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("machines")),
+):
+    from fastapi import Response
+
+    from app.models import AssetPhoto
+
+    try:
+        pid = uuid.UUID(photo_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "asset.photo_not_found"})
+    photo = (
+        await db.execute(select(AssetPhoto).where(AssetPhoto.id == pid))
+    ).scalar_one_or_none()
+    if photo is None:
+        raise HTTPException(status_code=404, detail={"code": "asset.photo_not_found"})
+    return Response(content=photo.data, media_type=photo.mime)
+
+
+@assets_router.delete("/photos/{photo_id}")
+async def delete_asset_photo(
+    photo_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("machines")),
+):
+    from app.models import AssetPhoto
+
+    try:
+        pid = uuid.UUID(photo_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "asset.photo_not_found"})
+    photo = (
+        await db.execute(select(AssetPhoto).where(AssetPhoto.id == pid))
+    ).scalar_one_or_none()
+    if photo is None:
+        raise HTTPException(status_code=404, detail={"code": "asset.photo_not_found"})
+    await db.delete(photo)
+    await record_audit(
+        db, actor=actor, action="asset.photo_delete", entity_type="asset",
+        entity_id=str(photo.asset_id), request=request,
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@assets_router.get("/{asset_id}/photos")
+async def list_asset_photos(
+    asset_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("machines")),
+):
+    from app.models import AssetPhoto
+
+    a = await _get_asset_or_404(db, asset_id)
+    rows = (
+        await db.execute(
+            select(AssetPhoto.id, AssetPhoto.filename, AssetPhoto.note, AssetPhoto.created_at)
+            .where(AssetPhoto.asset_id == a.id)
+            .order_by(AssetPhoto.created_at.desc())
+        )
+    ).all()
+    return [
+        {"id": str(pid), "filename": fn, "note": note, "created_at": created}
+        for pid, fn, note, created in rows
+    ]
+
+
+@assets_router.post("/{asset_id}/photos", status_code=201)
+async def upload_asset_photos(
+    asset_id: str,
+    body: AssetPhotosBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("machines")),
+):
+    """Fotók a gépről (max 10/gép, 4MB/kép, PNG/JPEG/WebP data URL-ként)."""
+    import base64
+
+    from app.models import AssetPhoto
+
+    a = await _get_asset_or_404(db, asset_id)
+    existing = (
+        await db.execute(
+            select(func.count()).select_from(AssetPhoto).where(AssetPhoto.asset_id == a.id)
+        )
+    ).scalar_one()
+    if existing + len(body.photos) > MAX_ASSET_PHOTOS:
+        raise HTTPException(status_code=422, detail={"code": "asset.too_many_photos"})
+
+    for i, data_url in enumerate(body.photos):
+        try:
+            header, b64 = data_url.split(",", 1)
+            mime = header.split(";")[0].removeprefix("data:")
+            ext = _PHOTO_MIMES[mime]
+            raw = base64.b64decode(b64)
+        except (ValueError, KeyError):
+            raise HTTPException(status_code=422, detail={"code": "asset.bad_photo"})
+        if len(raw) > 4 * 1024 * 1024:
+            raise HTTPException(status_code=422, detail={"code": "asset.photo_too_large"})
+        db.add(AssetPhoto(
+            asset_id=a.id,
+            filename=f"{a.barcode}-{datetime.now(UTC):%Y%m%d%H%M%S}-{i}.{ext}",
+            mime=mime,
+            data=raw,
+            note=body.note,
+            created_by=actor.id,
+        ))
+    await record_audit(
+        db, actor=actor, action="asset.photo_upload", entity_type="asset",
+        entity_id=a.barcode, detail={"count": len(body.photos)}, request=request,
+    )
+    await db.commit()
+    return {"uploaded": len(body.photos)}
+
+
 @assets_router.get("/{asset_id}", response_model=AssetOut)
 async def get_asset(
     asset_id: str,
@@ -639,6 +779,9 @@ async def create_asset(
         norm=body.norm,
         tangible=body.tangible,
         customer_owned=body.customer_owned,
+        contract_min_portions=body.contract_min_portions,
+        contract_below_min_price=body.contract_below_min_price,
+        rent_fee=body.rent_fee,
         notes=body.notes,
         created_by=actor.id,
     )
@@ -734,6 +877,67 @@ async def deploy_asset(
     )
     await db.commit()
     return _asset_out(a, partner.name)
+
+
+class SwapBody(BaseModel):
+    replacement_asset_id: str
+    note: str | None = Field(default=None, max_length=512)
+
+
+@assets_router.post("/{asset_id}/swap", response_model=AssetOut)
+async def swap_asset(
+    asset_id: str,
+    body: SwapBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("machines")),
+):
+    """Gépcsere egy lépésben: a kihelyezett gép szervizre kerül, a cseregép
+    ugyanahhoz a partnerhez kihelyeződik, és ÖRÖKLI a szerződéses feltételeket
+    (min. adag, min. alatti adagár, bérleti díj). Mindkét gép előzményébe
+    bekerül a csere."""
+    old = await _get_asset_or_404(db, asset_id)
+    if old.status != "deployed" or old.partner_id is None:
+        raise HTTPException(status_code=422, detail={"code": "asset.not_deployed"})
+    new = await _get_asset_or_404(db, body.replacement_asset_id)
+    if new.status != "in_stock":
+        raise HTTPException(status_code=422, detail={"code": "asset.replacement_not_in_stock"})
+    partner = (
+        await db.execute(select(Partner).where(Partner.id == old.partner_id))
+    ).scalar_one_or_none()
+
+    # cseregép: kihelyezés + szerződéses feltételek öröklése
+    new.status = "deployed"
+    new.partner_id = old.partner_id
+    new.deployed_at = datetime.now(UTC)
+    new.contract_min_portions = old.contract_min_portions
+    new.contract_below_min_price = old.contract_below_min_price
+    new.rent_fee = old.rent_fee
+    # régi gép: szervizre, kihelyezés lezárva
+    prev_partner = old.partner_id
+    old.status = "maintenance"
+    old.partner_id = None
+    old.deployed_at = None
+
+    note = (body.note or "").strip()
+    db.add(AssetMovement(
+        asset_id=old.id, action="return", partner_id=prev_partner,
+        detail=f"Gépcsere → {new.barcode} került a helyére. {note}".strip(),
+        actor_user_id=actor.id,
+    ))
+    db.add(AssetMovement(
+        asset_id=new.id, action="deploy", partner_id=prev_partner,
+        detail=f"Gépcsere: {old.barcode} helyett. {note}".strip(),
+        actor_user_id=actor.id,
+    ))
+    await record_audit(
+        db, actor=actor, action="asset.swap", entity_type="asset",
+        entity_id=old.barcode,
+        detail={"replacement": new.barcode, "partner": partner.name if partner else None},
+        request=request,
+    )
+    await db.commit()
+    return _asset_out(new, partner.name if partner else None)
 
 
 @assets_router.post("/{asset_id}/return", response_model=AssetOut)

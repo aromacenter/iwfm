@@ -46,7 +46,15 @@ interface PerfRow {
   settlements: number;
   machines: number;
   tickets: number;
+  service_cost: number;
   per_visit: number;
+}
+
+interface CoverageRow {
+  city: string;
+  partners: number;
+  machines: number;
+  gross: number;
 }
 
 interface PartnerPerformance {
@@ -58,6 +66,7 @@ export default function VezerlopultPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [stats, setStats] = useState<ConsStats | null>(null);
   const [performance, setPerformance] = useState<PartnerPerformance | null>(null);
+  const [coverage, setCoverage] = useState<CoverageRow[]>([]);
   const { t, lang } = useT();
   const { toast } = useUI();
 
@@ -65,6 +74,7 @@ export default function VezerlopultPage() {
     api.get<DashboardData>("/api/dashboard").then(setData).catch(() => {});
     api.get<ConsStats>("/api/dashboard/consignment-stats").then(setStats).catch(() => {});
     api.get<PartnerPerformance>("/api/dashboard/partner-performance").then(setPerformance).catch(() => {});
+    api.get<CoverageRow[]>("/api/dashboard/coverage").then(setCoverage).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
@@ -375,6 +385,7 @@ export default function VezerlopultPage() {
                                 <th className="py-1.5">{t("cons.partner")}</th>
                                 <th className="py-1.5 text-right">{t("dash.perfGross")}</th>
                                 <th className="py-1.5 text-right">{t("dash.perfPerVisit")}</th>
+                                <th className="py-1.5 text-right" title={t("dash.perfServiceCostHint")}>{t("dash.perfServiceCost")}</th>
                                 <th className="py-1.5 text-right" title={t("dash.perfTicketsHint")}>🔧</th>
                               </tr>
                             </thead>
@@ -389,6 +400,9 @@ export default function VezerlopultPage() {
                                   </td>
                                   <td className="py-1.5 text-right font-semibold">{ft(r.gross)}</td>
                                   <td className="py-1.5 text-right text-slate-500">{ft(r.per_visit)}</td>
+                                  <td className={`py-1.5 text-right ${r.service_cost > 0 && r.service_cost > r.gross * 0.2 ? "font-semibold text-rose-600" : "text-slate-500"}`}>
+                                    {r.service_cost > 0 ? ft(r.service_cost) : "—"}
+                                  </td>
                                   <td className={`py-1.5 text-right ${r.tickets >= 3 ? "font-semibold text-rose-600" : "text-slate-500"}`}>
                                     {r.tickets}
                                   </td>
@@ -399,6 +413,24 @@ export default function VezerlopultPage() {
                         </div>
                       ),
                   )}
+                </div>
+              </section>
+            )}
+
+            {coverage.length > 0 && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+                <h3 className="mb-1 font-semibold">{t("dash.coverageTitle")}</h3>
+                <p className="mb-3 text-xs text-slate-500">{t("dash.coverageHint")}</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3 lg:grid-cols-4">
+                  {coverage.slice(0, 24).map((c) => (
+                    <div key={c.city} className="flex items-baseline justify-between border-b border-slate-100 py-1">
+                      <span className="truncate">
+                        <span className="font-medium">{c.city}</span>
+                        <span className="ml-1 text-xs text-slate-400">{c.partners}p · {c.machines}g</span>
+                      </span>
+                      <span className="ml-2 whitespace-nowrap text-xs font-semibold text-slate-600">{ft(c.gross)}</span>
+                    </div>
+                  ))}
                 </div>
               </section>
             )}

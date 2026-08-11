@@ -12,7 +12,7 @@ import math
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import delete as sa_delete, func as sa_func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -559,6 +559,78 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
     )
 
 
+async def apply_contract_lines(
+    db: AsyncSession, partner: Partner, settlement: Settlement, total_portions: float
+) -> tuple[float, float]:
+    """Szerződéses sorok az elszámoláshoz: időarányos BÉRLETI DÍJ és a havi
+    MINIMUM ADAG alatti fogyás különbözete (a gépeken beállított feltételekből).
+
+    Az időszak az előző elszámolás óta eltelt napok száma (első elszámolásnál
+    30 nap, 1–90 nap közé szorítva). Visszaadja a hozzáadott (nettó, bruttó)
+    összeget."""
+    from app.models import Asset
+
+    assets = (
+        await db.execute(
+            select(Asset).where(
+                Asset.partner_id == partner.id,
+                Asset.status == "deployed",
+            )
+        )
+    ).scalars().all()
+    rent_total = sum(a.rent_fee or 0 for a in assets)
+    min_total = sum(a.contract_min_portions or 0 for a in assets)
+    below_prices = [a.contract_below_min_price for a in assets if a.contract_below_min_price]
+    if rent_total <= 0 and (min_total <= 0 or not below_prices):
+        return 0.0, 0.0
+
+    prev = (
+        await db.execute(
+            select(sa_func.max(Settlement.created_at)).where(
+                Settlement.partner_id == partner.id, Settlement.id != settlement.id
+            )
+        )
+    ).scalar_one_or_none()
+    if prev is not None and prev.tzinfo is None:
+        prev = prev.replace(tzinfo=UTC)
+    days = 30 if prev is None else (datetime.now(UTC) - prev).days
+    days = min(max(days, 1), 90)
+
+    added_net = added_gross = 0.0
+    if rent_total > 0:
+        rent_net = _money(rent_total * days / 30)
+        db.add(SettlementLine(
+            settlement_id=settlement.id,
+            product_name=f"Bérleti díj ({days} nap, {sum(1 for a in assets if a.rent_fee)} gép)",
+            previous_qty=0.0, physical_qty=0.0, consumed_qty=0.0,
+            portions=1.0, price_per_portion=rent_net, vat_percent=27,
+            amount_net=rent_net,
+        ))
+        added_net += rent_net
+        added_gross += _money(rent_net * 1.27)
+
+    if min_total > 0 and below_prices:
+        min_due = min_total * days / 30.0
+        shortfall = max(min_due - total_portions, 0.0)
+        if shortfall >= 1:
+            price = max(below_prices)
+            amount = _money(shortfall * price)
+            db.add(SettlementLine(
+                settlement_id=settlement.id,
+                product_name=(
+                    f"Minimum adag különbözet ({shortfall:.0f} adag — "
+                    f"{days} napra {min_due:.0f} adag a minimum)"
+                ),
+                previous_qty=0.0, physical_qty=0.0, consumed_qty=0.0,
+                portions=round(shortfall), price_per_portion=price, vat_percent=27,
+                amount_net=amount,
+            ))
+            added_net += amount
+            added_gross += _money(amount * 1.27)
+
+    return _money(added_net), _money(added_gross)
+
+
 async def _get_settlement_or_404(db: AsyncSession, settlement_id: str) -> Settlement:
     try:
         sid = uuid.UUID(settlement_id)
@@ -648,6 +720,19 @@ async def create_settlement(
                     quantity_delta=-consumed, settlement_id=settlement.id, actor_user_id=actor.id,
                 )
             )
+
+    # Szerződéses tételek: bérleti díj + minimum adag különbözet (automatikus)
+    total_portions = sum(
+        line.portions
+        for line in (
+            await db.execute(
+                select(SettlementLine).where(SettlementLine.settlement_id == settlement.id)
+            )
+        ).scalars()
+    )
+    extra_net, extra_gross = await apply_contract_lines(db, partner, settlement, total_portions)
+    total_net += extra_net
+    total_gross += extra_gross
 
     settlement.total_net = _money(total_net)
     settlement.total_gross = _money(total_gross)
@@ -1017,6 +1102,57 @@ async def due_settlements(
     return out
 
 
+@settlements_router.get("/monthly-report")
+async def monthly_report(
+    year: int = Query(ge=2000, le=2100),
+    month: int = Query(ge=1, le=12),
+    company: str | None = Query(default=None),  # xp | pc | None (összes)
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("agent_report")),
+):
+    """Havi zárás PDF a könyvelőnek — cégenként vagy összesítve."""
+    from fastapi import Response
+
+    from app.services.wfm.billingo_service import COMPANIES
+    from app.services.wfm.monthly_report import build_monthly_report_pdf
+
+    if company is not None and company not in ("xp", "pc"):
+        raise HTTPException(status_code=422, detail={"code": "settlement.bad_company"})
+    start = datetime(year, month, 1, tzinfo=UTC)
+    end = datetime(year + 1, 1, 1, tzinfo=UTC) if month == 12 else datetime(year, month + 1, 1, tzinfo=UTC)
+
+    query = (
+        select(Settlement, Partner.name)
+        .join(Partner, Partner.id == Settlement.partner_id)
+        .where(Settlement.created_at >= start, Settlement.created_at < end)
+        .order_by(Settlement.created_at)
+    )
+    if company:
+        query = query.where(Settlement.invoicing_company == company)
+    rows = [
+        {
+            "date": f"{s.created_at:%m.%d. %H:%M}",
+            "partner": name or "—",
+            "method": s.payment_method,
+            "net": s.total_net,
+            "gross": s.total_gross,
+            "invoiced": s.invoiced,
+            "payment_status": s.payment_status,
+        }
+        for s, name in (await db.execute(query)).all()
+    ]
+    pdf = build_monthly_report_pdf(
+        company_label=COMPANIES.get(company, "Mindkét cég összesítve") if company else "Mindkét cég összesítve",
+        period_label=f"{year}. {month:02d}. hónap",
+        rows=rows,
+    )
+    fn = f"zaras-{company or 'osszes'}-{year}-{month:02d}.pdf"
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+    )
+
+
 class ReceivableOut(BaseModel):
     id: str
     partner_id: str
@@ -1304,10 +1440,13 @@ async def sign_settlement(
     settlement_id: str,
     body: SignatureBody,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("settlements")),
 ):
-    """A partner képernyős aláírásának rögzítése a bizonylathoz."""
+    """A partner képernyős aláírásának rögzítése a bizonylathoz. Ha az
+    Értesítéseknél be van kapcsolva, a bizonylat automatikusan kimegy
+    e-mailben a partnernek aláírás után."""
     if not body.signature.startswith("data:image/png;base64,"):
         raise HTTPException(status_code=422, detail={"code": "settlement.bad_signature"})
     s = await _get_settlement_or_404(db, settlement_id)
@@ -1326,7 +1465,52 @@ async def sign_settlement(
         entity_id=str(s.id), request=request,
     )
     await db.commit()
+
+    # Automatikus bizonylat-küldés (best-effort, háttérben)
+    from app.services.wfm.notifier import get_or_create_settings as _notif
+
+    notif = await _notif(db)
+    await db.commit()
+    partner_email = partner.contact_email if partner else None
+    if notif.auto_receipt and partner_email:
+        background_tasks.add_task(_auto_send_receipt, str(s.id), partner_email)
     return _settlement_out(s, partner.name if partner else None)
+
+
+async def _auto_send_receipt(settlement_id: str, to: str) -> None:
+    """Háttérfeladat: bizonylat-PDF küldése aláírás után (saját session)."""
+    from app.db import get_session_factory
+    from app.services.wfm.email_service import load_smtp_config, send_email
+
+    try:
+        async with get_session_factory()() as db:
+            s = (
+                await db.execute(
+                    select(Settlement).where(Settlement.id == uuid.UUID(settlement_id))
+                )
+            ).scalar_one_or_none()
+            if s is None:
+                return
+            smtp = await load_smtp_config(db)
+            if smtp is None:
+                return
+            pdf, receipt_no = await _build_settlement_pdf(db, s)
+            ok = await send_email(
+                smtp, to,
+                f"Elszámolási bizonylat — {receipt_no}",
+                (
+                    f"Tisztelt Partnerünk!\n\nMellékelve küldjük a(z) {receipt_no} számú "
+                    f"elszámolási bizonylatot.\n\nÜdvözlettel:\n{s.settled_by_name}"
+                ),
+                attachments=[(f"{receipt_no}.pdf", pdf, "application", "pdf")],
+            )
+            if ok:
+                s.receipt_sent_at = datetime.now(UTC)
+                await db.commit()
+    except Exception:  # noqa: BLE001 — háttérfeladat, nem dobhat a kérésre
+        import logging
+
+        logging.getLogger(__name__).warning("auto receipt send failed", exc_info=True)
 
 
 class ReceiptEmailBody(BaseModel):

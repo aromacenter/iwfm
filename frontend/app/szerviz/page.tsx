@@ -27,6 +27,9 @@ interface Ticket {
   assigned_to_name: string | null;
   counter_at_service: number | null;
   resolution: string | null;
+  parts: { name: string; qty: number; unit_price: number }[] | null;
+  labor_fee: number | null;
+  total_cost: number;
   resolved_at: string | null;
   created_at: string;
 }
@@ -71,6 +74,12 @@ const PRIORITY_STYLE: Record<Ticket["priority"], string> = {
   high: "text-red-600 font-semibold",
 };
 
+interface PartRow {
+  name: string;
+  qty: string;
+  unit_price: string;
+}
+
 interface FormState {
   id: string | null;
   title: string;
@@ -81,6 +90,8 @@ interface FormState {
   assigned_to_user_id: string;
   resolution: string;
   counter_at_service: string;
+  parts: PartRow[];
+  labor_fee: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -93,6 +104,8 @@ const EMPTY_FORM: FormState = {
   assigned_to_user_id: "",
   resolution: "",
   counter_at_service: "",
+  parts: [],
+  labor_fee: "",
 };
 
 export default function SzervizPage() {
@@ -174,6 +187,12 @@ export default function SzervizPage() {
       assigned_to_user_id: tk.assigned_to_user_id ?? "",
       resolution: tk.resolution ?? "",
       counter_at_service: tk.counter_at_service?.toString() ?? "",
+      parts: (tk.parts ?? []).map((p) => ({
+        name: p.name ?? "",
+        qty: String(p.qty ?? 1),
+        unit_price: String(p.unit_price ?? 0),
+      })),
+      labor_fee: tk.labor_fee != null ? String(tk.labor_fee) : "",
     });
   }
 
@@ -192,6 +211,14 @@ export default function SzervizPage() {
           assigned_to_user_id: form.assigned_to_user_id || "",
           resolution: form.resolution || null,
           counter_at_service: form.counter_at_service === "" ? null : Number(form.counter_at_service),
+          parts: form.parts
+            .filter((p) => p.name.trim())
+            .map((p) => ({
+              name: p.name.trim(),
+              qty: Number(p.qty) || 1,
+              unit_price: Number(p.unit_price) || 0,
+            })),
+          labor_fee: form.labor_fee === "" ? null : Number(form.labor_fee),
         });
       } else {
         await api.post("/api/service", {
@@ -591,6 +618,57 @@ export default function SzervizPage() {
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
                   />
                 </label>
+                <fieldset className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("service.costSection")}</legend>
+                  {form.parts.map((p, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        value={p.name}
+                        onChange={(e) => setForm({ ...form, parts: form.parts.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })}
+                        placeholder={t("service.partName")}
+                        className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                      <input
+                        type="number" min={0} step="0.1" value={p.qty}
+                        onChange={(e) => setForm({ ...form, parts: form.parts.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)) })}
+                        title={t("service.partQty")}
+                        className="w-16 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                      <input
+                        type="number" min={0} value={p.unit_price}
+                        onChange={(e) => setForm({ ...form, parts: form.parts.map((x, j) => (j === i ? { ...x, unit_price: e.target.value } : x)) })}
+                        title={t("service.partPrice")}
+                        className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                      <button type="button" onClick={() => setForm({ ...form, parts: form.parts.filter((_, j) => j !== i) })} className="text-slate-400 hover:text-red-600">✕</button>
+                    </div>
+                  ))}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, parts: [...form.parts, { name: "", qty: "1", unit_price: "0" }] })}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-100"
+                    >
+                      + {t("service.partAdd")}
+                    </button>
+                    <label className="flex items-center gap-2 text-sm">
+                      {t("service.laborFee")}
+                      <input
+                        type="number" min={0} value={form.labor_fee}
+                        onChange={(e) => setForm({ ...form, labor_fee: e.target.value })}
+                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                    <span className="text-xs text-slate-500">
+                      {t("service.costTotal", {
+                        total: (
+                          (Number(form.labor_fee) || 0)
+                          + form.parts.reduce((s, p) => s + (Number(p.qty) || 0) * (Number(p.unit_price) || 0), 0)
+                        ).toLocaleString("hu-HU"),
+                      })}
+                    </span>
+                  </div>
+                </fieldset>
               </>
             )}
             {error && <p className="text-sm text-red-600">{error}</p>}

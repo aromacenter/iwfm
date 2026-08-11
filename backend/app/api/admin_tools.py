@@ -57,6 +57,28 @@ def _jsonable(value):
     return value
 
 
+async def build_backup_gzip(db: AsyncSession) -> bytes:
+    """Teljes logikai mentés gzip-elt JSON-ként (a heti auto-mentés is ezt
+    használja)."""
+    from app.models import Base
+
+    dump: dict[str, list[dict]] = {}
+    for table in Base.metadata.sorted_tables:
+        rows = (await db.execute(sa_text(f'SELECT * FROM "{table.name}"'))).mappings().all()
+        dump[table.name] = [
+            {k: _jsonable(v) for k, v in row.items()} for row in rows
+        ]
+    payload = json.dumps(
+        {"format": "iwfm-backup-v1", "created_at": datetime.now().isoformat(), "tables": dump},
+        ensure_ascii=False,
+        default=str,
+    ).encode("utf-8")
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+        gz.write(payload)
+    return buf.getvalue()
+
+
 @router.get("/backup")
 async def download_backup(
     request: Request,
@@ -66,33 +88,15 @@ async def download_backup(
     """Teljes logikai mentés: minden tábla minden sora, gzip-elt JSON-ban.
     A bináris mezők (aláírások, csatolmányok, titkosított kulcsok) base64-ben.
     Visszatöltés: soronkénti INSERT az azonos sémájú üres adatbázisba."""
-    from app.models import Base
-
-    dump: dict[str, list[dict]] = {}
-    for table in Base.metadata.sorted_tables:
-        rows = (await db.execute(sa_text(f'SELECT * FROM "{table.name}"'))).mappings().all()
-        dump[table.name] = [
-            {k: _jsonable(v) for k, v in row.items()} for row in rows
-        ]
-
-    payload = json.dumps(
-        {"format": "iwfm-backup-v1", "created_at": datetime.now().isoformat(), "tables": dump},
-        ensure_ascii=False,
-        default=str,
-    ).encode("utf-8")
-    buf = io.BytesIO()
-    with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
-        gz.write(payload)
-
+    content = await build_backup_gzip(db)
     await record_audit(
         db, actor=actor, action="admin.backup", entity_type="backup",
-        detail={"tables": len(dump), "rows": sum(len(r) for r in dump.values())},
-        request=request,
+        detail={"bytes": len(content)}, request=request,
     )
     await db.commit()
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
     return Response(
-        content=buf.getvalue(),
+        content=content,
         media_type="application/gzip",
         headers={"Content-Disposition": f'attachment; filename="iwfm-mentes-{stamp}.json.gz"'},
     )

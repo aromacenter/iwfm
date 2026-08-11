@@ -48,6 +48,9 @@ interface Asset {
   norm: number | null;
   tangible: boolean;
   customer_owned: boolean;
+  contract_min_portions: number | null;
+  contract_below_min_price: number | null;
+  rent_fee: number | null;
   status: "in_stock" | "deployed" | "maintenance" | "retired";
   partner_id: string | null;
   partner_name: string | null;
@@ -75,6 +78,9 @@ const EMPTY_ASSET = {
   norm: "",
   tangible: false,
   customer_owned: false,
+  contract_min_portions: "",
+  contract_below_min_price: "",
+  rent_fee: "",
   notes: "",
   status: "in_stock",
 };
@@ -222,6 +228,9 @@ export default function GepekPage() {
         norm: assetForm.norm !== "" ? Number(assetForm.norm) : null,
         tangible: assetForm.tangible,
         customer_owned: assetForm.customer_owned,
+        contract_min_portions: assetForm.contract_min_portions !== "" ? Number(assetForm.contract_min_portions) : null,
+        contract_below_min_price: assetForm.contract_below_min_price !== "" ? Number(assetForm.contract_below_min_price) : null,
+        rent_fee: assetForm.rent_fee !== "" ? Number(assetForm.rent_fee) : null,
         notes: assetForm.notes || null,
       };
       if (assetForm.id) await api.patch(`/api/assets/${assetForm.id}`, body);
@@ -265,6 +274,42 @@ export default function GepekPage() {
     }
   }
 
+  // Gépcsere: a kihelyezett gép helyére raktári cseregép, szerződés-örökléssel.
+  const [swapFor, setSwapFor] = useState<Asset | null>(null);
+  const [swapCode, setSwapCode] = useState("");
+  const [inStock, setInStock] = useState<Asset[]>([]);
+
+  useEffect(() => {
+    if (!swapFor) return;
+    api.get<Asset[]>("/api/assets?status=in_stock").then(setInStock).catch(() => {});
+  }, [swapFor]);
+
+  async function doSwap(e: React.FormEvent) {
+    e.preventDefault();
+    if (!swapFor) return;
+    const replacement = inStock.find(
+      (x) => x.barcode === swapCode.trim() || `${x.name} (${x.barcode})` === swapCode.trim(),
+    );
+    if (!replacement) {
+      setError(t("inv.swapNotFound"));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/api/assets/${swapFor.id}/swap`, {
+        replacement_asset_id: replacement.id,
+      });
+      toast(t("inv.swapDone", { old: swapFor.barcode, new: replacement.barcode }), "success");
+      setSwapFor(null);
+      loadAssets();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function returnAsset(asset: Asset) {
     try {
       await api.post(`/api/assets/${asset.id}/return`, {});
@@ -275,10 +320,55 @@ export default function GepekPage() {
     }
   }
 
+  interface AssetPhoto {
+    id: string;
+    filename: string;
+    note: string | null;
+    created_at: string;
+  }
+  const [photos, setPhotos] = useState<AssetPhoto[]>([]);
+
+  const loadPhotos = useCallback((assetId: string) => {
+    api.get<AssetPhoto[]>(`/api/assets/${assetId}/photos`).then(setPhotos).catch(() => setPhotos([]));
+  }, []);
+
   async function openHistory(asset: Asset) {
     try {
       const full = await api.get<Asset>(`/api/assets/${asset.id}`);
       setHistoryFor(full);
+      loadPhotos(full.id);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  function onPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !historyFor) return;
+    if (file.size > 4 * 1024 * 1024) {
+      toast(t("inv.photoTooLarge"), "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        await api.post(`/api/assets/${historyFor.id}/photos`, { photos: [reader.result as string] });
+        toast(t("inv.photoUploaded"), "success");
+        loadPhotos(historyFor.id);
+      } catch (err) {
+        toast(errorMessage(err), "error");
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function deletePhoto(photoId: string) {
+    if (!historyFor) return;
+    if (!(await confirm(t("inv.photoDeleteConfirm")))) return;
+    try {
+      await api.delete(`/api/assets/photos/${photoId}`);
+      loadPhotos(historyFor.id);
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -450,9 +540,14 @@ export default function GepekPage() {
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1.5">
                     {a.status === "deployed" ? (
+                      <>
                       <button onClick={() => returnAsset(a)} title={t("inv.returnBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                         📥
                       </button>
+                      <button onClick={() => { setError(null); setSwapCode(""); setSwapFor(a); }} title={t("inv.swapBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                        🔁
+                      </button>
+                      </>
                     ) : a.status !== "retired" ? (
                       <button onClick={() => { setError(null); setDeploy({ partner_id: "", note: "" }); setDeployFor(a); }} title={t("inv.deploy")} className="rounded bg-emerald-600 px-2 py-1 text-sm leading-none hover:bg-emerald-700">
                         📤
@@ -464,7 +559,7 @@ export default function GepekPage() {
                     <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       🕘
                     </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, customer_owned: a.customer_owned, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, customer_owned: a.customer_owned, contract_min_portions: a.contract_min_portions != null ? String(a.contract_min_portions) : "", contract_below_min_price: a.contract_below_min_price != null ? String(a.contract_below_min_price) : "", rent_fee: a.rent_fee != null ? String(a.rent_fee) : "", notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       ✏️
                     </button>
                   </div>
@@ -536,6 +631,24 @@ export default function GepekPage() {
               <input type="checkbox" checked={assetForm.customer_owned} onChange={(e) => setAssetForm({ ...assetForm, customer_owned: e.target.checked })} className="h-4 w-4" />
               {t("inv.customerOwned")}
             </label>
+            <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
+              <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("inv.contractSection")}</legend>
+              <p className="text-xs text-slate-500">{t("inv.contractHint")}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <label className="block text-sm">
+                  {t("inv.contractMin")}
+                  <input type="number" min={0} value={assetForm.contract_min_portions} onChange={(e) => setAssetForm({ ...assetForm, contract_min_portions: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                </label>
+                <label className="block text-sm">
+                  {t("inv.contractBelowPrice")}
+                  <input type="number" min={0} step="0.01" value={assetForm.contract_below_min_price} onChange={(e) => setAssetForm({ ...assetForm, contract_below_min_price: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                </label>
+                <label className="block text-sm">
+                  {t("inv.rentFee")}
+                  <input type="number" min={0} step="0.01" value={assetForm.rent_fee} onChange={(e) => setAssetForm({ ...assetForm, rent_fee: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                </label>
+              </div>
+            </fieldset>
             <label className="block text-sm">
               {t("inv.notes")}
               <textarea value={assetForm.notes} onChange={(e) => setAssetForm({ ...assetForm, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
@@ -600,10 +713,76 @@ export default function GepekPage() {
                 ))}
               </ul>
             )}
+            {/* Fotók a gépről */}
+            <div className="border-t border-slate-200 pt-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold">{t("inv.photosTitle", { count: photos.length })}</p>
+                <label className="cursor-pointer rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-100">
+                  📷 {t("inv.photoAdd")}
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={onPhotoFile} />
+                </label>
+              </div>
+              {photos.length === 0 ? (
+                <p className="text-xs text-slate-400">{t("inv.noPhotos")}</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {photos.map((p) => (
+                    <div key={p.id} className="group relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <a href={`/api/assets/photos/${p.id}`} target="_blank" rel="noreferrer">
+                        <img src={`/api/assets/photos/${p.id}`} alt={p.filename} className="h-24 w-full rounded-lg object-cover" />
+                      </a>
+                      <button
+                        onClick={() => deletePhoto(p.id)}
+                        title={t("common.delete")}
+                        className="absolute right-1 top-1 hidden rounded bg-black/60 px-1.5 text-xs text-white group-hover:block"
+                      >
+                        ✕
+                      </button>
+                      <p className="mt-0.5 truncate text-[10px] text-slate-400">{fmt(p.created_at)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="flex justify-end">
               <button onClick={() => setHistoryFor(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.close")}</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Gépcsere */}
+      {swapFor && (
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setSwapFor(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={doSwap} className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">{t("inv.swapTitle")}</h2>
+            <p className="text-sm text-slate-500">
+              {swapFor.name} · <span className="font-mono">{swapFor.barcode}</span> → {swapFor.partner_name}
+            </p>
+            <p className="text-xs text-slate-500">{t("inv.swapHint")}</p>
+            <label className="block text-sm">
+              {t("inv.swapReplacement")}
+              <input
+                required
+                list="instock-assets"
+                value={swapCode}
+                onChange={(e) => setSwapCode(e.target.value)}
+                placeholder={t("inv.swapPh")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono"
+              />
+              <datalist id="instock-assets">
+                {inStock.map((x) => (
+                  <option key={x.id} value={x.barcode}>{x.name}</option>
+                ))}
+              </datalist>
+            </label>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setSwapFor(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{t("inv.swapBtn")}</button>
+            </div>
+          </form>
         </div>
       )}
 
