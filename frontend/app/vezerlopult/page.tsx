@@ -37,15 +37,34 @@ interface DashboardData {
   active_employees: number;
 }
 
+interface PerfRow {
+  partner_id: string;
+  name: string;
+  partner_code: string | null;
+  invoicing_company: string | null;
+  gross: number;
+  settlements: number;
+  machines: number;
+  tickets: number;
+  per_visit: number;
+}
+
+interface PartnerPerformance {
+  top: PerfRow[];
+  bottom: PerfRow[];
+}
+
 export default function VezerlopultPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [stats, setStats] = useState<ConsStats | null>(null);
+  const [performance, setPerformance] = useState<PartnerPerformance | null>(null);
   const { t, lang } = useT();
   const { toast } = useUI();
 
   const load = useCallback(() => {
     api.get<DashboardData>("/api/dashboard").then(setData).catch(() => {});
     api.get<ConsStats>("/api/dashboard/consignment-stats").then(setStats).catch(() => {});
+    api.get<PartnerPerformance>("/api/dashboard/partner-performance").then(setPerformance).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
@@ -337,6 +356,52 @@ export default function VezerlopultPage() {
                 ))}
               </div>
             </section>
+
+            {performance && (performance.top.length > 0 || performance.bottom.length > 0) && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+                <h3 className="mb-1 font-semibold">{t("dash.perfTitle")}</h3>
+                <p className="mb-3 text-xs text-slate-500">{t("dash.perfHint")}</p>
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                  {([["top", performance.top], ["bottom", performance.bottom]] as const).map(
+                    ([key, rows]) =>
+                      rows.length > 0 && (
+                        <div key={key}>
+                          <p className="mb-2 text-xs font-semibold uppercase text-slate-400">
+                            {t(key === "top" ? "dash.perfTop" : "dash.perfBottom")}
+                          </p>
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left text-xs uppercase text-slate-500">
+                                <th className="py-1.5">{t("cons.partner")}</th>
+                                <th className="py-1.5 text-right">{t("dash.perfGross")}</th>
+                                <th className="py-1.5 text-right">{t("dash.perfPerVisit")}</th>
+                                <th className="py-1.5 text-right" title={t("dash.perfTicketsHint")}>🔧</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map((r) => (
+                                <tr key={r.partner_id} className="border-t border-slate-100">
+                                  <td className="py-1.5">
+                                    <span className="font-medium">{r.name}</span>
+                                    <span className="ml-1 text-xs text-slate-400">
+                                      {r.machines > 0 ? `${r.machines} gép` : ""}
+                                    </span>
+                                  </td>
+                                  <td className="py-1.5 text-right font-semibold">{ft(r.gross)}</td>
+                                  <td className="py-1.5 text-right text-slate-500">{ft(r.per_visit)}</td>
+                                  <td className={`py-1.5 text-right ${r.tickets >= 3 ? "font-semibold text-rose-600" : "text-slate-500"}`}>
+                                    {r.tickets}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ),
+                  )}
+                </div>
+              </section>
+            )}
           </div>
         </>
       )}

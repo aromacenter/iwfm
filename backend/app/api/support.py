@@ -22,7 +22,7 @@ import uuid
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -229,6 +229,7 @@ class SupportTicketBody(BaseModel):
     description: str = Field(min_length=5, max_length=4000)
     contact_name: str | None = Field(default=None, max_length=256)
     contact_phone: str | None = Field(default=None, max_length=64)
+    contact_email: EmailStr | None = None  # ha a partnernek nincs, elmentjük
     photos: list[str] = Field(default_factory=list, max_length=MAX_PHOTOS)
 
 
@@ -266,10 +267,15 @@ async def create_support_ticket(
     partner = await _asset_partner(db, asset)
     photos = [_decode_photo(p, i) for i, p in enumerate(body.photos)]
 
-    contact_bits = " · ".join(x for x in (body.contact_name, body.contact_phone) if x)
+    contact_bits = " · ".join(
+        x for x in (body.contact_name, body.contact_phone, body.contact_email) if x
+    )
     description = body.description.strip()
     if contact_bits:
         description = f"{description}\n\nBejelentő: {contact_bits}"
+    # E-mail-gyűjtés: csak ÜRES partner-e-mailt töltünk (kézit nem írunk felül).
+    if body.contact_email and partner is not None and not partner.contact_email:
+        partner.contact_email = str(body.contact_email)
 
     ticket = ServiceTicket(
         ticket_no=await _next_ticket_no(db),

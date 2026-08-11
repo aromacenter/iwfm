@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { api, errorMessage } from "@/lib/api";
+import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
 
@@ -380,6 +380,54 @@ export default function BeallitasokPage() {
     }
   }
 
+  const [backupBusy, setBackupBusy] = useState(false);
+
+  async function downloadBackup() {
+    setBackupBusy(true);
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      await downloadFile("/api/admin/backup", `iwfm-mentes-${stamp}.json.gz`);
+      toast(t("backup.done"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  const [syncBusy, setSyncBusy] = useState(false);
+
+  async function billingoPartnerSync(dryRun: boolean) {
+    if (!dryRun && !(await confirm(t("settings.billingoSyncConfirm")))) return;
+    setSyncBusy(true);
+    setBillingoMsg(null);
+    try {
+      const res = await api.post<{ report: Record<string, Record<string, unknown>> }>(
+        "/api/admin/billingo-sync",
+        { dry_run: dryRun },
+      );
+      const parts: string[] = [];
+      for (const [company, rep] of Object.entries(res.report)) {
+        const label = company === "pc" ? "Premium Caffe" : "X-Presso";
+        if (rep.skipped) {
+          parts.push(`${label}: ${rep.skipped}`);
+        } else {
+          const updated = (rep.updated ?? rep.would_update ?? 0) as number;
+          parts.push(
+            `${label}: ${rep.billingo_partners} vevő a Billingóban, ${rep.matched} párosítva, ${updated} ${dryRun ? "frissülne" : "frissítve"}`,
+          );
+          const samples = (rep.samples as string[]) ?? [];
+          if (samples.length) parts.push("· " + samples.join("\n· "));
+        }
+      }
+      setBillingoMsg(parts.join("\n"));
+    } catch (err) {
+      setBillingoMsg(errorMessage(err));
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
   async function wipe(entity: "assets" | "products" | "partners") {
     const count = wipeCounts?.[entity] ?? 0;
     const extra = entity === "partners"
@@ -684,7 +732,7 @@ export default function BeallitasokPage() {
               {t("settings.billingoLiveWarning")}
             </p>
           )}
-          {billingoMsg && <p className="text-sm text-slate-600">{billingoMsg}</p>}
+          {billingoMsg && <p className="whitespace-pre-wrap text-sm text-slate-600">{billingoMsg}</p>}
           <div className="flex gap-2">
             <button disabled={billingoBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
               {billingoBusy ? t("common.saving") : t("common.save")}
@@ -694,6 +742,12 @@ export default function BeallitasokPage() {
             </button>
             <button type="button" onClick={() => testBillingo("pc")} disabled={billingoBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
               {t("settings.billingoTest")} (Premium)
+            </button>
+            <button type="button" onClick={() => billingoPartnerSync(true)} disabled={syncBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
+              {syncBusy ? t("common.loading") : t("settings.billingoSyncDry")}
+            </button>
+            <button type="button" onClick={() => billingoPartnerSync(false)} disabled={syncBusy} className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">
+              {t("settings.billingoSyncApply")}
             </button>
           </div>
         </form>
@@ -1006,6 +1060,20 @@ export default function BeallitasokPage() {
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             {t("settings.saveAi")}
+          </button>
+        </div>
+
+        {/* Adatbázis-mentés (csak admin) */}
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="font-semibold">{t("backup.title")}</h2>
+          <p className="text-xs text-slate-500">{t("backup.hint")}</p>
+          <button
+            type="button"
+            onClick={downloadBackup}
+            disabled={backupBusy}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {backupBusy ? t("common.loading") : t("backup.download")}
           </button>
         </div>
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field
@@ -887,9 +887,15 @@ class DuePartnerOut(BaseModel):
     partner_code: str | None
     name: str
     contact_phone: str | None
+    address: str | None = None  # útvonal-tervezéshez
+    city: str | None = None  # földrajzi csoportosításhoz
     last_settlement_at: datetime | None  # None = még sosem volt elszámolva
     days_since: int | None
     stock_products: int  # hány termékből van kint készlete
+    # Fogyás-előrejelzés az elszámolás-előzményekből (utolsó 180 nap):
+    avg_daily_kg: float | None = None  # átlagos napi fogyás (kg)
+    days_left: int | None = None  # várhatóan ennyi nap múlva fogy ki
+    suggested_kg: float | None = None  # javasolt vinnivaló (30 napra)
 
 
 @settlements_router.get("/due", response_model=list[DuePartnerOut])
@@ -900,7 +906,8 @@ async def due_settlements(
 ):
     """Esedékes elszámolások (látogatási terv): azok az aktív partnerek, akiknél
     van kint készlet vagy volt már elszámolás, és az utolsó elszámolásuk N+
-    napja történt (vagy még sosem). A legrégebben elszámoltak elöl."""
+    napja történt (vagy még sosem) VAGY a fogyás-előrejelzés szerint 7 napon
+    belül kifogynak. A legrégebben elszámoltak elöl."""
     last_at = {
         pid: at
         for pid, at in (
@@ -920,6 +927,41 @@ async def due_settlements(
             )
         ).all()
     }
+    stock_kg = {
+        pid: float(total or 0)
+        for pid, total in (
+            await db.execute(
+                select(PartnerStock.partner_id, sa_func.sum(PartnerStock.quantity))
+                .group_by(PartnerStock.partner_id)
+            )
+        ).all()
+    }
+
+    # Fogyás az utolsó 180 nap elszámolásaiból: összes fogyás (kg) + időablak.
+    now = datetime.now(UTC)
+    window_start = now - timedelta(days=180)
+    consumption = {
+        pid: (float(kg or 0), first, last)
+        for pid, kg, first, last in (
+            await db.execute(
+                select(
+                    Settlement.partner_id,
+                    sa_func.sum(SettlementLine.consumed_qty),
+                    sa_func.min(Settlement.created_at),
+                    sa_func.max(Settlement.created_at),
+                )
+                .join(SettlementLine, SettlementLine.settlement_id == Settlement.id)
+                .where(Settlement.created_at >= window_start)
+                .group_by(Settlement.partner_id)
+            )
+        ).all()
+    }
+
+    def _aware(dt: datetime | None) -> datetime | None:
+        if dt is not None and dt.tzinfo is None:
+            return dt.replace(tzinfo=UTC)  # SQLite naiv datetime-ot ad vissza
+        return dt
+
     relevant = set(last_at) | set(stock_counts)
     if not relevant:
         return []
@@ -929,14 +971,24 @@ async def due_settlements(
         )
     ).scalars().all()
 
-    now = datetime.now(UTC)
     out: list[DuePartnerOut] = []
     for p in partners:
-        last = last_at.get(p.id)
-        if last is not None and last.tzinfo is None:
-            last = last.replace(tzinfo=UTC)  # SQLite naiv datetime-ot ad vissza
+        last = _aware(last_at.get(p.id))
         since = (now - last).days if last is not None else None
-        if since is not None and since < days:
+
+        avg_daily = days_left = suggested = None
+        cons = consumption.get(p.id)
+        if cons and cons[0] > 0:
+            kg, first, clast = cons[0], _aware(cons[1]), _aware(cons[2])
+            span = max((clast - first).days if first and clast else 0, 14)
+            avg_daily = round(kg / span, 3)
+            if avg_daily > 0:
+                remaining = stock_kg.get(p.id, 0.0)
+                days_left = max(int(remaining / avg_daily), 0)
+                suggested = round(max(avg_daily * 30 - remaining, 0), 1)
+
+        runs_out_soon = days_left is not None and days_left <= 7
+        if since is not None and since < days and not runs_out_soon:
             continue
         out.append(
             DuePartnerOut(
@@ -944,13 +996,24 @@ async def due_settlements(
                 partner_code=p.partner_code,
                 name=p.name,
                 contact_phone=p.contact_phone,
+                address=p.address,
+                city=p.address_city,
                 last_settlement_at=last,
                 days_since=since,
                 stock_products=stock_counts.get(p.id, 0),
+                avg_daily_kg=avg_daily,
+                days_left=days_left,
+                suggested_kg=suggested,
             )
         )
-    # sosem elszámoltak elöl, utána a legrégebbiek
-    out.sort(key=lambda d: (d.days_since is not None, -(d.days_since or 0)))
+    # hamarosan kifogyók legelöl, aztán a sosem elszámoltak, majd a legrégebbiek
+    out.sort(
+        key=lambda d: (
+            d.days_left if d.days_left is not None and d.days_left <= 7 else 999,
+            d.days_since is not None,
+            -(d.days_since or 0),
+        )
+    )
     return out
 
 
@@ -1231,6 +1294,9 @@ async def settlement_pdf(
 
 class SignatureBody(BaseModel):
     signature: str = Field(min_length=30, max_length=500_000)
+    # Opcionális e-mail-gyűjtés aláíráskor: csak akkor mentjük a partnerre,
+    # ha még nincs e-mail címe (kézi értéket nem írunk felül).
+    partner_email: EmailStr | None = None
 
 
 @settlements_router.post("/{settlement_id}/signature", response_model=SettlementOut)
@@ -1246,15 +1312,21 @@ async def sign_settlement(
         raise HTTPException(status_code=422, detail={"code": "settlement.bad_signature"})
     s = await _get_settlement_or_404(db, settlement_id)
     s.partner_signature = body.signature
-    partner_name = (
-        await db.execute(select(Partner.name).where(Partner.id == s.partner_id))
+    partner = (
+        await db.execute(select(Partner).where(Partner.id == s.partner_id))
     ).scalar_one_or_none()
+    if body.partner_email and partner is not None and not partner.contact_email:
+        partner.contact_email = str(body.partner_email)
+        await record_audit(
+            db, actor=actor, action="partner.email_collected", entity_type="partner",
+            entity_id=str(partner.id), request=request,
+        )
     await record_audit(
         db, actor=actor, action="settlement.sign", entity_type="settlement",
         entity_id=str(s.id), request=request,
     )
     await db.commit()
-    return _settlement_out(s, partner_name)
+    return _settlement_out(s, partner.name if partner else None)
 
 
 class ReceiptEmailBody(BaseModel):

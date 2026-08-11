@@ -339,7 +339,8 @@ async def test_settlement_receipt_email_requires_config(client, manager):
 
 async def test_due_settlements(client, manager):
     """Esedékesek: készletes, sosem elszámolt partner szerepel; a most
-    elszámolt (0 napja) nem éri el a 30 napos küszöböt."""
+    elszámolt (0 napja) csak akkor, ha az előrejelzés szerint hamarosan
+    kifogy. Bő készlet-visszatöltés után nem listázódik."""
     _, mgr = manager
     # sosem elszámolt, de van kint készlete
     waiting = await make_partner(client, mgr, name="Váró Bt.")
@@ -349,15 +350,21 @@ async def test_due_settlements(client, manager):
         json={"product_id": product["id"], "quantity": 2.0},
         headers=mgr,
     )
-    # most elszámolt partner
-    await _setup_settlement(client, mgr)
+    # most elszámolt partner — utána bőven visszatöltjük a készletét, hogy az
+    # előrejelzés szerint se fogyjon ki hamarosan
+    settled_partner, settled_product, _body = await _setup_settlement(client, mgr)
+    await client.post(
+        f"/api/partners/{settled_partner['id']}/stock/replenish",
+        json={"product_id": settled_product["id"], "quantity": 50.0},
+        headers=mgr,
+    )
     # készlet és elszámolás nélküli partner — nem releváns
     await make_partner(client, mgr, name="Üres Kft.")
 
     due = (await client.get("/api/settlements/due?days=30", headers=mgr)).json()
     names = [d["name"] for d in due]
     assert "Váró Bt." in names
-    assert "Kávézó Bt." not in names  # ma volt elszámolva
+    assert "Kávézó Bt." not in names  # ma volt elszámolva, bő készlettel
     assert "Üres Kft." not in names
     row = next(d for d in due if d["name"] == "Váró Bt.")
     assert row["last_settlement_at"] is None

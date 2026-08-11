@@ -49,6 +49,7 @@ export default function TamogatasPage() {
   const [description, setDescription] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [photos, setPhotos] = useState<{ name: string; dataUrl: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -177,6 +178,7 @@ export default function TamogatasPage() {
         description,
         contact_name: contactName || null,
         contact_phone: contactPhone || null,
+        contact_email: contactEmail.trim() || null,
         photos: photos.map((p) => p.dataUrl),
       });
       setTicketNo(res.ticket_no);
@@ -524,6 +526,16 @@ export default function TamogatasPage() {
                 />
               </label>
             </div>
+            <label className="block text-sm">
+              {t("support.contactEmail")}
+              <input
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                placeholder="pl. nev@ceg.hu"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
             <div className="text-sm">
               <p>{t("support.photos", { max: MAX_PHOTOS })}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import CameraScanner, { cameraScanSupported } from "@/components/CameraScanner";
 import IconLegend from "@/components/IconLegend";
 import PartnerPicker from "@/components/PartnerPicker";
 import { api, ApiError, downloadFile, downloadFilePost, errorMessage } from "@/lib/api";
@@ -122,6 +123,10 @@ export default function GepekPage() {
     const code = scanRef.current?.value.trim();
     if (!code) return;
     e.preventDefault();
+    await lookupCode(code);
+  }
+
+  async function lookupCode(code: string) {
     try {
       const a = await api.get<Asset>(`/api/assets/by-barcode/${encodeURIComponent(code)}`);
       setScanMsg({ text: t("inv.scannedFound", { name: a.name, barcode: a.barcode }), ok: true });
@@ -138,6 +143,8 @@ export default function GepekPage() {
     if (scanRef.current) scanRef.current.value = "";
     setTimeout(() => setScanMsg(null), 5000);
   }
+
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   async function generateBarcode() {
     try {
@@ -281,13 +288,30 @@ export default function GepekPage() {
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">{t("inv.title")}</h1>
-        <input
-          ref={scanRef}
-          onKeyDown={onScan}
-          placeholder={t("inv.scanHint")}
-          className="rounded-lg border-2 border-indigo-300 bg-indigo-50 px-3 py-2 text-sm placeholder:text-indigo-400"
-          autoFocus
-        />
+        <div className="flex items-center gap-1">
+          <input
+            ref={scanRef}
+            onKeyDown={onScan}
+            placeholder={t("inv.scanHint")}
+            className="rounded-lg border-2 border-indigo-300 bg-indigo-50 px-3 py-2 text-sm placeholder:text-indigo-400"
+            autoFocus
+          />
+          {cameraScanSupported() && (
+            <button
+              onClick={() => setCameraOpen(true)}
+              title={t("scanner.title")}
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm hover:bg-slate-100"
+            >
+              📷
+            </button>
+          )}
+        </div>
+        {cameraOpen && (
+          <CameraScanner
+            onDetect={(code) => { setCameraOpen(false); void lookupCode(code); }}
+            onClose={() => setCameraOpen(false)}
+          />
+        )}
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}

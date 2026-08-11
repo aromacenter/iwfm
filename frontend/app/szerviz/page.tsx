@@ -127,6 +127,25 @@ export default function SzervizPage() {
     api.get<MaintenanceDue[]>("/api/service/maintenance-due").then(setMaintDue).catch(() => {});
   }, []);
 
+  // Karbantartás-alapvonal: az előzmény nélküli gépek jelenlegi állását
+  // "kész" jegyként rögzíti — az esedékesség innentől reális.
+  const [baselineBusy, setBaselineBusy] = useState(false);
+
+  async function runBaseline() {
+    if (!(await confirm(t("service.baselineConfirm", { count: maintDue.length })))) return;
+    setBaselineBusy(true);
+    try {
+      const res = await api.post<{ created: number }>("/api/service/maintenance-baseline");
+      toast(t("service.baselineDone", { count: res.created }), "success");
+      loadDue();
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBaselineBusy(false);
+    }
+  }
+
   useEffect(load, [load]);
   useEffect(loadDue, [loadDue]);
   useEffect(() => {
@@ -282,7 +301,19 @@ export default function SzervizPage() {
             <span className="text-amber-700">{showDue ? "▾" : "▸"}</span>
           </button>
           {showDue && (
-            <div className="overflow-x-auto border-t border-amber-200">
+            <div className="border-t border-amber-200">
+              <div className="flex items-center gap-2 px-4 py-2">
+                <button
+                  onClick={runBaseline}
+                  disabled={baselineBusy}
+                  title={t("service.baselineHint")}
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {baselineBusy ? t("common.saving") : t("service.baselineBtn")}
+                </button>
+                <span className="text-xs text-amber-700">{t("service.baselineExplain")}</span>
+              </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase text-amber-700">
@@ -316,6 +347,7 @@ export default function SzervizPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>

@@ -215,6 +215,80 @@ async def list_assignees(
     return [{"id": str(u.id), "name": u.display_name, "role": u.role} for u in rows]
 
 
+@router.post("/maintenance-baseline")
+async def maintenance_baseline(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("service")),
+):
+    """Karbantartás-alapvonal: minden számlálós gépre, amelynek még nincs KÉSZ
+    karbantartás-jegye, létrehoz egy lezárt „alapvonal” jegyet a jelenlegi
+    számláló-állással. Így az importált gépek esedékesség-listája kinullázódik,
+    és az igazi esedékesség a mostani állástól számítódik. Idempotens: akinek
+    már van kész karbantartása, azt nem bántja."""
+    assets = (
+        await db.execute(
+            select(Asset).where(Asset.counter.is_not(None), Asset.status != "retired")
+        )
+    ).scalars().all()
+    have_done = {
+        aid
+        for (aid,) in (
+            await db.execute(
+                select(ServiceTicket.asset_id.distinct()).where(
+                    ServiceTicket.kind == "maintenance",
+                    ServiceTicket.status == "done",
+                    ServiceTicket.asset_id.is_not(None),
+                )
+            )
+        ).all()
+    }
+    targets = [a for a in assets if a.id not in have_done]
+    if not targets:
+        return {"created": 0}
+
+    last = (
+        await db.execute(
+            select(ServiceTicket.ticket_no)
+            .where(ServiceTicket.ticket_no.like("SZ-%"))
+            .order_by(ServiceTicket.ticket_no.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    number = 0
+    if last:
+        try:
+            number = int(last.split("-", 1)[1])
+        except (IndexError, ValueError):
+            number = 0
+
+    now = datetime.now(UTC)
+    for a in targets:
+        number += 1
+        db.add(
+            ServiceTicket(
+                ticket_no=f"SZ-{number:04d}",
+                kind="maintenance",
+                status="done",
+                priority="low",
+                title="Karbantartás-alapvonal (jelenlegi állás rögzítése)",
+                description="Automatikus alapvonal: az esedékesség innentől számítódik.",
+                asset_id=a.id,
+                asset_label=f"{a.name} ({a.barcode})",
+                partner_id=a.partner_id,
+                counter_at_service=a.counter,
+                resolved_at=now,
+                created_by=actor.id,
+            )
+        )
+    await record_audit(
+        db, actor=actor, action="service.baseline", entity_type="service_ticket",
+        detail={"created": len(targets)}, request=request,
+    )
+    await db.commit()
+    return {"created": len(targets)}
+
+
 @router.get("/maintenance-due")
 async def maintenance_due(
     db: AsyncSession = Depends(get_db),

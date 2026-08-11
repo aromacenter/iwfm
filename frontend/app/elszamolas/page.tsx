@@ -94,9 +94,14 @@ interface DuePartner {
   partner_code: string | null;
   name: string;
   contact_phone: string | null;
+  address: string | null;
+  city: string | null;
   last_settlement_at: string | null;
   days_since: number | null;
   stock_products: number;
+  avg_daily_kg: number | null;
+  days_left: number | null;
+  suggested_kg: number | null;
 }
 
 const PAYMENTS = ["cash", "card", "transfer"] as const;
@@ -149,6 +154,7 @@ export default function ElszamolasPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [signing, setSigning] = useState<Settlement | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
+  const [signEmail, setSignEmail] = useState("");
   const [prices, setPrices] = useState<PartnerPrice[] | null>(null); // null = modal zárva
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -179,6 +185,41 @@ export default function ElszamolasPage() {
     const qs = params.toString();
     api.get<Settlement[]>(`/api/settlements${qs ? `?${qs}` : ""}`).then(setHistory).catch(() => {});
   }, [partnerId, companyFilter]);
+
+  // Körút-tervező: város-szűrő + megállók kijelölése → Google Maps útvonal.
+  const [dueCity, setDueCity] = useState("");
+  const [routeSelected, setRouteSelected] = useState<Set<string>>(new Set());
+
+  const dueCities = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const d of due) {
+      if (d.city) counts.set(d.city, (counts.get(d.city) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [due]);
+
+  const dueFiltered = useMemo(
+    () => (dueCity ? due.filter((d) => d.city === dueCity) : due),
+    [due, dueCity],
+  );
+
+  function toggleRoute(id: string) {
+    setRouteSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 10) next.add(id);
+      else toast(t("route.maxStops"), "error");
+      return next;
+    });
+  }
+
+  function openRoute() {
+    const stops = due
+      .filter((d) => routeSelected.has(d.partner_id) && d.address)
+      .map((d) => encodeURIComponent(d.address as string));
+    if (!stops.length) return;
+    window.open(`https://www.google.com/maps/dir/${stops.join("/")}`, "_blank");
+  }
 
   const loadDue = useCallback(() => {
     api.get<DuePartner[]>("/api/settlements/due?days=30").then(setDue).catch(() => {});
@@ -382,10 +423,14 @@ export default function ElszamolasPage() {
     if (!signing || !signature) return;
     setBusy(true);
     try {
-      await api.post(`/api/settlements/${signing.id}/signature`, { signature });
+      await api.post(`/api/settlements/${signing.id}/signature`, {
+        signature,
+        partner_email: signEmail.trim() || null,
+      });
       toast(t("cons.signatureSaved"), "success");
       setSigning(null);
       setSignature(null);
+      setSignEmail("");
       loadHistory();
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -576,23 +621,66 @@ export default function ElszamolasPage() {
             <span className="text-amber-700">{showDue ? "▾" : "▸"}</span>
           </button>
           {showDue && (
-            <div className="overflow-x-auto border-t border-amber-200">
+            <div className="border-t border-amber-200">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-2">
+                <select
+                  value={dueCity}
+                  onChange={(e) => setDueCity(e.target.value)}
+                  className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
+                >
+                  <option value="">{t("route.allCities")}</option>
+                  {dueCities.map(([city, count]) => (
+                    <option key={city} value={city}>{city} ({count})</option>
+                  ))}
+                </select>
+                {routeSelected.size > 0 && (
+                  <>
+                    <button
+                      onClick={openRoute}
+                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+                    >
+                      🗺 {t("route.open", { count: routeSelected.size })}
+                    </button>
+                    <button
+                      onClick={() => setRouteSelected(new Set())}
+                      className="rounded-lg border border-amber-300 px-2 py-1.5 text-xs text-amber-800 hover:bg-amber-100"
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
+                <span className="text-xs text-amber-700">{t("route.hint")}</span>
+              </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase text-amber-700">
+                    <th className="px-2 py-2"></th>
                     <th className="px-4 py-2">{t("cons.partner")}</th>
                     <th className="px-4 py-2">{t("cons.dueLast")}</th>
                     <th className="px-4 py-2">{t("cons.dueDays")}</th>
-                    <th className="px-4 py-2">{t("cons.dueStock")}</th>
+                    <th className="px-4 py-2">{t("route.forecast")}</th>
                     <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {due.map((d) => (
+                  {dueFiltered.map((d) => (
                     <tr key={d.partner_id} className="border-t border-amber-100">
+                      <td className="px-2 py-2">
+                        {d.address && (
+                          <input
+                            type="checkbox"
+                            checked={routeSelected.has(d.partner_id)}
+                            onChange={() => toggleRoute(d.partner_id)}
+                            title={t("route.addStop")}
+                            className="h-4 w-4"
+                          />
+                        )}
+                      </td>
                       <td className="px-4 py-2 font-medium text-amber-950">
                         {d.name}
                         {d.partner_code && <span className="ml-2 text-xs text-amber-600">{d.partner_code}</span>}
+                        {d.city && <div className="text-xs font-normal text-amber-700">{d.city}</div>}
                       </td>
                       <td className="px-4 py-2 text-amber-800">
                         {d.last_settlement_at ? fmt(d.last_settlement_at) : t("cons.dueNever")}
@@ -600,7 +688,20 @@ export default function ElszamolasPage() {
                       <td className="px-4 py-2 text-amber-800">
                         {d.days_since !== null ? t("cons.dueDaysAgo", { days: d.days_since }) : "—"}
                       </td>
-                      <td className="px-4 py-2 text-amber-800">{d.stock_products}</td>
+                      <td className="px-4 py-2 text-amber-800">
+                        {d.days_left !== null && d.days_left !== undefined ? (
+                          <>
+                            <span className={d.days_left <= 7 ? "font-semibold text-rose-800" : ""}>
+                              {t("route.daysLeft", { days: d.days_left })}
+                            </span>
+                            {d.suggested_kg != null && d.suggested_kg > 0 && (
+                              <div className="text-xs">{t("route.bring", { kg: d.suggested_kg })}</div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs text-amber-600">{d.stock_products > 0 ? `${d.stock_products} ${t("route.stockShort")}` : "—"}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-right">
                         <button
                           onClick={() => setPartnerId(d.partner_id)}
@@ -613,6 +714,7 @@ export default function ElszamolasPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>
@@ -898,6 +1000,18 @@ export default function ElszamolasPage() {
               {signing.partner_name} · {ft(signing.total_gross)} · {fmt(signing.created_at)}
             </p>
             <SignatureCanvas label={t("cons.signLabel")} onChange={setSignature} />
+            {!partners.find((p) => p.id === signing.partner_id)?.contact_email && (
+              <label className="block text-sm">
+                {t("cons.signEmail")}
+                <input
+                  type="email"
+                  value={signEmail}
+                  onChange={(e) => setSignEmail(e.target.value)}
+                  placeholder="pl. partner@ceg.hu"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </label>
+            )}
             <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"

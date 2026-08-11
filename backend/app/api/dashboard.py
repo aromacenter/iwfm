@@ -34,6 +34,85 @@ from app.models import (
 router = APIRouter()
 
 
+@router.get("/partner-performance")
+async def partner_performance(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("dashboard")),
+):
+    """Partner-teljesítmény (12 hónap): bruttó bevétel + elszámolás-darabszám
+    partnerenként, mellette gépszám és szervizjegy-darab — top és sereghajtó
+    lista (aktív, elszámolós partnerek)."""
+    from app.models import Asset
+
+    since = datetime.now() - timedelta(days=365)
+    revenue = {
+        pid: (float(gross or 0), int(cnt))
+        for pid, gross, cnt in (
+            await db.execute(
+                select(
+                    Settlement.partner_id,
+                    func.sum(Settlement.total_gross),
+                    func.count(),
+                )
+                .where(Settlement.created_at >= since)
+                .group_by(Settlement.partner_id)
+            )
+        ).all()
+    }
+    if not revenue:
+        return {"top": [], "bottom": []}
+    machines = {
+        pid: int(cnt)
+        for pid, cnt in (
+            await db.execute(
+                select(Asset.partner_id, func.count())
+                .where(Asset.partner_id.is_not(None))
+                .group_by(Asset.partner_id)
+            )
+        ).all()
+    }
+    tickets = {
+        pid: int(cnt)
+        for pid, cnt in (
+            await db.execute(
+                select(ServiceTicket.partner_id, func.count())
+                .where(
+                    ServiceTicket.partner_id.is_not(None),
+                    ServiceTicket.created_at >= since,
+                )
+                .group_by(ServiceTicket.partner_id)
+            )
+        ).all()
+    }
+    partners = {
+        p.id: p
+        for p in (
+            await db.execute(
+                select(Partner).where(Partner.id.in_(list(revenue)), Partner.is_active.is_(True))
+            )
+        ).scalars()
+    }
+
+    rows = []
+    for pid, (gross, cnt) in revenue.items():
+        p = partners.get(pid)
+        if p is None:
+            continue
+        rows.append({
+            "partner_id": str(pid),
+            "name": p.name,
+            "partner_code": p.partner_code,
+            "invoicing_company": p.invoicing_company,
+            "gross": round(gross),
+            "settlements": cnt,
+            "machines": machines.get(pid, 0),
+            "tickets": tickets.get(pid, 0),
+            "per_visit": round(gross / cnt) if cnt else 0,
+        })
+    rows.sort(key=lambda r: -r["gross"])
+    return {"top": rows[:15], "bottom": [r for r in reversed(rows[-15:])] if len(rows) > 15 else []}
+
+
 @router.get("/consignment-stats")
 async def consignment_stats(
     db: AsyncSession = Depends(get_db),

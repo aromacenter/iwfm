@@ -506,6 +506,126 @@ async def _t_fill_worksheet(db: AsyncSession, actor: User, args: dict, *, own_on
     )
 
 
+async def _t_create_settlement(db: AsyncSession, actor: User, args: dict):
+    """Elszámolás rögzítése diktálásból — a webes create_settlement logikája:
+    fizikai leltár → fogyás → adag × ár, készlet frissítés, mozgás."""
+    from app.api.consignment import (
+        _effective_price,
+        _partner_price_map,
+        portions_from,
+    )
+    from app.models import Settlement, SettlementLine
+
+    partner = await _find_partner(db, str(args.get("partner") or ""))
+    if partner is None:
+        return {"error": "partner nem található (pontos név vagy PT-kód kell)"}, None
+    raw_lines = args.get("lines")
+    if not isinstance(raw_lines, list) or not raw_lines:
+        return {"error": "lines kötelező: [{product, physical_qty}]"}, None
+    payment = str(args.get("payment_method") or "cash")
+    if payment not in ("cash", "card", "transfer"):
+        return {"error": "payment_method: cash | card | transfer"}, None
+
+    settlement = Settlement(
+        partner_id=partner.id,
+        settled_by_user_id=actor.id,
+        settled_by_name=actor.display_name,
+        invoicing_company=partner.invoicing_company,
+        payment_method=payment,
+        total_net=0.0,
+        total_gross=0.0,
+        note=(str(args.get("note") or "") or None),
+    )
+    db.add(settlement)
+    await db.flush()
+
+    overrides = await _partner_price_map(db, partner.id)
+    total_net = total_gross = 0.0
+    summary = []
+    for raw in raw_lines[:20]:
+        if not isinstance(raw, dict):
+            continue
+        pq = str(raw.get("product") or "").strip()
+        matches = (
+            await db.execute(
+                select(Product)
+                .where(Product.name.ilike(f"%{pq}%"), Product.is_active.is_(True))
+                .limit(2)
+            )
+        ).scalars().all()
+        if len(matches) != 1:
+            await db.rollback()
+            return {"error": f"termék nem egyértelmű vagy nincs meg: '{pq}'"}, None
+        product = matches[0]
+        try:
+            physical = float(raw.get("physical_qty"))
+        except (TypeError, ValueError):
+            await db.rollback()
+            return {"error": f"physical_qty: szám kell ({pq})"}, None
+        if physical < 0 or physical > 10000:
+            await db.rollback()
+            return {"error": "physical_qty: 0 és 10000 között"}, None
+
+        stock = (
+            await db.execute(
+                select(PartnerStock).where(
+                    PartnerStock.partner_id == partner.id,
+                    PartnerStock.product_id == product.id,
+                )
+            )
+        ).scalar_one_or_none()
+        previous = stock.quantity if stock is not None else 0.0
+        consumed = max(previous - physical, 0.0)
+        portions = portions_from(consumed, product.grams_per_portion)
+        unit_price = _effective_price(product, overrides)
+        amount_net = round(portions * unit_price, 2)
+        amount_gross = round(amount_net * (1 + product.vat_percent / 100), 2)
+        total_net += amount_net
+        total_gross += amount_gross
+
+        db.add(SettlementLine(
+            settlement_id=settlement.id,
+            product_id=product.id,
+            product_name=product.name,
+            previous_qty=previous,
+            physical_qty=physical,
+            consumed_qty=consumed,
+            portions=portions,
+            price_per_portion=unit_price,
+            vat_percent=product.vat_percent,
+            amount_net=amount_net,
+        ))
+        if stock is None:
+            db.add(PartnerStock(partner_id=partner.id, product_id=product.id, quantity=physical))
+        else:
+            stock.quantity = physical
+        if consumed > 0:
+            db.add(StockMovement(
+                partner_id=partner.id, product_id=product.id, action="settlement",
+                quantity_delta=-consumed, settlement_id=settlement.id,
+                actor_user_id=actor.id,
+            ))
+        summary.append(f"{product.name}: fogyás {consumed:g} kg ({portions:.0f} adag)")
+
+    settlement.total_net = round(total_net, 2)
+    settlement.total_gross = round(total_gross, 2)
+    await record_audit(
+        db, actor=actor, action="settlement.create", entity_type="settlement",
+        entity_id=str(settlement.id),
+        detail={"partner": partner.name, "gross": settlement.total_gross, "via": "assistant"},
+    )
+    await db.commit()
+    return (
+        {
+            "ok": True, "settlement_id": str(settlement.id), "partner": partner.name,
+            "total_gross": settlement.total_gross, "total_net": settlement.total_net,
+            "lines": summary,
+        },
+        {"kind": "created",
+         "label": f"Elszámolás: {partner.name} · {settlement.total_gross:,.0f} Ft".replace(",", " ")},
+    )
+
+
 async def _t_navigate(db: AsyncSession, actor: User, args: dict):
     path = str(args.get("path") or "").strip()
     base = path.split("?")[0].rstrip("/") or "/"
@@ -649,6 +769,37 @@ TOOLS: list[dict] = [
             },
         },
         "run": None,  # speciális: own_only a jogosultságtól függ (lásd _execute_tool)
+    },
+    {
+        "name": "create_settlement",
+        "feature": "settlements",
+        "description": (
+            "Elszámolás rögzítése egy partnernél a FIZIKAI leltár alapján (a fogyás és az "
+            "összeg automatikusan számolódik). lines: [{product: terméknév, physical_qty: "
+            "megmaradt mennyiség kg-ban}]. FONTOS: végrehajtás előtt mindig sorold fel a "
+            "felhasználónak, mit fogsz rögzíteni, és várd meg a megerősítését."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "partner": {"type": "string"},
+                "lines": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "product": {"type": "string"},
+                            "physical_qty": {"type": "number"},
+                        },
+                        "required": ["product", "physical_qty"],
+                    },
+                },
+                "payment_method": {"type": "string", "enum": ["cash", "card", "transfer"]},
+                "note": {"type": "string"},
+            },
+            "required": ["partner", "lines"],
+        },
+        "run": _t_create_settlement,
     },
     {
         "name": "navigate",
