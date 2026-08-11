@@ -41,6 +41,33 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _run_alembic(sync_conn) -> None:
+    """Sémaverziózás Alembickel (v0.19-től).
+
+    - Már élő, Alembic előtti adatbázis (van users tábla, nincs alembic_version):
+      csak bélyegzünk (stamp head) — DDL nem fut, az adatokhoz nem nyúlunk.
+    - Friss vagy már verziózott adatbázis: upgrade head.
+    A régi ensure_column-blokk átmenetileg védőhálóként utána is lefut.
+    """
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    root = Path(__file__).resolve().parent.parent  # backend/
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "alembic"))
+    cfg.attributes["connection"] = sync_conn
+
+    tables = inspect(sync_conn).get_table_names()
+    if "alembic_version" not in tables and "users" in tables:
+        command.stamp(cfg, "head")
+        logger.info("Alembic: existing database stamped to head (no DDL executed)")
+    else:
+        command.upgrade(cfg, "head")
+
+
 def _ensure_employee_code_column(sync_conn) -> None:
     """Mini-migrációk: a create_all meglévő táblát nem módosít, ezért a már
     futó adatbázisokon az új oszlopokat kézzel adjuk hozzá (SQLite + PG)."""
@@ -192,6 +219,13 @@ async def lifespan(app: FastAPI):
     # v1 schema management: tables are created on boot (idempotent), plus
     # small targeted column migrations below for already-deployed databases.
     engine = get_engine()
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(_run_alembic)
+    except Exception:
+        # Átmeneti védőháló: ha az Alembic elhasal, a régi ensure_column +
+        # create_all út továbbra is bootolható állapotba hozza az appot.
+        logger.exception("Alembic migration failed — legacy schema path still runs")
     async with engine.begin() as conn:
         await conn.run_sync(_ensure_employee_code_column)
         await conn.run_sync(Base.metadata.create_all)
