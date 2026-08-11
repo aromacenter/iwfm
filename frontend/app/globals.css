@@ -93,6 +93,10 @@ body {
 .dark .bg-indigo-50 {
   background-color: #1e293b !important;
 }
+/* Partner-kereső kiemelt találata */
+.dark .bg-blue-50 {
+  background-color: #1e2f4a !important;
+}
 .dark .text-indigo-700 {
   color: #a5b4fc !important;
 }
