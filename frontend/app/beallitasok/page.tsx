@@ -50,7 +50,7 @@ const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-
 
 export default function BeallitasokPage() {
   const { t } = useT();
-  const { confirm, toast } = useUI();
+  const { confirm, prompt, toast } = useUI();
 
   // --- Email ---
   const [email, setEmail] = useState({
@@ -101,6 +101,8 @@ export default function BeallitasokPage() {
   });
   const [billingoHasKey, setBillingoHasKey] = useState(false);
   const [billingoPcHasKey, setBillingoPcHasKey] = useState(false);
+  const [wipeCounts, setWipeCounts] = useState<Record<string, number> | null>(null);
+  const [wipeBusy, setWipeBusy] = useState(false);
   const [billingoMsg, setBillingoMsg] = useState<string | null>(null);
   const [billingoBusy, setBillingoBusy] = useState(false);
   const [knowledgeBase, setKnowledgeBase] = useState("");
@@ -197,6 +199,7 @@ export default function BeallitasokPage() {
         setAutoKb(s.auto_kb);
       })
       .catch(() => {});
+    api.get<Record<string, number>>("/api/admin/wipe/counts").then(setWipeCounts).catch(() => {});
     api
       .get<WorksheetSettings>("/api/settings/worksheet")
       .then((s) => {
@@ -374,6 +377,33 @@ export default function BeallitasokPage() {
       setBillingoMsg(errorMessage(err));
     } finally {
       setBillingoBusy(false);
+    }
+  }
+
+  async function wipe(entity: "assets" | "products" | "partners") {
+    const count = wipeCounts?.[entity] ?? 0;
+    const extra = entity === "partners"
+      ? "\n" + t("danger.partnersWarning", { settlements: wipeCounts?.settlements ?? 0 })
+      : "";
+    if (!(await confirm(t("danger.confirm", { count }) + extra))) return;
+    const word = await prompt(t("danger.typeWord"));
+    if (word === null) return;
+    if (word.trim().toUpperCase() !== "TORLES") {
+      toast(t("danger.wrongWord"), "error");
+      return;
+    }
+    setWipeBusy(true);
+    try {
+      const res = await api.post<{ deleted: number }>("/api/admin/wipe", {
+        entity,
+        confirm: "TORLES",
+      });
+      toast(t("danger.done", { count: res.deleted }), "success");
+      api.get<Record<string, number>>("/api/admin/wipe/counts").then(setWipeCounts).catch(() => {});
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setWipeBusy(false);
     }
   }
 
@@ -977,6 +1007,25 @@ export default function BeallitasokPage() {
           >
             {t("settings.saveAi")}
           </button>
+        </div>
+
+        {/* Veszélyzóna — teljes törlés entitásonként (csak admin) */}
+        <div className="space-y-3 rounded-2xl border-2 border-red-200 bg-white p-5 shadow-sm">
+          <h2 className="font-semibold text-red-700">{t("danger.title")}</h2>
+          <p className="text-xs text-slate-500">{t("danger.hint")}</p>
+          <div className="flex flex-wrap gap-2">
+            {(["assets", "products", "partners"] as const).map((entity) => (
+              <button
+                key={entity}
+                type="button"
+                onClick={() => wipe(entity)}
+                disabled={wipeBusy}
+                className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                {t(`danger.${entity}`, { count: wipeCounts?.[entity] ?? "…" })}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </AppShell>

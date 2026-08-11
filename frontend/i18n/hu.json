@@ -1,4 +1,16 @@
 {
+  "danger": {
+    "title": "Veszélyzóna — teljes törlés",
+    "hint": "Csak adminnak. A kiválasztott adatkör MINDEN sora véglegesen törlődik — nem visszavonható. Használat előtt érdemes exportot készíteni (Import/Export).",
+    "assets": "🗑 Összes gép törlése ({count})",
+    "products": "🗑 Összes termék törlése ({count})",
+    "partners": "🗑 Összes partner törlése ({count})",
+    "confirm": "VÉGLEGES törlés: {count} rekord. Biztos vagy benne?",
+    "partnersWarning": "FIGYELEM: a partnerekkel együtt az ÖSSZES elszámolás-előzmény ({settlements} db) és partner-készlet is törlődik!",
+    "typeWord": "A megerősítéshez írd be: TORLES",
+    "wrongWord": "A megerősítő szó nem egyezik — nem történt törlés.",
+    "done": "Törölve: {count} rekord."
+  },
   "assistant": {
     "title": "Iwfm asszisztens",
     "open": "AI-asszisztens megnyitása",

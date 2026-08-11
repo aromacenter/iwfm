@@ -1,4 +1,16 @@
 {
+  "danger": {
+    "title": "Danger zone — full wipe",
+    "hint": "Admin only. ALL rows of the selected data set are permanently deleted — cannot be undone. Consider exporting first (Import/Export).",
+    "assets": "🗑 Delete all machines ({count})",
+    "products": "🗑 Delete all products ({count})",
+    "partners": "🗑 Delete all partners ({count})",
+    "confirm": "PERMANENT delete: {count} records. Are you sure?",
+    "partnersWarning": "WARNING: deleting partners also deletes ALL settlement history ({settlements} records) and partner stock!",
+    "typeWord": "Type TORLES to confirm",
+    "wrongWord": "Confirmation word does not match — nothing was deleted.",
+    "done": "Deleted: {count} records."
+  },
   "assistant": {
     "title": "Iwfm assistant",
     "open": "Open AI assistant",
