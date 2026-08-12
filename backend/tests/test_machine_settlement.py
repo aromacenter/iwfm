@@ -150,24 +150,45 @@ async def test_machine_discount_and_fallback_product(client, manager):
     # leltár-sor nélkül is készül termék-tétel a gép adagjaiból
     assert any(ln["portions"] == 100 for ln in s["lines"])
 
-    # második termék → a fallback megszűnik, beállítás nélkül 422
+    # a fallback-elszámolás a gépre menti a terméket (megjegyzés)
+    detail = (await client.get(f"/api/assets/{asset['id']}", headers=mgr)).json()
+    assert detail["default_product_id"] == product["id"]
+
+    # második termék + ÚJ (termék nélküli) gép → a fallback megszűnik: 422
     product2 = await make_product(client, mgr, name="Másik kávé")
     await client.post(
         f"/api/partners/{partner['id']}/stock/replenish",
         json={"product_id": product2["id"], "quantity": 2.0},
         headers=mgr,
     )
+    asset2 = await _machine(client, mgr, partner, "KEDV-2", counter=0)
     bad = await client.post(
         "/api/settlements",
         json={
             "partner_id": partner["id"],
             "payment_method": "cash",
-            "machines": [{"asset_id": asset["id"], "new_counter": 150}],
+            "machines": [{"asset_id": asset2["id"], "new_counter": 150}],
         },
         headers=mgr,
     )
     assert bad.status_code == 422
     assert bad.json()["detail"]["code"] == "settlement.machine_no_product"
+
+    # elszámoláskor választott termék → sikeres, és a gép megjegyzi
+    ok = await client.post(
+        "/api/settlements",
+        json={
+            "partner_id": partner["id"],
+            "payment_method": "cash",
+            "machines": [{"asset_id": asset2["id"], "new_counter": 150,
+                          "product_id": product2["id"]}],
+        },
+        headers=mgr,
+    )
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["machines"][0]["product_name"] == "Másik kávé"
+    detail2 = (await client.get(f"/api/assets/{asset2['id']}", headers=mgr)).json()
+    assert detail2["default_product_id"] == product2["id"]
 
 
 async def test_debt_carryover_and_handover(client, manager):

@@ -45,6 +45,9 @@ interface Product {
   name: string;
   is_active: boolean;
   purchase_price: number | null;
+  price_per_portion: number;
+  grams_per_portion: number;
+  unit: string;
 }
 
 interface Settlement {
@@ -144,6 +147,7 @@ interface MachinePayload {
   new_counters?: number[];
   service_portions: number;
   discount_pct: number;
+  product_id?: string | null;
 }
 
 interface HandoverPayload {
@@ -200,8 +204,12 @@ export default function ElszamolasPage() {
   // Gép-soros elszámolás: kontextus + gépenkénti beviteli mezők
   const [ctx, setCtx] = useState<SettlementContext | null>(null);
   const [machineInputs, setMachineInputs] = useState<Record<string, MachineInput>>({});
+  const [machineProducts, setMachineProducts] = useState<Record<string, string>>({});
   const [handovers, setHandovers] = useState<Record<string, { qty: string; cost: string }>>({});
   const [paidAmount, setPaidAmount] = useState("");
+  // Készlet-sor nélküli partnernél is elszámolható: kézzel felvett termék-sorok
+  const [extraProducts, setExtraProducts] = useState<string[]>([]);
+  const [addProductId, setAddProductId] = useState("");
   const [history, setHistory] = useState<Settlement[]>([]);
   const [companyFilter, setCompanyFilter] = useState("");
   const [replenish, setReplenish] = useState<{ product_id: string; quantity: string; unit_cost: string } | null>(null);
@@ -231,6 +239,7 @@ export default function ElszamolasPage() {
     if (!partnerId) { setStock([]); return; }
     api.get<Stock[]>(`/api/partners/${partnerId}/stock`).then((s) => {
       setStock(s);
+      setExtraProducts([]);
       setPhysical(Object.fromEntries(s.map((x) => [x.product_id, ""])));
       setCounters(Object.fromEntries(s.map((x) => [x.product_id, ""])));
       setHandovers(Object.fromEntries(s.map((x) => [x.product_id, { qty: "", cost: "" }])));
@@ -246,9 +255,38 @@ export default function ElszamolasPage() {
         { newCounter: "", newCounters: Array.from({ length: m.counter_count }, () => ""),
           service: "", discount: "" },
       ])));
+      setMachineProducts(Object.fromEntries(c.machines.map((m) => [
+        m.asset_id,
+        m.default_product_id ?? c.single_product_id ?? "",
+      ])));
       setPaidAmount("");
     }).catch(() => setCtx(null));
   }, [partnerId]);
+
+  // Készlet-sorok + kézzel felvett termékek (0 induló készlettel) — leltár
+  // nélküli partnernél is elszámolható.
+  const stockRows = useMemo<Stock[]>(() => {
+    const extras = extraProducts
+      .filter((pid) => !stock.some((s) => s.product_id === pid))
+      .map((pid) => {
+        const p = products.find((x) => x.id === pid);
+        if (!p) return null;
+        return {
+          product_id: p.id,
+          product_name: p.name,
+          unit: p.unit || "kg",
+          quantity: 0,
+          grams_per_portion: p.grams_per_portion,
+          price_per_portion: p.price_per_portion,
+          base_price_per_portion: p.price_per_portion,
+          has_price_override: false,
+          portions_available: 0,
+          min_quantity: null,
+        } as Stock;
+      })
+      .filter(Boolean) as Stock[];
+    return [...stock, ...extras];
+  }, [stock, extraProducts, products]);
 
   const loadHistory = useCallback(() => {
     const params = new URLSearchParams();
@@ -386,9 +424,11 @@ export default function ElszamolasPage() {
       const service = Number(inp?.service) || 0;
       const discount = Number(inp?.discount) || 0;
       const billed = Math.max(brewed - service, 0);
-      const pid = m.default_product_id ?? ctx.single_product_id;
-      const stockRow = pid ? stock.find((x) => x.product_id === pid) : undefined;
-      const price = stockRow ? stockRow.price_per_portion : null;
+      const pid = machineProducts[m.asset_id] || m.default_product_id || ctx.single_product_id;
+      const stockRow = pid ? stockRows.find((x) => x.product_id === pid) : undefined;
+      const price = stockRow
+        ? stockRow.price_per_portion
+        : (pid ? products.find((x) => x.id === pid)?.price_per_portion ?? null : null);
       const amount = filled && price !== null ? billed * price * (1 - discount / 100) : 0;
       if (filled && pid) {
         billedByProduct[pid] = (billedByProduct[pid] ?? 0) + billed;
@@ -397,14 +437,14 @@ export default function ElszamolasPage() {
       return { ...m, filled, newCounter, brewed, billed, discount, price, amount, belowPrev };
     });
     return { rows, billedByProduct, amountByProduct };
-  }, [ctx, machineInputs, stock]);
+  }, [ctx, machineInputs, machineProducts, stockRows, products]);
 
   // Élő fogyás-előnézet a beírt leltár alapján — a gép-sorok által lefedett
   // termékeknél a számlázott adag/összeg a gépekből jön.
   const preview = useMemo(() => {
     let net = 0;
-    const rows = stock.map((s) => {
-      const phys = physical[s.product_id];
+    const rows = stockRows.map((s) => {
+      const phys = physical[s.product_id] ?? "";
       const physNum = phys === "" ? null : Number(phys);
       const consumed = physNum === null ? 0 : Math.max(s.quantity - physNum, 0);
       const machineBilled = machinePreview.billedByProduct[s.product_id];
@@ -433,10 +473,10 @@ export default function ElszamolasPage() {
     });
     // Gép-termék készlet-sor nélkül (ritka): az összegbe így is beszámít
     for (const [pid, amount] of Object.entries(machinePreview.amountByProduct)) {
-      if (!stock.some((s) => s.product_id === pid)) net += amount;
+      if (!stockRows.some((s) => s.product_id === pid)) net += amount;
     }
     return { rows, net };
-  }, [stock, physical, counters, machinePreview]);
+  }, [stockRows, physical, counters, machinePreview]);
 
   // Becsült fizetendő: nettó × ÁFA + korábbi tartozás (a szerződéses tételeket
   // — bérleti díj, minimum — a mentés számolja hozzá).
@@ -486,8 +526,8 @@ export default function ElszamolasPage() {
 
   async function createSettlement() {
     if (!partnerId) return;
-    const lines = stock
-      .filter((s) => physical[s.product_id] !== "")
+    const lines = stockRows
+      .filter((s) => (physical[s.product_id] ?? "") !== "")
       .map((s) => ({
         product_id: s.product_id,
         physical_qty: Number(physical[s.product_id]),
@@ -510,8 +550,9 @@ export default function ElszamolasPage() {
             : undefined,
         service_portions: Number(machineInputs[r.asset_id]?.service) || 0,
         discount_pct: Number(machineInputs[r.asset_id]?.discount) || 0,
+        product_id: machineProducts[r.asset_id] || null,
       }));
-    const handoverList: HandoverPayload[] = stock
+    const handoverList: HandoverPayload[] = stockRows
       .filter((s) => (handovers[s.product_id]?.qty ?? "") !== "" && Number(handovers[s.product_id].qty) > 0)
       .map((s) => ({
         product_id: s.product_id,
@@ -564,7 +605,7 @@ export default function ElszamolasPage() {
         setPendingOffline(queue.length);
         setNote("");
         setPaidAmount("");
-        setPhysical(Object.fromEntries(stock.map((x) => [x.product_id, ""])));
+        setPhysical(Object.fromEntries(stockRows.map((x) => [x.product_id, ""])));
         toast(t("offline.queued"), "info");
       } else {
         toast(errorMessage(err), "error");
@@ -972,9 +1013,30 @@ export default function ElszamolasPage() {
                   <td className="px-4 py-2.5 font-mono text-xs">{m.barcode}</td>
                   <td className="px-4 py-2.5">
                     <div className="font-medium">{m.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {m.product_name ?? t("cons.machineProductFallback")}
-                    </div>
+                    <select
+                      value={machineProducts[m.asset_id] ?? ""}
+                      onChange={(e) =>
+                        setMachineProducts({ ...machineProducts, [m.asset_id]: e.target.value })
+                      }
+                      title={t("cons.machineProductHint")}
+                      className={`mt-0.5 max-w-44 rounded border px-1.5 py-1 text-xs ${machineProducts[m.asset_id] ? "border-slate-200 text-slate-500" : "border-amber-300 bg-amber-50 text-amber-700"}`}
+                    >
+                      <option value="">{t("cons.machineProductChoose")}</option>
+                      {stock.length > 0 && (
+                        <optgroup label={t("cons.partnerStockGroup")}>
+                          {stock.map((s) => (
+                            <option key={s.product_id} value={s.product_id}>{s.product_name}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      <optgroup label={t("cons.allProductsGroup")}>
+                        {activeProducts
+                          .filter((p) => !stock.some((s) => s.product_id === p.id))
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                      </optgroup>
+                    </select>
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-500">
                     {m.last_settled_at ? fmt(m.last_settled_at) : "—"}
@@ -1132,7 +1194,7 @@ export default function ElszamolasPage() {
                       />
                     )}
                   </td>
-                  <td className="px-4 py-3">{physical[s.product_id] !== "" ? `${s.consumed.toFixed(2)} ${s.unit}` : "—"}</td>
+                  <td className="px-4 py-3">{(physical[s.product_id] ?? "") !== "" ? `${s.consumed.toFixed(2)} ${s.unit}` : "—"}</td>
                   <td className="px-4 py-3">{s.filled ? s.portions.toFixed(0) : "—"}</td>
                   <td className="px-4 py-3 font-medium">{s.filled ? ft(Math.round(s.amount)) : "—"}</td>
                   <td className="px-4 py-3">
@@ -1157,12 +1219,40 @@ export default function ElszamolasPage() {
                   </td>
                 </tr>
               ))}
-              {stock.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">{t("cons.noStock")}</td></tr>
+              {stockRows.length === 0 && (
+                <tr><td colSpan={10} className="px-4 py-6 text-center text-slate-400">{t("cons.noStockAddBelow")}</td></tr>
               )}
             </tbody>
           </table>
-          {(stock.length > 0 || (ctx?.machines.length ?? 0) > 0) && (
+          {/* Termék felvétele a leltárba — készlet-sor nélküli partnernél is */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2.5">
+            <select
+              value={addProductId}
+              onChange={(e) => setAddProductId(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm"
+            >
+              <option value="">{t("cons.addProductChoose")}</option>
+              {activeProducts
+                .filter((p) => !stockRows.some((s) => s.product_id === p.id))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+            </select>
+            <button
+              type="button"
+              disabled={!addProductId}
+              onClick={() => {
+                if (!addProductId) return;
+                setExtraProducts((xs) => [...xs, addProductId]);
+                setAddProductId("");
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-40"
+            >
+              {t("cons.addProduct")}
+            </button>
+            <span className="text-xs text-slate-400">{t("cons.addProductHint")}</span>
+          </div>
+          {(stockRows.length > 0 || (ctx?.machines.length ?? 0) > 0) && (
             <div className="space-y-3 border-t border-slate-200 px-4 py-3">
               {/* Összesítő: elszámolás + tartozás = összes fizetendő, fizetve */}
               <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
@@ -1230,7 +1320,7 @@ export default function ElszamolasPage() {
                   onClick={createSettlement}
                   disabled={
                     busy ||
-                    (stock.every((s) => physical[s.product_id] === "" || physical[s.product_id] === undefined) &&
+                    (stockRows.every((s) => physical[s.product_id] === "" || physical[s.product_id] === undefined) &&
                       machinePreview.rows.every((r) => !r.filled))
                   }
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"

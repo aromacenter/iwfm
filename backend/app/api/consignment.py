@@ -638,6 +638,9 @@ class SettlementMachineIn(BaseModel):
     new_counters: list[int] | None = None  # több számlálós gép: állásonként
     service_portions: int = Field(default=0, ge=0)  # szerviz közben főzött, nem számlázandó
     discount_pct: float = Field(default=0.0, ge=0, le=100)
+    # Termék-felülírás erre az elszámolásra — ha a gépen nincs beállítva
+    # „ebből főz", az itt választott termék kerül a gépre is (megjegyezzük).
+    product_id: str | None = None
 
 
 class HandoverIn(BaseModel):
@@ -1033,7 +1036,17 @@ async def create_settlement(
                 )
             brewed = new_counter - prev_counter
             billed = max(brewed - m_in.service_portions, 0)
-            pid = asset.default_product_id or fallback_pid
+            # Termék (erősorrend): kérésbeli felülírás → a gép beállítása →
+            # a partner egyetlen készlet-terméke.
+            override_pid: uuid.UUID | None = None
+            if m_in.product_id:
+                try:
+                    override_pid = uuid.UUID(m_in.product_id)
+                except ValueError:
+                    raise HTTPException(
+                        status_code=404, detail={"code": "product.not_found"}
+                    )
+            pid = override_pid or asset.default_product_id or fallback_pid
             if pid is None:
                 raise HTTPException(
                     status_code=422,
@@ -1041,6 +1054,9 @@ async def create_settlement(
                             "barcode": asset.barcode},
                 )
             product = await _get_product_or_404(db, str(pid))
+            # Beállítás nélküli gép: a most választott terméket megjegyezzük
+            if asset.default_product_id is None:
+                asset.default_product_id = product.id
             unit_price = _effective_price(product, price_overrides)
             amount = _money(billed * unit_price * (1 - m_in.discount_pct / 100.0))
             db.add(SettlementMachine(
