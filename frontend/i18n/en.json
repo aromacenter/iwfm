@@ -280,7 +280,7 @@
     "machineService": "Service portions",
     "machineServiceHint": "Portions brewed during service/testing — not billed.",
     "machineDiscount": "Disc.",
-    "machineDiscountHint": "Fixed 27% discount on the machine's billed portions.",
+    "machineDiscountHint": "Discount: the net price is payable — no VAT is added and no Billingó invoice is created for the settlement.",
     "machineBelowPrev": "Below the previous reading!",
     "machineProductFallback": "at the single stock product's price",
     "machineProductChoose": "— choose product —",

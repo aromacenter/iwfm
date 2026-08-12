@@ -199,7 +199,6 @@ export default function ElszamolasPage() {
   const [physical, setPhysical] = useState<Record<string, string>>({});
   const [counters, setCounters] = useState<Record<string, string>>({});
   const [payment, setPayment] = useState<(typeof PAYMENTS)[number]>("cash");
-  const [noVat, setNoVat] = useState(false);
   const [note, setNote] = useState("");
   // Gép-soros elszámolás: kontextus + gépenkénti beviteli mezők
   const [ctx, setCtx] = useState<SettlementContext | null>(null);
@@ -422,22 +421,30 @@ export default function ElszamolasPage() {
       const belowPrev = filled && (newCounter as number) < m.prev_counter;
       const brewed = filled ? Math.max((newCounter as number) - m.prev_counter, 0) : 0;
       const service = Number(inp?.service) || 0;
-      const discount = Number(inp?.discount) || 0;
+      // Kedvezmény-pipa: a NETTÓ ár a fizetendő (ÁFA és Billingó-számla
+      // nélkül) — az összeget nem csökkenti, a mentés no_vat-ként kezeli.
+      const discounted = (inp?.discount ?? "") !== "";
       const billed = Math.max(brewed - service, 0);
       const pid = machineProducts[m.asset_id] || m.default_product_id || ctx.single_product_id;
       const stockRow = pid ? stockRows.find((x) => x.product_id === pid) : undefined;
       const price = stockRow
         ? stockRow.price_per_portion
         : (pid ? products.find((x) => x.id === pid)?.price_per_portion ?? null : null);
-      const amount = filled && price !== null ? billed * price * (1 - discount / 100) : 0;
+      const amount = filled && price !== null ? billed * price : 0;
       if (filled && pid) {
         billedByProduct[pid] = (billedByProduct[pid] ?? 0) + billed;
         amountByProduct[pid] = (amountByProduct[pid] ?? 0) + amount;
       }
-      return { ...m, filled, newCounter, brewed, billed, discount, price, amount, belowPrev };
+      return { ...m, filled, newCounter, brewed, billed, discounted, price, amount, belowPrev };
     });
     return { rows, billedByProduct, amountByProduct };
   }, [ctx, machineInputs, machineProducts, stockRows, products]);
+
+  // Bármely gép-soron bepipált kedvezmény → az egész elszámolás ÁFA és
+  // Billingó-számla nélkül megy (a nettó a fizetendő).
+  const noVat = machinePreview.rows.some(
+    (r) => (machineInputs[r.asset_id]?.discount ?? "") !== "",
+  );
 
   // Élő fogyás-előnézet a beírt leltár alapján — a gép-sorok által lefedett
   // termékeknél a számlázott adag/összeg a gépekből jön.
@@ -549,7 +556,7 @@ export default function ElszamolasPage() {
             ? machineInputs[r.asset_id].newCounters.map((v) => Number(v) || 0)
             : undefined,
         service_portions: Number(machineInputs[r.asset_id]?.service) || 0,
-        discount_pct: Number(machineInputs[r.asset_id]?.discount) || 0,
+        discount_pct: 0, // a Kedv. pipa nem árcsökkentés: no_vat-ként érvényesül
         product_id: machineProducts[r.asset_id] || null,
       }));
     const handoverList: HandoverPayload[] = stockRows
@@ -1106,7 +1113,7 @@ export default function ElszamolasPage() {
                   <td className="px-4 py-2.5">
                     <label
                       title={t("cons.machineDiscountHint")}
-                      className="flex cursor-pointer items-center gap-1.5"
+                      className="flex cursor-pointer items-center justify-center"
                     >
                       <input
                         type="checkbox"
@@ -1116,13 +1123,12 @@ export default function ElszamolasPage() {
                             ...machineInputs,
                             [m.asset_id]: {
                               ...machineInputs[m.asset_id],
-                              discount: e.target.checked ? "27" : "",
+                              discount: e.target.checked ? "1" : "",
                             },
                           })
                         }
                         className="h-4 w-4"
                       />
-                      <span className="text-xs text-slate-500">27%</span>
                     </label>
                   </td>
                   <td className="px-4 py-2.5 text-right font-medium tabular-nums">
@@ -1309,18 +1315,14 @@ export default function ElszamolasPage() {
                     <option key={m} value={m}>{t(`cons.payments.${m}`)}</option>
                   ))}
                 </select>
-                <label
-                  title={t("cons.noVatHint")}
-                  className="flex items-center gap-1.5 text-sm text-slate-600"
-                >
-                  <input
-                    type="checkbox"
-                    checked={noVat}
-                    onChange={(e) => setNoVat(e.target.checked)}
-                    className="h-4 w-4"
-                  />
-                  {t("cons.noVat")}
-                </label>
+                {noVat && (
+                  <span
+                    title={t("cons.noVatHint")}
+                    className="rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800"
+                  >
+                    {t("cons.noVatBadge")}
+                  </span>
+                )}
                 <input
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
