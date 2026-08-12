@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 import uuid
 from datetime import datetime
 
@@ -12,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_role
 from app.db import get_db
-from app.models import AutomationRule, EmailTemplate, User
+from app.models import AutomationRule, EmailTemplate, User, WorksheetSettings
 from app.services.wfm.automation import ACTION_TYPES, OPS, TRIGGERS
 
 router = APIRouter(prefix="/api/automation", tags=["automation"])
@@ -109,6 +111,114 @@ async def delete_template(
                        entity_id=template_id, detail={"name": t.name}, request=request)
     await db.commit()
     return {"ok": True}
+
+
+# ─── AI sablon-generálás ─────────────────────────────────────────────────────
+
+
+class TemplateAIBody(BaseModel):
+    description: str = Field(min_length=3, max_length=2000)
+    trigger: str | None = None  # opcionális: melyik eseményhez készül
+
+    @field_validator("trigger")
+    @classmethod
+    def _check_trigger(cls, v: str | None) -> str | None:
+        if v and v not in TRIGGERS:
+            raise ValueError("automation.bad_trigger")
+        return v or None
+
+
+class TemplateAIOut(BaseModel):
+    name: str
+    subject: str
+    body: str
+
+
+def _tpl_ai_prompt(description: str, trigger: str | None, company: str | None) -> str:
+    if trigger:
+        vars_txt = (
+            f"A sablon a(z) \u201e{trigger}\u201d automatizálási eseményhez készül. "
+            "KIZÁRÓLAG ezek a {{változók}} használhatók benne: "
+            + ", ".join("{{" + v + "}}" for v in TRIGGERS[trigger])
+        )
+    else:
+        lines = "\n".join(
+            f"- {ev}: " + ", ".join("{{" + v + "}}" for v in fields)
+            for ev, fields in TRIGGERS.items()
+        )
+        vars_txt = (
+            "Az automatizálási eseményeknél elérhető {{változók}}:\n" + lines +
+            "\nCsak olyan változót használj, amely a leírás szerinti eseménynél elérhető."
+        )
+    sender = f"a(z) {company} cég" if company else "egy kávégép-bérbeadó és bizományos cég"
+    return (
+        f"Írj magyar nyelvű e-mail sablont, amelyet {sender} küld a partnereinek "
+        "(kávégép-üzemeltetés, kávé-bizomány, elszámolások, szerviz témakörben).\n\n"
+        f"A sablon célja, az adminisztrátor leírása szerint:\n{description}\n\n"
+        f"{vars_txt}\n\n"
+        "Add vissza KIZÁRÓLAG ezt a JSON objektumot, minden más szöveg nélkül:\n"
+        '{"name": "rövid sablonnév (max 6 szó)", "subject": "e-mail tárgy", '
+        '"body": "az e-mail teljes szövege"}\n\n'
+        "Szabályok:\n"
+        "- Hangnem: udvarias, professzionális, magázó.\n"
+        "- A body sima szöveg legyen (nem HTML), bekezdésekkel, megszólítással és "
+        "elköszönéssel.\n"
+        "- A dinamikus adatokat {{változó}} formában illeszd be a tárgyba és a "
+        "szövegbe, ahol értelmes.\n"
+        "- Ne találj ki olyan adatot (ár, dátum, telefonszám), amely nem változó."
+    )
+
+
+def _parse_tpl_json(text: str) -> dict | None:
+    """A modellválasz JSON objektumának kinyerése (kódblokk-kerítés tűrve)."""
+    raw = (text or "").strip()
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        data = json.loads(raw[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    name = str(data.get("name") or "").strip()
+    subject = str(data.get("subject") or "").strip()
+    body = str(data.get("body") or "").strip()
+    if not subject or not body:
+        return None
+    return {
+        "name": (name or subject)[:128],
+        "subject": subject[:256],
+        "body": body[:20_000],
+    }
+
+
+@router.post("/templates/generate", response_model=TemplateAIOut)
+async def generate_template(
+    body: TemplateAIBody,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """AI-vázlat egy e-mail sablonhoz — nem ment, a kliens űrlapját tölti ki.
+    422 settings.ai_not_configured, ha nincs AI-kulcs; 502 automation.ai_failed."""
+    from app.services.wfm import ai_service
+
+    ws = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    company = (ws.company_name or "").strip() if ws else None
+    prompt = _tpl_ai_prompt(body.description.strip(), body.trigger, company or None)
+    try:
+        text = await ai_service.generate(db, prompt, max_tokens=1500)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settings.ai_not_configured"})
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "automation.ai_failed"})
+    parsed = _parse_tpl_json(text)
+    if parsed is None:
+        raise HTTPException(status_code=502, detail={"code": "automation.ai_failed"})
+    return TemplateAIOut(**parsed)
 
 
 # ─── Automatizálási szabályok ────────────────────────────────────────────────

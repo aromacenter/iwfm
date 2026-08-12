@@ -67,6 +67,14 @@ interface EmailTpl {
   body: string;
 }
 
+/** Ismert Anthropic modellek a legördülőhöz — egyéni név továbbra is megadható. */
+const ANTHROPIC_MODELS: { id: string; label: string; tagKey?: string }[] = [
+  { id: "claude-opus-4-8", label: "Claude Opus 4.8", tagKey: "settings.modelTagDefault" },
+  { id: "claude-opus-5", label: "Claude Opus 5", tagKey: "settings.modelTagSmart" },
+  { id: "claude-sonnet-5", label: "Claude Sonnet 5", tagKey: "settings.modelTagFast" },
+  { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", tagKey: "settings.modelTagCheapest" },
+];
+
 export default function BeallitasokPage() {
   const { t } = useT();
   const { confirm, prompt, toast } = useUI();
@@ -127,6 +135,34 @@ export default function BeallitasokPage() {
     }
   }
 
+  // --- AI sablon-generálás: leírásból tölti ki a név/tárgy/szöveg mezőket ---
+  const [tplAiDesc, setTplAiDesc] = useState("");
+  const [tplAiTrigger, setTplAiTrigger] = useState("");
+  const [tplAiBusy, setTplAiBusy] = useState(false);
+  const [autoTriggers, setAutoTriggers] = useState<Record<string, string[]>>({});
+  useEffect(() => {
+    api.get<{ triggers: Record<string, string[]> }>("/api/automation/triggers")
+      .then((d) => setAutoTriggers(d.triggers || {}))
+      .catch(() => {});
+  }, []);
+
+  async function generateTemplateAi() {
+    if (!tplForm || tplAiDesc.trim().length < 3) return;
+    setTplAiBusy(true);
+    setTplMsg(null);
+    try {
+      const res = await api.post<{ name: string; subject: string; body: string }>(
+        "/api/automation/templates/generate",
+        { description: tplAiDesc.trim(), trigger: tplAiTrigger || null },
+      );
+      setTplForm((f) => (f ? { ...f, name: f.name || res.name, subject: res.subject, body: res.body } : f));
+    } catch (err) {
+      setTplMsg(errorMessage(err));
+    } finally {
+      setTplAiBusy(false);
+    }
+  }
+
   // --- Email ---
   const [email, setEmail] = useState({
     enabled: false,
@@ -158,6 +194,9 @@ export default function BeallitasokPage() {
   const [aiHasKeys, setAiHasKeys] = useState({ anthropic: false, gemini: false });
   const [aiMsg, setAiMsg] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  // Anthropic modell: legördülő az ismert modellekkel; egyéni név is megadható
+  const [anthroCustom, setAnthroCustom] = useState(false);
+  const anthroKnown = ANTHROPIC_MODELS.some((m) => m.id === ai.anthropic_model);
   const [assignPrompt, setAssignPrompt] = useState("");
   const [promptIsCustom, setPromptIsCustom] = useState(false);
   const [defaultPrompt, setDefaultPrompt] = useState("");
@@ -1179,12 +1218,34 @@ export default function BeallitasokPage() {
               </label>
               <label className="block text-sm">
                 {t("settings.model")}
+                <select
+                  value={anthroCustom || !anthroKnown ? "__custom__" : ai.anthropic_model}
+                  onChange={(e) => {
+                    if (e.target.value === "__custom__") {
+                      setAnthroCustom(true);
+                    } else {
+                      setAnthroCustom(false);
+                      setAi({ ...ai, anthropic_model: e.target.value });
+                    }
+                  }}
+                  className={inputCls}
+                >
+                  {ANTHROPIC_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}{m.tagKey ? ` — ${t(m.tagKey)}` : ""}
+                    </option>
+                  ))}
+                  <option value="__custom__">{t("settings.modelCustom")}</option>
+                </select>
+              </label>
+              {(anthroCustom || !anthroKnown) && (
                 <input
                   value={ai.anthropic_model}
                   onChange={(e) => setAi({ ...ai, anthropic_model: e.target.value })}
+                  placeholder="claude-…"
                   className={inputCls}
                 />
-              </label>
+              )}
               <button
                 type="button"
                 onClick={() => testAi("anthropic")}
@@ -1364,6 +1425,40 @@ export default function BeallitasokPage() {
             <h2 className="text-lg font-semibold">
               {tplForm.id ? t("settings.tplEdit") : t("settings.tplNew")}
             </h2>
+
+            {/* AI-generálás: leírás + esemény → kitölti az alábbi mezőket */}
+            <div className="space-y-2 rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+              <div className="text-sm font-medium text-violet-800">✨ {t("settings.tplAiTitle")}</div>
+              <textarea
+                rows={2}
+                value={tplAiDesc}
+                onChange={(e) => setTplAiDesc(e.target.value)}
+                placeholder={t("settings.tplAiPlaceholder")}
+                className={inputCls}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={tplAiTrigger}
+                  onChange={(e) => setTplAiTrigger(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">{t("settings.tplAiAnyTrigger")}</option>
+                  {Object.keys(autoTriggers).map((k) => (
+                    <option key={k} value={k}>{t(`auto.triggers.${k.replace(/\./g, "_")}`)}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={generateTemplateAi}
+                  disabled={tplAiBusy || tplAiDesc.trim().length < 3}
+                  className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                >
+                  {tplAiBusy ? t("settings.tplAiBusy") : t("settings.tplAiGenerate")}
+                </button>
+              </div>
+              <p className="text-xs text-violet-700/70">{t("settings.tplAiHint")}</p>
+            </div>
+
             <label className="block text-sm">
               {t("settings.tplName")} *
               <input required value={tplForm.name} onChange={(e) => setTplForm({ ...tplForm, name: e.target.value })} className={inputCls} />

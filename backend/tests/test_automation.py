@@ -141,6 +141,75 @@ async def test_run_event_note_and_email(client, admin, manager, monkeypatch):
     assert fired2 == 0
 
 
+def test_parse_tpl_json():
+    from app.api.automation import _parse_tpl_json
+
+    raw = '```json\n{"name": "Emlékeztető", "subject": "Fizetés — {{partner_nev}}", "body": "Kedves {{partner_nev}}!"}\n```'
+    parsed = _parse_tpl_json(raw)
+    assert parsed == {
+        "name": "Emlékeztető",
+        "subject": "Fizetés — {{partner_nev}}",
+        "body": "Kedves {{partner_nev}}!",
+    }
+    # név nélkül a tárgy lesz a név; tárgy vagy szöveg nélkül None
+    assert _parse_tpl_json('{"subject": "T", "body": "B"}')["name"] == "T"
+    assert _parse_tpl_json('{"name": "X", "body": "B"}') is None
+    assert _parse_tpl_json("nem json") is None
+
+
+async def test_template_ai_generate(client, admin, monkeypatch):
+    """AI-vázlat: a leírásból név/tárgy/szöveg jön vissza (nem ment)."""
+    from app.services.wfm import ai_service
+
+    _, adm = admin
+
+    prompts: list[str] = []
+
+    async def fake_generate(db, prompt, **kw):
+        prompts.append(prompt)
+        return ('{"name": "Fizetési emlékeztető", "subject": "Lejárt elszámolás — '
+                '{{partner_nev}}", "body": "Kedves {{partner_nev}}!\\n\\nÖsszeg: '
+                '{{vegosszeg_brutto}} Ft."}')
+
+    monkeypatch.setattr(ai_service, "generate", fake_generate)
+
+    res = await client.post(
+        "/api/automation/templates/generate",
+        json={"description": "fizetési emlékeztető lejárt elszámolásról",
+              "trigger": "settlement.created"},
+        headers=adm,
+    )
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["name"] == "Fizetési emlékeztető"
+    assert "{{partner_nev}}" in data["subject"]
+    # a trigger változói bekerültek a promptba
+    assert "{{vegosszeg_brutto}}" in prompts[0]
+    # a sablon nem került mentésre
+    lst = (await client.get("/api/automation/templates", headers=adm)).json()
+    assert not any(x["name"] == "Fizetési emlékeztető" for x in lst)
+
+    # ismeretlen trigger → 422 validáció
+    bad = await client.post(
+        "/api/automation/templates/generate",
+        json={"description": "valami", "trigger": "nem.letezik"},
+        headers=adm,
+    )
+    assert bad.status_code == 422
+
+
+async def test_template_ai_not_configured(client, admin):
+    """AI-kulcs nélkül 422 settings.ai_not_configured."""
+    _, adm = admin
+    res = await client.post(
+        "/api/automation/templates/generate",
+        json={"description": "üdvözlő levél új partnernek"},
+        headers=adm,
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "settings.ai_not_configured"
+
+
 async def test_multi_counter_asset(client, manager):
     """Több számlálós gép: darabszám + állások; a counter mindig az összeg."""
     _, mgr = manager
