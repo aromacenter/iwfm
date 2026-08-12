@@ -280,6 +280,7 @@
     "machineService": "Szerviz-adag",
     "machineServiceHint": "Szerviz/teszt közben lefőzött adagok — nem kerülnek számlázásra.",
     "machineDiscount": "Kedv.",
+    "machineDiscountHint": "Fix 27% kedvezmény a gép számlázott adagjaira.",
     "machineBelowPrev": "Kisebb az előző állásnál!",
     "machineProductFallback": "az egyetlen készlet-termék árán",
     "machineProductChoose": "— válassz terméket —",

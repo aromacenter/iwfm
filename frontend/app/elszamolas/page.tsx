@@ -744,6 +744,12 @@ export default function ElszamolasPage() {
 
   const activeProducts = products.filter((p) => p.is_active);
 
+  // Partner kiválasztásakor az elszámolás-munkaterület azonnal fókuszba kerül:
+  // a lista-panelek (riasztás/rendelés/esedékes) eltűnnek, a nézet felugrik.
+  useEffect(() => {
+    if (partnerId) window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [partnerId]);
+
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -781,7 +787,7 @@ export default function ElszamolasPage() {
         )}
       </div>
 
-      {lowStock.length > 0 && (
+      {!partnerId && lowStock.length > 0 && (
         <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
           <p className="mb-2 font-semibold text-rose-900">{t("lowStock.title", { count: lowStock.length })}</p>
           <div className="flex flex-wrap gap-2">
@@ -799,7 +805,7 @@ export default function ElszamolasPage() {
         </div>
       )}
 
-      {orders.length > 0 && (
+      {!partnerId && orders.length > 0 && (
         <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 shadow-sm">
           <p className="px-4 py-3 font-semibold text-emerald-900">{t("orders.title", { count: orders.length })}</p>
           <div className="overflow-x-auto border-t border-emerald-200">
@@ -857,7 +863,7 @@ export default function ElszamolasPage() {
         </div>
       )}
 
-      {due.length > 0 && (
+      {!partnerId && due.length > 0 && (
         <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
           <button
             onClick={() => setShowDue((v) => !v)}
@@ -1098,21 +1104,26 @@ export default function ElszamolasPage() {
                     />
                   </td>
                   <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-1">
+                    <label
+                      title={t("cons.machineDiscountHint")}
+                      className="flex cursor-pointer items-center gap-1.5"
+                    >
                       <input
-                        type="number" min={0} max={100}
-                        value={machineInputs[m.asset_id]?.discount ?? ""}
+                        type="checkbox"
+                        checked={(machineInputs[m.asset_id]?.discount ?? "") !== ""}
                         onChange={(e) =>
                           setMachineInputs({
                             ...machineInputs,
-                            [m.asset_id]: { ...machineInputs[m.asset_id], discount: e.target.value },
+                            [m.asset_id]: {
+                              ...machineInputs[m.asset_id],
+                              discount: e.target.checked ? "27" : "",
+                            },
                           })
                         }
-                        placeholder="0"
-                        className="w-14 rounded-lg border border-slate-300 px-2 py-1.5"
+                        className="h-4 w-4"
                       />
-                      <span className="text-xs text-slate-400">%</span>
-                    </div>
+                      <span className="text-xs text-slate-500">27%</span>
+                    </label>
                   </td>
                   <td className="px-4 py-2.5 text-right font-medium tabular-nums">
                     {m.filled ? (m.price !== null ? ft(Math.round(m.amount)) : "?") : "—"}

@@ -280,6 +280,7 @@
     "machineService": "Service portions",
     "machineServiceHint": "Portions brewed during service/testing — not billed.",
     "machineDiscount": "Disc.",
+    "machineDiscountHint": "Fixed 27% discount on the machine's billed portions.",
     "machineBelowPrev": "Below the previous reading!",
     "machineProductFallback": "at the single stock product's price",
     "machineProductChoose": "— choose product —",
