@@ -453,30 +453,49 @@ export default function BeallitasokPage() {
 
   const [syncBusy, setSyncBusy] = useState(false);
 
+  interface SyncStatus {
+    running: boolean;
+    progress: string;
+    report: Record<string, Record<string, unknown>> | null;
+    error: string | null;
+  }
+
+  function renderSyncReport(report: Record<string, Record<string, unknown>>, dryRun: boolean) {
+    const parts: string[] = [];
+    for (const [company, rep] of Object.entries(report)) {
+      const label = company === "pc" ? "Premium Caffe" : "X-Presso";
+      if (rep.skipped) {
+        parts.push(`${label}: ${rep.skipped}`);
+      } else {
+        const updated = (rep.updated ?? rep.would_update ?? 0) as number;
+        parts.push(
+          `${label}: ${rep.billingo_partners} vevő a Billingóban, ${rep.matched} párosítva, ${updated} ${dryRun ? "frissülne" : "frissítve"}`,
+        );
+        const samples = (rep.samples as string[]) ?? [];
+        if (samples.length) parts.push("· " + samples.join("\n· "));
+      }
+    }
+    return parts.join("\n");
+  }
+
+  // A szinkron háttérben fut (80+ Billingó-hívás) — indítás után pollozzuk.
   async function billingoPartnerSync(dryRun: boolean) {
     if (!dryRun && !(await confirm(t("settings.billingoSyncConfirm")))) return;
     setSyncBusy(true);
-    setBillingoMsg(null);
+    setBillingoMsg(t("settings.billingoSyncStarted"));
     try {
-      const res = await api.post<{ report: Record<string, Record<string, unknown>> }>(
-        "/api/admin/billingo-sync",
-        { dry_run: dryRun },
-      );
-      const parts: string[] = [];
-      for (const [company, rep] of Object.entries(res.report)) {
-        const label = company === "pc" ? "Premium Caffe" : "X-Presso";
-        if (rep.skipped) {
-          parts.push(`${label}: ${rep.skipped}`);
-        } else {
-          const updated = (rep.updated ?? rep.would_update ?? 0) as number;
-          parts.push(
-            `${label}: ${rep.billingo_partners} vevő a Billingóban, ${rep.matched} párosítva, ${updated} ${dryRun ? "frissülne" : "frissítve"}`,
-          );
-          const samples = (rep.samples as string[]) ?? [];
-          if (samples.length) parts.push("· " + samples.join("\n· "));
+      await api.post("/api/admin/billingo-sync", { dry_run: dryRun });
+      for (let i = 0; i < 120; i++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const st = await api.get<SyncStatus>("/api/admin/billingo-sync");
+        if (st.running) {
+          setBillingoMsg(`${t("settings.billingoSyncRunning")} ${st.progress}`);
+          continue;
         }
+        if (st.error) setBillingoMsg(`${t("settings.billingoSyncFailed")} ${st.error}`);
+        else if (st.report) setBillingoMsg(renderSyncReport(st.report, dryRun));
+        break;
       }
-      setBillingoMsg(parts.join("\n"));
     } catch (err) {
       setBillingoMsg(errorMessage(err));
     } finally {

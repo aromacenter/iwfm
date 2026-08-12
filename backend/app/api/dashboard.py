@@ -229,15 +229,16 @@ async def consignment_stats(
             )
         )
     ).scalar_one()
+    _threshold = func.coalesce(PartnerStock.min_quantity, Product.low_stock_threshold)
     low_stock_count = (
         await db.execute(
             select(func.count())
             .select_from(PartnerStock)
             .join(Product, Product.id == PartnerStock.product_id)
             .where(
-                Product.low_stock_threshold.is_not(None),
+                _threshold.is_not(None),
                 Product.is_active.is_(True),
-                PartnerStock.quantity <= Product.low_stock_threshold,
+                PartnerStock.quantity <= _threshold,
             )
         )
     ).scalar_one()

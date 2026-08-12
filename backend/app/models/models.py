@@ -455,6 +455,21 @@ class Partner(Base):
     # Melyik SAJÁT cégünk szerződött vele / számláz neki: xp (X-Presso Coffee
     # Kft.) | pc (Premium Caffe Kft.) | None (nincs megadva).
     invoicing_company: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # Partner-szintű szerződés — ha be van állítva, FELÜLÍRJA a gépeken lévő
+    # feltételeket. Adag-alapú minimum + minimum alatti adagár (Ft, nettó):
+    contract_min_portions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    contract_below_min_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # VAGY kg-alapú minimum átvétel + minimum alatti ár (Ft/kg, nettó) — ha ez
+    # be van állítva, az adag-alapú minimum helyett ez érvényesül:
+    contract_min_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    contract_below_min_price_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Minimum-mentes (türelmi) időszak vége — pl. új partner első 3 hónapja.
+    contract_no_min_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Ha igaz: a minimum el nem érésekor NEM különbözetet számlázunk, hanem a
+    # gép(ek) fix havi bérleti díja lép életbe; minimum felett bérleti díj sincs.
+    contract_rent_if_below_min: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     # vevő (customer) | szállító (supplier) | mindkettő (both)
     partner_type: Mapped[str] = mapped_column(String(16), nullable=False, default="customer")
     tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)  # adószám
@@ -624,6 +639,8 @@ class Product(Base):
     vat_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=27)  # ÁFA %
     # Riasztási küszöb (kg): ha egy partnernél ennyi vagy kevesebb van, jelzünk.
     low_stock_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Utolsó beszerzési ár (Ft/kg, nettó) — bevételezéskor frissül, az űrlapot előtölti.
+    purchase_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -653,6 +670,9 @@ class PartnerStock(Base):
         Uuid, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
     )
     quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)  # egységben (kg)
+    # Partnerenkénti riasztási küszöb (kg) — ha None, a termék globális
+    # low_stock_threshold-ja érvényes.
+    min_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -697,6 +717,8 @@ class StockMovement(Base):
     )
     action: Mapped[str] = mapped_column(String(16), nullable=False)  # replenish | settlement
     quantity_delta: Mapped[float] = mapped_column(Float, nullable=False)  # + feltöltés, − fogyás
+    # Beszerzési ár a bevételezéskor (Ft/kg, nettó) — csak replenish sorokon.
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     settlement_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("settlements.id", ondelete="SET NULL"), nullable=True
     )
@@ -730,6 +752,9 @@ class Settlement(Base):
     # Számlázó cég pillanatképe (a partner szerződött cége rögzítéskor): xp|pc.
     invoicing_company: Mapped[str | None] = mapped_column(String(8), nullable=True)
     payment_method: Mapped[str] = mapped_column(String(16), nullable=False)  # cash|card|transfer
+    # ÁFA és számla nélküli elszámolás: a megadott (nettó) ár a fizetendő,
+    # Billingó-számla nem készül hozzá.
+    no_vat: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     total_net: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     total_gross: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     invoiced: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -766,6 +791,9 @@ class SettlementLine(Base):
     physical_qty: Mapped[float] = mapped_column(Float, nullable=False)  # fizikai leltár (kg)
     consumed_qty: Mapped[float] = mapped_column(Float, nullable=False)  # fogyás (kg)
     portions: Mapped[float] = mapped_column(Float, nullable=False)  # adag
+    # A gép számlálója szerinti adagszám az időszakban — ha meg van adva,
+    # a számlázás EZ alapján megy, a kg-leltár pedig keresztellenőrzés.
+    counter_portions: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_per_portion: Mapped[float] = mapped_column(Float, nullable=False)  # pillanatkép Ft/adag
     vat_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=27)
     amount_net: Mapped[float] = mapped_column(Float, nullable=False)  # portions * price

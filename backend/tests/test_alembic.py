@@ -60,6 +60,28 @@ def test_existing_db_gets_stamped(tmp_path):
     engine.dispose()
 
 
+def test_legacy_baseline_db_gets_migrated(tmp_path):
+    """Alembic előtti, RÉGI sémájú DB (baseline-kori, purchase_price nélkül):
+    a boot baseline-ra bélyegez, majd az upgrade pótolja az újabb migrációkat."""
+    from alembic import command
+
+    from app.main import BASELINE_REVISION, _run_alembic
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with engine.begin() as conn:
+        command.upgrade(_alembic_cfg(conn), BASELINE_REVISION)
+        conn.execute(text("DROP TABLE alembic_version"))  # verziózatlan legacy állapot
+
+    with engine.begin() as conn:
+        _run_alembic(conn)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        cols = {c["name"] for c in inspect(conn).get_columns("products")}
+    engine.dispose()
+    assert version != BASELINE_REVISION  # tovább migrált a headre
+    assert "purchase_price" in cols  # a 0002-es oszlop pótolva
+
+
 def test_fresh_db_created_by_upgrade(tmp_path):
     """Teljesen üres DB: a boot-logika upgrade-del építi fel a teljes sémát."""
     from app.main import _run_alembic

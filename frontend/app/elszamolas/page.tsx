@@ -37,12 +37,14 @@ interface Stock {
   base_price_per_portion: number;
   has_price_override: boolean;
   portions_available: number;
+  min_quantity: number | null;
 }
 
 interface Product {
   id: string;
   name: string;
   is_active: boolean;
+  purchase_price: number | null;
 }
 
 interface Settlement {
@@ -52,6 +54,7 @@ interface Settlement {
   settled_by_name: string;
   invoicing_company: "xp" | "pc" | null;
   payment_method: "cash" | "card" | "transfer";
+  no_vat: boolean;
   total_net: number;
   total_gross: number;
   invoiced: boolean;
@@ -114,7 +117,8 @@ interface QueuedSettlement {
   partner_id: string;
   partner_name: string;
   payment_method: (typeof PAYMENTS)[number];
-  lines: { product_id: string; physical_qty: number }[];
+  no_vat?: boolean;
+  lines: { product_id: string; physical_qty: number; counter_portions?: number | null }[];
   note: string | null;
   queued_at: string;
 }
@@ -143,11 +147,13 @@ export default function ElszamolasPage() {
   const [partnerId, setPartnerId] = useState("");
   const [stock, setStock] = useState<Stock[]>([]);
   const [physical, setPhysical] = useState<Record<string, string>>({});
+  const [counters, setCounters] = useState<Record<string, string>>({});
   const [payment, setPayment] = useState<(typeof PAYMENTS)[number]>("cash");
+  const [noVat, setNoVat] = useState(false);
   const [note, setNote] = useState("");
   const [history, setHistory] = useState<Settlement[]>([]);
   const [companyFilter, setCompanyFilter] = useState("");
-  const [replenish, setReplenish] = useState<{ product_id: string; quantity: string } | null>(null);
+  const [replenish, setReplenish] = useState<{ product_id: string; quantity: string; unit_cost: string } | null>(null);
   const [due, setDue] = useState<DuePartner[]>([]);
   const [showDue, setShowDue] = useState(true);
   const [lowStock, setLowStock] = useState<LowStock[]>([]);
@@ -175,6 +181,7 @@ export default function ElszamolasPage() {
     api.get<Stock[]>(`/api/partners/${partnerId}/stock`).then((s) => {
       setStock(s);
       setPhysical(Object.fromEntries(s.map((x) => [x.product_id, ""])));
+      setCounters(Object.fromEntries(s.map((x) => [x.product_id, ""])));
     }).catch(() => {});
   }, [partnerId]);
 
@@ -293,13 +300,42 @@ export default function ElszamolasPage() {
       const phys = physical[s.product_id];
       const physNum = phys === "" ? null : Number(phys);
       const consumed = physNum === null ? 0 : Math.max(s.quantity - physNum, 0);
-      const portions = s.grams_per_portion > 0 ? (consumed * 1000) / s.grams_per_portion : 0;
+      // Ha a gép számlálója meg van adva, a számlázott adag AZ — a kg-fogyás
+      // keresztellenőrzés (a hiányt a mentés kg-áron külön sorban számolja).
+      const counterStr = counters[s.product_id] ?? "";
+      const counterNum = counterStr === "" ? null : Number(counterStr);
+      const portions =
+        counterNum !== null
+          ? counterNum
+          : s.grams_per_portion > 0
+            ? (consumed * 1000) / s.grams_per_portion
+            : 0;
       const amount = portions * s.price_per_portion;
       net += amount;
       return { ...s, consumed, portions, amount, filled: physNum !== null };
     });
     return { rows, net };
-  }, [stock, physical]);
+  }, [stock, physical, counters]);
+
+  // Partnerenkénti minimum készlet (riasztási küszöb) beállítása egy termékre.
+  async function setStockMin(s: Stock) {
+    const answer = await prompt(
+      t("cons.minStockPrompt", { product: s.product_name }),
+      { type: "number", initial: s.min_quantity != null ? String(s.min_quantity) : "" },
+    );
+    if (answer === null && s.min_quantity == null) return; // mégse, nem volt beállítva
+    try {
+      await api.patch(`/api/partners/${partnerId}/stock/min`, {
+        product_id: s.product_id,
+        min_quantity: answer === null || answer === "" ? null : Number(answer),
+      });
+      toast(t("cons.minStockSaved"), "success");
+      loadStock();
+      loadDue();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   async function doReplenish(e: React.FormEvent) {
     e.preventDefault();
@@ -310,6 +346,7 @@ export default function ElszamolasPage() {
       await api.post(`/api/partners/${partnerId}/stock/replenish`, {
         product_id: replenish.product_id,
         quantity: Number(replenish.quantity),
+        unit_cost: replenish.unit_cost === "" ? null : Number(replenish.unit_cost),
       });
       setReplenish(null);
       loadStock();
@@ -325,13 +362,19 @@ export default function ElszamolasPage() {
     if (!partnerId) return;
     const lines = stock
       .filter((s) => physical[s.product_id] !== "")
-      .map((s) => ({ product_id: s.product_id, physical_qty: Number(physical[s.product_id]) }));
+      .map((s) => ({
+        product_id: s.product_id,
+        physical_qty: Number(physical[s.product_id]),
+        counter_portions:
+          (counters[s.product_id] ?? "") === "" ? null : Number(counters[s.product_id]),
+      }));
     if (lines.length === 0) return;
     setBusy(true);
     try {
       const res = await api.post<Settlement>("/api/settlements", {
         partner_id: partnerId,
         payment_method: payment,
+        no_vat: noVat,
         lines,
         note: note || null,
       });
@@ -350,6 +393,7 @@ export default function ElszamolasPage() {
           partner_id: partnerId,
           partner_name: partners.find((p) => p.id === partnerId)?.name ?? "?",
           payment_method: payment,
+          no_vat: noVat,
           lines,
           note: note || null,
           queued_at: new Date().toISOString(),
@@ -517,7 +561,7 @@ export default function ElszamolasPage() {
         />
         {partnerId && (
           <button
-            onClick={() => { setError(null); setReplenish({ product_id: activeProducts[0]?.id ?? "", quantity: "" }); }}
+            onClick={() => { setError(null); setReplenish({ product_id: activeProducts[0]?.id ?? "", quantity: "", unit_cost: activeProducts[0]?.purchase_price?.toString() ?? "" }); }}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
           >
             {t("cons.replenish")}
@@ -730,6 +774,7 @@ export default function ElszamolasPage() {
                 <th className="px-4 py-3">{t("cons.bookQty")}</th>
                 <th className="px-4 py-3">{t("cons.portionsAvail")}</th>
                 <th className="px-4 py-3">{t("cons.physicalQty")}</th>
+                <th className="px-4 py-3">{t("cons.counterPortions")}</th>
                 <th className="px-4 py-3">{t("cons.consumed")}</th>
                 <th className="px-4 py-3">{t("cons.portions")}</th>
                 <th className="px-4 py-3">{t("cons.amountNet")}</th>
@@ -745,7 +790,16 @@ export default function ElszamolasPage() {
                       <span title={t("prices.overrideHint", { base: ft(s.base_price_per_portion) })} className="ml-1 text-xs text-indigo-600">*</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">{s.quantity} {s.unit}</td>
+                  <td className="px-4 py-3">
+                    {s.quantity} {s.unit}
+                    <button
+                      onClick={() => setStockMin(s)}
+                      title={t("cons.minStockHint")}
+                      className={`ml-2 rounded border px-1.5 py-0.5 text-xs leading-none hover:bg-slate-100 ${s.min_quantity != null ? "border-amber-300 text-amber-700" : "border-slate-300 text-slate-400"}`}
+                    >
+                      ⚠ {s.min_quantity != null ? `${s.min_quantity} ${s.unit}` : "—"}
+                    </button>
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{s.portions_available}</td>
                   <td className="px-4 py-3">
                     <input
@@ -758,13 +812,25 @@ export default function ElszamolasPage() {
                       className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
                     />
                   </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={counters[s.product_id] ?? ""}
+                      onChange={(e) => setCounters({ ...counters, [s.product_id]: e.target.value })}
+                      placeholder="—"
+                      title={t("cons.counterHint")}
+                      className="w-24 rounded-lg border border-slate-300 px-2 py-1.5"
+                    />
+                  </td>
                   <td className="px-4 py-3">{s.filled ? `${s.consumed.toFixed(2)} ${s.unit}` : "—"}</td>
                   <td className="px-4 py-3">{s.filled ? s.portions.toFixed(0) : "—"}</td>
                   <td className="px-4 py-3 font-medium">{s.filled ? ft(Math.round(s.amount)) : "—"}</td>
                 </tr>
               ))}
               {stock.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">{t("cons.noStock")}</td></tr>
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">{t("cons.noStock")}</td></tr>
               )}
             </tbody>
           </table>
@@ -779,6 +845,18 @@ export default function ElszamolasPage() {
                   <option key={m} value={m}>{t(`cons.payments.${m}`)}</option>
                 ))}
               </select>
+              <label
+                title={t("cons.noVatHint")}
+                className="flex items-center gap-1.5 text-sm text-slate-600"
+              >
+                <input
+                  type="checkbox"
+                  checked={noVat}
+                  onChange={(e) => setNoVat(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                {t("cons.noVat")}
+              </label>
               <input
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -908,7 +986,14 @@ export default function ElszamolasPage() {
                     >
                       ✉{s.receipt_sent_at ? "✓" : ""}
                     </button>
-                    {s.invoiced ? (
+                    {s.no_vat ? (
+                      <span
+                        title={t("cons.noVatHint")}
+                        className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+                      >
+                        {t("cons.noVatBadge")}
+                      </span>
+                    ) : s.invoiced ? (
                       <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
                         {t("cons.invoiced")}{s.billingo_status ? ` (${s.billingo_status})` : ""}
                       </span>
@@ -1044,7 +1129,14 @@ export default function ElszamolasPage() {
               <select
                 required
                 value={replenish.product_id}
-                onChange={(e) => setReplenish({ ...replenish, product_id: e.target.value })}
+                onChange={(e) => {
+                  const prod = activeProducts.find((p) => p.id === e.target.value);
+                  setReplenish({
+                    ...replenish,
+                    product_id: e.target.value,
+                    unit_cost: prod?.purchase_price?.toString() ?? "",
+                  });
+                }}
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
               >
                 {activeProducts.map((p) => (
@@ -1063,6 +1155,19 @@ export default function ElszamolasPage() {
                 onChange={(e) => setReplenish({ ...replenish, quantity: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               />
+            </label>
+            <label className="block text-sm">
+              {t("cons.purchasePrice")}
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={replenish.unit_cost}
+                onChange={(e) => setReplenish({ ...replenish, unit_cost: e.target.value })}
+                placeholder={t("cons.purchasePriceHint")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+              <span className="mt-1 block text-xs text-slate-400">{t("cons.purchasePriceNote")}</span>
             </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">

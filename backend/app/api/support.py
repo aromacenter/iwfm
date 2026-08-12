@@ -304,6 +304,7 @@ async def create_support_ticket(
 
 class CounterBody(BaseModel):
     counter: int = Field(ge=0, le=100_000_000)
+    stock_kg: float | None = Field(default=None, ge=0, le=10_000)  # jelenlegi készlet (kg)
     reporter_name: str | None = Field(default=None, max_length=256)
 
 
@@ -324,6 +325,8 @@ async def report_counter(
     old = asset.counter
     reporter = (body.reporter_name or "").strip() or "QR-oldali bejelentés"
     detail = f"Számláló: {old if old is not None else '—'} → {body.counter} · bejelentette: {reporter}"
+    if body.stock_kg is not None:
+        detail += f" · készlet: ~{body.stock_kg:g} kg"
     if old is not None and body.counter < old:
         detail += " (csökkenés!)"
 
@@ -332,7 +335,9 @@ async def report_counter(
     await record_audit(
         db, actor=None, action="support.counter", entity_type="asset",
         entity_id=asset.barcode,
-        detail={"old": old, "new": body.counter, "reporter": reporter}, request=request,
+        detail={"old": old, "new": body.counter, "stock_kg": body.stock_kg,
+                "reporter": reporter},
+        request=request,
     )
     await db.commit()
     return {"old_counter": old, "new_counter": body.counter}

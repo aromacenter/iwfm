@@ -40,6 +40,12 @@ interface Partner {
   billing_number: string | null;
   bank_account: string | null;
   payment_terms_days: number | null;
+  contract_min_portions: number | null;
+  contract_below_min_price: number | null;
+  contract_min_kg: number | null;
+  contract_below_min_price_kg: number | null;
+  contract_no_min_until: string | null;
+  contract_rent_if_below_min: boolean;
   notes: string | null;
   is_active: boolean;
   asset_count: number;
@@ -71,6 +77,12 @@ const EMPTY = {
   billing_number: "",
   bank_account: "",
   payment_terms_days: "",
+  contract_min_portions: "",
+  contract_below_min_price: "",
+  contract_min_kg: "",
+  contract_below_min_price_kg: "",
+  contract_no_min_until: "",
+  contract_rent_if_below_min: false,
   notes: "",
   is_active: true,
 };
@@ -161,6 +173,12 @@ export default function PartnerekPage() {
       billing_number: p.billing_number ?? "",
       bank_account: p.bank_account ?? "",
       payment_terms_days: p.payment_terms_days != null ? String(p.payment_terms_days) : "",
+      contract_min_portions: p.contract_min_portions != null ? String(p.contract_min_portions) : "",
+      contract_below_min_price: p.contract_below_min_price != null ? String(p.contract_below_min_price) : "",
+      contract_min_kg: p.contract_min_kg != null ? String(p.contract_min_kg) : "",
+      contract_below_min_price_kg: p.contract_below_min_price_kg != null ? String(p.contract_below_min_price_kg) : "",
+      contract_no_min_until: p.contract_no_min_until ?? "",
+      contract_rent_if_below_min: p.contract_rent_if_below_min,
       notes: p.notes ?? "",
       is_active: p.is_active,
     });
@@ -227,6 +245,12 @@ export default function PartnerekPage() {
         billing_number: form.billing_number || null,
         bank_account: form.bank_account || null,
         payment_terms_days: form.payment_terms_days ? Number(form.payment_terms_days) : null,
+        contract_min_portions: form.contract_min_portions ? Number(form.contract_min_portions) : null,
+        contract_below_min_price: form.contract_below_min_price ? Number(form.contract_below_min_price) : null,
+        contract_min_kg: form.contract_min_kg ? Number(form.contract_min_kg) : null,
+        contract_below_min_price_kg: form.contract_below_min_price_kg ? Number(form.contract_below_min_price_kg) : null,
+        contract_no_min_until: form.contract_no_min_until || null,
+        contract_rent_if_below_min: form.contract_rent_if_below_min,
         notes: form.notes || null,
         is_active: form.is_active,
       };
@@ -581,6 +605,86 @@ export default function PartnerekPage() {
                   <p className="mt-1 text-xs text-slate-400">{t("partners.legacyAddress", { address: form.billing_address })}</p>
                 )}
               </div>
+            </fieldset>
+
+            <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
+              <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("partners.contractSection")}</legend>
+              <p className="text-xs text-slate-400">{t("partners.contractHint")}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block text-sm">
+                  {t("partners.contractMinPortions")}
+                  <input
+                    type="number" min={0}
+                    value={form.contract_min_portions}
+                    onChange={(e) => setForm({ ...form, contract_min_portions: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="block text-sm">
+                  {t("partners.contractBelowMinPrice")}
+                  <input
+                    type="number" min={0} step="0.01"
+                    value={form.contract_below_min_price}
+                    onChange={(e) => setForm({ ...form, contract_below_min_price: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block text-sm">
+                  {t("partners.contractMinKg")}
+                  <input
+                    type="number" min={0} step="0.1"
+                    value={form.contract_min_kg}
+                    onChange={(e) => setForm({ ...form, contract_min_kg: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="block text-sm">
+                  {t("partners.contractBelowMinPriceKg")}
+                  <input
+                    type="number" min={0} step="0.01"
+                    value={form.contract_below_min_price_kg}
+                    onChange={(e) => setForm({ ...form, contract_below_min_price_kg: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="block flex-1 text-sm">
+                  {t("partners.contractNoMinUntil")}
+                  <input
+                    type="date"
+                    value={form.contract_no_min_until}
+                    onChange={(e) => setForm({ ...form, contract_no_min_until: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() + 3);
+                    setForm({ ...form, contract_no_min_until: d.toISOString().slice(0, 10) });
+                  }}
+                  title={t("partners.contractGraceHint")}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100"
+                >
+                  {t("partners.contractGrace3m")}
+                </button>
+              </div>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.contract_rent_if_below_min}
+                  onChange={(e) => setForm({ ...form, contract_rent_if_below_min: e.target.checked })}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>
+                  {t("partners.contractRentIfBelowMin")}
+                  <span className="block text-xs text-slate-400">{t("partners.contractRentIfBelowMinHint")}</span>
+                </span>
+              </label>
             </fieldset>
 
             <label className="block text-sm">

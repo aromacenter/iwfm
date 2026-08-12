@@ -47,6 +47,7 @@ class ProductBody(BaseModel):
     price_per_portion: float = Field(default=0.0, ge=0)
     vat_percent: int = Field(default=27, ge=0, le=100)
     low_stock_threshold: float | None = Field(default=None, ge=0)
+    purchase_price: float | None = Field(default=None, ge=0)  # Ft/kg (nettó)
     is_active: bool = True
     notes: str | None = None
 
@@ -59,6 +60,7 @@ class ProductOut(BaseModel):
     price_per_portion: float
     vat_percent: int
     low_stock_threshold: float | None
+    purchase_price: float | None
     is_active: bool
     notes: str | None
 
@@ -72,6 +74,7 @@ def _product_out(p: Product) -> ProductOut:
         price_per_portion=p.price_per_portion,
         vat_percent=p.vat_percent,
         low_stock_threshold=p.low_stock_threshold,
+        purchase_price=p.purchase_price,
         is_active=p.is_active,
         notes=p.notes,
     )
@@ -105,16 +108,19 @@ async def low_stock(
 ):
     """Küszöb alatti partner-készletek: hol fogy ki hamarosan a termék.
     A legkisebb (küszöbhöz mért) készletek elöl."""
+    # Küszöb: partnerenkénti felülírás (partner_stock.min_quantity), ha nincs,
+    # a termék globális low_stock_threshold-ja.
+    threshold = sa_func.coalesce(PartnerStock.min_quantity, Product.low_stock_threshold)
     rows = (
         await db.execute(
             select(PartnerStock, Product, Partner.name)
             .join(Product, Product.id == PartnerStock.product_id)
             .join(Partner, Partner.id == PartnerStock.partner_id)
             .where(
-                Product.low_stock_threshold.is_not(None),
+                threshold.is_not(None),
                 Product.is_active.is_(True),
                 Partner.is_active.is_(True),
-                PartnerStock.quantity <= Product.low_stock_threshold,
+                PartnerStock.quantity <= threshold,
             )
         )
     ).all()
@@ -126,7 +132,11 @@ async def low_stock(
             product_name=product.name,
             unit=product.unit,
             quantity=stock.quantity,
-            threshold=product.low_stock_threshold or 0.0,
+            threshold=(
+                stock.min_quantity
+                if stock.min_quantity is not None
+                else (product.low_stock_threshold or 0.0)
+            ),
         )
         for stock, product, partner_name in rows
     ]
@@ -246,11 +256,13 @@ class StockOut(BaseModel):
     base_price_per_portion: float  # a termék alapára
     has_price_override: bool = False
     portions_available: int  # hány adag készíthető (lefelé kerekítve)
+    min_quantity: float | None = None  # partnerenkénti riasztási küszöb (kg)
 
 
 class ReplenishBody(BaseModel):
     product_id: str
     quantity: float = Field(gt=0)  # feltöltendő mennyiség (kg)
+    unit_cost: float | None = Field(default=None, ge=0)  # beszerzési ár (Ft/kg, nettó)
     note: str | None = Field(default=None, max_length=512)
 
 
@@ -298,6 +310,7 @@ def _stock_out(
         base_price_per_portion=product.price_per_portion,
         has_price_override=product.id in overrides,
         portions_available=int(math.floor(portions_from(stock.quantity, product.grams_per_portion))),
+        min_quantity=stock.min_quantity,
     )
 
 
@@ -348,12 +361,55 @@ async def replenish_partner_stock(
     db.add(
         StockMovement(
             partner_id=partner.id, product_id=product.id, action="replenish",
-            quantity_delta=body.quantity, note=body.note, actor_user_id=actor.id,
+            quantity_delta=body.quantity, unit_cost=body.unit_cost,
+            note=body.note, actor_user_id=actor.id,
         )
     )
+    if body.unit_cost is not None:
+        product.purchase_price = body.unit_cost  # utolsó beszerzési ár
     await record_audit(
         db, actor=actor, action="stock.replenish", entity_type="partner_stock",
-        entity_id=str(partner.id), detail={"product": product.name, "qty": body.quantity},
+        entity_id=str(partner.id),
+        detail={"product": product.name, "qty": body.quantity, "unit_cost": body.unit_cost},
+        request=request,
+    )
+    await db.commit()
+    return _stock_out(stock, product, await _partner_price_map(db, partner.id))
+
+
+class StockMinBody(BaseModel):
+    product_id: str
+    min_quantity: float | None = Field(default=None, ge=0)  # None = globális küszöb
+
+
+@stock_router.patch("/{partner_id}/stock/min", response_model=StockOut)
+async def set_stock_min(
+    partner_id: str,
+    body: StockMinBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Partnerenkénti minimum készlet (riasztási küszöb) beállítása egy
+    termékre — None visszaáll a termék globális küszöbére."""
+    partner = await _get_partner_or_404(db, partner_id)
+    product = await _get_product_or_404(db, body.product_id)
+    stock = (
+        await db.execute(
+            select(PartnerStock).where(
+                PartnerStock.partner_id == partner.id,
+                PartnerStock.product_id == product.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if stock is None:
+        stock = PartnerStock(partner_id=partner.id, product_id=product.id, quantity=0.0)
+        db.add(stock)
+    stock.min_quantity = body.min_quantity
+    await record_audit(
+        db, actor=actor, action="stock.min_set", entity_type="partner_stock",
+        entity_id=str(partner.id),
+        detail={"product": product.name, "min_quantity": body.min_quantity},
         request=request,
     )
     await db.commit()
@@ -472,11 +528,17 @@ async def clear_partner_price(
 class SettlementLineIn(BaseModel):
     product_id: str
     physical_qty: float = Field(ge=0)  # fizikai leltár (kg)
+    # A gép számlálója szerinti adagszám az időszakban (opcionális). Ha meg
+    # van adva, a számlázás EZ alapján megy; a kg-leltár keresztellenőrzés:
+    # a számláló szerint vártnál kisebb fizikai készlet hiánya kg-áron kerül
+    # felszámításra.
+    counter_portions: float | None = Field(default=None, ge=0)
 
 
 class SettlementCreate(BaseModel):
     partner_id: str
     payment_method: str  # cash | card | transfer
+    no_vat: bool = False  # ÁFA és Billingó-számla nélkül (a megadott ár fizetendő)
     lines: list[SettlementLineIn] = Field(min_length=1)
     note: str | None = Field(default=None, max_length=1000)
 
@@ -501,6 +563,7 @@ class SettlementOut(BaseModel):
     settled_by_name: str
     invoicing_company: str | None = None  # xp | pc
     payment_method: str
+    no_vat: bool = False
     total_net: float
     total_gross: float
     invoiced: bool
@@ -544,6 +607,7 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         settled_by_name=s.settled_by_name,
         invoicing_company=s.invoicing_company,
         payment_method=s.payment_method,
+        no_vat=s.no_vat,
         total_net=s.total_net,
         total_gross=s.total_gross,
         invoiced=s.invoiced,
@@ -560,10 +624,25 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
 
 
 async def apply_contract_lines(
-    db: AsyncSession, partner: Partner, settlement: Settlement, total_portions: float
+    db: AsyncSession,
+    partner: Partner,
+    settlement: Settlement,
+    total_portions: float,
+    total_consumed_kg: float = 0.0,
 ) -> tuple[float, float]:
-    """Szerződéses sorok az elszámoláshoz: időarányos BÉRLETI DÍJ és a havi
-    MINIMUM ADAG alatti fogyás különbözete (a gépeken beállított feltételekből).
+    """Szerződéses sorok az elszámoláshoz.
+
+    Minimum-forrás (erősorrend):
+      1. partner kg-alapú minimuma (contract_min_kg + contract_below_min_price_kg),
+      2. partner adag-alapú minimuma (contract_min_portions + contract_below_min_price),
+      3. a kihelyezett gépeken beállított adag-minimumok összege.
+    Türelmi időszak (contract_no_min_until, pl. új partner első 3 hónapja):
+    a minimum-elvárás szünetel.
+
+    Bérleti díj: alapesetben mindig jár (időarányosan, a gépek rent_fee-je).
+    Ha a partneren contract_rent_if_below_min igaz: a bérleti díj CSAK akkor
+    kerül felszámításra, ha a minimum nem teljesült — és ilyenkor különbözetet
+    nem számlázunk (a bérleti díj maga a szankció); minimum felett semmi.
 
     Az időszak az előző elszámolás óta eltelt napok száma (első elszámolásnál
     30 nap, 1–90 nap közé szorítva). Visszaadja a hozzáadott (nettó, bruttó)
@@ -579,9 +658,30 @@ async def apply_contract_lines(
         )
     ).scalars().all()
     rent_total = sum(a.rent_fee or 0 for a in assets)
-    min_total = sum(a.contract_min_portions or 0 for a in assets)
+
+    # Adag-alapú minimum: gépek összege, partner-felülírással
+    min_portions = sum(a.contract_min_portions or 0 for a in assets)
     below_prices = [a.contract_below_min_price for a in assets if a.contract_below_min_price]
-    if rent_total <= 0 and (min_total <= 0 or not below_prices):
+    if partner.contract_min_portions is not None:
+        min_portions = partner.contract_min_portions
+    if partner.contract_below_min_price is not None:
+        below_prices = [partner.contract_below_min_price]
+
+    # Kg-alapú minimum (csak partner-szinten) — ha él, az adag-alapút kiváltja
+    kg_mode = bool(partner.contract_min_kg)
+
+    # Türelmi időszak: minden minimum-elvárás szünetel
+    grace = (
+        partner.contract_no_min_until is not None
+        and date.today() <= partner.contract_no_min_until
+    )
+    if grace:
+        min_portions = 0
+        kg_mode = False
+
+    conditional_rent = bool(partner.contract_rent_if_below_min)
+    has_min = kg_mode or (min_portions > 0 and bool(below_prices))
+    if rent_total <= 0 and not has_min:
         return 0.0, 0.0
 
     prev = (
@@ -596,37 +696,74 @@ async def apply_contract_lines(
     days = 30 if prev is None else (datetime.now(UTC) - prev).days
     days = min(max(days, 1), 90)
 
+    # Minimum-teljesülés kiszámítása (a bérleti díj feltételéhez is kell)
+    shortfall_portions = 0.0
+    shortfall_kg = 0.0
+    min_due_portions = min_due_kg = 0.0
+    if kg_mode:
+        min_due_kg = (partner.contract_min_kg or 0) * days / 30.0
+        shortfall_kg = max(min_due_kg - total_consumed_kg, 0.0)
+    elif min_portions > 0:
+        min_due_portions = min_portions * days / 30.0
+        shortfall_portions = max(min_due_portions - total_portions, 0.0)
+    below_minimum = shortfall_kg >= 0.1 or shortfall_portions >= 1
+
     added_net = added_gross = 0.0
-    if rent_total > 0:
+    vat_pct = 0 if settlement.no_vat else 27
+    vat_mult = 1.0 if settlement.no_vat else 1.27
+
+    # Bérleti díj: feltételes módban csak minimum alatt, egyébként mindig
+    charge_rent = rent_total > 0 and (
+        (below_minimum and has_min) if conditional_rent else True
+    )
+    if charge_rent:
         rent_net = _money(rent_total * days / 30)
+        label = f"Bérleti díj ({days} nap, {sum(1 for a in assets if a.rent_fee)} gép)"
+        if conditional_rent:
+            label += " — minimum alatt"
         db.add(SettlementLine(
             settlement_id=settlement.id,
-            product_name=f"Bérleti díj ({days} nap, {sum(1 for a in assets if a.rent_fee)} gép)",
+            product_name=label,
             previous_qty=0.0, physical_qty=0.0, consumed_qty=0.0,
-            portions=1.0, price_per_portion=rent_net, vat_percent=27,
+            portions=1.0, price_per_portion=rent_net, vat_percent=vat_pct,
             amount_net=rent_net,
         ))
         added_net += rent_net
-        added_gross += _money(rent_net * 1.27)
+        added_gross += _money(rent_net * vat_mult)
 
-    if min_total > 0 and below_prices:
-        min_due = min_total * days / 30.0
-        shortfall = max(min_due - total_portions, 0.0)
-        if shortfall >= 1:
-            price = max(below_prices)
-            amount = _money(shortfall * price)
+    # Különbözet-számlázás: csak ha NEM a feltételes bérleti díj a szankció
+    if not conditional_rent and below_minimum:
+        if kg_mode and partner.contract_below_min_price_kg:
+            price_kg = partner.contract_below_min_price_kg
+            amount = _money(shortfall_kg * price_kg)
             db.add(SettlementLine(
                 settlement_id=settlement.id,
                 product_name=(
-                    f"Minimum adag különbözet ({shortfall:.0f} adag — "
-                    f"{days} napra {min_due:.0f} adag a minimum)"
+                    f"Minimum átvétel különbözet ({shortfall_kg:.1f} kg — "
+                    f"{days} napra {min_due_kg:.1f} kg a minimum)"
                 ),
                 previous_qty=0.0, physical_qty=0.0, consumed_qty=0.0,
-                portions=round(shortfall), price_per_portion=price, vat_percent=27,
+                portions=1.0, price_per_portion=amount, vat_percent=vat_pct,
                 amount_net=amount,
             ))
             added_net += amount
-            added_gross += _money(amount * 1.27)
+            added_gross += _money(amount * vat_mult)
+        elif not kg_mode and below_prices:
+            price = max(below_prices)
+            amount = _money(shortfall_portions * price)
+            db.add(SettlementLine(
+                settlement_id=settlement.id,
+                product_name=(
+                    f"Minimum adag különbözet ({shortfall_portions:.0f} adag — "
+                    f"{days} napra {min_due_portions:.0f} adag a minimum)"
+                ),
+                previous_qty=0.0, physical_qty=0.0, consumed_qty=0.0,
+                portions=round(shortfall_portions), price_per_portion=price,
+                vat_percent=vat_pct,
+                amount_net=amount,
+            ))
+            added_net += amount
+            added_gross += _money(amount * vat_mult)
 
     return _money(added_net), _money(added_gross)
 
@@ -662,6 +799,7 @@ async def create_settlement(
         settled_by_name=actor.display_name,
         invoicing_company=partner.invoicing_company,
         payment_method=body.payment_method,
+        no_vat=body.no_vat,
         total_net=0.0,
         total_gross=0.0,
         note=body.note,
@@ -672,6 +810,8 @@ async def create_settlement(
     price_overrides = await _partner_price_map(db, partner.id)
     total_net = 0.0
     total_gross = 0.0
+    total_portions = 0.0
+    total_consumed_kg = 0.0
     for line_in in body.lines:
         product = await _get_product_or_404(db, line_in.product_id)
         stock = (
@@ -684,12 +824,20 @@ async def create_settlement(
         ).scalar_one_or_none()
         previous = stock.quantity if stock is not None else 0.0
         consumed = max(previous - line_in.physical_qty, 0.0)
-        portions = portions_from(consumed, product.grams_per_portion)
+        # Számlázott adagszám: a gép számlálója szerint, ha meg van adva —
+        # egyébként a kg-fogyásból számolva.
+        if line_in.counter_portions is not None:
+            portions = line_in.counter_portions
+        else:
+            portions = portions_from(consumed, product.grams_per_portion)
         unit_price = _effective_price(product, price_overrides)
+        line_vat = 0 if body.no_vat else product.vat_percent
         amount_net = _money(portions * unit_price)
-        amount_gross = _money(amount_net * (1 + product.vat_percent / 100))
+        amount_gross = _money(amount_net * (1 + line_vat / 100))
         total_net += amount_net
         total_gross += amount_gross
+        total_portions += portions
+        total_consumed_kg += consumed
 
         db.add(
             SettlementLine(
@@ -700,11 +848,42 @@ async def create_settlement(
                 physical_qty=line_in.physical_qty,
                 consumed_qty=consumed,
                 portions=portions,
+                counter_portions=line_in.counter_portions,
                 price_per_portion=unit_price,
-                vat_percent=product.vat_percent,
+                vat_percent=line_vat,
                 amount_net=amount_net,
             )
         )
+
+        # Kg-keresztellenőrzés: a számláló szerint ennyi készletnek KELLENE
+        # lennie — ha a mért ennél kevesebb, a hiányt kg-áron számlázzuk
+        # (beszerzési ár, ha van; különben az adagár kg-egyenértéke).
+        if line_in.counter_portions is not None:
+            expected_remaining = previous - (
+                line_in.counter_portions * product.grams_per_portion / 1000.0
+            )
+            shortage_kg = expected_remaining - line_in.physical_qty
+            if shortage_kg >= 0.05:
+                kg_price = product.purchase_price or (
+                    unit_price * 1000.0 / max(product.grams_per_portion, 1)
+                )
+                short_net = _money(shortage_kg * kg_price)
+                db.add(
+                    SettlementLine(
+                        settlement_id=settlement.id,
+                        product_id=product.id,
+                        product_name=(
+                            f"Készlethiány — {product.name} "
+                            f"({shortage_kg:.2f} kg, számláló-ellenőrzés)"
+                        ),
+                        previous_qty=0.0, physical_qty=0.0,
+                        consumed_qty=0.0, portions=1.0,
+                        price_per_portion=short_net, vat_percent=line_vat,
+                        amount_net=short_net,
+                    )
+                )
+                total_net += short_net
+                total_gross += _money(short_net * (1 + line_vat / 100))
         # A könyv szerinti készlet a leltár utáni fizikai mennyiségre áll.
         if stock is None:
             stock = PartnerStock(
@@ -721,16 +900,11 @@ async def create_settlement(
                 )
             )
 
-    # Szerződéses tételek: bérleti díj + minimum adag különbözet (automatikus)
-    total_portions = sum(
-        line.portions
-        for line in (
-            await db.execute(
-                select(SettlementLine).where(SettlementLine.settlement_id == settlement.id)
-            )
-        ).scalars()
+    # Szerződéses tételek: bérleti díj + minimum különbözet (automatikus).
+    # total_portions/total_consumed_kg a termék-sorokból gyűlt a ciklusban.
+    extra_net, extra_gross = await apply_contract_lines(
+        db, partner, settlement, total_portions, total_consumed_kg
     )
-    extra_net, extra_gross = await apply_contract_lines(db, partner, settlement, total_portions)
     total_net += extra_net
     total_gross += extra_gross
 
@@ -1298,6 +1472,9 @@ async def invoice_settlement(
     from app.services.wfm.billingo_service import create_invoice_for_settlement
 
     s = await _get_settlement_or_404(db, settlement_id)
+    if s.no_vat:
+        # ÁFA/számla nélküli elszámolás — Billingó-számla nem készülhet hozzá.
+        raise HTTPException(status_code=409, detail={"code": "settlement.no_vat_no_invoice"})
     if s.invoiced:
         raise HTTPException(status_code=409, detail={"code": "settlement.already_invoiced"})
     partner = (

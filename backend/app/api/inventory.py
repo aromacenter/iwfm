@@ -8,7 +8,7 @@ visszavéve (in_stock). Minden mozgás az asset_movements táblába kerül
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -77,6 +77,13 @@ class PartnerBody(BaseModel):
     billing_number: str | None = Field(default=None, max_length=32)
     bank_account: str | None = Field(default=None, max_length=64)
     payment_terms_days: int | None = Field(default=None, ge=0, le=365)
+    # Partner-szintű szerződés (felülírja a gépeken beállítottat)
+    contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
+    contract_below_min_price: float | None = Field(default=None, ge=0)  # Ft/adag
+    contract_min_kg: float | None = Field(default=None, ge=0, le=100_000)  # kg/hó
+    contract_below_min_price_kg: float | None = Field(default=None, ge=0)  # Ft/kg
+    contract_no_min_until: date | None = None  # türelmi időszak vége
+    contract_rent_if_below_min: bool = False  # minimum alatt bérleti díj a szankció
     notes: str | None = None
     is_active: bool = True
 
@@ -139,6 +146,12 @@ class PartnerOut(BaseModel):
     billing_number: str | None
     bank_account: str | None
     payment_terms_days: int | None
+    contract_min_portions: int | None
+    contract_below_min_price: float | None
+    contract_min_kg: float | None
+    contract_below_min_price_kg: float | None
+    contract_no_min_until: date | None
+    contract_rent_if_below_min: bool
     notes: str | None
     is_active: bool
     asset_count: int = 0
@@ -171,6 +184,12 @@ def _partner_out(p: Partner, asset_count: int = 0) -> PartnerOut:
         billing_number=p.billing_number,
         bank_account=p.bank_account,
         payment_terms_days=p.payment_terms_days,
+        contract_min_portions=p.contract_min_portions,
+        contract_below_min_price=p.contract_below_min_price,
+        contract_min_kg=p.contract_min_kg,
+        contract_below_min_price_kg=p.contract_below_min_price_kg,
+        contract_no_min_until=p.contract_no_min_until,
+        contract_rent_if_below_min=p.contract_rent_if_below_min,
         notes=p.notes,
         is_active=p.is_active,
         asset_count=asset_count,

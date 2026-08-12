@@ -41,11 +41,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+BASELINE_REVISION = "1761410c3a1e"  # a v0.19-es Alembic-átálláskori teljes séma
+
+
 def _run_alembic(sync_conn) -> None:
     """Sémaverziózás Alembickel (v0.19-től).
 
     - Már élő, Alembic előtti adatbázis (van users tábla, nincs alembic_version):
-      csak bélyegzünk (stamp head) — DDL nem fut, az adatokhoz nem nyúlunk.
+      bélyegzés (stamp) DDL nélkül, majd upgrade. ÁTMENETI ág — a bélyegzés
+      célpontját a séma állapotából ismerjük fel (marker: az első baseline
+      utáni migráció egy oszlopa), hogy a stamp ne ugorjon át valós migrációt.
     - Friss vagy már verziózott adatbázis: upgrade head.
     A régi ensure_column-blokk átmenetileg védőhálóként utána is lefut.
     """
@@ -60,12 +65,20 @@ def _run_alembic(sync_conn) -> None:
     cfg.set_main_option("script_location", str(root / "alembic"))
     cfg.attributes["connection"] = sync_conn
 
-    tables = inspect(sync_conn).get_table_names()
+    inspector = inspect(sync_conn)
+    tables = inspector.get_table_names()
     if "alembic_version" not in tables and "users" in tables:
-        command.stamp(cfg, "head")
-        logger.info("Alembic: existing database stamped to head (no DDL executed)")
-    else:
-        command.upgrade(cfg, "head")
+        product_cols = (
+            {c["name"] for c in inspector.get_columns("products")}
+            if "products" in tables
+            else set()
+        )
+        # Ha a 0002-es migráció oszlopa már megvan (create_all hozta létre),
+        # a séma aktuális → head; különben baseline, és az upgrade pótolja.
+        target = "head" if "purchase_price" in product_cols else BASELINE_REVISION
+        command.stamp(cfg, target)
+        logger.info("Alembic: existing database stamped to %s (no DDL executed)", target)
+    command.upgrade(cfg, "head")
 
 
 def _ensure_employee_code_column(sync_conn) -> None:

@@ -19,8 +19,15 @@ interface Product {
   price_per_portion: number;
   vat_percent: number;
   low_stock_threshold: number | null;
+  purchase_price: number | null;
   is_active: boolean;
   notes: string | null;
+}
+
+/** Árrés egy adagon: eladási ár − (beszerzési Ft/kg × gramm/adag). */
+function marginPerPortion(p: Product): number | null {
+  if (p.purchase_price == null) return null;
+  return p.price_per_portion - (p.purchase_price * p.grams_per_portion) / 1000;
 }
 
 const EMPTY = {
@@ -31,6 +38,7 @@ const EMPTY = {
   price_per_portion: "",
   vat_percent: "27",
   low_stock_threshold: "",
+  purchase_price: "",
   is_active: true,
   notes: "",
 };
@@ -60,6 +68,7 @@ export default function TermekekPage() {
       price_per_portion: String(p.price_per_portion),
       vat_percent: String(p.vat_percent),
       low_stock_threshold: p.low_stock_threshold?.toString() ?? "",
+      purchase_price: p.purchase_price?.toString() ?? "",
       is_active: p.is_active,
       notes: p.notes ?? "",
     });
@@ -110,6 +119,7 @@ export default function TermekekPage() {
         vat_percent: Number(form.vat_percent) || 27,
         low_stock_threshold:
           form.low_stock_threshold === "" ? null : Number(form.low_stock_threshold),
+        purchase_price: form.purchase_price === "" ? null : Number(form.purchase_price),
         is_active: form.is_active,
         notes: form.notes || null,
       };
@@ -164,6 +174,8 @@ export default function TermekekPage() {
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.name")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.gramsPerPortion")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.pricePerPortion")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.purchasePriceShort")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.marginPerPortion")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.vat")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.lowStockThreshold")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
@@ -193,6 +205,20 @@ export default function TermekekPage() {
                 </td>
                 <td className="px-4 py-3">{p.grams_per_portion} g</td>
                 <td className="px-4 py-3 font-medium">{p.price_per_portion.toLocaleString("hu-HU")} Ft</td>
+                <td className="px-4 py-3 text-slate-500">
+                  {p.purchase_price != null ? `${p.purchase_price.toLocaleString("hu-HU")} Ft/kg` : "—"}
+                </td>
+                <td className="px-4 py-3">
+                  {(() => {
+                    const m = marginPerPortion(p);
+                    if (m == null) return <span className="text-slate-400">—</span>;
+                    return (
+                      <span className={m < 0 ? "font-medium text-red-600" : "text-emerald-700"}>
+                        {m.toLocaleString("hu-HU", { maximumFractionDigits: 1 })} Ft
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td className="px-4 py-3 text-slate-500">{p.vat_percent}%</td>
                 <td className="px-4 py-3 text-slate-500">
                   {p.low_stock_threshold != null ? `${p.low_stock_threshold} ${p.unit}` : "—"}
@@ -205,7 +231,7 @@ export default function TermekekPage() {
               </tr>
             ))}
             {products.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("cons.noProducts")}</td></tr>
+              <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">{t("cons.noProducts")}</td></tr>
             )}
           </tbody>
         </table>
@@ -246,6 +272,10 @@ export default function TermekekPage() {
                 <input type="number" min={0} step="0.1" value={form.low_stock_threshold} onChange={(e) => setForm({ ...form, low_stock_threshold: e.target.value })} placeholder={t("cons.noAlert")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
             </div>
+            <label className="block text-sm">
+              {t("cons.purchasePrice")}
+              <input type="number" min={0} step="0.01" value={form.purchase_price} onChange={(e) => setForm({ ...form, purchase_price: e.target.value })} placeholder={t("cons.purchasePriceHint")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
             <label className="block text-sm">
               {t("cons.notes")}
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

@@ -142,13 +142,28 @@ async def test_billingo_partner_sync(client, admin, manager, monkeypatch):
 
     monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
 
-    dry = await client.post("/api/admin/billingo-sync", json={"dry_run": True}, headers=adm)
-    assert dry.status_code == 200, dry.text
-    assert dry.json()["report"]["xp"]["would_update"] == 1
+    # A szinkron háttérfeladat: indítás után a státusz-végpontot pollozzuk.
+    import asyncio as _asyncio
 
-    run = await client.post("/api/admin/billingo-sync", json={"dry_run": False}, headers=adm)
-    assert run.status_code == 200
-    assert run.json()["report"]["xp"]["updated"] == 1
+    async def _run_sync(dry_run: bool) -> dict:
+        res = await client.post(
+            "/api/admin/billingo-sync", json={"dry_run": dry_run}, headers=adm
+        )
+        assert res.status_code == 200, res.text
+        assert res.json()["started"] is True
+        for _ in range(100):
+            st = (await client.get("/api/admin/billingo-sync", headers=adm)).json()
+            if not st["running"]:
+                assert st["error"] is None, st
+                return st["report"]
+            await _asyncio.sleep(0.05)
+        raise AssertionError("sync did not finish")
+
+    dry_report = await _run_sync(True)
+    assert dry_report["xp"]["would_update"] == 1
+
+    run_report = await _run_sync(False)
+    assert run_report["xp"]["updated"] == 1
 
     got = next(
         p for p in (await client.get("/api/partners", headers=mgr)).json()

@@ -125,6 +125,129 @@ class BillingoSyncBody(BaseModel):
     dry_run: bool = True
 
 
+# A két fiók lapozott lekérése akár 80+ Billingó API-hívás → egyetlen szinkron
+# HTTP-kérésbe nem fér bele (proxy-időtúllépés = 500 a kliensnél). Ezért a
+# munka háttérfeladatként fut, a kliens a GET /billingo-sync státuszt pollozza.
+_SYNC_STATE: dict = {
+    "running": False, "dry_run": None, "progress": "",
+    "report": None, "error": None, "started_at": None, "finished_at": None,
+}
+
+
+async def _billingo_sync_job(dry_run: bool, actor_email: str) -> None:
+    import asyncio
+    import logging
+    import re as _re
+
+    import httpx
+
+    from app.db import get_session_factory
+    from app.services.wfm.billingo_service import _account, get_or_create_settings
+
+    logger = logging.getLogger(__name__)
+    state = _SYNC_STATE
+    try:
+        async with get_session_factory()() as db:
+            settings = await get_or_create_settings(db)
+            partners = (await db.execute(select(Partner))).scalars().all()
+            report: dict[str, dict] = {}
+            total_updated = 0
+
+            async with httpx.AsyncClient(timeout=30) as client:
+                for company in ("xp", "pc"):
+                    api_key, _block, _test = _account(settings, company)
+                    if not api_key:
+                        report[company] = {"skipped": "nincs API-kulcs"}
+                        continue
+                    by_tax: dict[str, dict] = {}
+                    fetched = 0
+                    for page in range(1, 61):
+                        state["progress"] = f"{company}: {page}. oldal ({fetched} vevő)"
+                        res = None
+                        for attempt in range(4):
+                            res = await client.get(
+                                f"https://api.billingo.hu/v3/partners?page={page}&per_page=100",
+                                headers={"X-API-KEY": api_key},
+                            )
+                            if res.status_code == 429:  # Billingó kérés-limit
+                                await asyncio.sleep(2.5 * (attempt + 1))
+                                continue
+                            break
+                        assert res is not None
+                        res.raise_for_status()
+                        data = res.json().get("data", [])
+                        if not data:
+                            break
+                        for item in data:
+                            fetched += 1
+                            digits = _re.sub(r"\D", "", str(item.get("taxcode") or ""))
+                            if len(digits) >= 8:
+                                by_tax.setdefault(digits[:8], item)
+                        if len(data) < 100:
+                            break
+                        await asyncio.sleep(0.35)  # kíméletes ütem a limit alatt
+
+                    matched = updated = 0
+                    samples: list[str] = []
+                    for p in partners:
+                        if p.invoicing_company != company:
+                            continue
+                        digits = _re.sub(r"\D", "", p.tax_number or "")
+                        item = by_tax.get(digits[:8]) if len(digits) >= 8 else None
+                        if item is None:
+                            continue
+                        matched += 1
+                        changes: list[str] = []
+                        b_name = str(item.get("name") or "").strip()
+                        if b_name and not p.company_name:
+                            changes.append(f"cégnév → {b_name}")
+                            if not dry_run:
+                                p.company_name = b_name[:256]
+                        addr = item.get("address") or {}
+                        if addr.get("post_code") and not p.billing_zip:
+                            changes.append("számlázási cím")
+                            if not dry_run:
+                                p.billing_zip = str(addr.get("post_code"))[:16]
+                                p.billing_city = str(addr.get("city") or "")[:128] or None
+                                p.billing_street = str(addr.get("address") or "")[:256] or None
+                                p.billing_address = ", ".join(
+                                    x for x in (
+                                        f"{addr.get('post_code')} {addr.get('city') or ''}".strip(),
+                                        str(addr.get("address") or ""),
+                                    ) if x
+                                )[:512] or None
+                        emails = item.get("emails") or []
+                        if emails and not p.contact_email:
+                            changes.append(f"e-mail → {emails[0]}")
+                            if not dry_run:
+                                p.contact_email = str(emails[0])[:320]
+                        if changes:
+                            updated += 1
+                            if len(samples) < 8:
+                                samples.append(f"{p.name}: {', '.join(changes)}")
+                    total_updated += updated
+                    report[company] = {
+                        "billingo_partners": fetched, "matched": matched,
+                        "would_update" if dry_run else "updated": updated,
+                        "samples": samples,
+                    }
+
+            if not dry_run and total_updated:
+                await record_audit(
+                    db, actor=None, action="partner.billingo_sync", entity_type="partner",
+                    detail={"updated": total_updated, "by": actor_email},
+                )
+                await db.commit()
+            state["report"] = report
+    except Exception as exc:  # a hiba a státuszban jelenik meg, nem 500-ként
+        logger.exception("Billingo sync job failed")
+        state["error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+    finally:
+        state["running"] = False
+        state["progress"] = ""
+        state["finished_at"] = datetime.now().isoformat(timespec="seconds")
+
+
 @router.post("/billingo-sync")
 async def billingo_sync(
     body: BillingoSyncBody,
@@ -132,99 +255,31 @@ async def billingo_sync(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_role("admin")),
 ):
-    """Cégadatok frissítése a Billingó vevőtörzséből, cégenként a saját
-    fiókkal (xp partnerek ← X-Presso fiók, pc ← Premium Caffe). Párosítás
-    adószám-törzsszámra (első 8 jegy). Csak az ÜRES mezőket tölti:
-    company_name, billing cím, contact_email. dry_run=True: csak jelentés."""
-    import re as _re
+    """Cégadat-szinkron indítása a Billingó vevőtörzséből (háttérfeladat).
+    Párosítás adószám-törzsszámra (első 8 jegy), csak az ÜRES mezők töltődnek:
+    company_name, billing cím, contact_email. Állapot: GET /billingo-sync."""
+    import asyncio
 
-    import httpx
+    if _SYNC_STATE["running"]:
+        raise HTTPException(status_code=409, detail={"code": "admin.sync_running"})
+    _SYNC_STATE.update(
+        running=True, dry_run=body.dry_run, progress="indul…",
+        report=None, error=None,
+        started_at=datetime.now().isoformat(timespec="seconds"), finished_at=None,
+    )
+    await record_audit(
+        db, actor=actor, action="partner.billingo_sync_start", entity_type="partner",
+        detail={"dry_run": body.dry_run}, request=request,
+    )
+    await db.commit()
+    asyncio.create_task(_billingo_sync_job(body.dry_run, actor.email))
+    return {"started": True, "dry_run": body.dry_run}
 
-    from app.services.wfm.billingo_service import _account, get_or_create_settings
 
-    settings = await get_or_create_settings(db)
-    partners = (await db.execute(select(Partner))).scalars().all()
-    report: dict[str, dict] = {}
-    total_updated = 0
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        for company in ("xp", "pc"):
-            api_key, _block, _test = _account(settings, company)
-            if not api_key:
-                report[company] = {"skipped": "nincs API-kulcs"}
-                continue
-            # Billingó partnerlista lapozva (max 40 × 100 = 4000 vevő)
-            by_tax: dict[str, dict] = {}
-            fetched = 0
-            for page in range(1, 41):
-                res = await client.get(
-                    f"https://api.billingo.hu/v3/partners?page={page}&per_page=100",
-                    headers={"X-API-KEY": api_key},
-                )
-                res.raise_for_status()
-                data = res.json().get("data", [])
-                if not data:
-                    break
-                for item in data:
-                    fetched += 1
-                    digits = _re.sub(r"\D", "", str(item.get("taxcode") or ""))
-                    if len(digits) >= 8:
-                        by_tax.setdefault(digits[:8], item)
-                if len(data) < 100:
-                    break
-
-            matched = updated = 0
-            samples: list[str] = []
-            for p in partners:
-                if p.invoicing_company != company:
-                    continue
-                digits = _re.sub(r"\D", "", p.tax_number or "")
-                item = by_tax.get(digits[:8]) if len(digits) >= 8 else None
-                if item is None:
-                    continue
-                matched += 1
-                changes: list[str] = []
-                b_name = str(item.get("name") or "").strip()
-                if b_name and not p.company_name:
-                    changes.append(f"cégnév → {b_name}")
-                    if not body.dry_run:
-                        p.company_name = b_name[:256]
-                addr = item.get("address") or {}
-                if addr.get("post_code") and not p.billing_zip:
-                    changes.append("számlázási cím")
-                    if not body.dry_run:
-                        p.billing_zip = str(addr.get("post_code"))[:16]
-                        p.billing_city = str(addr.get("city") or "")[:128] or None
-                        p.billing_street = str(addr.get("address") or "")[:256] or None
-                        p.billing_address = ", ".join(
-                            x for x in (
-                                f"{addr.get('post_code')} {addr.get('city') or ''}".strip(),
-                                str(addr.get("address") or ""),
-                            ) if x
-                        )[:512] or None
-                emails = item.get("emails") or []
-                if emails and not p.contact_email:
-                    changes.append(f"e-mail → {emails[0]}")
-                    if not body.dry_run:
-                        p.contact_email = str(emails[0])[:320]
-                if changes:
-                    updated += 1
-                    if len(samples) < 8:
-                        samples.append(f"{p.name}: {', '.join(changes)}")
-            total_updated += updated
-            report[company] = {
-                "billingo_partners": fetched, "matched": matched,
-                "would_update" if body.dry_run else "updated": updated,
-                "samples": samples,
-            }
-
-    if not body.dry_run and total_updated:
-        await record_audit(
-            db, actor=actor, action="partner.billingo_sync", entity_type="partner",
-            detail={"updated": total_updated}, request=request,
-        )
-        await db.commit()
-    return {"dry_run": body.dry_run, "report": report}
+@router.get("/billingo-sync")
+async def billingo_sync_status(_: User = Depends(require_role("admin"))):
+    """A futó/utolsó vevőtörzs-szinkron állapota (a kliens ezt pollozza)."""
+    return _SYNC_STATE
 
 
 class WipeBody(BaseModel):

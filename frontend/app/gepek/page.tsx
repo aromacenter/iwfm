@@ -228,9 +228,10 @@ export default function GepekPage() {
         norm: assetForm.norm !== "" ? Number(assetForm.norm) : null,
         tangible: assetForm.tangible,
         customer_owned: assetForm.customer_owned,
-        contract_min_portions: assetForm.contract_min_portions !== "" ? Number(assetForm.contract_min_portions) : null,
-        contract_below_min_price: assetForm.contract_below_min_price !== "" ? Number(assetForm.contract_below_min_price) : null,
-        rent_fee: assetForm.rent_fee !== "" ? Number(assetForm.rent_fee) : null,
+        // Ügyfél saját gépénél nincs szerződéses feltétel (csak szervizeljük)
+        contract_min_portions: !assetForm.customer_owned && assetForm.contract_min_portions !== "" ? Number(assetForm.contract_min_portions) : null,
+        contract_below_min_price: !assetForm.customer_owned && assetForm.contract_below_min_price !== "" ? Number(assetForm.contract_below_min_price) : null,
+        rent_fee: !assetForm.customer_owned && assetForm.rent_fee !== "" ? Number(assetForm.rent_fee) : null,
         notes: assetForm.notes || null,
       };
       if (assetForm.id) await api.patch(`/api/assets/${assetForm.id}`, body);
@@ -631,6 +632,7 @@ export default function GepekPage() {
               <input type="checkbox" checked={assetForm.customer_owned} onChange={(e) => setAssetForm({ ...assetForm, customer_owned: e.target.checked })} className="h-4 w-4" />
               {t("inv.customerOwned")}
             </label>
+            {!assetForm.customer_owned && (
             <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
               <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("inv.contractSection")}</legend>
               <p className="text-xs text-slate-500">{t("inv.contractHint")}</p>
@@ -649,6 +651,7 @@ export default function GepekPage() {
                 </label>
               </div>
             </fieldset>
+            )}
             <label className="block text-sm">
               {t("inv.notes")}
               <textarea value={assetForm.notes} onChange={(e) => setAssetForm({ ...assetForm, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

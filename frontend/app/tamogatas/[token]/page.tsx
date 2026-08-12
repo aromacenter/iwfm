@@ -57,6 +57,7 @@ export default function TamogatasPage() {
 
   // számláló-bejelentés
   const [counterVal, setCounterVal] = useState("");
+  const [counterStockKg, setCounterStockKg] = useState("");
   const [reporterName, setReporterName] = useState("");
   const [counterResult, setCounterResult] = useState<{ old: number | null; next: number } | null>(null);
 
@@ -136,7 +137,11 @@ export default function TamogatasPage() {
     try {
       const res = await api.post<{ old_counter: number | null; new_counter: number }>(
         `/api/support/${token}/counter`,
-        { counter: Number(counterVal), reporter_name: reporterName || null },
+        {
+          counter: Number(counterVal),
+          stock_kg: counterStockKg === "" ? null : Number(counterStockKg),
+          reporter_name: reporterName || null,
+        },
       );
       setCounterResult({ old: res.old_counter, next: res.new_counter });
       setMode("counter_done");
@@ -245,7 +250,7 @@ export default function TamogatasPage() {
               <p className="mt-1 text-sm text-slate-500">{t("support.ticketOptionHint")}</p>
             </button>
             <button
-              onClick={() => { setCounterVal(""); setError(null); setMode("counter"); }}
+              onClick={() => { setCounterVal(""); setCounterStockKg(""); setError(null); setMode("counter"); }}
               className="rounded-2xl border border-sky-200 bg-white p-5 text-left shadow-sm transition hover:border-sky-400"
             >
               <p className="text-lg font-semibold text-sky-700">🔢 {t("support.counterOption")}</p>
@@ -291,6 +296,21 @@ export default function TamogatasPage() {
               />
             </label>
             <label className="block text-sm">
+              {t("support.counterStockKg")} *
+              <input
+                required
+                type="number"
+                min={0}
+                step="0.1"
+                inputMode="decimal"
+                value={counterStockKg}
+                onChange={(e) => setCounterStockKg(e.target.value)}
+                placeholder={t("support.counterStockKgPh")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-lg tabular-nums"
+              />
+              <span className="mt-1 block text-xs text-slate-400">{t("support.counterStockKgHint")}</span>
+            </label>
+            <label className="block text-sm">
               {t("support.reporterName")}
               <input
                 value={reporterName}
@@ -300,7 +320,7 @@ export default function TamogatasPage() {
             </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button
-              disabled={busy || counterVal === ""}
+              disabled={busy || counterVal === "" || counterStockKg === ""}
               className="w-full rounded-xl bg-sky-600 px-4 py-2.5 font-medium text-white hover:bg-sky-700 disabled:opacity-50"
             >
               {busy ? t("common.saving") : t("support.counterSubmit")}

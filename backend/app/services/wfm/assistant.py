@@ -273,15 +273,26 @@ async def _t_report_counter(db: AsyncSession, actor: User, args: dict):
         return {"error": "counter: egész szám kell"}, None
     if counter < 0 or counter > 100_000_000:
         return {"error": "counter: 0 és 100 millió között"}, None
+    stock_kg = None
+    if args.get("stock_kg") is not None:
+        try:
+            stock_kg = float(args["stock_kg"])
+        except (TypeError, ValueError):
+            return {"error": "stock_kg: szám kell"}, None
+        if stock_kg < 0:
+            return {"error": "stock_kg: nem lehet negatív"}, None
     old = asset.counter
     asset.counter = counter
     detail = f"Számláló: {old if old is not None else '—'} → {counter} · asszisztens ({actor.display_name})"
+    if stock_kg is not None:
+        detail += f" · készlet: ~{stock_kg:g} kg"
     if old is not None and counter < old:
         detail += " (csökkenés!)"
     db.add(AssetMovement(asset_id=asset.id, action="counter", detail=detail, actor_user_id=actor.id))
     await record_audit(
         db, actor=actor, action="asset.counter", entity_type="asset",
-        entity_id=asset.barcode, detail={"via": "assistant", "counter": counter},
+        entity_id=asset.barcode,
+        detail={"via": "assistant", "counter": counter, "stock_kg": stock_kg},
     )
     await db.commit()
     return (
@@ -309,6 +320,14 @@ async def _t_replenish_stock(db: AsyncSession, actor: User, args: dict):
         return {"error": "quantity: szám kell"}, None
     if qty <= 0 or qty > 10000:
         return {"error": "quantity: 0 és 10000 között"}, None
+    unit_cost = None
+    if args.get("unit_cost") is not None:
+        try:
+            unit_cost = float(args["unit_cost"])
+        except (TypeError, ValueError):
+            return {"error": "unit_cost: szám kell"}, None
+        if unit_cost < 0:
+            return {"error": "unit_cost: nem lehet negatív"}, None
     stock = (
         await db.execute(
             select(PartnerStock).where(
@@ -322,11 +341,14 @@ async def _t_replenish_stock(db: AsyncSession, actor: User, args: dict):
     stock.quantity = round(stock.quantity + qty, 3)
     db.add(StockMovement(
         partner_id=partner.id, product_id=prod.id, action="replenish",
-        quantity_delta=qty, note="asszisztens", actor_user_id=actor.id,
+        quantity_delta=qty, unit_cost=unit_cost, note="asszisztens", actor_user_id=actor.id,
     ))
+    if unit_cost is not None:
+        prod.purchase_price = unit_cost  # utolsó beszerzési ár
     await record_audit(
         db, actor=actor, action="stock.replenish", entity_type="partner",
-        entity_id=str(partner.id), detail={"via": "assistant", "product": prod.name, "qty": qty},
+        entity_id=str(partner.id),
+        detail={"via": "assistant", "product": prod.name, "qty": qty, "unit_cost": unit_cost},
     )
     await db.commit()
     return (
@@ -608,15 +630,20 @@ async def _t_create_settlement(db: AsyncSession, actor: User, args: dict):
             ))
         summary.append(f"{product.name}: fogyás {consumed:g} kg ({portions:.0f} adag)")
 
-    total_portions = sum(
-        line.portions
-        for line in (
+    _slines = (
+        (
             await db.execute(
                 select(SettlementLine).where(SettlementLine.settlement_id == settlement.id)
             )
-        ).scalars()
+        )
+        .scalars()
+        .all()
     )
-    extra_net, extra_gross = await apply_contract_lines(db, partner, settlement, total_portions)
+    total_portions = sum(line.portions for line in _slines)
+    total_consumed_kg = sum(line.consumed_qty for line in _slines)
+    extra_net, extra_gross = await apply_contract_lines(
+        db, partner, settlement, total_portions, total_consumed_kg
+    )
     if extra_net:
         summary.append(f"szerződéses tételek (bérleti díj / minimum): {extra_net:.0f} Ft nettó")
     total_net += extra_net
@@ -703,12 +730,13 @@ TOOLS: list[dict] = [
     {
         "name": "report_counter",
         "feature": "machines",
-        "description": "Gép számláló-állásának rögzítése (a gép adatlapja + előzmények frissülnek).",
+        "description": "Gép számláló-állásának rögzítése (a gép adatlapja + előzmények frissülnek). A bejelentéshez kérd el a jelenlegi készletet is kg-ban (stock_kg).",
         "schema": {
             "type": "object",
             "properties": {
                 "machine_barcode": {"type": "string"},
                 "counter": {"type": "integer"},
+                "stock_kg": {"type": "number"},
             },
             "required": ["machine_barcode", "counter"],
         },
@@ -717,13 +745,14 @@ TOOLS: list[dict] = [
     {
         "name": "replenish_stock",
         "feature": "settlements",
-        "description": "Partner külső raktárának feltöltése termékkel (bizomány). quantity a termék egységében (pl. kg).",
+        "description": "Partner külső raktárának feltöltése termékkel (bizomány). quantity a termék egységében (pl. kg); unit_cost az opcionális beszerzési ár (Ft/kg, nettó).",
         "schema": {
             "type": "object",
             "properties": {
                 "partner": {"type": "string"},
                 "product": {"type": "string"},
                 "quantity": {"type": "number"},
+                "unit_cost": {"type": "number"},
             },
             "required": ["partner", "product", "quantity"],
         },
