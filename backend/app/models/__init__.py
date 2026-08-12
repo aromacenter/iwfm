@@ -22,6 +22,7 @@ from app.models.models import (  # noqa: F401
     ServiceTicket,
     Settlement,
     SettlementLine,
+    SettlementMachine,
     Shift,
     Skill,
     StockMovement,

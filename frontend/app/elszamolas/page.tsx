@@ -61,6 +61,8 @@ interface Settlement {
   billingo_status: string | null;
   has_signature: boolean;
   receipt_sent_at: string | null;
+  debt_before: number | null;
+  paid_amount: number | null;
   created_at: string;
 }
 
@@ -109,6 +111,47 @@ interface DuePartner {
 
 const PAYMENTS = ["cash", "card", "transfer"] as const;
 
+interface CtxMachine {
+  asset_id: string;
+  barcode: string;
+  name: string;
+  counter_count: number;
+  counters: number[] | null;
+  prev_counter: number;
+  last_settled_at: string | null;
+  default_product_id: string | null;
+  product_name: string | null;
+}
+
+interface SettlementContext {
+  machines: CtxMachine[];
+  debt: number;
+  active_contracts: number;
+  last_visit: string | null;
+  single_product_id: string | null;
+}
+
+interface MachineInput {
+  newCounter: string;
+  newCounters: string[];
+  service: string;
+  discount: string;
+}
+
+interface MachinePayload {
+  asset_id: string;
+  new_counter: number;
+  new_counters?: number[];
+  service_portions: number;
+  discount_pct: number;
+}
+
+interface HandoverPayload {
+  product_id: string;
+  quantity: number;
+  unit_cost?: number | null;
+}
+
 // Offline-várólista: hálózati hiba esetén ide kerül az elszámolás, és
 // újracsatlakozáskor automatikusan beküldjük.
 const QUEUE_KEY = "iwfm-pending-settlements";
@@ -119,6 +162,9 @@ interface QueuedSettlement {
   payment_method: (typeof PAYMENTS)[number];
   no_vat?: boolean;
   lines: { product_id: string; physical_qty: number; counter_portions?: number | null }[];
+  machines?: MachinePayload[];
+  handovers?: HandoverPayload[];
+  paid_amount?: number | null;
   note: string | null;
   queued_at: string;
 }
@@ -151,6 +197,11 @@ export default function ElszamolasPage() {
   const [payment, setPayment] = useState<(typeof PAYMENTS)[number]>("cash");
   const [noVat, setNoVat] = useState(false);
   const [note, setNote] = useState("");
+  // Gép-soros elszámolás: kontextus + gépenkénti beviteli mezők
+  const [ctx, setCtx] = useState<SettlementContext | null>(null);
+  const [machineInputs, setMachineInputs] = useState<Record<string, MachineInput>>({});
+  const [handovers, setHandovers] = useState<Record<string, { qty: string; cost: string }>>({});
+  const [paidAmount, setPaidAmount] = useState("");
   const [history, setHistory] = useState<Settlement[]>([]);
   const [companyFilter, setCompanyFilter] = useState("");
   const [replenish, setReplenish] = useState<{ product_id: string; quantity: string; unit_cost: string } | null>(null);
@@ -182,7 +233,21 @@ export default function ElszamolasPage() {
       setStock(s);
       setPhysical(Object.fromEntries(s.map((x) => [x.product_id, ""])));
       setCounters(Object.fromEntries(s.map((x) => [x.product_id, ""])));
+      setHandovers(Object.fromEntries(s.map((x) => [x.product_id, { qty: "", cost: "" }])));
     }).catch(() => {});
+  }, [partnerId]);
+
+  const loadCtx = useCallback(() => {
+    if (!partnerId) { setCtx(null); setMachineInputs({}); setPaidAmount(""); return; }
+    api.get<SettlementContext>(`/api/partners/${partnerId}/settlement-context`).then((c) => {
+      setCtx(c);
+      setMachineInputs(Object.fromEntries(c.machines.map((m) => [
+        m.asset_id,
+        { newCounter: "", newCounters: Array.from({ length: m.counter_count }, () => ""),
+          service: "", discount: "" },
+      ])));
+      setPaidAmount("");
+    }).catch(() => setCtx(null));
   }, [partnerId]);
 
   const loadHistory = useCallback(() => {
@@ -245,6 +310,7 @@ export default function ElszamolasPage() {
   }
 
   useEffect(loadStock, [loadStock]);
+  useEffect(loadCtx, [loadCtx]);
   useEffect(loadHistory, [loadHistory]);
   useEffect(loadDue, [loadDue]);
 
@@ -260,7 +326,11 @@ export default function ElszamolasPage() {
         await api.post("/api/settlements", {
           partner_id: item.partner_id,
           payment_method: item.payment_method,
+          no_vat: item.no_vat ?? false,
           lines: item.lines,
+          machines: item.machines ?? [],
+          handovers: item.handovers ?? [],
+          paid_amount: item.paid_amount ?? null,
           note: item.note,
         });
         sent += 1;
@@ -293,29 +363,85 @@ export default function ElszamolasPage() {
     return () => window.removeEventListener("online", onOnline);
   }, [flushQueue]);
 
-  // Élő fogyás-előnézet a beírt leltár alapján
+  // Gép-soros élő előnézet: lefőzött adag (számláló-különbség) − szerviz,
+  // kedvezménnyel árazva; termékenként összegződik a leltár-táblához.
+  const machinePreview = useMemo(() => {
+    const billedByProduct: Record<string, number> = {};
+    const amountByProduct: Record<string, number> = {};
+    if (!ctx) return { rows: [], billedByProduct, amountByProduct };
+    const rows = ctx.machines.map((m) => {
+      const inp = machineInputs[m.asset_id];
+      let newCounter: number | null = null;
+      if (m.counter_count > 1) {
+        const anyFilled = inp?.newCounters.some((v) => v !== "");
+        newCounter = anyFilled
+          ? inp.newCounters.reduce((a, v) => a + (Number(v) || 0), 0)
+          : null;
+      } else if (inp && inp.newCounter !== "") {
+        newCounter = Number(inp.newCounter);
+      }
+      const filled = newCounter !== null && Number.isFinite(newCounter);
+      const belowPrev = filled && (newCounter as number) < m.prev_counter;
+      const brewed = filled ? Math.max((newCounter as number) - m.prev_counter, 0) : 0;
+      const service = Number(inp?.service) || 0;
+      const discount = Number(inp?.discount) || 0;
+      const billed = Math.max(brewed - service, 0);
+      const pid = m.default_product_id ?? ctx.single_product_id;
+      const stockRow = pid ? stock.find((x) => x.product_id === pid) : undefined;
+      const price = stockRow ? stockRow.price_per_portion : null;
+      const amount = filled && price !== null ? billed * price * (1 - discount / 100) : 0;
+      if (filled && pid) {
+        billedByProduct[pid] = (billedByProduct[pid] ?? 0) + billed;
+        amountByProduct[pid] = (amountByProduct[pid] ?? 0) + amount;
+      }
+      return { ...m, filled, newCounter, brewed, billed, discount, price, amount, belowPrev };
+    });
+    return { rows, billedByProduct, amountByProduct };
+  }, [ctx, machineInputs, stock]);
+
+  // Élő fogyás-előnézet a beírt leltár alapján — a gép-sorok által lefedett
+  // termékeknél a számlázott adag/összeg a gépekből jön.
   const preview = useMemo(() => {
     let net = 0;
     const rows = stock.map((s) => {
       const phys = physical[s.product_id];
       const physNum = phys === "" ? null : Number(phys);
       const consumed = physNum === null ? 0 : Math.max(s.quantity - physNum, 0);
+      const machineBilled = machinePreview.billedByProduct[s.product_id];
       // Ha a gép számlálója meg van adva, a számlázott adag AZ — a kg-fogyás
       // keresztellenőrzés (a hiányt a mentés kg-áron külön sorban számolja).
       const counterStr = counters[s.product_id] ?? "";
       const counterNum = counterStr === "" ? null : Number(counterStr);
-      const portions =
-        counterNum !== null
-          ? counterNum
-          : s.grams_per_portion > 0
-            ? (consumed * 1000) / s.grams_per_portion
-            : 0;
-      const amount = portions * s.price_per_portion;
+      let portions: number;
+      let amount: number;
+      if (machineBilled !== undefined) {
+        portions = machineBilled;
+        amount = machinePreview.amountByProduct[s.product_id] ?? 0;
+      } else if (counterNum !== null) {
+        portions = counterNum;
+        amount = portions * s.price_per_portion;
+      } else {
+        portions = s.grams_per_portion > 0 ? (consumed * 1000) / s.grams_per_portion : 0;
+        amount = portions * s.price_per_portion;
+      }
       net += amount;
-      return { ...s, consumed, portions, amount, filled: physNum !== null };
+      return {
+        ...s, consumed, portions, amount,
+        filled: physNum !== null || machineBilled !== undefined,
+        fromMachines: machineBilled !== undefined,
+      };
     });
+    // Gép-termék készlet-sor nélkül (ritka): az összegbe így is beszámít
+    for (const [pid, amount] of Object.entries(machinePreview.amountByProduct)) {
+      if (!stock.some((s) => s.product_id === pid)) net += amount;
+    }
     return { rows, net };
-  }, [stock, physical, counters]);
+  }, [stock, physical, counters, machinePreview]);
+
+  // Becsült fizetendő: nettó × ÁFA + korábbi tartozás (a szerződéses tételeket
+  // — bérleti díj, minimum — a mentés számolja hozzá).
+  const grossEstimate = Math.round(preview.net * (noVat ? 1 : 1.27));
+  const totalPayable = grossEstimate + Math.round(ctx?.debt ?? 0);
 
   // Partnerenkénti minimum készlet (riasztási küszöb) beállítása egy termékre.
   async function setStockMin(s: Stock) {
@@ -368,19 +494,52 @@ export default function ElszamolasPage() {
         counter_portions:
           (counters[s.product_id] ?? "") === "" ? null : Number(counters[s.product_id]),
       }));
-    if (lines.length === 0) return;
+    // Gép-sorok: csak a kitöltött (új számlálós) gépek kerülnek be
+    if (machinePreview.rows.some((r) => r.belowPrev)) {
+      toast(t("cons.machineBelowPrev"), "error");
+      return;
+    }
+    const machines: MachinePayload[] = machinePreview.rows
+      .filter((r) => r.filled)
+      .map((r) => ({
+        asset_id: r.asset_id,
+        new_counter: r.newCounter as number,
+        new_counters:
+          r.counter_count > 1
+            ? machineInputs[r.asset_id].newCounters.map((v) => Number(v) || 0)
+            : undefined,
+        service_portions: Number(machineInputs[r.asset_id]?.service) || 0,
+        discount_pct: Number(machineInputs[r.asset_id]?.discount) || 0,
+      }));
+    const handoverList: HandoverPayload[] = stock
+      .filter((s) => (handovers[s.product_id]?.qty ?? "") !== "" && Number(handovers[s.product_id].qty) > 0)
+      .map((s) => ({
+        product_id: s.product_id,
+        quantity: Number(handovers[s.product_id].qty),
+        unit_cost: handovers[s.product_id].cost === "" ? null : Number(handovers[s.product_id].cost),
+      }));
+    if (lines.length === 0 && machines.length === 0) return;
+    const paid = paidAmount.trim() === "" ? null : Number(paidAmount);
+    const payload = {
+      partner_id: partnerId,
+      payment_method: payment,
+      no_vat: noVat,
+      lines,
+      machines,
+      handovers: handoverList,
+      paid_amount: paid,
+      note: note || null,
+    };
     setBusy(true);
     try {
-      const res = await api.post<Settlement>("/api/settlements", {
-        partner_id: partnerId,
-        payment_method: payment,
-        no_vat: noVat,
-        lines,
-        note: note || null,
-      });
+      const res = await api.post<Settlement & { debt_before?: number; paid_amount?: number | null }>(
+        "/api/settlements", payload,
+      );
       toast(t("cons.settlementSaved", { gross: res.total_gross.toLocaleString("hu-HU") }), "success");
       setNote("");
+      setPaidAmount("");
       loadStock();
+      loadCtx();
       loadHistory();
       loadDue();
       setSigning(res); // elszámolás után rögtön aláírathatjuk a partnerrel
@@ -395,12 +554,16 @@ export default function ElszamolasPage() {
           payment_method: payment,
           no_vat: noVat,
           lines,
+          machines,
+          handovers: handoverList,
+          paid_amount: paid,
           note: note || null,
           queued_at: new Date().toISOString(),
         });
         writeQueue(queue);
         setPendingOffline(queue.length);
         setNote("");
+        setPaidAmount("");
         setPhysical(Object.fromEntries(stock.map((x) => [x.product_id, ""])));
         toast(t("offline.queued"), "info");
       } else {
@@ -764,6 +927,141 @@ export default function ElszamolasPage() {
         </div>
       )}
 
+      {partnerId && ctx && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm shadow-sm">
+          <span className="text-slate-500">
+            {t("cons.lastVisit")}:{" "}
+            <span className="font-medium text-slate-700">
+              {ctx.last_visit ? fmt(ctx.last_visit) : t("cons.dueNever")}
+            </span>
+          </span>
+          <span className="text-slate-500">
+            {t("cons.activeContracts")}:{" "}
+            <span className="font-medium text-slate-700">{ctx.active_contracts}</span>
+          </span>
+          <span className="text-slate-500">
+            {t("cons.debt")}:{" "}
+            <span className={`font-semibold ${ctx.debt > 0.5 ? "text-rose-600" : "text-emerald-600"}`}>
+              {ft(Math.round(ctx.debt))}
+            </span>
+          </span>
+        </div>
+      )}
+
+      {partnerId && ctx && ctx.machines.length > 0 && (
+        <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <p className="px-4 pt-3 text-sm font-semibold">{t("cons.machinesTitle")}</p>
+          <p className="px-4 pb-2 text-xs text-slate-400">{t("cons.machinesHint")}</p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                <th className="px-4 py-2.5">{t("cons.machineBarcode")}</th>
+                <th className="px-4 py-2.5">{t("cons.machineName")}</th>
+                <th className="px-4 py-2.5">{t("cons.machinePrevAt")}</th>
+                <th className="px-4 py-2.5">{t("cons.machinePrevCounter")}</th>
+                <th className="px-4 py-2.5">{t("cons.machineNewCounter")}</th>
+                <th className="px-4 py-2.5">{t("cons.machineBrewed")}</th>
+                <th className="px-4 py-2.5">{t("cons.machineService")}</th>
+                <th className="px-4 py-2.5">{t("cons.machineDiscount")}</th>
+                <th className="px-4 py-2.5 text-right">{t("cons.amountNet")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {machinePreview.rows.map((m) => (
+                <tr key={m.asset_id} className="border-b border-slate-100 last:border-0">
+                  <td className="px-4 py-2.5 font-mono text-xs">{m.barcode}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium">{m.name}</div>
+                    <div className="text-xs text-slate-400">
+                      {m.product_name ?? t("cons.machineProductFallback")}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500">
+                    {m.last_settled_at ? fmt(m.last_settled_at) : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 tabular-nums text-slate-600">{m.prev_counter}</td>
+                  <td className="px-4 py-2.5">
+                    {m.counter_count > 1 ? (
+                      <div className="flex gap-1">
+                        {machineInputs[m.asset_id]?.newCounters.map((v, i) => (
+                          <input
+                            key={i}
+                            type="number" min={0}
+                            value={v}
+                            onChange={(e) => {
+                              const inp = machineInputs[m.asset_id];
+                              const next = [...inp.newCounters];
+                              next[i] = e.target.value;
+                              setMachineInputs({ ...machineInputs, [m.asset_id]: { ...inp, newCounters: next } });
+                            }}
+                            placeholder={String(m.counters?.[i] ?? "")}
+                            className="w-20 rounded-lg border border-slate-300 px-2 py-1.5"
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <input
+                        type="number" min={0}
+                        value={machineInputs[m.asset_id]?.newCounter ?? ""}
+                        onChange={(e) =>
+                          setMachineInputs({
+                            ...machineInputs,
+                            [m.asset_id]: { ...machineInputs[m.asset_id], newCounter: e.target.value },
+                          })
+                        }
+                        placeholder={String(m.prev_counter)}
+                        className={`w-24 rounded-lg border px-2 py-1.5 ${m.belowPrev ? "border-rose-400 bg-rose-50" : "border-slate-300"}`}
+                      />
+                    )}
+                    {m.belowPrev && (
+                      <div className="mt-0.5 text-xs text-rose-600">{t("cons.machineBelowPrev")}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 tabular-nums">
+                    {m.filled ? m.brewed : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <input
+                      type="number" min={0}
+                      value={machineInputs[m.asset_id]?.service ?? ""}
+                      onChange={(e) =>
+                        setMachineInputs({
+                          ...machineInputs,
+                          [m.asset_id]: { ...machineInputs[m.asset_id], service: e.target.value },
+                        })
+                      }
+                      placeholder="0"
+                      title={t("cons.machineServiceHint")}
+                      className="w-16 rounded-lg border border-slate-300 px-2 py-1.5"
+                    />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number" min={0} max={100}
+                        value={machineInputs[m.asset_id]?.discount ?? ""}
+                        onChange={(e) =>
+                          setMachineInputs({
+                            ...machineInputs,
+                            [m.asset_id]: { ...machineInputs[m.asset_id], discount: e.target.value },
+                          })
+                        }
+                        placeholder="0"
+                        className="w-14 rounded-lg border border-slate-300 px-2 py-1.5"
+                      />
+                      <span className="text-xs text-slate-400">%</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                    {m.filled ? (m.price !== null ? ft(Math.round(m.amount)) : "?") : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {partnerId && (
         <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-sm">
@@ -778,6 +1076,7 @@ export default function ElszamolasPage() {
                 <th className="px-4 py-3">{t("cons.consumed")}</th>
                 <th className="px-4 py-3">{t("cons.portions")}</th>
                 <th className="px-4 py-3">{t("cons.amountNet")}</th>
+                <th className="px-4 py-3">{t("cons.handover")}</th>
               </tr>
             </thead>
             <tbody>
@@ -813,66 +1112,133 @@ export default function ElszamolasPage() {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <input
-                      type="number"
-                      min={0}
-                      step="1"
-                      value={counters[s.product_id] ?? ""}
-                      onChange={(e) => setCounters({ ...counters, [s.product_id]: e.target.value })}
-                      placeholder="—"
-                      title={t("cons.counterHint")}
-                      className="w-24 rounded-lg border border-slate-300 px-2 py-1.5"
-                    />
+                    {s.fromMachines ? (
+                      <span
+                        title={t("cons.fromMachinesHint")}
+                        className="rounded bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700"
+                      >
+                        ⚙ {s.portions.toFixed(0)}
+                      </span>
+                    ) : (
+                      <input
+                        type="number"
+                        min={0}
+                        step="1"
+                        value={counters[s.product_id] ?? ""}
+                        onChange={(e) => setCounters({ ...counters, [s.product_id]: e.target.value })}
+                        placeholder="—"
+                        title={t("cons.counterHint")}
+                        className="w-24 rounded-lg border border-slate-300 px-2 py-1.5"
+                      />
+                    )}
                   </td>
-                  <td className="px-4 py-3">{s.filled ? `${s.consumed.toFixed(2)} ${s.unit}` : "—"}</td>
+                  <td className="px-4 py-3">{physical[s.product_id] !== "" ? `${s.consumed.toFixed(2)} ${s.unit}` : "—"}</td>
                   <td className="px-4 py-3">{s.filled ? s.portions.toFixed(0) : "—"}</td>
                   <td className="px-4 py-3 font-medium">{s.filled ? ft(Math.round(s.amount)) : "—"}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={handovers[s.product_id]?.qty ?? ""}
+                        onChange={(e) =>
+                          setHandovers({
+                            ...handovers,
+                            [s.product_id]: { ...(handovers[s.product_id] ?? { cost: "" }), qty: e.target.value },
+                          })
+                        }
+                        placeholder="0"
+                        title={t("cons.handoverHint")}
+                        className="w-20 rounded-lg border border-slate-300 px-2 py-1.5"
+                      />
+                      <span className="text-xs text-slate-400">{s.unit}</span>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {stock.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">{t("cons.noStock")}</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">{t("cons.noStock")}</td></tr>
               )}
             </tbody>
           </table>
-          {stock.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-3">
-              <select
-                value={payment}
-                onChange={(e) => setPayment(e.target.value as (typeof PAYMENTS)[number])}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              >
-                {PAYMENTS.map((m) => (
-                  <option key={m} value={m}>{t(`cons.payments.${m}`)}</option>
-                ))}
-              </select>
-              <label
-                title={t("cons.noVatHint")}
-                className="flex items-center gap-1.5 text-sm text-slate-600"
-              >
+          {(stock.length > 0 || (ctx?.machines.length ?? 0) > 0) && (
+            <div className="space-y-3 border-t border-slate-200 px-4 py-3">
+              {/* Összesítő: elszámolás + tartozás = összes fizetendő, fizetve */}
+              <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
+                <span className="text-slate-500">
+                  {t("cons.amountNet")}:{" "}
+                  <span className="font-semibold text-slate-800">{ft(Math.round(preview.net))}</span>
+                </span>
+                <span className="text-slate-500">
+                  {t("cons.grossEstimate")}:{" "}
+                  <span className="font-semibold text-slate-800">{ft(grossEstimate)}</span>
+                </span>
+                {(ctx?.debt ?? 0) > 0.5 && (
+                  <span className="text-slate-500">
+                    {t("cons.debt")}:{" "}
+                    <span className="font-semibold text-rose-600">{ft(Math.round(ctx!.debt))}</span>
+                  </span>
+                )}
+                <span className="text-slate-600">
+                  {t("cons.totalPayable")}:{" "}
+                  <span className="text-base font-bold text-indigo-700">{ft(totalPayable)}</span>
+                </span>
+                <label className="flex items-center gap-1.5 text-slate-600">
+                  {t("cons.paidAmount")}:
+                  <input
+                    type="number"
+                    min={0}
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    placeholder={t("cons.paidAmountPh")}
+                    title={t("cons.paidAmountHint")}
+                    className="w-32 rounded-lg border border-slate-300 px-2 py-1.5"
+                  />
+                  <span className="text-xs text-slate-400">Ft</span>
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  value={payment}
+                  onChange={(e) => setPayment(e.target.value as (typeof PAYMENTS)[number])}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  {PAYMENTS.map((m) => (
+                    <option key={m} value={m}>{t(`cons.payments.${m}`)}</option>
+                  ))}
+                </select>
+                <label
+                  title={t("cons.noVatHint")}
+                  className="flex items-center gap-1.5 text-sm text-slate-600"
+                >
+                  <input
+                    type="checkbox"
+                    checked={noVat}
+                    onChange={(e) => setNoVat(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  {t("cons.noVat")}
+                </label>
                 <input
-                  type="checkbox"
-                  checked={noVat}
-                  onChange={(e) => setNoVat(e.target.checked)}
-                  className="h-4 w-4"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder={t("cons.notes")}
+                  className="min-w-40 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
-                {t("cons.noVat")}
-              </label>
-              <input
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder={t("cons.notes")}
-                className="min-w-40 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-              <span className="text-sm text-slate-600">
-                {t("cons.amountNet")}: <span className="font-semibold">{ft(Math.round(preview.net))}</span>
-              </span>
-              <button
-                onClick={createSettlement}
-                disabled={busy || preview.rows.every((r) => !r.filled)}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {busy ? t("common.saving") : t("cons.createSettlement")}
-              </button>
+                <button
+                  onClick={createSettlement}
+                  disabled={
+                    busy ||
+                    (stock.every((s) => physical[s.product_id] === "" || physical[s.product_id] === undefined) &&
+                      machinePreview.rows.every((r) => !r.filled))
+                  }
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {busy ? t("common.saving") : t("cons.createSettlement")}
+                </button>
+              </div>
+              <p className="text-xs text-slate-400">{t("cons.summaryHint")}</p>
             </div>
           )}
         </div>
@@ -958,7 +1324,22 @@ export default function ElszamolasPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
-                <td className="px-4 py-3 text-right font-medium">{ft(s.total_gross)}</td>
+                <td className="px-4 py-3 text-right font-medium">
+                  {ft(s.total_gross)}
+                  {s.paid_amount !== null &&
+                    s.total_gross + (s.debt_before ?? 0) - s.paid_amount > 0.5 && (
+                    <div
+                      title={t("cons.debtLeftHint")}
+                      className="mt-0.5 text-xs font-semibold text-rose-600"
+                    >
+                      {t("cons.debtLeft", {
+                        amount: Math.round(
+                          s.total_gross + (s.debt_before ?? 0) - s.paid_amount,
+                        ).toLocaleString("hu-HU"),
+                      })}
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1.5">
                     <button

@@ -23,6 +23,7 @@ from app.models import (
     Partner,
     PartnerPrice,
     PartnerStock,
+    Product,
     Settlement,
     StockMovement,
     User,
@@ -427,6 +428,7 @@ class AssetBody(BaseModel):
     counter_count: int = Field(default=1, ge=1, le=8)  # hány számláló van a gépen
     counters: list[int] | None = Field(default=None, max_length=8)  # állások (több számlálós)
     norm: float | None = Field(default=None, ge=0)
+    default_product_id: str | None = None  # melyik terméket (kávét) főzi
     tangible: bool = False
     customer_owned: bool = False  # az ügyfél saját gépe
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
@@ -449,6 +451,7 @@ class AssetPatch(BaseModel):
     counter_count: int | None = Field(default=None, ge=1, le=8)
     counters: list[int] | None = Field(default=None, max_length=8)
     norm: float | None = Field(default=None, ge=0)
+    default_product_id: str | None = None  # "" → törlés
     tangible: bool | None = None
     customer_owned: bool | None = None
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
@@ -490,6 +493,7 @@ class AssetOut(BaseModel):
     counter_count: int = 1
     counters: list[int] | None = None
     norm: float | None
+    default_product_id: str | None = None
     tangible: bool
     customer_owned: bool
     contract_min_portions: int | None
@@ -519,6 +523,7 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         counter_count=a.counter_count or 1,
         counters=a.counters,
         norm=a.norm,
+        default_product_id=str(a.default_product_id) if a.default_product_id else None,
         tangible=a.tangible,
         customer_owned=a.customer_owned,
         contract_min_portions=a.contract_min_portions,
@@ -539,6 +544,20 @@ async def _partner_names(db: AsyncSession, partner_ids: set) -> dict:
         return {}
     rows = (await db.execute(select(Partner.id, Partner.name).where(Partner.id.in_(ids)))).all()
     return {pid: name for pid, name in rows}
+
+
+async def _parse_default_product(db: AsyncSession, raw: str | None) -> uuid.UUID | None:
+    """A gép „ebből főz" termék-hivatkozásának ellenőrzése. Üres → None."""
+    if not raw:
+        return None
+    try:
+        pid = uuid.UUID(raw)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "product.not_found"})
+    exists = (await db.execute(select(Product.id).where(Product.id == pid))).first()
+    if exists is None:
+        raise HTTPException(status_code=404, detail={"code": "product.not_found"})
+    return pid
 
 
 async def _get_asset_or_404(db: AsyncSession, asset_id: str) -> Asset:
@@ -817,6 +836,7 @@ async def create_asset(
         counter_count=body.counter_count,
         counters=body.counters,
         norm=body.norm,
+        default_product_id=await _parse_default_product(db, body.default_product_id),
         tangible=body.tangible,
         customer_owned=body.customer_owned,
         contract_min_portions=body.contract_min_portions,
@@ -877,6 +897,11 @@ async def update_asset(
         if clash is not None:
             raise HTTPException(status_code=409, detail={"code": "asset.barcode_taken"})
         data["barcode"] = new_bc
+
+    if "default_product_id" in data:
+        data["default_product_id"] = await _parse_default_product(
+            db, data["default_product_id"]
+        )
 
     for key, value in data.items():
         setattr(a, key, value.strip() if isinstance(value, str) and key != "notes" else value)

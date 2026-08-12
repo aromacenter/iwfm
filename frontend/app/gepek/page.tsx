@@ -48,6 +48,7 @@ interface Asset {
   counter_count: number;
   counters: number[] | null;
   norm: number | null;
+  default_product_id: string | null;
   tangible: boolean;
   customer_owned: boolean;
   contract_min_portions: number | null;
@@ -80,6 +81,7 @@ const EMPTY_ASSET = {
   counter_count: "1",
   counters: [] as string[],
   norm: "",
+  default_product_id: "",
   tangible: false,
   customer_owned: false,
   contract_min_portions: "",
@@ -122,6 +124,14 @@ export default function GepekPage() {
 
   const loadPartners = useCallback(() => {
     api.get<Partner[]>("/api/partners").then(setPartners).catch(() => {});
+  }, []);
+
+  // Termékek az „Ebből főz" (gép→termék) hozzárendeléshez
+  const [products, setProducts] = useState<{ id: string; name: string; is_active: boolean }[]>([]);
+  useEffect(() => {
+    api.get<{ id: string; name: string; is_active: boolean }[]>("/api/products")
+      .then((rows) => setProducts(rows.filter((p) => p.is_active)))
+      .catch(() => {});
   }, []);
 
   useEffect(loadPartners, [loadPartners]);
@@ -236,6 +246,7 @@ export default function GepekPage() {
                 Number(assetForm.counters[i]) || 0)
             : null,
         norm: assetForm.norm !== "" ? Number(assetForm.norm) : null,
+        default_product_id: assetForm.default_product_id || null,
         tangible: assetForm.tangible,
         customer_owned: assetForm.customer_owned,
         // Ügyfél saját gépénél nincs szerződéses feltétel (csak szervizeljük)
@@ -571,7 +582,7 @@ export default function GepekPage() {
                     <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       🕘
                     </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, customer_owned: a.customer_owned, contract_min_portions: a.contract_min_portions != null ? String(a.contract_min_portions) : "", contract_below_min_price: a.contract_below_min_price != null ? String(a.contract_below_min_price) : "", rent_fee: a.rent_fee != null ? String(a.rent_fee) : "", notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), norm: a.norm != null ? String(a.norm) : "", default_product_id: a.default_product_id ?? "", tangible: a.tangible, customer_owned: a.customer_owned, contract_min_portions: a.contract_min_portions != null ? String(a.contract_min_portions) : "", contract_below_min_price: a.contract_below_min_price != null ? String(a.contract_below_min_price) : "", rent_fee: a.rent_fee != null ? String(a.rent_fee) : "", notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       ✏️
                     </button>
                   </div>
@@ -662,6 +673,20 @@ export default function GepekPage() {
                 <input type="number" min={0} step="0.1" value={assetForm.norm} onChange={(e) => setAssetForm({ ...assetForm, norm: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
             </div>
+            <label className="block text-sm">
+              {t("inv.defaultProduct")}
+              <select
+                value={assetForm.default_product_id}
+                onChange={(e) => setAssetForm({ ...assetForm, default_product_id: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+              >
+                <option value="">{t("inv.defaultProductNone")}</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-slate-400">{t("inv.defaultProductHint")}</span>
+            </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={assetForm.tangible} onChange={(e) => setAssetForm({ ...assetForm, tangible: e.target.checked })} className="h-4 w-4" />
               {t("inv.tangible")}

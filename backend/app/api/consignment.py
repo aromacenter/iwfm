@@ -20,12 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import record_audit, require_perm
 from app.db import get_db
 from app.models import (
+    Asset,
+    AssetMovement,
     Partner,
     PartnerPrice,
     PartnerStock,
     Product,
     Settlement,
     SettlementLine,
+    SettlementMachine,
     StockMovement,
     User,
 )
@@ -416,6 +419,98 @@ async def set_stock_min(
     return _stock_out(stock, product, await _partner_price_map(db, partner.id))
 
 
+# ─── Elszámolási kontextus (gép-soros elszámoláshoz) ─────────────────────────
+
+
+class SettlementCtxMachine(BaseModel):
+    asset_id: str
+    barcode: str
+    name: str
+    counter_count: int
+    counters: list[int] | None  # több számlálós gép aktuális állásai
+    prev_counter: int  # az utolsó elszámoláskori állás (vagy a gép aktuális)
+    last_settled_at: datetime | None
+    default_product_id: str | None
+    product_name: str | None
+
+
+class SettlementContextOut(BaseModel):
+    machines: list[SettlementCtxMachine]
+    debt: float  # nyitott egyenleg (Σ bruttó − fizetett)
+    active_contracts: int
+    last_visit: datetime | None
+    single_product_id: str | None  # ha a partnernek pontosan 1 készlet-terméke van
+
+
+@stock_router.get("/{partner_id}/settlement-context", response_model=SettlementContextOut)
+async def settlement_context(
+    partner_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """A gép-soros elszámoló nézet adatai: kihelyezett gépek előző számlálóval
+    és termék-hozzárendeléssel, nyitott tartozás, aktív szerződések száma."""
+    partner = await _get_partner_or_404(db, partner_id)
+
+    assets = (
+        await db.execute(
+            select(Asset)
+            .where(Asset.partner_id == partner.id, Asset.status == "deployed")
+            .order_by(Asset.barcode)
+        )
+    ).scalars().all()
+    product_names = {
+        p.id: p.name
+        for p in (await db.execute(select(Product.id, Product.name).select_from(Product))).all()
+    } if assets else {}
+
+    machines = []
+    for a in assets:
+        prev, last_at = await _machine_prev_counter(db, a)
+        machines.append(SettlementCtxMachine(
+            asset_id=str(a.id),
+            barcode=a.barcode,
+            name=a.name,
+            counter_count=a.counter_count,
+            counters=a.counters,
+            prev_counter=prev,
+            last_settled_at=last_at,
+            default_product_id=str(a.default_product_id) if a.default_product_id else None,
+            product_name=product_names.get(a.default_product_id),
+        ))
+
+    stock_pids = (
+        await db.execute(
+            select(PartnerStock.product_id).where(PartnerStock.partner_id == partner.id)
+        )
+    ).scalars().all()
+    single_pid = str(stock_pids[0]) if len(stock_pids) == 1 else None
+
+    contracts = sum(
+        1 for a in assets
+        if a.rent_fee or a.contract_min_portions
+    )
+    if (partner.contract_min_portions or partner.contract_min_kg
+            or partner.contract_rent_if_below_min):
+        contracts += 1
+
+    last_visit = (
+        await db.execute(
+            select(sa_func.max(Settlement.created_at)).where(
+                Settlement.partner_id == partner.id
+            )
+        )
+    ).scalar_one_or_none()
+
+    return SettlementContextOut(
+        machines=machines,
+        debt=await _partner_debt(db, partner.id),
+        active_contracts=contracts,
+        last_visit=last_visit,
+        single_product_id=single_pid,
+    )
+
+
 # ─── Partner-specifikus árak ─────────────────────────────────────────────────
 
 
@@ -535,11 +630,34 @@ class SettlementLineIn(BaseModel):
     counter_portions: float | None = Field(default=None, ge=0)
 
 
+class SettlementMachineIn(BaseModel):
+    """Gép-soros elszámolás: egy gép új számláló-állása + levonások."""
+
+    asset_id: str
+    new_counter: int = Field(default=0, ge=0)
+    new_counters: list[int] | None = None  # több számlálós gép: állásonként
+    service_portions: int = Field(default=0, ge=0)  # szerviz közben főzött, nem számlázandó
+    discount_pct: float = Field(default=0.0, ge=0, le=100)
+
+
+class HandoverIn(BaseModel):
+    """Elszámoláskor átadott áru (a leltár UTÁN növeli a készletet)."""
+
+    product_id: str
+    quantity: float = Field(gt=0)  # kg
+    unit_cost: float | None = Field(default=None, ge=0)  # beszerzési ár (Ft/kg)
+
+
 class SettlementCreate(BaseModel):
     partner_id: str
     payment_method: str  # cash | card | transfer
     no_vat: bool = False  # ÁFA és Billingó-számla nélkül (a megadott ár fizetendő)
-    lines: list[SettlementLineIn] = Field(min_length=1)
+    lines: list[SettlementLineIn] = Field(default_factory=list)
+    machines: list[SettlementMachineIn] = Field(default_factory=list)
+    handovers: list[HandoverIn] = Field(default_factory=list)
+    # A helyszínen ténylegesen fizetett bruttó összeg — None: nem rögzítjük
+    # (a saját bruttó rendezettnek számít, tartozás nem képződik).
+    paid_amount: float | None = Field(default=None, ge=0)
     note: str | None = Field(default=None, max_length=1000)
 
 
@@ -554,6 +672,20 @@ class SettlementLineOut(BaseModel):
     vat_percent: int
     amount_net: float
     amount_gross: float
+
+
+class SettlementMachineOut(BaseModel):
+    asset_id: str | None
+    barcode: str
+    asset_name: str
+    product_name: str | None
+    prev_counter: int
+    new_counter: int
+    service_portions: int
+    discount_pct: float
+    portions_billed: float
+    price_per_portion: float
+    amount_net: float
 
 
 class SettlementOut(BaseModel):
@@ -574,9 +706,12 @@ class SettlementOut(BaseModel):
     payment_status: str = "none"
     due_date: date | None = None
     paid_at: datetime | None = None
+    debt_before: float | None = None  # nyitott egyenleg az elszámolás előtt
+    paid_amount: float | None = None  # a helyszínen fizetett bruttó összeg
     note: str | None
     created_at: datetime
     lines: list[SettlementLineOut] | None = None
+    machines: list[SettlementMachineOut] | None = None
 
 
 def _money(value: float) -> float:
@@ -618,9 +753,59 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         payment_status=s.payment_status,
         due_date=s.due_date,
         paid_at=s.paid_at,
+        debt_before=s.debt_before,
+        paid_amount=s.paid_amount,
         note=s.note,
         created_at=s.created_at,
     )
+
+
+def _machine_out(m: SettlementMachine) -> SettlementMachineOut:
+    return SettlementMachineOut(
+        asset_id=str(m.asset_id) if m.asset_id else None,
+        barcode=m.barcode,
+        asset_name=m.asset_name,
+        product_name=m.product_name,
+        prev_counter=m.prev_counter,
+        new_counter=m.new_counter,
+        service_portions=m.service_portions,
+        discount_pct=m.discount_pct,
+        portions_billed=m.portions_billed,
+        price_per_portion=m.price_per_portion,
+        amount_net=m.amount_net,
+    )
+
+
+async def _partner_debt(
+    db: AsyncSession, partner_id: uuid.UUID, exclude_id: uuid.UUID | None = None
+) -> float:
+    """A partner nyitott egyenlege: Σ(bruttó − fizetett). A paid_amount=None
+    sorok (régi elszámolások) rendezettnek számítanak."""
+    expr = sa_func.sum(
+        Settlement.total_gross - sa_func.coalesce(Settlement.paid_amount, Settlement.total_gross)
+    )
+    q = select(expr).where(Settlement.partner_id == partner_id)
+    if exclude_id is not None:
+        q = q.where(Settlement.id != exclude_id)
+    return _money((await db.execute(q)).scalar_one() or 0.0)
+
+
+async def _machine_prev_counter(
+    db: AsyncSession, asset: Asset
+) -> tuple[int, datetime | None]:
+    """A gép előző elszámolási számlálója: az utolsó gép-soros elszámolásból;
+    ha még nem volt, a gép aktuális számlálója az alapvonal."""
+    row = (
+        await db.execute(
+            select(SettlementMachine.new_counter, SettlementMachine.created_at)
+            .where(SettlementMachine.asset_id == asset.id)
+            .order_by(SettlementMachine.created_at.desc())
+            .limit(1)
+        )
+    ).first()
+    if row is not None:
+        return int(row[0]), row[1]
+    return int(asset.counter or 0), None
 
 
 async def apply_contract_lines(
@@ -647,8 +832,6 @@ async def apply_contract_lines(
     Az időszak az előző elszámolás óta eltelt napok száma (első elszámolásnál
     30 nap, 1–90 nap közé szorítva). Visszaadja a hozzáadott (nettó, bruttó)
     összeget."""
-    from app.models import Asset
-
     assets = (
         await db.execute(
             select(Asset).where(
@@ -791,6 +974,8 @@ async def create_settlement(
     A számlázás külön lépés (POST /{id}/invoice)."""
     if body.payment_method not in PAYMENT_METHODS:
         raise HTTPException(status_code=422, detail={"code": "settlement.bad_payment"})
+    if not body.lines and not body.machines:
+        raise HTTPException(status_code=422, detail={"code": "settlement.empty"})
     partner = await _get_partner_or_404(db, body.partner_id)
 
     settlement = Settlement(
@@ -808,10 +993,89 @@ async def create_settlement(
     await db.flush()
 
     price_overrides = await _partner_price_map(db, partner.id)
+
+    # ── Gép-soros elszámolás: gépenként lefőzött adag (számláló-különbség) −
+    # szerviz-adag, kedvezménnyel árazva; termékenként összegződik és a
+    # termék-sor számlázási alapja lesz. A gép számlálója frissül.
+    machine_billed: dict[uuid.UUID, float] = {}   # termék → számlázott adag
+    machine_brewed: dict[uuid.UUID, float] = {}   # termék → lefőzött adag (kg-ellenőrzés)
+    machine_amount: dict[uuid.UUID, float] = {}   # termék → nettó összeg (kedvezménnyel)
+    if body.machines:
+        stock_pids = (
+            await db.execute(
+                select(PartnerStock.product_id).where(PartnerStock.partner_id == partner.id)
+            )
+        ).scalars().all()
+        fallback_pid = stock_pids[0] if len(stock_pids) == 1 else None
+        for m_in in body.machines:
+            try:
+                aid = uuid.UUID(m_in.asset_id)
+            except ValueError:
+                raise HTTPException(status_code=404, detail={"code": "asset.not_found"})
+            asset = (
+                await db.execute(select(Asset).where(Asset.id == aid))
+            ).scalar_one_or_none()
+            if asset is None:
+                raise HTTPException(status_code=404, detail={"code": "asset.not_found"})
+            if asset.partner_id != partner.id:
+                raise HTTPException(
+                    status_code=422, detail={"code": "settlement.machine_wrong_partner"}
+                )
+            prev_counter, _ = await _machine_prev_counter(db, asset)
+            new_counter = (
+                sum(m_in.new_counters) if m_in.new_counters else m_in.new_counter
+            )
+            if new_counter < prev_counter:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "settlement.counter_below_prev",
+                            "barcode": asset.barcode},
+                )
+            brewed = new_counter - prev_counter
+            billed = max(brewed - m_in.service_portions, 0)
+            pid = asset.default_product_id or fallback_pid
+            if pid is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "settlement.machine_no_product",
+                            "barcode": asset.barcode},
+                )
+            product = await _get_product_or_404(db, str(pid))
+            unit_price = _effective_price(product, price_overrides)
+            amount = _money(billed * unit_price * (1 - m_in.discount_pct / 100.0))
+            db.add(SettlementMachine(
+                settlement_id=settlement.id,
+                asset_id=asset.id,
+                barcode=asset.barcode,
+                asset_name=asset.name,
+                product_id=product.id,
+                product_name=product.name,
+                prev_counter=prev_counter,
+                new_counter=new_counter,
+                service_portions=m_in.service_portions,
+                discount_pct=m_in.discount_pct,
+                portions_billed=billed,
+                price_per_portion=unit_price,
+                amount_net=amount,
+            ))
+            machine_billed[product.id] = machine_billed.get(product.id, 0.0) + billed
+            machine_brewed[product.id] = machine_brewed.get(product.id, 0.0) + brewed
+            machine_amount[product.id] = machine_amount.get(product.id, 0.0) + amount
+            old_counter = asset.counter
+            asset.counter = new_counter
+            if m_in.new_counters and asset.counter_count > 1:
+                asset.counters = list(m_in.new_counters)
+            db.add(AssetMovement(
+                asset_id=asset.id, action="counter", partner_id=partner.id,
+                actor_user_id=actor.id,
+                detail=f"Elszámolás: {old_counter if old_counter is not None else '?'} → {new_counter}"[:512],
+            ))
+
     total_net = 0.0
     total_gross = 0.0
     total_portions = 0.0
     total_consumed_kg = 0.0
+    settled_pids: set[uuid.UUID] = set()
     for line_in in body.lines:
         product = await _get_product_or_404(db, line_in.product_id)
         stock = (
@@ -824,20 +1088,30 @@ async def create_settlement(
         ).scalar_one_or_none()
         previous = stock.quantity if stock is not None else 0.0
         consumed = max(previous - line_in.physical_qty, 0.0)
-        # Számlázott adagszám: a gép számlálója szerint, ha meg van adva —
-        # egyébként a kg-fogyásból számolva.
-        if line_in.counter_portions is not None:
+        # Számlázott adagszám (erősorrend): a gép-sorok összege erre a
+        # termékre → a kézzel megadott számláló-adag → a kg-fogyásból számolva.
+        # A kg-keresztellenőrzés alapja a LEFŐZÖTT adag (szerviz-adagokkal
+        # együtt — azok is fogyasztottak kávét, csak nem számlázzuk őket).
+        unit_price = _effective_price(product, price_overrides)
+        if product.id in machine_billed:
+            portions = machine_billed[product.id]
+            amount_net = _money(machine_amount[product.id])
+            cross_portions: float | None = machine_brewed[product.id]
+        elif line_in.counter_portions is not None:
             portions = line_in.counter_portions
+            amount_net = _money(portions * unit_price)
+            cross_portions = line_in.counter_portions
         else:
             portions = portions_from(consumed, product.grams_per_portion)
-        unit_price = _effective_price(product, price_overrides)
+            amount_net = _money(portions * unit_price)
+            cross_portions = None
         line_vat = 0 if body.no_vat else product.vat_percent
-        amount_net = _money(portions * unit_price)
         amount_gross = _money(amount_net * (1 + line_vat / 100))
         total_net += amount_net
         total_gross += amount_gross
         total_portions += portions
         total_consumed_kg += consumed
+        settled_pids.add(product.id)
 
         db.add(
             SettlementLine(
@@ -848,7 +1122,7 @@ async def create_settlement(
                 physical_qty=line_in.physical_qty,
                 consumed_qty=consumed,
                 portions=portions,
-                counter_portions=line_in.counter_portions,
+                counter_portions=cross_portions,
                 price_per_portion=unit_price,
                 vat_percent=line_vat,
                 amount_net=amount_net,
@@ -858,9 +1132,9 @@ async def create_settlement(
         # Kg-keresztellenőrzés: a számláló szerint ennyi készletnek KELLENE
         # lennie — ha a mért ennél kevesebb, a hiányt kg-áron számlázzuk
         # (beszerzési ár, ha van; különben az adagár kg-egyenértéke).
-        if line_in.counter_portions is not None:
+        if cross_portions is not None:
             expected_remaining = previous - (
-                line_in.counter_portions * product.grams_per_portion / 1000.0
+                cross_portions * product.grams_per_portion / 1000.0
             )
             shortage_kg = expected_remaining - line_in.physical_qty
             if shortage_kg >= 0.05:
@@ -900,6 +1174,54 @@ async def create_settlement(
                 )
             )
 
+    # Gép-sorokból számlázott termékek, amelyekhez NEM érkezett leltár-sor:
+    # önálló tételként kerülnek be (készlet-módosítás nélkül).
+    for pid, billed in machine_billed.items():
+        if pid in settled_pids:
+            continue
+        product = await _get_product_or_404(db, str(pid))
+        unit_price = _effective_price(product, price_overrides)
+        line_vat = 0 if body.no_vat else product.vat_percent
+        amount_net = _money(machine_amount[pid])
+        db.add(SettlementLine(
+            settlement_id=settlement.id,
+            product_id=product.id,
+            product_name=product.name,
+            previous_qty=0.0, physical_qty=0.0, consumed_qty=0.0,
+            portions=billed,
+            counter_portions=machine_brewed[pid],
+            price_per_portion=unit_price,
+            vat_percent=line_vat,
+            amount_net=amount_net,
+        ))
+        total_net += amount_net
+        total_gross += _money(amount_net * (1 + line_vat / 100))
+        total_portions += billed
+
+    # Átadott áru (a leltár UTÁN növeli a készletet — a következő időszaké).
+    for h in body.handovers:
+        product = await _get_product_or_404(db, h.product_id)
+        h_stock = (
+            await db.execute(
+                select(PartnerStock).where(
+                    PartnerStock.partner_id == partner.id,
+                    PartnerStock.product_id == product.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if h_stock is None:
+            h_stock = PartnerStock(partner_id=partner.id, product_id=product.id, quantity=0.0)
+            db.add(h_stock)
+        h_stock.quantity += h.quantity
+        db.add(StockMovement(
+            partner_id=partner.id, product_id=product.id, action="replenish",
+            quantity_delta=h.quantity, unit_cost=h.unit_cost,
+            settlement_id=settlement.id, note="Elszámoláskor átadva",
+            actor_user_id=actor.id,
+        ))
+        if h.unit_cost is not None:
+            product.purchase_price = h.unit_cost
+
     # Szerződéses tételek: bérleti díj + minimum különbözet (automatikus).
     # total_portions/total_consumed_kg a termék-sorokból gyűlt a ciklusban.
     extra_net, extra_gross = await apply_contract_lines(
@@ -910,6 +1232,10 @@ async def create_settlement(
 
     settlement.total_net = _money(total_net)
     settlement.total_gross = _money(total_gross)
+
+    # Tartozás-görgetés: nyitott egyenleg pillanatképe + a fizetett összeg.
+    settlement.debt_before = await _partner_debt(db, partner.id, exclude_id=settlement.id)
+    settlement.paid_amount = body.paid_amount
 
     await record_audit(
         db, actor=actor, action="settlement.create", entity_type="settlement",
@@ -965,6 +1291,16 @@ async def create_settlement(
         for line in (
             await db.execute(
                 select(SettlementLine).where(SettlementLine.settlement_id == settlement.id)
+            )
+        ).scalars()
+    ]
+    out.machines = [
+        _machine_out(m)
+        for m in (
+            await db.execute(
+                select(SettlementMachine)
+                .where(SettlementMachine.settlement_id == settlement.id)
+                .order_by(SettlementMachine.barcode)
             )
         ).scalars()
     ]
@@ -1498,6 +1834,16 @@ async def get_settlement(
             )
         ).scalars()
     ]
+    out.machines = [
+        _machine_out(m)
+        for m in (
+            await db.execute(
+                select(SettlementMachine)
+                .where(SettlementMachine.settlement_id == s.id)
+                .order_by(SettlementMachine.barcode)
+            )
+        ).scalars()
+    ]
     return out
 
 
@@ -1574,6 +1920,13 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes,
     lines = (
         await db.execute(select(SettlementLine).where(SettlementLine.settlement_id == s.id))
     ).scalars().all()
+    machines = (
+        await db.execute(
+            select(SettlementMachine)
+            .where(SettlementMachine.settlement_id == s.id)
+            .order_by(SettlementMachine.barcode)
+        )
+    ).scalars().all()
 
     branding = (
         await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
@@ -1615,8 +1968,23 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes,
                 }
                 for line in lines
             ],
+            "machines": [
+                {
+                    "barcode": m.barcode,
+                    "asset_name": m.asset_name,
+                    "prev_counter": m.prev_counter,
+                    "new_counter": m.new_counter,
+                    "service_portions": m.service_portions,
+                    "discount_pct": m.discount_pct,
+                    "portions_billed": m.portions_billed,
+                    "amount_net": m.amount_net,
+                }
+                for m in machines
+            ],
             "total_net": s.total_net,
             "total_gross": s.total_gross,
+            "debt_before": s.debt_before,
+            "paid_amount": s.paid_amount,
             "partner_signature": s.partner_signature,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
         },

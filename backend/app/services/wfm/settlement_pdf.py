@@ -130,6 +130,40 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
     if data.get("note"):
         line("Megjegyzés:", str(data["note"])[:90])
 
+    # ─── Gépek (gép-soros elszámolás) ───
+    machines = data.get("machines") or []
+    if machines:
+        section("Gépek")
+        m_headers = [
+            ("Vonalkód", left),
+            ("Gép", left + 30 * mm),
+            ("Előző", left + 78 * mm),
+            ("Számláló", left + 96 * mm),
+            ("Szerviz", left + 116 * mm),
+            ("Adag", left + 132 * mm),
+            ("Nettó", right - 22 * mm),
+        ]
+        c.setFont(FONT_BOLD, 8.5)
+        for label, x in m_headers:
+            if label == "Nettó":
+                c.drawRightString(x + 22 * mm, y, label)
+            else:
+                c.drawString(x, y, label)
+        y -= 5 * mm
+        c.setFont(FONT, 8.5)
+        for m in machines[:20]:
+            c.drawString(left, y, str(m.get("barcode", ""))[:16])
+            name = str(m.get("asset_name", ""))[:26]
+            if m.get("discount_pct"):
+                name += f" (−{m['discount_pct']:g}%)"
+            c.drawString(left + 30 * mm, y, name)
+            c.drawString(left + 78 * mm, y, str(m.get("prev_counter", 0)))
+            c.drawString(left + 96 * mm, y, str(m.get("new_counter", 0)))
+            c.drawString(left + 116 * mm, y, str(m.get("service_portions", 0)))
+            c.drawString(left + 132 * mm, y, f"{m.get('portions_billed', 0):.0f}")
+            c.drawRightString(right, y, _fmt_money(m.get("amount_net", 0)))
+            y -= 4.5 * mm
+
     # ─── Tételek ───
     section("Tételek")
     headers = [
@@ -169,6 +203,27 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
     y -= 6 * mm
     c.drawString(left, y, "Összesen (bruttó):")
     c.drawRightString(right, y, _fmt_money(data.get("total_gross", 0)))
+    # Tartozás-görgetés: korábbi egyenleg + összes fizetendő + fizetve
+    debt_before = data.get("debt_before")
+    paid_amount = data.get("paid_amount")
+    if debt_before:
+        y -= 6 * mm
+        c.drawString(left, y, "Korábbi tartozás:")
+        c.drawRightString(right, y, _fmt_money(debt_before))
+        y -= 6 * mm
+        c.drawString(left, y, "Összes fizetendő:")
+        c.drawRightString(right, y, _fmt_money(data.get("total_gross", 0) + debt_before))
+    if paid_amount is not None:
+        y -= 6 * mm
+        c.drawString(left, y, "Fizetve:")
+        c.drawRightString(right, y, _fmt_money(paid_amount))
+        remaining = data.get("total_gross", 0) + (debt_before or 0) - paid_amount
+        if remaining > 0.5:
+            y -= 6 * mm
+            c.setFillColorRGB(0.7, 0.1, 0.1)
+            c.drawString(left, y, "Fennmaradó tartozás:")
+            c.drawRightString(right, y, _fmt_money(remaining))
+            c.setFillColorRGB(0, 0, 0)
 
     # ─── Aláírások (lap alján) ───
     sig_y = 38 * mm

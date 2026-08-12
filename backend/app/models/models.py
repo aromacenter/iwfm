@@ -542,6 +542,11 @@ class Asset(Base):
     counter_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     counters: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [állás1, állás2…]
     norm: Mapped[float | None] = mapped_column(Float, nullable=True)  # norma
+    # Melyik terméket (kávét) főzi a gép — a gép-soros elszámolás ez alapján
+    # árazza az adagokat. None: a partner egyetlen készlet-terméke érvényes.
+    default_product_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="SET NULL"), nullable=True
+    )
     tangible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # tárgyi eszköz
     # Az ügyfél SAJÁT gépe (mi csak szervizeljük) — nem "kihelyezett" saját eszköz.
     customer_owned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -772,7 +777,50 @@ class Settlement(Base):
     # A partner képernyős aláírása a bizonylaton (PNG data URL)
     partner_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     receipt_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Tartozás-görgetés: a partner nyitott egyenlege az elszámolás ELŐTT
+    # (pillanatkép) + a helyszínen ténylegesen fizetett összeg (bruttó Ft).
+    # paid_amount=None → "nem rögzített" = a saját bruttója rendezettnek számít
+    # (a régi elszámolások nem keletkeztetnek visszamenőleg tartozást).
+    debt_before: Mapped[float | None] = mapped_column(Float, nullable=True)
+    paid_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SettlementMachine(Base):
+    """Gép-soros elszámolási adat (a régi Xpresso-munkafolyamat tükre): egy gép
+    előző/új számlálója, a levont szerviz-adagok és a kedvezmény pillanatképe.
+    A számlázott adagok a gép termékének (default_product) során összegződnek."""
+
+    __tablename__ = "settlement_machines"
+    __table_args__ = (
+        Index("ix_settlement_machines_settlement", "settlement_id"),
+        Index("ix_settlement_machines_asset", "asset_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    settlement_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("settlements.id", ondelete="CASCADE"), nullable=False
+    )
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
+    )
+    barcode: Mapped[str] = mapped_column(String(64), nullable=False)  # pillanatkép
+    asset_name: Mapped[str] = mapped_column(String(256), nullable=False)  # pillanatkép
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="SET NULL"), nullable=True
+    )
+    product_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    prev_counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    new_counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Szerviz közben lefőzött, NEM számlázandó adagok (összevont mező).
+    service_portions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    discount_pct: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    portions_billed: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    price_per_portion: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    amount_net: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

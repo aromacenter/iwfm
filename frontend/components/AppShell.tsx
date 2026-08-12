@@ -15,6 +15,7 @@ interface NavItem {
   href: string;
   key: string;
   perm: string | "admin-only";
+  icon: string;
 }
 
 interface NavGroup {
@@ -25,49 +26,49 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: "nav.groups.overview",
-    items: [{ href: "/vezerlopult", key: "nav.dashboard", perm: "dashboard" }],
+    items: [{ href: "/vezerlopult", key: "nav.dashboard", perm: "dashboard", icon: "📊" }],
   },
   {
     labelKey: "nav.groups.operations",
     items: [
-      { href: "/feladatok", key: "nav.tasks", perm: "tasks" },
-      { href: "/szerviz", key: "nav.service", perm: "service" },
-      { href: "/tudasbazis", key: "nav.kb", perm: "service" },
-      { href: "/beosztas", key: "nav.schedule", perm: "schedule" },
-      { href: "/jelenlet", key: "nav.attendance", perm: "attendance" },
-      { href: "/tavollet", key: "nav.timeOff", perm: "timeoff" },
+      { href: "/feladatok", key: "nav.tasks", perm: "tasks", icon: "🗂️" },
+      { href: "/szerviz", key: "nav.service", perm: "service", icon: "🔧" },
+      { href: "/tudasbazis", key: "nav.kb", perm: "service", icon: "📚" },
+      { href: "/beosztas", key: "nav.schedule", perm: "schedule", icon: "🗓️" },
+      { href: "/jelenlet", key: "nav.attendance", perm: "attendance", icon: "⏱️" },
+      { href: "/tavollet", key: "nav.timeOff", perm: "timeoff", icon: "🏖️" },
     ],
   },
   {
     labelKey: "nav.groups.masterData",
     items: [
-      { href: "/dolgozok", key: "nav.employees", perm: "employees" },
-      { href: "/partnerek", key: "nav.partners", perm: "partners" },
-      { href: "/gepek", key: "nav.inventory", perm: "machines" },
-      { href: "/termekek", key: "nav.products", perm: "products" },
+      { href: "/dolgozok", key: "nav.employees", perm: "employees", icon: "👥" },
+      { href: "/partnerek", key: "nav.partners", perm: "partners", icon: "🤝" },
+      { href: "/gepek", key: "nav.inventory", perm: "machines", icon: "☕" },
+      { href: "/termekek", key: "nav.products", perm: "products", icon: "📦" },
     ],
   },
   {
     labelKey: "nav.groups.billing",
     items: [
-      { href: "/elszamolas", key: "nav.settlement", perm: "settlements" },
-      { href: "/uzletkoto", key: "nav.agentReport", perm: "agent_report" },
+      { href: "/elszamolas", key: "nav.settlement", perm: "settlements", icon: "🧾" },
+      { href: "/uzletkoto", key: "nav.agentReport", perm: "agent_report", icon: "💼" },
     ],
   },
   {
     labelKey: "nav.groups.system",
     items: [
-      { href: "/import-export", key: "nav.importExport", perm: "import_export" },
-      { href: "/automatizalasok", key: "nav.automation", perm: "admin-only" },
-      { href: "/naplo", key: "nav.audit", perm: "admin-only" },
-      { href: "/beallitasok", key: "nav.settings", perm: "admin-only" },
+      { href: "/import-export", key: "nav.importExport", perm: "import_export", icon: "🔄" },
+      { href: "/automatizalasok", key: "nav.automation", perm: "admin-only", icon: "⚡" },
+      { href: "/naplo", key: "nav.audit", perm: "admin-only", icon: "📋" },
+      { href: "/beallitasok", key: "nav.settings", perm: "admin-only", icon: "⚙️" },
     ],
   },
   {
     labelKey: "nav.groups.personal",
     items: [
-      { href: "/beosztasom", key: "nav.mySchedule", perm: "my_schedule" },
-      { href: "/feladataim", key: "nav.myTasks", perm: "my_tasks" },
+      { href: "/beosztasom", key: "nav.mySchedule", perm: "my_schedule", icon: "📅" },
+      { href: "/feladataim", key: "nav.myTasks", perm: "my_tasks", icon: "✅" },
     ],
   },
 ];
@@ -235,12 +236,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                       active
                         ? "bg-indigo-50 text-indigo-700"
                         : "text-slate-600 hover:bg-slate-100"
                     }`}
                   >
+                    <span aria-hidden className={`w-5 text-center text-base leading-none ${active ? "" : "opacity-80 grayscale-[35%]"}`}>
+                      {item.icon}
+                    </span>
                     {t(item.key)}
                   </Link>
                 );
