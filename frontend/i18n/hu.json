@@ -288,6 +288,8 @@
     "partnerStockGroup": "Partner készlete",
     "allProductsGroup": "Minden termék",
     "addProduct": "+ Termék hozzáadása",
+    "stockRowDeleteConfirm": "Törlöd a(z) {product} készlet-sorát ennél a partnernél? A könyv szerinti {qty} {unit} kivezetésre kerül.",
+    "stockRowDeleted": "Készlet-sor törölve.",
     "addProductChoose": "— termék felvétele a leltárba —",
     "addProductHint": "Készlet-sor nélküli partnernél is: a felvett termékre leltár, számláló és átadott mennyiség rögzíthető.",
     "noStockAddBelow": "Ennél a partnernél még nincs készlet-sor — vegyél fel terméket alább, vagy számolj el a gépek számlálóival.",
@@ -1268,7 +1270,8 @@
     "settlement.empty": "Adj meg legalább egy leltár-sort vagy gép-számlálót.",
     "settlement.counter_below_prev": "A gép új számláló-állása kisebb az előző elszámoláskorinál.",
     "settlement.machine_wrong_partner": "A gép nem ehhez a partnerhez van kihelyezve.",
-    "settlement.machine_no_product": "A gépen nincs termék beállítva, és a partnernek több készlet-terméke van — állítsd be a gépnél, melyikből főz."
+    "settlement.machine_no_product": "A gépen nincs termék beállítva, és a partnernek több készlet-terméke van — állítsd be a gépnél, melyikből főz.",
+    "stock.not_found": "Ez a készlet-sor nem található (talán már törölve lett)."
   },
   "inv": {
     "title": "Gépek",

@@ -256,6 +256,44 @@ async def test_debt_carryover_and_handover(client, manager):
     assert abs(ctx2["debt"]) < 1  # rendezve
 
 
+async def test_delete_stock_row(client, manager):
+    """Készlet-sor törlése: a mennyiség kivezetésre kerül (remove mozgás)."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = await _partner(client, mgr, "Törlős Bolt")
+    product = await make_product(client, mgr, name="Törlendő kávé")
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 2.5},
+        headers=mgr,
+    )
+    res = await client.delete(
+        f"/api/partners/{partner['id']}/stock/{product['id']}", headers=mgr
+    )
+    assert res.status_code == 200, res.text
+    stock = (await client.get(f"/api/partners/{partner['id']}/stock", headers=mgr)).json()
+    assert not any(x["product_id"] == product["id"] for x in stock)
+    # másodszor már 404
+    again = await client.delete(
+        f"/api/partners/{partner['id']}/stock/{product['id']}", headers=mgr
+    )
+    assert again.status_code == 404
+
+    import app.db as app_db
+    from sqlalchemy import select
+
+    from app.models import StockMovement
+
+    async with app_db.get_session_factory()() as session:
+        moves = (
+            await session.execute(
+                select(StockMovement).where(StockMovement.action == "remove")
+            )
+        ).scalars().all()
+    assert any(m.quantity_delta == -2.5 for m in moves)
+
+
 async def test_settlement_requires_lines_or_machines(client, manager):
     _, mgr = manager
     partner = await _partner(client, mgr, "Üres Bolt")

@@ -759,6 +759,21 @@ export default function ElszamolasPage() {
     setHandovers((h) => ({ ...h, [pid]: { qty: "", cost: "" } }));
   }
 
+  // Valódi készlet-sor törlése a partner raktárából (a mennyiség kivezetésével).
+  async function deleteStockRow(s: Stock) {
+    if (!(await confirm(t("cons.stockRowDeleteConfirm", {
+      product: s.product_name, qty: s.quantity, unit: s.unit,
+    })))) return;
+    try {
+      await api.delete(`/api/partners/${partnerId}/stock/${s.product_id}`);
+      toast(t("cons.stockRowDeleted"), "success");
+      loadStock();
+      loadDue();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   // Partner kiválasztásakor az elszámolás-munkaterület azonnal fókuszba kerül:
   // a lista-panelek (riasztás/rendelés/esedékes) eltűnnek, a nézet felugrik.
   useEffect(() => {
@@ -1171,15 +1186,17 @@ export default function ElszamolasPage() {
                 <tr key={s.product_id} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3 font-medium">
                     {s.product_name}
-                    {extraProducts.includes(s.product_id) && (
-                      <button
-                        onClick={() => removeExtraProduct(s.product_id)}
-                        title={t("common.delete")}
-                        className="ml-2 rounded px-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                      >
-                        ✕
-                      </button>
-                    )}
+                    <button
+                      onClick={() =>
+                        extraProducts.includes(s.product_id)
+                          ? removeExtraProduct(s.product_id)
+                          : deleteStockRow(s)
+                      }
+                      title={t("common.delete")}
+                      className="ml-2 rounded px-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                    >
+                      ✕
+                    </button>
                   </td>
                   <td className="px-4 py-3">
                     {ft(s.price_per_portion)}

@@ -380,6 +380,45 @@ async def replenish_partner_stock(
     return _stock_out(stock, product, await _partner_price_map(db, partner.id))
 
 
+@stock_router.delete("/{partner_id}/stock/{product_id}")
+async def delete_partner_stock(
+    partner_id: str,
+    product_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Készlet-sor törlése a partner külső raktárából (pl. tévesen felvett
+    termék). A könyv szerinti mennyiség kivezetésre kerül (remove mozgás)."""
+    partner = await _get_partner_or_404(db, partner_id)
+    product = await _get_product_or_404(db, product_id)
+    stock = (
+        await db.execute(
+            select(PartnerStock).where(
+                PartnerStock.partner_id == partner.id,
+                PartnerStock.product_id == product.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if stock is None:
+        raise HTTPException(status_code=404, detail={"code": "stock.not_found"})
+    qty = stock.quantity
+    if qty:
+        db.add(StockMovement(
+            partner_id=partner.id, product_id=product.id, action="remove",
+            quantity_delta=-qty, note="Készlet-sor törölve",
+            actor_user_id=actor.id,
+        ))
+    await db.delete(stock)
+    await record_audit(
+        db, actor=actor, action="stock.delete", entity_type="partner_stock",
+        entity_id=str(partner.id),
+        detail={"product": product.name, "qty": qty}, request=request,
+    )
+    await db.commit()
+    return {"ok": True}
+
+
 class StockMinBody(BaseModel):
     product_id: str
     min_quantity: float | None = Field(default=None, ge=0)  # None = globális küszöb

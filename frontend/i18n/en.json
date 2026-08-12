@@ -288,6 +288,8 @@
     "partnerStockGroup": "Partner stock",
     "allProductsGroup": "All products",
     "addProduct": "+ Add product",
+    "stockRowDeleteConfirm": "Delete the {product} stock row for this partner? The recorded {qty} {unit} will be written off.",
+    "stockRowDeleted": "Stock row deleted.",
     "addProductChoose": "— add product to inventory —",
     "addProductHint": "Works without existing stock too: record inventory, counter and handed-over quantity for the added product.",
     "noStockAddBelow": "No stock rows for this partner yet — add a product below or settle using the machine counters.",
@@ -1268,7 +1270,8 @@
     "settlement.empty": "Provide at least one inventory line or machine counter.",
     "settlement.counter_below_prev": "The machine's new counter is below the previous settlement reading.",
     "settlement.machine_wrong_partner": "The machine is not deployed at this partner.",
-    "settlement.machine_no_product": "The machine has no product set and the partner has multiple stock products — set which product the machine brews."
+    "settlement.machine_no_product": "The machine has no product set and the partner has multiple stock products — set which product the machine brews.",
+    "stock.not_found": "This stock row was not found (it may have been deleted already)."
   },
   "inv": {
     "title": "Machines",
