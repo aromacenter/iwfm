@@ -751,6 +751,14 @@ export default function ElszamolasPage() {
 
   const activeProducts = products.filter((p) => p.is_active);
 
+  // Kézzel felvett termék-sor eltávolítása (a beírt értékeivel együtt).
+  function removeExtraProduct(pid: string) {
+    setExtraProducts((xs) => xs.filter((x) => x !== pid));
+    setPhysical((p) => ({ ...p, [pid]: "" }));
+    setCounters((c) => ({ ...c, [pid]: "" }));
+    setHandovers((h) => ({ ...h, [pid]: { qty: "", cost: "" } }));
+  }
+
   // Partner kiválasztásakor az elszámolás-munkaterület azonnal fókuszba kerül:
   // a lista-panelek (riasztás/rendelés/esedékes) eltűnnek, a nézet felugrik.
   useEffect(() => {
@@ -1161,7 +1169,18 @@ export default function ElszamolasPage() {
             <tbody>
               {preview.rows.map((s) => (
                 <tr key={s.product_id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-4 py-3 font-medium">{s.product_name}</td>
+                  <td className="px-4 py-3 font-medium">
+                    {s.product_name}
+                    {extraProducts.includes(s.product_id) && (
+                      <button
+                        onClick={() => removeExtraProduct(s.product_id)}
+                        title={t("common.delete")}
+                        className="ml-2 rounded px-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     {ft(s.price_per_portion)}
                     {s.has_price_override && (
