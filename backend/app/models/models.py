@@ -535,7 +535,12 @@ class Asset(Base):
     article_number: Mapped[str | None] = mapped_column(String(64), nullable=True)  # cikkszám
     serial_number: Mapped[str | None] = mapped_column(String(128), nullable=True)  # gyárt. szám
     location_type: Mapped[str | None] = mapped_column(String(64), nullable=True)  # hely típus
-    counter: Mapped[int | None] = mapped_column(Integer, nullable=True)  # számláló-állás
+    counter: Mapped[int | None] = mapped_column(Integer, nullable=True)  # számláló (összeg)
+    # Több számlálós gépek: hány számláló van a gépen + az egyes állások.
+    # A `counter` mindig az ÖSSZEG — a régi (norma, karbantartás, elszámolás)
+    # logika változatlanul erre épül.
+    counter_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    counters: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [állás1, állás2…]
     norm: Mapped[float | None] = mapped_column(Float, nullable=True)  # norma
     tangible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # tárgyi eszköz
     # Az ügyfél SAJÁT gépe (mi csak szervizeljük) — nem "kihelyezett" saját eszköz.
@@ -932,6 +937,53 @@ class KnowledgeEntry(Base):
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")  # manual|ai
     created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     created_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class EmailTemplate(Base):
+    """Újrafelhasználható e-mail sablon ({{helyettesítőkkel}}) — az
+    automatizálások „e-mail küldése" akciója használja."""
+
+    __tablename__ = "email_templates"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    subject: Mapped[str] = mapped_column(String(256), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class AutomationRule(Base):
+    """Flow-szerű automatizálás: trigger (esemény) + feltételek + akciók.
+
+    conditions: [{"field": "...", "op": "eq|ne|gte|lte|contains", "value": ...}]
+      — mind teljesüljön (ÉS kapcsolat).
+    actions: [{"type": "send_email", "template_id": "...", "to": "partner|recipients|cím1,cím2"},
+              {"type": "add_partner_note", "text": "... {{valtozo}} ..."},
+              {"type": "create_task", "title": "...", "description": "...", "employee": "név?"}]
+    """
+
+    __tablename__ = "automation_rules"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    trigger: Mapped[str] = mapped_column(String(64), nullable=False)  # pl. settlement.created
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    conditions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    actions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    run_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

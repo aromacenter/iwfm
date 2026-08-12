@@ -918,6 +918,47 @@ async def create_settlement(
         request=request,
     )
     await db.commit()
+
+    # Automatizálások (háttérben, saját sessionnel)
+    from app.services.wfm.automation import fire_event
+
+    fire_event("settlement.created", {
+        "_partner_id": partner.id,
+        "partner_nev": partner.name,
+        "partner_kod": partner.partner_code,
+        "partner_email": partner.contact_email,
+        "vegosszeg_brutto": settlement.total_gross,
+        "vegosszeg_netto": settlement.total_net,
+        "fizetes_mod": settlement.payment_method,
+        "elszamolo": settlement.settled_by_name,
+        "ceg": settlement.invoicing_company or "",
+        "afa_nelkul": "igen" if settlement.no_vat else "nem",
+    })
+    # Alacsony készlet: a leltár utáni mennyiség a küszöb alatt van-e
+    for line_in in body.lines:
+        try:
+            prod = await _get_product_or_404(db, line_in.product_id)
+        except HTTPException:
+            continue
+        st = (
+            await db.execute(
+                select(PartnerStock).where(
+                    PartnerStock.partner_id == partner.id,
+                    PartnerStock.product_id == prod.id,
+                )
+            )
+        ).scalar_one_or_none()
+        threshold = (st.min_quantity if st and st.min_quantity is not None
+                     else prod.low_stock_threshold)
+        if threshold is not None and line_in.physical_qty <= threshold:
+            fire_event("stock.low", {
+                "_partner_id": partner.id,
+                "partner_nev": partner.name,
+                "termek_nev": prod.name,
+                "keszlet_kg": line_in.physical_qty,
+                "kuszob_kg": threshold,
+            })
+
     out = _settlement_out(settlement, partner.name)
     out.lines = [
         _line_out(line)
@@ -1651,6 +1692,17 @@ async def sign_settlement(
     partner_email = partner.contact_email if partner else None
     if notif.auto_receipt and partner_email:
         background_tasks.add_task(_auto_send_receipt, str(s.id), partner_email)
+
+    from app.services.wfm.automation import fire_event
+
+    fire_event("settlement.signed", {
+        "_partner_id": partner.id if partner else None,
+        "partner_nev": partner.name if partner else "",
+        "partner_kod": partner.partner_code if partner else "",
+        "partner_email": partner_email,
+        "vegosszeg_brutto": s.total_gross,
+        "elszamolo": s.settled_by_name,
+    })
     return _settlement_out(s, partner.name if partner else None)
 
 

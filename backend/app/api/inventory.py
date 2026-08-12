@@ -312,6 +312,16 @@ async def create_partner(
         entity_id=str(p.id), request=request,
     )
     await db.commit()
+
+    from app.services.wfm.automation import fire_event
+
+    fire_event("partner.created", {
+        "_partner_id": p.id,
+        "partner_nev": p.name,
+        "partner_kod": p.partner_code,
+        "varos": p.address_city or "",
+        "ceg": p.invoicing_company or "",
+    })
     return _partner_out(p)
 
 
@@ -414,6 +424,8 @@ class AssetBody(BaseModel):
     serial_number: str | None = Field(default=None, max_length=128)
     location_type: str | None = Field(default=None, max_length=64)
     counter: int | None = Field(default=None, ge=0)
+    counter_count: int = Field(default=1, ge=1, le=8)  # hány számláló van a gépen
+    counters: list[int] | None = Field(default=None, max_length=8)  # állások (több számlálós)
     norm: float | None = Field(default=None, ge=0)
     tangible: bool = False
     customer_owned: bool = False  # az ügyfél saját gépe
@@ -434,6 +446,8 @@ class AssetPatch(BaseModel):
     serial_number: str | None = None
     location_type: str | None = None
     counter: int | None = Field(default=None, ge=0)
+    counter_count: int | None = Field(default=None, ge=1, le=8)
+    counters: list[int] | None = Field(default=None, max_length=8)
     norm: float | None = Field(default=None, ge=0)
     tangible: bool | None = None
     customer_owned: bool | None = None
@@ -473,6 +487,8 @@ class AssetOut(BaseModel):
     serial_number: str | None
     location_type: str | None
     counter: int | None
+    counter_count: int = 1
+    counters: list[int] | None = None
     norm: float | None
     tangible: bool
     customer_owned: bool
@@ -500,6 +516,8 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         serial_number=a.serial_number,
         location_type=a.location_type,
         counter=a.counter,
+        counter_count=a.counter_count or 1,
+        counters=a.counters,
         norm=a.norm,
         tangible=a.tangible,
         customer_owned=a.customer_owned,
@@ -794,7 +812,10 @@ async def create_asset(
         article_number=(body.article_number or "").strip() or None,
         serial_number=(body.serial_number or "").strip() or None,
         location_type=(body.location_type or "").strip() or None,
-        counter=body.counter,
+        # Több számlálós gép: a `counter` mindig az állások összege
+        counter=sum(body.counters) if body.counters else body.counter,
+        counter_count=body.counter_count,
+        counters=body.counters,
         norm=body.norm,
         tangible=body.tangible,
         customer_owned=body.customer_owned,
@@ -859,6 +880,9 @@ async def update_asset(
 
     for key, value in data.items():
         setattr(a, key, value.strip() if isinstance(value, str) and key != "notes" else value)
+    # Több számlálós gép: az egyes állásokból a `counter` mindig az összeg
+    if data.get("counters"):
+        a.counter = sum(data["counters"])
     await record_audit(
         db, actor=actor, action="asset.update", entity_type="asset",
         entity_id=a.barcode, detail={"fields": sorted(data)}, request=request,

@@ -66,28 +66,99 @@ def has_section_for(kb: str, manufacturer: str | None, name: str | None) -> bool
 
 def _build_prompt(label: str) -> str:
     return (
-        f"Készíts magyar nyelvű ügyfél-támogatási tudásbázis-szekciót a(z) "
-        f"{label} kávégéphez.\n\n"
-        "Formátum (pontosan tartsd be):\n"
-        f"- Minden bejegyzés külön '## {label} — <hibakód vagy üzenet>' "
-        "címsorral kezdődjön.\n"
-        "- A címsor után 2–5 mondat: mit jelent, milyen lépésekkel háríthatja "
-        "el egy NEM szakember ügyfél, és mikor kell szervizigényt bejelenteni.\n"
-        "- Vedd sorra a gyártónál ismert hibakódokat (Error/E-kódok) ÉS a "
-        "gyakori kijelző-üzeneteket (víztartály, szemes kávé, zacctartó, "
-        "csepptálca, öblítés, tisztítás, vízkőtelenítés, szűrőcsere).\n"
-        "- Csak olyan kódot írj le, amely ennél a gyártónál/típusnál valóban "
-        "használatos; ha egy kódban bizonytalan vagy, írd oda: "
-        "'(ellenőrizendő)'.\n"
-        "- Ne írj bevezetőt, összegzést vagy egyéb szöveget a szekciókon "
-        "kívül.\n"
-        "- Az utolsó sor legyen pontosan: "
-        "'(AI által generált szekció — szerviztechnikusi ellenőrzés ajánlott)'"
+        f"A(z) {label} kávégéphez / kávézós eszközhöz készíts magyar nyelvű "
+        "ügyfél-támogatási tudásbázist.\n\n"
+        "Add vissza KIZÁRÓLAG egy JSON tömböt, minden más szöveg nélkül, "
+        "ebben a formában:\n"
+        '[{"code": "E8", "title": "rövid cím", "body": "2-5 mondat"}]\n\n'
+        "Tartalmi szabályok:\n"
+        "- Vedd sorra a gyártónál/típusnál ismert hibakódokat (Error/E-kódok) "
+        "ÉS a kijelzőn megjelenő gyakori üzeneteket, jelzéseket, világító "
+        "ikonokat (víztartály, szemes kávé, zacctartó, csepptálca, öblítés, "
+        "tisztítás, vízkőtelenítés, szűrőcsere, fűtés).\n"
+        "- body: mit jelent, milyen lépésekkel háríthatja el egy NEM "
+        "szakember ügyfél, és mikor kell szervizigényt bejelenteni.\n"
+        "- 8–20 bejegyzés. Csak olyan kódot írj le, amely ennél a gyártónál/"
+        "típusnál valóban használatos; bizonytalan kódnál a title végére "
+        "írd: '(ellenőrizendő)'.\n"
+        "- code: a hibakód vagy az üzenet rövid azonosítója (pl. 'E8', "
+        "'Víztartály üres')."
     )
 
 
+def parse_articles(text: str) -> list[dict]:
+    """A modellválasz JSON-tömbjének kinyerése (kódblokk-kerítés tűrve)."""
+    import json
+
+    raw = (text or "").strip()
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+    start, end = raw.find("["), raw.rfind("]")
+    if start == -1 or end <= start:
+        return []
+    try:
+        items = json.loads(raw[start:end + 1])
+    except json.JSONDecodeError:
+        return []
+    out = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get("code") or "").strip()
+        title = str(item.get("title") or "").strip()
+        body = str(item.get("body") or "").strip()
+        if code and body:
+            out.append({"code": code, "title": title, "body": body})
+    return out
+
+
+async def generate_articles(db, manufacturer: str | None, name: str | None) -> int:
+    """Strukturált tudásbázis-bejegyzések generálása egy géptípushoz a
+    knowledge_entries táblába (kereshető, gépre szűrhető). Vissza: hány
+    bejegyzés készült. ValueError, ha az AI nincs beállítva."""
+    from app.models import KnowledgeEntry
+
+    label = machine_label(manufacturer, name)
+    if len(label) < 3:
+        return 0
+    text = await ai_service.generate(db, _build_prompt(label), max_tokens=4000)
+    articles = parse_articles(text)
+    for a in articles:
+        title = f"{a['code']} — {a['title']}" if a["title"] else a["code"]
+        db.add(KnowledgeEntry(
+            machine_label=label[:256],
+            title=title[:256],
+            content=a["body"][:8000],
+            source="ai",
+            created_by_name="AI generálás",
+        ))
+    if articles:
+        db.add(AuditEvent(
+            actor_user_id=None, action="support.kb_auto", entity_type="knowledge_entry",
+            entity_id=label[:64], detail={"machine": label, "entries": len(articles)},
+        ))
+        await db.commit()
+    return len(articles)
+
+
+async def has_ai_articles(db, label: str) -> bool:
+    from sqlalchemy import func as sa_func
+
+    from app.models import KnowledgeEntry
+
+    count = (
+        await db.execute(
+            select(sa_func.count()).select_from(KnowledgeEntry).where(
+                KnowledgeEntry.machine_label == label[:256],
+                KnowledgeEntry.source == "ai",
+            )
+        )
+    ).scalar_one()
+    return count > 0
+
+
 async def ensure_machine_kb(manufacturer: str | None, name: str | None) -> bool:
-    """Háttérfeladat: tudásbázis-szekció generálása az új géptípushoz.
+    """Háttérfeladat: strukturált tudásbázis-bejegyzések generálása az új
+    géptípushoz (knowledge_entries tábla — kereshető, gépre szűrhető).
 
     True, ha bővítettük a tudásbázist; False, ha nem volt rá szükség vagy nem
     lehetett (AI nincs beállítva, ki van kapcsolva, már létezik)."""
@@ -108,39 +179,17 @@ async def ensure_machine_kb(manufacturer: str | None, name: str | None) -> bool:
             await db.flush()
         if not row.auto_kb:
             return False
-
-        kb = row.knowledge_base or ""
-        marker = _marker(label)
-        if marker in kb or has_section_for(kb, manufacturer, name):
-            return False
-        if len(kb) > _MAX_KB_CHARS:
-            logger.warning("Auto-KB kihagyva (%s): a tudásbázis túl nagy", label)
+        if await has_ai_articles(db, label):
             return False
 
         try:
-            text = await ai_service.generate(db, _build_prompt(label), max_tokens=3000)
+            count = await generate_articles(db, manufacturer, name)
         except ValueError:
             logger.info("Auto-KB kihagyva (%s): AI nincs beállítva", label)
             return False
         except Exception:
             logger.warning("Auto-KB generálás sikertelen (%s)", label, exc_info=True)
             return False
-
-        text = (text or "").strip()
-        if "## " not in text:
-            logger.warning("Auto-KB (%s): a válasz nem szekcionált, eldobva", label)
-            return False
-
-        row.knowledge_base = f"{kb.rstrip()}\n\n{marker}\n{text}\n".lstrip()
-        db.add(
-            AuditEvent(
-                actor_user_id=None,
-                action="support.kb_auto",
-                entity_type="settings",
-                entity_id="support",
-                detail={"machine": label, "chars": len(text)},
-            )
-        )
-        await db.commit()
-        logger.info("Auto-KB: tudásbázis bővítve — %s (%d karakter)", label, len(text))
-        return True
+        if count:
+            logger.info("Auto-KB: %d bejegyzés generálva — %s", count, label)
+        return count > 0

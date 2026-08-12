@@ -13,6 +13,7 @@ from app.api import (
     assistant as assistant_api,
     audit,
     auth,
+    automation as automation_api,
     consignment,
     dashboard,
     employees,
@@ -407,6 +408,7 @@ def create_app() -> FastAPI:
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
     app.include_router(assistant_api.router, prefix="/api/assistant", tags=["assistant"])
     app.include_router(admin_tools.router, prefix="/api/admin", tags=["admin"])
+    app.include_router(automation_api.router)
 
     @app.get("/api/health")
     async def health():

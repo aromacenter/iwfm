@@ -45,6 +45,8 @@ interface Asset {
   serial_number: string | null;
   location_type: string | null;
   counter: number | null;
+  counter_count: number;
+  counters: number[] | null;
   norm: number | null;
   tangible: boolean;
   customer_owned: boolean;
@@ -75,6 +77,8 @@ const EMPTY_ASSET = {
   serial_number: "",
   location_type: "",
   counter: "",
+  counter_count: "1",
+  counters: [] as string[],
   norm: "",
   tangible: false,
   customer_owned: false,
@@ -225,6 +229,12 @@ export default function GepekPage() {
         serial_number: assetForm.serial_number || null,
         location_type: assetForm.location_type || null,
         counter: assetForm.counter !== "" ? Number(assetForm.counter) : null,
+        counter_count: Number(assetForm.counter_count) || 1,
+        counters:
+          Number(assetForm.counter_count) > 1
+            ? Array.from({ length: Number(assetForm.counter_count) }, (_, i) =>
+                Number(assetForm.counters[i]) || 0)
+            : null,
         norm: assetForm.norm !== "" ? Number(assetForm.norm) : null,
         tangible: assetForm.tangible,
         customer_owned: assetForm.customer_owned,
@@ -524,6 +534,7 @@ export default function GepekPage() {
                 <td className="px-4 py-3 text-right">
                   <div className="tabular-nums font-medium">{a.counter ?? "—"}</div>
                   <div className="text-xs tabular-nums text-slate-400">
+                    {a.counters && a.counters.length > 1 ? `${a.counters.join(" + ")} · ` : ""}
                     {a.norm != null ? `${t("inv.norm")}: ${a.norm}` : ""}
                   </div>
                 </td>
@@ -560,7 +571,7 @@ export default function GepekPage() {
                     <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       🕘
                     </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, customer_owned: a.customer_owned, contract_min_portions: a.contract_min_portions != null ? String(a.contract_min_portions) : "", contract_below_min_price: a.contract_below_min_price != null ? String(a.contract_below_min_price) : "", rent_fee: a.rent_fee != null ? String(a.rent_fee) : "", notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", location_type: a.location_type ?? "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), norm: a.norm != null ? String(a.norm) : "", tangible: a.tangible, customer_owned: a.customer_owned, contract_min_portions: a.contract_min_portions != null ? String(a.contract_min_portions) : "", contract_below_min_price: a.contract_below_min_price != null ? String(a.contract_below_min_price) : "", rent_fee: a.rent_fee != null ? String(a.rent_fee) : "", notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       ✏️
                     </button>
                   </div>
@@ -616,9 +627,36 @@ export default function GepekPage() {
                 <input value={assetForm.location_type} onChange={(e) => setAssetForm({ ...assetForm, location_type: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
               <label className="block text-sm">
+                {t("inv.counterCount")}
+                <input
+                  type="number" min={1} max={8}
+                  value={assetForm.counter_count}
+                  onChange={(e) => setAssetForm({ ...assetForm, counter_count: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </label>
+              {Number(assetForm.counter_count) <= 1 ? (
+              <label className="block text-sm">
                 {t("inv.counter")}
                 <input type="number" min={0} value={assetForm.counter} onChange={(e) => setAssetForm({ ...assetForm, counter: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
+              ) : (
+                Array.from({ length: Math.min(Number(assetForm.counter_count) || 1, 8) }, (_, i) => (
+                  <label key={i} className="block text-sm">
+                    {t("inv.counterN", { n: i + 1 })}
+                    <input
+                      type="number" min={0}
+                      value={assetForm.counters[i] ?? ""}
+                      onChange={(e) => {
+                        const next = [...assetForm.counters];
+                        next[i] = e.target.value;
+                        setAssetForm({ ...assetForm, counters: next });
+                      }}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                  </label>
+                ))
+              )}
               <label className="block text-sm">
                 {t("inv.norm")}
                 <input type="number" min={0} step="0.1" value={assetForm.norm} onChange={(e) => setAssetForm({ ...assetForm, norm: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

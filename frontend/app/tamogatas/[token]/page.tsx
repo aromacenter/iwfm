@@ -16,6 +16,8 @@ interface SupportInfo {
   serial_number: string | null;
   location_type: string | null;
   counter: number | null;
+  counter_count: number;
+  counters: number[] | null;
   partner_name: string | null;
   partner_code: string | null;
   contact_name: string | null;
@@ -57,7 +59,9 @@ export default function TamogatasPage() {
 
   // számláló-bejelentés
   const [counterVal, setCounterVal] = useState("");
+  const [counterVals, setCounterVals] = useState<string[]>([]); // több számlálós gép
   const [counterStockKg, setCounterStockKg] = useState("");
+  const multiCounter = (info?.counter_count ?? 1) > 1;
   const [reporterName, setReporterName] = useState("");
   const [counterResult, setCounterResult] = useState<{ old: number | null; next: number } | null>(null);
 
@@ -137,11 +141,18 @@ export default function TamogatasPage() {
     try {
       const res = await api.post<{ old_counter: number | null; new_counter: number }>(
         `/api/support/${token}/counter`,
-        {
-          counter: Number(counterVal),
-          stock_kg: counterStockKg === "" ? null : Number(counterStockKg),
-          reporter_name: reporterName || null,
-        },
+        multiCounter
+          ? {
+              counter: counterVals.reduce((s, v) => s + (Number(v) || 0), 0),
+              counters: counterVals.map((v) => Number(v) || 0),
+              stock_kg: counterStockKg === "" ? null : Number(counterStockKg),
+              reporter_name: reporterName || null,
+            }
+          : {
+              counter: Number(counterVal),
+              stock_kg: counterStockKg === "" ? null : Number(counterStockKg),
+              reporter_name: reporterName || null,
+            },
       );
       setCounterResult({ old: res.old_counter, next: res.new_counter });
       setMode("counter_done");
@@ -250,7 +261,13 @@ export default function TamogatasPage() {
               <p className="mt-1 text-sm text-slate-500">{t("support.ticketOptionHint")}</p>
             </button>
             <button
-              onClick={() => { setCounterVal(""); setCounterStockKg(""); setError(null); setMode("counter"); }}
+              onClick={() => {
+                setCounterVal("");
+                setCounterVals(Array.from({ length: info?.counter_count ?? 1 }, () => ""));
+                setCounterStockKg("");
+                setError(null);
+                setMode("counter");
+              }}
               className="rounded-2xl border border-sky-200 bg-white p-5 text-left shadow-sm transition hover:border-sky-400"
             >
               <p className="text-lg font-semibold text-sky-700">🔢 {t("support.counterOption")}</p>
@@ -282,6 +299,34 @@ export default function TamogatasPage() {
             {info.counter != null && (
               <p className="text-sm text-slate-500">{t("support.counterCurrent", { counter: info.counter })}</p>
             )}
+            {multiCounter ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t("support.countersTitle", { count: info.counter_count })}</p>
+                {counterVals.map((v, i) => (
+                  <label key={i} className="block text-sm">
+                    {t("support.counterN", { n: i + 1 })} *
+                    {info.counters?.[i] != null && (
+                      <span className="ml-1 text-xs text-slate-400">
+                        ({t("support.counterPrev", { value: info.counters[i] })})
+                      </span>
+                    )}
+                    <input
+                      required
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      value={v}
+                      onChange={(e) => {
+                        const next = [...counterVals];
+                        next[i] = e.target.value;
+                        setCounterVals(next);
+                      }}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-lg tabular-nums"
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : (
             <label className="block text-sm">
               {t("support.counterNew")} *
               <input
@@ -295,6 +340,7 @@ export default function TamogatasPage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-lg tabular-nums"
               />
             </label>
+            )}
             <label className="block text-sm">
               {t("support.counterStockKg")} *
               <input
@@ -320,7 +366,7 @@ export default function TamogatasPage() {
             </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button
-              disabled={busy || counterVal === "" || counterStockKg === ""}
+              disabled={busy || counterStockKg === "" || (multiCounter ? counterVals.some((v) => v === "") : counterVal === "")}
               className="w-full rounded-xl bg-sky-600 px-4 py-2.5 font-medium text-white hover:bg-sky-700 disabled:opacity-50"
             >
               {busy ? t("common.saving") : t("support.counterSubmit")}

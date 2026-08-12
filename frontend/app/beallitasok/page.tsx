@@ -48,9 +48,84 @@ interface WorksheetSettings {
 
 const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 
+const SETTINGS_TABS = [
+  ["worksheet", "🧾"],
+  ["billing", "💳"],
+  ["email", "✉️"],
+  ["notifications", "🔔"],
+  ["ai", "✨"],
+  ["support", "💬"],
+  ["skills", "🎓"],
+  ["permissions", "🔐"],
+  ["data", "🗄️"],
+] as const;
+
+interface EmailTpl {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+}
+
 export default function BeallitasokPage() {
   const { t } = useT();
   const { confirm, prompt, toast } = useUI();
+
+  // --- Fülek: a beállítások logikus alcsoportokban ---
+  const [tab, setTabState] = useState<(typeof SETTINGS_TABS)[number][0]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("iwfm-settings-tab");
+      if (saved && SETTINGS_TABS.some(([k]) => k === saved)) {
+        return saved as (typeof SETTINGS_TABS)[number][0];
+      }
+    }
+    return "worksheet";
+  });
+  const setTab = (k: (typeof SETTINGS_TABS)[number][0]) => {
+    setTabState(k);
+    try { sessionStorage.setItem("iwfm-settings-tab", k); } catch {}
+  };
+  const cardCls = (own: string, base: string) =>
+    `${tab === own ? "" : "hidden "}${base}`;
+
+  // --- E-mail sablonok (automatizálásokhoz) ---
+  const [templates, setTemplates] = useState<EmailTpl[]>([]);
+  const [tplForm, setTplForm] = useState<{ id: string; name: string; subject: string; body: string } | null>(null);
+  const [tplBusy, setTplBusy] = useState(false);
+  const [tplMsg, setTplMsg] = useState<string | null>(null);
+
+  const loadTemplates = () => {
+    api.get<EmailTpl[]>("/api/automation/templates").then(setTemplates).catch(() => {});
+  };
+  useEffect(loadTemplates, []);
+
+  async function saveTemplate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tplForm) return;
+    setTplBusy(true);
+    setTplMsg(null);
+    try {
+      const body = { name: tplForm.name, subject: tplForm.subject, body: tplForm.body };
+      if (tplForm.id) await api.patch(`/api/automation/templates/${tplForm.id}`, body);
+      else await api.post("/api/automation/templates", body);
+      setTplForm(null);
+      loadTemplates();
+    } catch (err) {
+      setTplMsg(errorMessage(err));
+    } finally {
+      setTplBusy(false);
+    }
+  }
+
+  async function deleteTemplate(tpl: EmailTpl) {
+    if (!(await confirm(t("settings.tplDeleteConfirm", { name: tpl.name })))) return;
+    try {
+      await api.delete(`/api/automation/templates/${tpl.id}`);
+      loadTemplates();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   // --- Email ---
   const [email, setEmail] = useState({
@@ -598,9 +673,26 @@ export default function BeallitasokPage() {
     <AppShell>
       <h1 className="mb-4 text-xl font-bold">{t("settings.title")}</h1>
 
+      {/* Alfülek: a beállítások logikus csoportokban */}
+      <div className="mb-5 flex flex-wrap gap-1.5">
+        {SETTINGS_TABS.map(([k, icon]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              tab === k
+                ? "bg-indigo-600 text-white"
+                : "border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {icon} {t(`settings.tabs.${k}`)}
+          </button>
+        ))}
+      </div>
+
       {/* Jogosultságok — szerepkör × funkció mátrix */}
       {permRoles.length > 0 && (
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className={cardCls("permissions", "mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
           <h2 className="font-semibold">{t("settings.permTitle")}</h2>
           <p className="mb-3 text-xs text-slate-500">{t("settings.permHint")}</p>
           <div className="overflow-x-auto">
@@ -656,11 +748,11 @@ export default function BeallitasokPage() {
         </div>
       )}
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="flex max-w-3xl flex-col gap-4">
         {/* Munkalap-PDF testreszabás */}
         <form
           onSubmit={saveWorksheet}
-          className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          className={cardCls("worksheet", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
         >
           <h2 className="font-semibold">{t("settings.wsTitle")}</h2>
           <p className="text-xs text-slate-500">{t("settings.wsHint")}</p>
@@ -720,7 +812,7 @@ export default function BeallitasokPage() {
         {/* Billingó számlázó */}
         <form
           onSubmit={saveBillingo}
-          className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          className={cardCls("billing", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
         >
           <h2 className="font-semibold">{t("settings.billingoTitle")}</h2>
           <p className="text-xs text-slate-500">{t("settings.billingoHint")}</p>
@@ -830,7 +922,7 @@ export default function BeallitasokPage() {
         {/* Ügyfél-támogatás tudásbázis (QR-oldal AI chat) */}
         <form
           onSubmit={saveKnowledgeBase}
-          className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          className={cardCls("support", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
         >
           <h2 className="font-semibold">{t("settings.kbTitle")}</h2>
           <p className="text-xs text-slate-500">{t("settings.kbHint")}</p>
@@ -859,7 +951,7 @@ export default function BeallitasokPage() {
         {/* Email értesítések */}
         <form
           onSubmit={saveEmail}
-          className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          className={cardCls("email", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
         >
           <h2 className="font-semibold">{t("settings.emailTitle")}</h2>
           <p className="text-xs text-slate-500">{t("settings.emailHint")}</p>
@@ -962,8 +1054,53 @@ export default function BeallitasokPage() {
           </div>
         </form>
 
+        {/* E-mail sablonok (automatizálásokhoz) */}
+        <div className={cardCls("email", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
+          <div className="flex items-center">
+            <h2 className="font-semibold">{t("settings.tplTitle")}</h2>
+            <button
+              type="button"
+              onClick={() => { setTplMsg(null); setTplForm({ id: "", name: "", subject: "", body: "" }); }}
+              className="ml-auto rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              {t("settings.tplNew")}
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">{t("settings.tplHint")}</p>
+          {templates.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("settings.tplEmpty")}</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {templates.map((tpl) => (
+                <li key={tpl.id} className="flex items-center gap-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{tpl.name}</div>
+                    <div className="truncate text-xs text-slate-400">{tpl.subject}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setTplMsg(null); setTplForm({ ...tpl }); }}
+                    title={t("common.edit")}
+                    className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteTemplate(tpl)}
+                    title={t("common.delete")}
+                    className="rounded border border-red-200 px-2 py-1 text-sm leading-none text-red-600 hover:bg-red-50"
+                  >
+                    🗑
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {/* Skillek */}
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className={cardCls("skills", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
           <h2 className="font-semibold">{t("settings.skillsTitle")}</h2>
           <p className="text-xs text-slate-500">{t("settings.skillsHint")}</p>
           <form onSubmit={addSkill} className="flex gap-2">
@@ -1002,7 +1139,7 @@ export default function BeallitasokPage() {
         </div>
 
         {/* AI integráció */}
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+        <div className={cardCls("ai", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
           <h2 className="font-semibold">{t("settings.aiTitle")}</h2>
           <p className="text-xs text-slate-500">{t("settings.aiHint")}</p>
 
@@ -1141,7 +1278,7 @@ export default function BeallitasokPage() {
         {/* Értesítések (csak admin) */}
         <form
           onSubmit={saveNotifications}
-          className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          className={cardCls("notifications", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
         >
           <h2 className="font-semibold">{t("notif.title")}</h2>
           <p className="text-xs text-slate-500">{t("notif.hint")}</p>
@@ -1184,7 +1321,7 @@ export default function BeallitasokPage() {
         </form>
 
         {/* Adatbázis-mentés (csak admin) */}
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className={cardCls("data", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
           <h2 className="font-semibold">{t("backup.title")}</h2>
           <p className="text-xs text-slate-500">{t("backup.hint")}</p>
           <button
@@ -1198,7 +1335,7 @@ export default function BeallitasokPage() {
         </div>
 
         {/* Veszélyzóna — teljes törlés entitásonként (csak admin) */}
-        <div className="space-y-3 rounded-2xl border-2 border-red-200 bg-white p-5 shadow-sm">
+        <div className={cardCls("data", "space-y-3 rounded-2xl border-2 border-red-200 bg-white p-5 shadow-sm")}>
           <h2 className="font-semibold text-red-700">{t("danger.title")}</h2>
           <p className="text-xs text-slate-500">{t("danger.hint")}</p>
           <div className="flex flex-wrap gap-2">
@@ -1216,6 +1353,38 @@ export default function BeallitasokPage() {
           </div>
         </div>
       </div>
+
+      {/* E-mail sablon szerkesztő */}
+      {tplForm && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setTplForm(null); }}
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+        >
+          <form onSubmit={saveTemplate} className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">
+              {tplForm.id ? t("settings.tplEdit") : t("settings.tplNew")}
+            </h2>
+            <label className="block text-sm">
+              {t("settings.tplName")} *
+              <input required value={tplForm.name} onChange={(e) => setTplForm({ ...tplForm, name: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              {t("settings.tplSubject")} *
+              <input required value={tplForm.subject} onChange={(e) => setTplForm({ ...tplForm, subject: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              {t("settings.tplBody")} *
+              <textarea required rows={8} value={tplForm.body} onChange={(e) => setTplForm({ ...tplForm, body: e.target.value })} className={inputCls} />
+            </label>
+            <p className="text-xs text-slate-400">{t("settings.tplVarsHint")}</p>
+            {tplMsg && <p className="text-sm text-red-600">{tplMsg}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setTplForm(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={tplBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{tplBusy ? t("common.saving") : t("common.save")}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </AppShell>
   );
 }

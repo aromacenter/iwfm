@@ -76,17 +76,19 @@ async def test_kb_rbac(client, employee_user):
 
 
 async def test_auto_kb_on_asset_create(client, manager, admin, monkeypatch):
-    """Új gép rögzítésekor az AI-generált szekció a tudásbázisba kerül;
-    ugyanahhoz a típushoz nem generálunk kétszer."""
+    """Új gép rögzítésekor az AI strukturált tudásbázis-bejegyzéseket generál
+    (knowledge_entries); ugyanahhoz a típushoz nem generálunk kétszer, de
+    ugyanazon gyártó MÁSIK típusához igen."""
     from app.services.wfm import kb_auto
 
     calls: list[str] = []
 
     async def fake_generate(db, prompt, **kw):
         calls.append(prompt)
-        return ("## Nivona CafeRomatica 960 — Error 5\nHőmérséklet-hiba, "
-                "hagyd hűlni 30 percet.\n\n(AI által generált szekció — "
-                "szerviztechnikusi ellenőrzés ajánlott)")
+        return ('[{"code": "Error 5", "title": "Hőmérséklet-hiba", '
+                '"body": "Hagyd hűlni 30 percet, utána indítsd újra."},'
+                '{"code": "Víztartály", "title": "Víztartály üres", '
+                '"body": "Töltsd fel a tartályt friss vízzel."}]')
 
     monkeypatch.setattr(kb_auto.ai_service, "generate", fake_generate)
 
@@ -95,9 +97,12 @@ async def test_auto_kb_on_asset_create(client, manager, admin, monkeypatch):
     await make_asset(client, mgr, barcode="KB-AUTO-1", name="CafeRomatica 960",
                      manufacturer="Nivona")
 
-    kb = (await client.get("/api/settings/support", headers=adm)).json()["knowledge_base"]
-    assert kb and "Nivona CafeRomatica 960 — Error 5" in kb
-    assert "kb-auto: nivona-caferomatica-960" in kb
+    entries = (
+        await client.get("/api/knowledge?machine=Nivona CafeRomatica 960", headers=mgr)
+    ).json()
+    assert len(entries) == 2
+    assert any(e["title"].startswith("Error 5") for e in entries)
+    assert all(e["source"] == "ai" for e in entries)
     assert len(calls) == 1
 
     # ugyanaz a típus még egyszer → nincs újabb generálás
@@ -105,10 +110,10 @@ async def test_auto_kb_on_asset_create(client, manager, admin, monkeypatch):
                      manufacturer="Nivona")
     assert len(calls) == 1
 
-    # meglévő szekciójú gyártóhoz (a most bekerült Nivona) sem generál újra
+    # ugyanazon gyártó MÁSIK típusa → külön tudásbázis készül hozzá
     await make_asset(client, mgr, barcode="KB-AUTO-3", name="CafeRomatica 8",
                      manufacturer="Nivona")
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 async def test_auto_kb_skips_without_ai(client, manager, admin):

@@ -215,6 +215,8 @@ async def support_info(token: str, db: AsyncSession = Depends(get_db)):
         "serial_number": asset.serial_number,
         "location_type": asset.location_type,
         "counter": asset.counter,
+        "counter_count": asset.counter_count or 1,
+        "counters": asset.counters,
         "partner_name": partner.name if partner else None,
         "partner_code": partner.partner_code if partner else None,
         "contact_name": partner.contact_name if partner else None,
@@ -303,7 +305,9 @@ async def create_support_ticket(
 
 
 class CounterBody(BaseModel):
-    counter: int = Field(ge=0, le=100_000_000)
+    counter: int = Field(ge=0, le=100_000_000)  # egy számlálós gép / összeg
+    # Több számlálós gép: az egyes állások külön-külön (a counter az összeg)
+    counters: list[int] | None = Field(default=None, max_length=8)
     stock_kg: float | None = Field(default=None, ge=0, le=10_000)  # jelenlegi készlet (kg)
     reporter_name: str | None = Field(default=None, max_length=256)
 
@@ -324,23 +328,43 @@ async def report_counter(
     asset = await _asset_by_token(db, token)
     old = asset.counter
     reporter = (body.reporter_name or "").strip() or "QR-oldali bejelentés"
-    detail = f"Számláló: {old if old is not None else '—'} → {body.counter} · bejelentette: {reporter}"
+    new_total = sum(body.counters) if body.counters else body.counter
+    if body.counters:
+        parts = " + ".join(str(c) for c in body.counters)
+        detail = (f"Számláló: {old if old is not None else '—'} → {new_total} "
+                  f"({parts}) · bejelentette: {reporter}")
+        asset.counters = body.counters
+    else:
+        detail = f"Számláló: {old if old is not None else '—'} → {new_total} · bejelentette: {reporter}"
     if body.stock_kg is not None:
         detail += f" · készlet: ~{body.stock_kg:g} kg"
-    if old is not None and body.counter < old:
+    if old is not None and new_total < old:
         detail += " (csökkenés!)"
 
-    asset.counter = body.counter
+    asset.counter = new_total
     db.add(AssetMovement(asset_id=asset.id, action="counter", detail=detail[:512]))
     await record_audit(
         db, actor=None, action="support.counter", entity_type="asset",
         entity_id=asset.barcode,
-        detail={"old": old, "new": body.counter, "stock_kg": body.stock_kg,
-                "reporter": reporter},
+        detail={"old": old, "new": new_total, "counters": body.counters,
+                "stock_kg": body.stock_kg, "reporter": reporter},
         request=request,
     )
     await db.commit()
-    return {"old_counter": old, "new_counter": body.counter}
+
+    from app.services.wfm.automation import fire_event
+
+    partner = await _asset_partner(db, asset)
+    fire_event("counter.reported", {
+        "_partner_id": partner.id if partner else None,
+        "gep_vonalkod": asset.barcode,
+        "gep_nev": asset.name,
+        "partner_nev": partner.name if partner else "",
+        "szamlalo": new_total,
+        "elozo_szamlalo": old,
+        "keszlet_kg": body.stock_kg,
+    })
+    return {"old_counter": old, "new_counter": new_total}
 
 
 class OrderItem(BaseModel):
@@ -421,6 +445,15 @@ async def create_order(
         detail={"partner": order.partner_label, "items": len(items)}, request=request,
     )
     await db.commit()
+
+    from app.services.wfm.automation import fire_event
+
+    fire_event("order.created", {
+        "_partner_id": partner.id if partner else None,
+        "rendeles_szam": order.order_no,
+        "partner_nev": order.partner_label,
+        "tetel_lista": ", ".join(f"{i['name']} ({i['quantity']:g} {i['unit']})" for i in items),
+    })
     return {"order_no": order.order_no}
 
 
@@ -433,10 +466,13 @@ class SupportChatBody(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=12)
 
 
-async def _load_kb(db: AsyncSession) -> str:
+async def _load_kb(db: AsyncSession, terms: list[str] | None = None) -> str:
     """A teljes tudás összeállítása: a Beállításokban tárolt tudásbázis-szöveg
-    + a kézzel rögzített, bevált megoldások (KnowledgeEntry) „## " szekciókká
-    formázva — így a gépre szűrés ezekre is működik."""
+    + a kereshető tudásbázis-bejegyzések (KnowledgeEntry) „## " szekciókká
+    formázva. A bejegyzéseket már SQL-szinten a gépre szűrjük (a tábla több
+    ezer bejegyzést tartalmazhat — a teljes betöltés nem skálázódna)."""
+    from sqlalchemy import or_
+
     from app.models import KnowledgeEntry
 
     row = (
@@ -444,14 +480,21 @@ async def _load_kb(db: AsyncSession) -> str:
     ).scalar_one_or_none()
     kb = (row.knowledge_base or "").strip() if row else ""
 
+    query = select(KnowledgeEntry)
+    useful = [t.strip() for t in (terms or []) if t and len(t.strip()) >= 3]
+    if useful:
+        query = query.where(
+            or_(*[KnowledgeEntry.machine_label.ilike(f"%{t}%") for t in useful])
+        )
     entries = (
         await db.execute(
-            select(KnowledgeEntry).order_by(KnowledgeEntry.machine_label, KnowledgeEntry.title)
+            query.order_by(KnowledgeEntry.machine_label, KnowledgeEntry.title).limit(300)
         )
     ).scalars().all()
     if entries:
         rendered = "\n\n".join(
-            f"## {e.machine_label} — {e.title} (bevált házi megoldás)\n{e.content}"
+            f"## {e.machine_label} — {e.title}"
+            f"{' (bevált házi megoldás)' if e.source == 'manual' else ''}\n{e.content}"
             for e in entries
         )
         kb = f"{kb}\n\n{rendered}".strip() if kb else rendered
@@ -519,11 +562,11 @@ async def support_chat(
 
     asset = await _asset_by_token(db, token)
     partner = await _asset_partner(db, asset)
-    kb = await _load_kb(db)
 
     # A QR-ból beazonosított gép gyártója/típusa alapján a tudásbázis releváns
     # szekcióit válogatjuk be (pl. Jura XJ6 → Jura + általános szekciók).
     terms = [asset.manufacturer or ""] + (asset.name or "").split()
+    kb = await _load_kb(db, terms)
     kb_for_machine = _relevant_kb(kb, terms) if kb else ""
 
     transcript = "\n".join(

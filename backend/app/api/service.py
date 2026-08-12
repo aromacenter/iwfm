@@ -428,6 +428,19 @@ async def create_ticket(
         entity_id=tk.ticket_no, detail={"title": body.title}, request=request,
     )
     await db.commit()
+
+    from app.services.wfm.automation import fire_event
+
+    fire_event("ticket.created", {
+        "_partner_id": partner_id,
+        "cim": tk.title,
+        "prioritas": tk.priority,
+        "fajta": tk.kind,
+        "gep_vonalkod": asset.barcode if asset else "",
+        "gep_nev": asset_label or "",
+        "partner_nev": partner_label or "",
+        "bejelento": actor.display_name,
+    })
     return _out(tk)
 
 
@@ -471,9 +484,11 @@ async def update_ticket(
             ).scalar_one_or_none()
             if asset is not None and (asset.counter or 0) < body.counter_at_service:
                 asset.counter = body.counter_at_service
+    became_done = False
     if body.status is not None:
         if body.status not in STATUSES:
             raise HTTPException(status_code=422, detail={"code": "service.bad_status"})
+        became_done = body.status == "done" and tk.status != "done"
         tk.status = body.status
         tk.resolved_at = datetime.now(UTC) if body.status in ("done", "cancelled") else None
 
@@ -482,6 +497,21 @@ async def update_ticket(
         entity_id=tk.ticket_no, request=request,
     )
     await db.commit()
+
+    if became_done:
+        from app.services.wfm.automation import fire_event
+
+        parts_cost = sum(
+            (p.get("qty") or 0) * (p.get("unit_price") or 0) for p in (tk.parts or [])
+        )
+        fire_event("ticket.done", {
+            "_partner_id": tk.partner_id,
+            "cim": tk.title,
+            "gep_vonalkod": "",
+            "gep_nev": tk.asset_label or "",
+            "partner_nev": tk.partner_label or "",
+            "koltseg_osszesen": round(parts_cost + (tk.labor_fee or 0)),
+        })
     return _out(tk)
 
 

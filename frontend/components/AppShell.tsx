@@ -58,6 +58,7 @@ const NAV_GROUPS: NavGroup[] = [
     labelKey: "nav.groups.system",
     items: [
       { href: "/import-export", key: "nav.importExport", perm: "import_export" },
+      { href: "/automatizalasok", key: "nav.automation", perm: "admin-only" },
       { href: "/naplo", key: "nav.audit", perm: "admin-only" },
       { href: "/beallitasok", key: "nav.settings", perm: "admin-only" },
     ],
