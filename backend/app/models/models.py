@@ -444,7 +444,11 @@ class Partner(Base):
     """Partner cég, akihez eszközök helyezhetők ki."""
 
     __tablename__ = "partners"
-    __table_args__ = (Index("ix_partners_name", "name"),)
+    __table_args__ = (
+        Index("ix_partners_name", "name"),
+        Index("uq_partners_code", "partner_code", unique=True),
+        Index("uq_partners_portal_token", "portal_token", unique=True),
+    )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     # Rövid, ember-olvasható ügyfél-azonosító (PT-0001) — automatikusan generált.
@@ -518,6 +522,7 @@ class Asset(Base):
     __tablename__ = "assets"
     __table_args__ = (
         UniqueConstraint("barcode", name="uq_assets_barcode"),
+        Index("uq_assets_qr_token", "qr_token", unique=True),
         CheckConstraint(
             "status IN ('in_stock','deployed','maintenance','retired')",
             name="ck_assets_status",
