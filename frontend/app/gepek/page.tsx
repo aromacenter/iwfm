@@ -266,15 +266,6 @@ export default function GepekPage() {
     }
   }
 
-  async function changeStatus(asset: Asset, status: string) {
-    try {
-      await api.patch(`/api/assets/${asset.id}`, { status });
-      loadAssets();
-    } catch (err) {
-      toast(errorMessage(err), "error");
-    }
-  }
-
   async function doDeploy(e: React.FormEvent) {
     e.preventDefault();
     if (!deployFor || !deploy.partner_id) return;

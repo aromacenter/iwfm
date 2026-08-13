@@ -17,10 +17,6 @@ const STORAGE_KEY = "iwfm-lang";
 
 let currentLang: Lang = "hu";
 
-export function getLang(): Lang {
-  return currentLang;
-}
-
 function lookup(dict: Record<string, unknown>, key: string): string | undefined {
   let node: unknown = dict;
   for (const part of key.split(".")) {
