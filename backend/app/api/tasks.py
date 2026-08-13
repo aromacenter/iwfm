@@ -438,19 +438,6 @@ async def delete_task(
     return {"ok": True}
 
 
-@router.post("/{task_id}/comment", response_model=TaskOut)
-async def manager_comment(
-    task_id: str,
-    body: CommentBody,
-    db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("tasks")),
-):
-    task = await _get_task_or_404(db, task_id)
-    db.add(TaskComment(task_id=task.id, author_user_id=actor.id, text=body.text.strip()))
-    await db.commit()
-    return (await _tasks_out(db, [task]))[0]
-
-
 STATUS_LABELS_HU = {
     "open": "Nyitott",
     "done": "Befejezett",

@@ -10,7 +10,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,33 +101,3 @@ async def update_order(
     return _out(o)
 
 
-class BulkDeleteBody(BaseModel):
-    ids: list[str] = Field(min_length=1, max_length=1000)
-
-
-@router.post("/bulk-delete")
-async def bulk_delete_orders(
-    body: BulkDeleteBody,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("delete")),
-):
-    deleted = 0
-    for raw in body.ids:
-        try:
-            oid = uuid.UUID(raw)
-        except ValueError:
-            continue
-        o = (
-            await db.execute(select(ProductOrder).where(ProductOrder.id == oid))
-        ).scalar_one_or_none()
-        if o is None:
-            continue
-        await db.delete(o)
-        deleted += 1
-    await record_audit(
-        db, actor=actor, action="order.bulk_delete", entity_type="product_order",
-        detail={"deleted": deleted}, request=request,
-    )
-    await db.commit()
-    return {"deleted": deleted, "blocked": []}
