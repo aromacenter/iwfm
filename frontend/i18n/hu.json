@@ -17,7 +17,9 @@
   "route": {
     "allCities": "Minden település",
     "open": "Útvonal megnyitása ({count})",
-    "hint": "Jelöld ki a megállókat (max 10), és nyisd meg a Google Mapsben.",
+    "hint": "Jelöld ki a megállókat (max 10) — a sorrendjük mindegy, az útvonalat a leghatékonyabb sorrendbe rendezzük.",
+    "optimized": "Útvonal optimalizálva: {km} km (légvonalban).",
+    "optimizedSaved": "Útvonal optimalizálva: {km} km — {saved} km-rel rövidebb, mint a kijelölés sorrendje.",
     "addStop": "Hozzáadás az útvonalhoz",
     "forecast": "Előrejelzés",
     "daysLeft": "~{days} nap múlva fogy ki",

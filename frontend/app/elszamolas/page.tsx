@@ -323,12 +323,39 @@ export default function ElszamolasPage() {
     });
   }
 
-  function openRoute() {
-    const stops = due
-      .filter((d) => routeSelected.has(d.partner_id) && d.address)
-      .map((d) => encodeURIComponent(d.address as string));
-    if (!stops.length) return;
-    window.open(`https://www.google.com/maps/dir/${stops.join("/")}`, "_blank");
+  async function openRoute() {
+    const selected = due.filter((d) => routeSelected.has(d.partner_id) && d.address);
+    if (!selected.length) return;
+    let addresses = selected.map((d) => d.address as string);
+    if (selected.length >= 2) {
+      // Hatékonyság: a megállók legrövidebb sorrendjét a szerver számolja
+      // (offline koordináta-adatból, 10 megállóig egzakt megoldással).
+      try {
+        const res = await api.post<{
+          stops: { partner_id: string; address: string | null; located: boolean }[];
+          total_km: number | null;
+          original_km: number | null;
+        }>("/api/geo/optimize-route", { partner_ids: selected.map((d) => d.partner_id) });
+        addresses = res.stops
+          .map((s) => s.address)
+          .filter((a): a is string => !!a);
+        if (res.total_km !== null && res.original_km !== null) {
+          const saved = Math.max(Math.round(res.original_km - res.total_km), 0);
+          toast(
+            saved > 0
+              ? t("route.optimizedSaved", { km: res.total_km, saved })
+              : t("route.optimized", { km: res.total_km }),
+            "success",
+          );
+        }
+      } catch {
+        // koordináta-adat híján az eredeti sorrend megy
+      }
+    }
+    window.open(
+      `https://www.google.com/maps/dir/${addresses.map(encodeURIComponent).join("/")}`,
+      "_blank",
+    );
   }
 
   const loadDue = useCallback(() => {

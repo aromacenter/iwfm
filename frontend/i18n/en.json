@@ -17,7 +17,9 @@
   "route": {
     "allCities": "All towns",
     "open": "Open route ({count})",
-    "hint": "Select stops (max 10) and open them in Google Maps.",
+    "hint": "Select stops (max 10) — order doesn't matter, the route is arranged into the most efficient sequence.",
+    "optimized": "Route optimized: {km} km (as the crow flies).",
+    "optimizedSaved": "Route optimized: {km} km — {saved} km shorter than the selection order.",
     "addStop": "Add to route",
     "forecast": "Forecast",
     "daysLeft": "runs out in ~{days} days",
