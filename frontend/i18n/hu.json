@@ -289,6 +289,8 @@
     "allProductsGroup": "Minden termék",
     "addProduct": "+ Termék hozzáadása",
     "stockRowDeleteConfirm": "Törlöd a(z) {product} készlet-sorát ennél a partnernél? A könyv szerinti {qty} {unit} kivezetésre kerül.",
+    "prevSettlementAt": "Előző: {date}",
+    "prevSettlementFirst": "Első elszámolás",
     "stockRowDeleted": "Készlet-sor törölve.",
     "addProductChoose": "— termék felvétele a leltárba —",
     "addProductHint": "Készlet-sor nélküli partnernél is: a felvett termékre leltár, számláló és átadott mennyiség rögzíthető.",

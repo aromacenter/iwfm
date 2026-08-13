@@ -289,6 +289,8 @@
     "allProductsGroup": "All products",
     "addProduct": "+ Add product",
     "stockRowDeleteConfirm": "Delete the {product} stock row for this partner? The recorded {qty} {unit} will be written off.",
+    "prevSettlementAt": "Previous: {date}",
+    "prevSettlementFirst": "First settlement",
     "stockRowDeleted": "Stock row deleted.",
     "addProductChoose": "— add product to inventory —",
     "addProductHint": "Works without existing stock too: record inventory, counter and handed-over quantity for the added product.",

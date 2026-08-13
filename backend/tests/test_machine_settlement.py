@@ -256,6 +256,46 @@ async def test_debt_carryover_and_handover(client, manager):
     assert abs(ctx2["debt"]) < 1  # rendezve
 
 
+async def test_previous_settlement_visible(client, manager):
+    """A listában minden elszámolásnál látszik az előző elszámolás időpontja."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = await _partner(client, mgr, "Időszakos Bolt")
+    product = await make_product(client, mgr)
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 2.0},
+        headers=mgr,
+    )
+    first = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [{"product_id": product["id"], "physical_qty": 1.5}]},
+        headers=mgr,
+    )
+    assert first.status_code == 201
+    second = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [{"product_id": product["id"], "physical_qty": 1.0}]},
+        headers=mgr,
+    )
+    assert second.status_code == 201
+
+    lst = (
+        await client.get(f"/api/settlements?partner_id={partner['id']}", headers=mgr)
+    ).json()
+    assert len(lst) == 2
+    # legújabb elöl: annak az előzője az első elszámolás időpontja
+    assert lst[0]["previous_at"] == lst[1]["created_at"]
+    assert lst[1]["previous_at"] is None
+
+    # egyedi lekérésen is
+    detail = (await client.get(f"/api/settlements/{lst[0]['id']}", headers=mgr)).json()
+    assert detail["previous_at"] == lst[1]["created_at"]
+
+
 async def test_delete_stock_row(client, manager):
     """Készlet-sor törlése: a mennyiség kivezetésre kerül (remove mozgás)."""
     from tests.test_consignment import make_product

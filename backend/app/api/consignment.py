@@ -14,7 +14,14 @@ from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import delete as sa_delete, func as sa_func, select, update as sa_update
+from sqlalchemy import (
+    DateTime,
+    delete as sa_delete,
+    func as sa_func,
+    select,
+    type_coerce,
+    update as sa_update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_perm
@@ -750,6 +757,7 @@ class SettlementOut(BaseModel):
     paid_at: datetime | None = None
     debt_before: float | None = None  # nyitott egyenleg az elszámolás előtt
     paid_amount: float | None = None  # a helyszínen fizetett bruttó összeg
+    previous_at: datetime | None = None  # a partner ELŐZŐ elszámolása (időszak-kezdet)
     note: str | None
     created_at: datetime
     lines: list[SettlementLineOut] | None = None
@@ -991,6 +999,21 @@ async def apply_contract_lines(
             added_gross += _money(amount * vat_mult)
 
     return _money(added_net), _money(added_gross)
+
+
+async def _previous_settlement_at(
+    db: AsyncSession, s: Settlement
+) -> datetime | None:
+    """A partner megelőző elszámolásának időpontja (az időszak kezdete)."""
+    return (
+        await db.execute(
+            select(sa_func.max(Settlement.created_at)).where(
+                Settlement.partner_id == s.partner_id,
+                Settlement.created_at < s.created_at,
+                Settlement.id != s.id,
+            )
+        )
+    ).scalar_one_or_none()
 
 
 async def _get_settlement_or_404(db: AsyncSession, settlement_id: str) -> Settlement:
@@ -1372,9 +1395,24 @@ async def list_settlements(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("settlements")),
 ):
+    # Az előző elszámolás időpontja partnerenként (időszak-kezdet) — a teljes
+    # állományon számolt ablak-függvény, hogy a szűrők ne csonkolják.
+    prev_sub = (
+        select(
+            Settlement.id.label("sid"),
+            type_coerce(
+                sa_func.lag(Settlement.created_at).over(
+                    partition_by=Settlement.partner_id,
+                    order_by=Settlement.created_at,
+                ),
+                DateTime(timezone=True),
+            ).label("prev_at"),
+        )
+    ).subquery()
     query = (
-        select(Settlement, Partner.name)
+        select(Settlement, Partner.name, prev_sub.c.prev_at)
         .join(Partner, Partner.id == Settlement.partner_id)
+        .join(prev_sub, prev_sub.c.sid == Settlement.id)
         .order_by(Settlement.created_at.desc())
     )
     if company:
@@ -1397,7 +1435,12 @@ async def list_settlements(
         query = query.where(Settlement.created_at <= datetime.combine(date_to, datetime.max.time()))
 
     rows = (await db.execute(query.limit(1000))).all()
-    return [_settlement_out(s, name) for s, name in rows]
+    out = []
+    for s, name, prev_at in rows:
+        item = _settlement_out(s, name)
+        item.previous_at = prev_at
+        out.append(item)
+    return out
 
 
 @settlements_router.post("/bulk-delete")
@@ -1881,6 +1924,7 @@ async def get_settlement(
         await db.execute(select(Partner.name).where(Partner.id == s.partner_id))
     ).scalar_one_or_none()
     out = _settlement_out(s, partner)
+    out.previous_at = await _previous_settlement_at(db, s)
     out.lines = [
         _line_out(line)
         for line in (
@@ -1996,11 +2040,13 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes,
             "logo_bytes": bytes(branding.logo_data) if branding.logo_data else None,
         }
 
+    previous_at = await _previous_settlement_at(db, s)
     receipt_no = _receipt_no(s)
     pdf = build_settlement_pdf(
         {
             "receipt_no": receipt_no,
             "created_at": f"{s.created_at:%Y-%m-%d %H:%M}",
+            "previous_at": f"{previous_at:%Y-%m-%d %H:%M}" if previous_at else None,
             "partner_name": partner.name if partner else "—",
             "partner_code": partner.partner_code if partner else None,
             "partner_address": partner.address if partner else None,

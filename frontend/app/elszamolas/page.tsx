@@ -66,6 +66,7 @@ interface Settlement {
   receipt_sent_at: string | null;
   debt_before: number | null;
   paid_amount: number | null;
+  previous_at: string | null;
   created_at: string;
 }
 
@@ -1447,7 +1448,14 @@ export default function ElszamolasPage() {
                   />
                 </td>
                 )}
-                <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {fmt(s.created_at)}
+                  <div className="text-xs text-slate-400">
+                    {s.previous_at
+                      ? t("cons.prevSettlementAt", { date: fmt(s.previous_at) })
+                      : t("cons.prevSettlementFirst")}
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{s.partner_name}</div>
                   <div className="flex items-center gap-1.5 text-xs text-slate-400">

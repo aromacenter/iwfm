@@ -122,6 +122,8 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
 
     # ─── Elszámolás adatai ───
     section("Elszámolás")
+    if data.get("previous_at"):
+        line("Előző elszámolás:", data["previous_at"])
     line("Elszámolást végezte:", data.get("settled_by_name", ""))
     line("Fizetési mód:", PAYMENT_LABELS.get(data.get("payment_method", ""), data.get("payment_method", "")))
     if data.get("invoiced"):
