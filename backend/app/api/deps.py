@@ -25,7 +25,6 @@ ROLE_ORDER = {"employee": 0, "szervizes": 0, "uzletkoto": 0, "manager": 1, "admi
 # Az admin mindig mindent tehet. A többi szerepkör jogait a permission_settings
 # mátrix adja (Beállítások → Jogosultságok); hiányzó szerepkörre a DEFAULT.
 
-ROLES = ("admin", "manager", "uzletkoto", "szervizes", "employee")
 CONFIGURABLE_ROLES = ("manager", "uzletkoto", "szervizes", "employee")
 
 FEATURES = (

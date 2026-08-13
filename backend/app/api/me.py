@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import set_session_cookie
 from app.api.deps import get_current_user, get_own_employee, record_audit
 from app.api.shifts import ShiftOut, _shift_out, _week_bounds
-from app.api.timeclock import EntryOut, to_out as entry_out
+from app.api.timeclock import to_out as entry_out
 from app.api.timeoff import TimeOffOut, ensure_no_overlap, to_out as timeoff_out, validate_range
 from app.core.security import hash_password, mint_token, verify_password
 from app.db import get_db

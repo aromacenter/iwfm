@@ -1,11 +1,10 @@
 """Automatikus tudásbázis-bővítés új gépekhez.
 
 Amikor új gép kerül a nyilvántartásba (kézzel vagy importból), a háttérben
-ellenőrizzük, hogy a gyártó+típus szerepel-e már a támogatási tudásbázisban.
-Ha nem, az AI-val legeneráljuk a hibakód/kijelző-üzenet szekciókat a QR-oldali
-chat formátumában ("## <Gép> — <kód>" címsorok), és hozzáfűzzük a
-tudásbázishoz. A generált blokk elé rejtett marker kerül, így ugyanahhoz a
-géptípushoz nem generálunk kétszer.
+ellenőrizzük, hogy a gyártó+típushoz van-e már AI-generált bejegyzés a
+strukturált tudásbázisban (knowledge_entries tábla). Ha nincs, az AI-val
+legeneráljuk a hibakód/kijelző-üzenet bejegyzéseket — kereshetően, gépre
+szűrhetően.
 
 A művelet best-effort: AI-kulcs híján vagy hiba esetén csendben kimarad —
 a gép-rögzítést soha nem akadályozza.
@@ -23,8 +22,6 @@ from app.services.wfm import ai_service
 
 logger = logging.getLogger(__name__)
 
-_MAX_KB_CHARS = 400_000  # e fölött nem bővítünk automatikusan
-
 
 def machine_label(manufacturer: str | None, name: str | None) -> str:
     """„Jura" + „Jura X8 Professional" → „Jura X8 Professional" (nincs duplázás)."""
@@ -37,31 +34,6 @@ def machine_label(manufacturer: str | None, name: str | None) -> str:
     if name.lower().startswith(manufacturer.lower()):
         return name
     return f"{manufacturer} {name}"
-
-
-def _marker(label: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
-    return f"<!-- kb-auto: {slug} -->"
-
-
-def has_section_for(kb: str, manufacturer: str | None, name: str | None) -> bool:
-    """Van-e már „## " címsor, amely lefedi ezt a gyártót/típust?
-
-    Gyártóval: a címsornak a gyártót kell tartalmaznia. Gyártó nélkül a típus
-    első értelmes szavát keressük."""
-    terms: list[str] = []
-    if manufacturer and len(manufacturer.strip()) >= 3:
-        terms.append(manufacturer.strip().lower())
-    else:
-        terms.extend(w.lower() for w in (name or "").split() if len(w) >= 3)
-    if not terms:
-        return True  # nincs mi alapján generálni
-    for line in kb.splitlines():
-        if line.startswith("## "):
-            head = line[3:].lower()
-            if any(term in head for term in terms):
-                return True
-    return False
 
 
 def _build_prompt(label: str) -> str:

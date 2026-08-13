@@ -1,6 +1,6 @@
 """Scheduling: CRUD, compliance preview, publish gating, 96h modify rule."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 from tests.conftest import make_employee_record, make_user
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 
 from openpyxl import Workbook
 from openpyxl.styles import Font

@@ -37,9 +37,8 @@ async def test_qr_label_and_public_info(client, manager):
     _, mgr = manager
     asset, token = await _asset_with_token(client, mgr)
 
-    # a token stabil: újra kérve ugyanaz marad
+    # a token stabil: újra kérve ugyanaz marad (lásd lenti info-hívás)
     await client.get(f"/api/assets/{asset['id']}/qr-label", headers=mgr)
-    _asset2, token2 = asset, token  # (nem generálódik újra — lásd lenti info-hívás)
 
     info = await client.get(f"/api/support/{token}")
     assert info.status_code == 200, info.text

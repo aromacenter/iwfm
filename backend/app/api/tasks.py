@@ -23,7 +23,6 @@ from app.api.deps import (
     get_own_employee,
     record_audit,
     require_perm,
-    require_perm,
 )
 from app.db import get_db
 from app.models import (

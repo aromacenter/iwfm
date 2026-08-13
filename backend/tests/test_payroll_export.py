@@ -12,8 +12,6 @@ from tests.conftest import (
     gen_bank_account,
     gen_tax_id,
     gen_taj,
-    make_employee_record,
-    make_user,
 )
 
 

@@ -6,10 +6,8 @@ schema (file-based SQLite in a pytest tmp dir).
 
 from __future__ import annotations
 
-import os
 import uuid
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 

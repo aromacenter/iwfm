@@ -1,6 +1,5 @@
 """Tudásbázis: kézi bejegyzések CRUD + auto-KB generálás új gépeknél."""
 
-import pytest
 
 from tests.test_service import make_asset
 
