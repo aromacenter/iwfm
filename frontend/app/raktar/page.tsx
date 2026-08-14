@@ -9,6 +9,7 @@ import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
 
 interface Warehouse {
@@ -105,7 +106,8 @@ const PO_CHIP: Record<PO["status"], string> = {
 
 export default function RaktarPage() {
   const { t } = useT();
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
+  const canDelete = usePerms().can("delete");
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [stock, setStock] = useState<WhStock[]>([]);
@@ -169,6 +171,18 @@ export default function RaktarPage() {
       setError(errorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function deleteWarehouse(w: Warehouse) {
+    if (!(await confirm(t("wh.deleteConfirm", { name: w.name })))) return;
+    try {
+      await api.delete(`/api/warehouses/${w.id}`);
+      toast(t("wh.deleted"), "success");
+      if (selectedId === w.id) setSelectedId(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -379,16 +393,27 @@ export default function RaktarPage() {
           >
             <div className="flex items-center justify-between">
               <span className="font-semibold">{w.kind === "van" ? "🚐" : "🏬"} {w.name}</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setError(null);
-                  setWhForm({ id: w.id, name: w.name, kind: w.kind, user_id: w.user_id ?? "", notes: w.notes ?? "", is_active: w.is_active });
-                }}
-                title={t("common.edit")}
-                className="cursor-pointer rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-100"
-              >
-                ✏️
+              <span className="flex gap-1">
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setError(null);
+                    setWhForm({ id: w.id, name: w.name, kind: w.kind, user_id: w.user_id ?? "", notes: w.notes ?? "", is_active: w.is_active });
+                  }}
+                  title={t("common.edit")}
+                  className="cursor-pointer rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-100"
+                >
+                  ✏️
+                </span>
+                {canDelete && (
+                  <span
+                    onClick={(e) => { e.stopPropagation(); deleteWarehouse(w); }}
+                    title={t("wh.delete")}
+                    className="cursor-pointer rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-red-50"
+                  >
+                    🗑️
+                  </span>
+                )}
               </span>
             </div>
             <div className="mt-1 text-xs text-slate-500">

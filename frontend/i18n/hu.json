@@ -1284,7 +1284,9 @@
     "po.line_not_found": "A rendelés-tétel nem található.",
     "po.no_warehouse": "A rendeléshez nincs cél-raktár beállítva.",
     "warehouse.product_exists": "Ez a termék már hozzá van rendelve a raktárhoz.",
-    "warehouse.stock_not_empty": "Csak üres készletű termék vehető le a raktárról — előbb leltározd 0-ra vagy add ki."
+    "warehouse.stock_not_empty": "Csak üres készletű termék vehető le a raktárról — előbb leltározd 0-ra vagy add ki.",
+    "warehouse.has_stock": "A raktár nem törölhető, amíg készlet van benne — előbb helyezd át vagy leltározd 0-ra.",
+    "warehouse.has_open_orders": "A raktár nem törölhető, amíg nyitott beszerzési rendelés céloz rá — előbb érkeztesd be vagy mondd le."
   },
   "inv": {
     "title": "Gépek",
@@ -1409,7 +1411,10 @@
     "when": "Mikor",
     "who": "Ki",
     "counterparty": "Honnan / hová",
-    "noMovements": "Nincs mozgás a szűrésnek megfelelően."
+    "noMovements": "Nincs mozgás a szűrésnek megfelelően.",
+    "delete": "Törlés",
+    "deleteConfirm": "Biztosan törlöd a(z) „{name}” raktárat? A mozgástörténete is törlődik — az audit-napló megmarad.",
+    "deleted": "Raktár törölve."
   },
   "po": {
     "title": "Beszerzési rendelések",

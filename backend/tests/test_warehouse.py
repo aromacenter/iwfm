@@ -191,6 +191,54 @@ async def test_movements_log_who_what_when(client, manager):
     assert by_action["transfer_out"]["counterparty"] == "Autó 1"
 
 
+async def test_delete_warehouse_guards(client, admin, manager):
+    """Törlés: készlettel vagy nyitott rendeléssel tiltva; üresen (adminnak)
+    megy, a mozgástörténetével együtt."""
+    _, adm = admin
+    _, mgr = manager
+    product = await _make_product(client, mgr)
+    site = await _make_warehouse(client, mgr, "Törlendő", "site")
+    van = await _make_warehouse(client, mgr, "Törlendő Autó", "van")
+
+    # manager (nincs delete perm) nem törölhet
+    res = await client.delete(f"/api/warehouses/{van['id']}", headers=mgr)
+    assert res.status_code == 403
+
+    # készlettel tiltva
+    await client.post(
+        f"/api/warehouses/{site['id']}/receive",
+        json={"product_id": product["id"], "quantity": 3.0}, headers=mgr,
+    )
+    res = await client.delete(f"/api/warehouses/{site['id']}", headers=adm)
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "warehouse.has_stock"
+
+    # nyitott beszerzési rendeléssel tiltva
+    res = await client.post(
+        "/api/purchase-orders",
+        json={"warehouse_id": van["id"],
+              "lines": [{"product_id": product["id"], "quantity": 5.0}]},
+        headers=mgr,
+    )
+    po = res.json()
+    res = await client.delete(f"/api/warehouses/{van['id']}", headers=adm)
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "warehouse.has_open_orders"
+
+    # lemondás + kiürítés után törölhető
+    await client.post(f"/api/purchase-orders/{po['id']}/cancel", json={}, headers=mgr)
+    res = await client.delete(f"/api/warehouses/{van['id']}", headers=adm)
+    assert res.status_code == 200, res.text
+    await client.post(
+        f"/api/warehouses/{site['id']}/adjust",
+        json={"product_id": product["id"], "counted_qty": 0}, headers=mgr,
+    )
+    res = await client.delete(f"/api/warehouses/{site['id']}", headers=adm)
+    assert res.status_code == 200, res.text
+    res = await client.get("/api/warehouses", headers=mgr)
+    assert res.json() == []
+
+
 async def test_assignable_users(client, manager):
     _, mgr = manager
     res = await client.get("/api/warehouses/assignable-users", headers=mgr)

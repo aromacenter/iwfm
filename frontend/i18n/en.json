@@ -1284,7 +1284,9 @@
     "po.line_not_found": "Order line not found.",
     "po.no_warehouse": "The order has no target warehouse.",
     "warehouse.product_exists": "This product is already assigned to the warehouse.",
-    "warehouse.stock_not_empty": "Only products with empty stock can be removed — count it to 0 or issue it first."
+    "warehouse.stock_not_empty": "Only products with empty stock can be removed — count it to 0 or issue it first.",
+    "warehouse.has_stock": "The warehouse cannot be deleted while it holds stock — transfer it or count it to 0 first.",
+    "warehouse.has_open_orders": "The warehouse cannot be deleted while an open purchase order targets it — receive or cancel it first."
   },
   "inv": {
     "title": "Machines",
@@ -1409,7 +1411,10 @@
     "when": "When",
     "who": "Who",
     "counterparty": "From / to",
-    "noMovements": "No movements match the filter."
+    "noMovements": "No movements match the filter.",
+    "delete": "Delete",
+    "deleteConfirm": "Delete warehouse “{name}”? Its movement history is removed too — the audit log is kept.",
+    "deleted": "Warehouse deleted."
   },
   "po": {
     "title": "Purchase orders",

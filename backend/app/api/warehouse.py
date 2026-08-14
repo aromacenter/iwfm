@@ -211,6 +211,60 @@ async def update_warehouse(
     return await _warehouse_out(db, wh)
 
 
+@router.delete("/{warehouse_id}")
+async def delete_warehouse(
+    warehouse_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("delete")),
+):
+    """Raktár/autó törlése. Védőkorlátok: nem üres készlettel vagy nyitott
+    (piszkozat/megrendelt) beszerzési rendeléssel nem törölhető. A mozgás-
+    történet a raktárral együtt törlődik (az audit-napló megmarad)."""
+    wh = await _get_warehouse_or_404(db, warehouse_id)
+    nonzero = [
+        s for s in (
+            await db.execute(
+                select(WarehouseStock).where(WarehouseStock.warehouse_id == wh.id)
+            )
+        ).scalars()
+        if abs(s.quantity) > 1e-9
+    ]
+    if nonzero:
+        raise HTTPException(status_code=422, detail={"code": "warehouse.has_stock"})
+    open_pos = (
+        await db.execute(
+            select(PurchaseOrder).where(
+                PurchaseOrder.warehouse_id == wh.id,
+                PurchaseOrder.status.in_(("draft", "ordered")),
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    if open_pos is not None:
+        raise HTTPException(status_code=422, detail={"code": "warehouse.has_open_orders"})
+    await record_audit(
+        db, actor=actor, action="warehouse.delete", entity_type="warehouse",
+        entity_id=str(wh.id), detail={"name": wh.name, "kind": wh.kind}, request=request,
+    )
+    # Gyerek-sorok explicit takarítása (SQLite-on nincs DB-szintű cascade).
+    from sqlalchemy import delete as sa_delete, update as sa_update
+
+    await db.execute(
+        sa_delete(WarehouseMovement).where(WarehouseMovement.warehouse_id == wh.id)
+    )
+    await db.execute(
+        sa_delete(WarehouseStock).where(WarehouseStock.warehouse_id == wh.id)
+    )
+    await db.execute(
+        sa_update(PurchaseOrder)
+        .where(PurchaseOrder.warehouse_id == wh.id)
+        .values(warehouse_id=None)
+    )
+    await db.delete(wh)
+    await db.commit()
+    return {"ok": True}
+
+
 class WarehouseStockOut(BaseModel):
     product_id: str
     product_name: str

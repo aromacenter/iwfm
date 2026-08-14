@@ -20,10 +20,24 @@ let currentLang: Lang = "hu";
 function lookup(dict: Record<string, unknown>, key: string): string | undefined {
   let node: unknown = dict;
   for (const part of key.split(".")) {
-    if (typeof node !== "object" || node === null) return undefined;
+    if (typeof node !== "object" || node === null) {
+      node = undefined;
+      break;
+    }
     node = (node as Record<string, unknown>)[part];
   }
-  return typeof node === "string" ? node : undefined;
+  if (typeof node === "string") return node;
+  // Lapos, pontot tartalmazó levél-kulcsok egy szekción belül —
+  // pl. errors["warehouse.has_stock"] az "errors.warehouse.has_stock"-hoz.
+  const dot = key.indexOf(".");
+  if (dot > 0) {
+    const section = dict[key.slice(0, dot)];
+    if (typeof section === "object" && section !== null) {
+      const flat = (section as Record<string, unknown>)[key.slice(dot + 1)];
+      if (typeof flat === "string") return flat;
+    }
+  }
+  return undefined;
 }
 
 /** Fordítás a jelenlegi nyelven; hiányzó kulcsnál magyar fallback, majd a kulcs. */
