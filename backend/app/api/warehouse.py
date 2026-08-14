@@ -1,0 +1,704 @@
+"""Raktárlánc: telephelyi és autó-raktárak készlete + beszerzési rendelések.
+
+Áruút: beszerzési rendelés (szállító = Partner, type supplier/both) →
+beérkeztetés a telephelyi raktárba → áthelyezés az üzletkötő autójára →
+kiadás a partner külső raktárába (a partner-feltöltés vonja a forrás-raktárt).
+Minden mozgás append-only a warehouse_movements táblában.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import record_audit, require_perm
+from app.db import get_db
+from app.models import (
+    Partner,
+    Product,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    User,
+    Warehouse,
+    WarehouseMovement,
+    WarehouseStock,
+)
+
+router = APIRouter()
+po_router = APIRouter()
+
+WAREHOUSE_KINDS = ("site", "van")
+
+
+# ─── Segédek ────────────────────────────────────────────────────────────────
+
+
+def _parse_uuid(raw: str, code: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(raw)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": code})
+
+
+async def _get_warehouse_or_404(db: AsyncSession, warehouse_id: str) -> Warehouse:
+    wh = (
+        await db.execute(
+            select(Warehouse).where(Warehouse.id == _parse_uuid(warehouse_id, "warehouse.not_found"))
+        )
+    ).scalar_one_or_none()
+    if wh is None:
+        raise HTTPException(status_code=404, detail={"code": "warehouse.not_found"})
+    return wh
+
+
+async def _get_product_or_404(db: AsyncSession, product_id: str) -> Product:
+    product = (
+        await db.execute(
+            select(Product).where(Product.id == _parse_uuid(product_id, "product.not_found"))
+        )
+    ).scalar_one_or_none()
+    if product is None:
+        raise HTTPException(status_code=404, detail={"code": "product.not_found"})
+    return product
+
+
+async def _stock_row(
+    db: AsyncSession, warehouse_id: uuid.UUID, product_id: uuid.UUID
+) -> WarehouseStock:
+    row = (
+        await db.execute(
+            select(WarehouseStock).where(
+                WarehouseStock.warehouse_id == warehouse_id,
+                WarehouseStock.product_id == product_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = WarehouseStock(warehouse_id=warehouse_id, product_id=product_id, quantity=0.0)
+        db.add(row)
+        await db.flush()
+    return row
+
+
+async def warehouse_issue(
+    db: AsyncSession,
+    *,
+    warehouse_id: uuid.UUID,
+    product: Product,
+    quantity: float,
+    partner_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
+) -> None:
+    """Kiadás egy raktárból partner-feltöltéshez. 422, ha nincs elég készlet.
+    A consignment.replenish hívja, amikor forrás-raktár van megadva."""
+    stock = await _stock_row(db, warehouse_id, product.id)
+    if stock.quantity + 1e-9 < quantity:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "warehouse.insufficient_stock", "available": stock.quantity},
+        )
+    stock.quantity -= quantity
+    db.add(WarehouseMovement(
+        warehouse_id=warehouse_id, product_id=product.id, action="issue",
+        quantity_delta=-quantity, ref_id=partner_id, actor_user_id=actor_id,
+    ))
+
+
+# ─── Raktárak ───────────────────────────────────────────────────────────────
+
+
+class WarehouseBody(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    kind: str = Field(default="site")
+    user_id: str | None = None  # autónál: az üzletkötő
+    notes: str | None = None
+    is_active: bool = True
+
+    @field_validator("kind")
+    @classmethod
+    def _check_kind(cls, v: str) -> str:
+        if v not in WAREHOUSE_KINDS:
+            raise ValueError("warehouse.bad_kind")
+        return v
+
+
+class WarehouseOut(BaseModel):
+    id: str
+    name: str
+    kind: str
+    user_id: str | None
+    user_name: str | None
+    notes: str | None
+    is_active: bool
+    product_count: int
+    total_quantity: float
+
+
+async def _warehouse_out(db: AsyncSession, wh: Warehouse) -> WarehouseOut:
+    rows = (
+        await db.execute(
+            select(WarehouseStock).where(WarehouseStock.warehouse_id == wh.id)
+        )
+    ).scalars().all()
+    user_name = None
+    if wh.user_id is not None:
+        u = (await db.execute(select(User).where(User.id == wh.user_id))).scalar_one_or_none()
+        user_name = u.display_name if u else None
+    nonzero = [r for r in rows if abs(r.quantity) > 1e-9]
+    return WarehouseOut(
+        id=str(wh.id), name=wh.name, kind=wh.kind,
+        user_id=str(wh.user_id) if wh.user_id else None, user_name=user_name,
+        notes=wh.notes, is_active=wh.is_active,
+        product_count=len(nonzero),
+        total_quantity=round(sum(r.quantity for r in rows), 2),
+    )
+
+
+@router.get("", response_model=list[WarehouseOut])
+async def list_warehouses(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    rows = (
+        await db.execute(select(Warehouse).order_by(Warehouse.kind, Warehouse.name))
+    ).scalars().all()
+    return [await _warehouse_out(db, wh) for wh in rows]
+
+
+@router.post("", response_model=WarehouseOut, status_code=201)
+async def create_warehouse(
+    body: WarehouseBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    data = body.model_dump()
+    data["user_id"] = _parse_uuid(body.user_id, "user.not_found") if body.user_id else None
+    wh = Warehouse(**data)
+    db.add(wh)
+    await db.flush()
+    await record_audit(
+        db, actor=actor, action="warehouse.create", entity_type="warehouse",
+        entity_id=str(wh.id), detail={"name": wh.name, "kind": wh.kind}, request=request,
+    )
+    await db.commit()
+    return await _warehouse_out(db, wh)
+
+
+@router.patch("/{warehouse_id}", response_model=WarehouseOut)
+async def update_warehouse(
+    warehouse_id: str,
+    body: WarehouseBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    wh = await _get_warehouse_or_404(db, warehouse_id)
+    data = body.model_dump()
+    data["user_id"] = _parse_uuid(body.user_id, "user.not_found") if body.user_id else None
+    for key, value in data.items():
+        setattr(wh, key, value)
+    await record_audit(
+        db, actor=actor, action="warehouse.update", entity_type="warehouse",
+        entity_id=str(wh.id), request=request,
+    )
+    await db.commit()
+    return await _warehouse_out(db, wh)
+
+
+class WarehouseStockOut(BaseModel):
+    product_id: str
+    product_name: str
+    unit: str
+    quantity: float
+    min_quantity: float | None
+
+
+@router.get("/{warehouse_id}/stock", response_model=list[WarehouseStockOut])
+async def warehouse_stock(
+    warehouse_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    wh = await _get_warehouse_or_404(db, warehouse_id)
+    rows = (
+        await db.execute(
+            select(WarehouseStock, Product)
+            .join(Product, Product.id == WarehouseStock.product_id)
+            .where(WarehouseStock.warehouse_id == wh.id)
+            .order_by(Product.name)
+        )
+    ).all()
+    return [
+        WarehouseStockOut(
+            product_id=str(p.id), product_name=p.name, unit=p.unit,
+            quantity=round(s.quantity, 2), min_quantity=s.min_quantity,
+        )
+        for s, p in rows
+    ]
+
+
+class ReceiveBody(BaseModel):
+    product_id: str
+    quantity: float = Field(gt=0, le=100_000)
+    unit_cost: float | None = Field(default=None, ge=0)  # Ft/egység, nettó
+    note: str | None = Field(default=None, max_length=512)
+
+
+@router.post("/{warehouse_id}/receive", response_model=WarehouseStockOut)
+async def receive_stock(
+    warehouse_id: str,
+    body: ReceiveBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Közvetlen bevételezés a raktárba (beszerzési rendelés nélkül)."""
+    wh = await _get_warehouse_or_404(db, warehouse_id)
+    product = await _get_product_or_404(db, body.product_id)
+    stock = await _stock_row(db, wh.id, product.id)
+    stock.quantity += body.quantity
+    db.add(WarehouseMovement(
+        warehouse_id=wh.id, product_id=product.id, action="receive",
+        quantity_delta=body.quantity, unit_cost=body.unit_cost,
+        note=body.note, actor_user_id=actor.id,
+    ))
+    if body.unit_cost is not None:
+        product.purchase_price = body.unit_cost
+    await record_audit(
+        db, actor=actor, action="warehouse.receive", entity_type="warehouse",
+        entity_id=str(wh.id),
+        detail={"product": product.name, "qty": body.quantity, "unit_cost": body.unit_cost},
+        request=request,
+    )
+    await db.commit()
+    return WarehouseStockOut(
+        product_id=str(product.id), product_name=product.name, unit=product.unit,
+        quantity=round(stock.quantity, 2), min_quantity=stock.min_quantity,
+    )
+
+
+class TransferBody(BaseModel):
+    from_warehouse_id: str
+    to_warehouse_id: str
+    product_id: str
+    quantity: float = Field(gt=0, le=100_000)
+    note: str | None = Field(default=None, max_length=512)
+
+
+@router.post("/transfer")
+async def transfer_stock(
+    body: TransferBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Áthelyezés raktárak között (tipikusan telephely → autó)."""
+    if body.from_warehouse_id == body.to_warehouse_id:
+        raise HTTPException(status_code=422, detail={"code": "warehouse.same_warehouse"})
+    src = await _get_warehouse_or_404(db, body.from_warehouse_id)
+    dst = await _get_warehouse_or_404(db, body.to_warehouse_id)
+    product = await _get_product_or_404(db, body.product_id)
+
+    src_stock = await _stock_row(db, src.id, product.id)
+    if src_stock.quantity + 1e-9 < body.quantity:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "warehouse.insufficient_stock", "available": src_stock.quantity},
+        )
+    dst_stock = await _stock_row(db, dst.id, product.id)
+    src_stock.quantity -= body.quantity
+    dst_stock.quantity += body.quantity
+    db.add(WarehouseMovement(
+        warehouse_id=src.id, product_id=product.id, action="transfer_out",
+        quantity_delta=-body.quantity, ref_id=dst.id, note=body.note,
+        actor_user_id=actor.id,
+    ))
+    db.add(WarehouseMovement(
+        warehouse_id=dst.id, product_id=product.id, action="transfer_in",
+        quantity_delta=body.quantity, ref_id=src.id, note=body.note,
+        actor_user_id=actor.id,
+    ))
+    await record_audit(
+        db, actor=actor, action="warehouse.transfer", entity_type="warehouse",
+        entity_id=str(src.id),
+        detail={"to": dst.name, "product": product.name, "qty": body.quantity},
+        request=request,
+    )
+    await db.commit()
+    return {
+        "ok": True,
+        "from_quantity": round(src_stock.quantity, 2),
+        "to_quantity": round(dst_stock.quantity, 2),
+    }
+
+
+class AdjustBody(BaseModel):
+    product_id: str
+    counted_qty: float = Field(ge=0, le=100_000)  # leltár szerinti tényleges
+    min_quantity: float | None = Field(default=None, ge=0)  # küszöb-állítás
+    note: str | None = Field(default=None, max_length=512)
+
+
+@router.post("/{warehouse_id}/adjust", response_model=WarehouseStockOut)
+async def adjust_stock(
+    warehouse_id: str,
+    body: AdjustBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Leltár-korrekció: a készletet a számolt értékre állítja, az eltérés
+    mozgásként rögzül."""
+    wh = await _get_warehouse_or_404(db, warehouse_id)
+    product = await _get_product_or_404(db, body.product_id)
+    stock = await _stock_row(db, wh.id, product.id)
+    delta = body.counted_qty - stock.quantity
+    stock.quantity = body.counted_qty
+    if body.min_quantity is not None:
+        stock.min_quantity = body.min_quantity
+    if abs(delta) > 1e-9:
+        db.add(WarehouseMovement(
+            warehouse_id=wh.id, product_id=product.id, action="adjust",
+            quantity_delta=delta, note=body.note, actor_user_id=actor.id,
+        ))
+    await record_audit(
+        db, actor=actor, action="warehouse.adjust", entity_type="warehouse",
+        entity_id=str(wh.id),
+        detail={"product": product.name, "counted": body.counted_qty, "delta": round(delta, 3)},
+        request=request,
+    )
+    await db.commit()
+    return WarehouseStockOut(
+        product_id=str(product.id), product_name=product.name, unit=product.unit,
+        quantity=round(stock.quantity, 2), min_quantity=stock.min_quantity,
+    )
+
+
+class ReorderSuggestionOut(BaseModel):
+    warehouse_id: str
+    warehouse_name: str
+    product_id: str
+    product_name: str
+    unit: str
+    quantity: float
+    min_quantity: float
+    suggested_qty: float
+
+
+@router.get("/reorder-suggestions", response_model=list[ReorderSuggestionOut])
+async def reorder_suggestions(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """Küszöb alá csökkent raktárkészletek + javasolt rendelési mennyiség
+    (a küszöb kétszereséig való feltöltés)."""
+    rows = (
+        await db.execute(
+            select(WarehouseStock, Warehouse, Product)
+            .join(Warehouse, Warehouse.id == WarehouseStock.warehouse_id)
+            .join(Product, Product.id == WarehouseStock.product_id)
+            .where(
+                WarehouseStock.min_quantity.is_not(None),
+                WarehouseStock.quantity <= WarehouseStock.min_quantity,
+                Warehouse.is_active.is_(True),
+            )
+            .order_by(Warehouse.name, Product.name)
+        )
+    ).all()
+    return [
+        ReorderSuggestionOut(
+            warehouse_id=str(wh.id), warehouse_name=wh.name,
+            product_id=str(p.id), product_name=p.name, unit=p.unit,
+            quantity=round(s.quantity, 2), min_quantity=s.min_quantity,
+            suggested_qty=round(max(s.min_quantity * 2 - s.quantity, 0.0), 1),
+        )
+        for s, wh, p in rows
+    ]
+
+
+# ─── Beszerzési rendelések ──────────────────────────────────────────────────
+
+
+class POLineIn(BaseModel):
+    product_id: str
+    quantity: float = Field(gt=0, le=100_000)
+    unit_cost: float | None = Field(default=None, ge=0)
+
+
+class POCreateBody(BaseModel):
+    supplier_partner_id: str | None = None
+    warehouse_id: str
+    expected_at: str | None = None  # ÉÉÉÉ-HH-NN
+    note: str | None = None
+    lines: list[POLineIn] = Field(min_length=1, max_length=100)
+
+
+class POLineOut(BaseModel):
+    id: str
+    product_id: str
+    product_name: str
+    unit: str
+    quantity: float
+    unit_cost: float | None
+    received_qty: float
+
+
+class POOut(BaseModel):
+    id: str
+    order_no: str
+    supplier_partner_id: str | None
+    supplier_name: str | None
+    warehouse_id: str | None
+    warehouse_name: str | None
+    status: str
+    expected_at: str | None
+    ordered_at: datetime | None
+    received_at: datetime | None
+    note: str | None
+    created_at: datetime
+    lines: list[POLineOut]
+
+
+async def _po_out(db: AsyncSession, po: PurchaseOrder) -> POOut:
+    lines = (
+        await db.execute(
+            select(PurchaseOrderLine, Product)
+            .join(Product, Product.id == PurchaseOrderLine.product_id)
+            .where(PurchaseOrderLine.purchase_order_id == po.id)
+            .order_by(Product.name)
+        )
+    ).all()
+    supplier_name = warehouse_name = None
+    if po.supplier_partner_id is not None:
+        s = (
+            await db.execute(select(Partner).where(Partner.id == po.supplier_partner_id))
+        ).scalar_one_or_none()
+        supplier_name = s.name if s else None
+    if po.warehouse_id is not None:
+        w = (
+            await db.execute(select(Warehouse).where(Warehouse.id == po.warehouse_id))
+        ).scalar_one_or_none()
+        warehouse_name = w.name if w else None
+    return POOut(
+        id=str(po.id), order_no=po.order_no,
+        supplier_partner_id=str(po.supplier_partner_id) if po.supplier_partner_id else None,
+        supplier_name=supplier_name,
+        warehouse_id=str(po.warehouse_id) if po.warehouse_id else None,
+        warehouse_name=warehouse_name,
+        status=po.status,
+        expected_at=po.expected_at.isoformat() if po.expected_at else None,
+        ordered_at=po.ordered_at, received_at=po.received_at,
+        note=po.note, created_at=po.created_at,
+        lines=[
+            POLineOut(
+                id=str(ln.id), product_id=str(p.id), product_name=p.name, unit=p.unit,
+                quantity=ln.quantity, unit_cost=ln.unit_cost, received_qty=ln.received_qty,
+            )
+            for ln, p in lines
+        ],
+    )
+
+
+async def _get_po_or_404(db: AsyncSession, po_id: str) -> PurchaseOrder:
+    po = (
+        await db.execute(
+            select(PurchaseOrder).where(PurchaseOrder.id == _parse_uuid(po_id, "po.not_found"))
+        )
+    ).scalar_one_or_none()
+    if po is None:
+        raise HTTPException(status_code=404, detail={"code": "po.not_found"})
+    return po
+
+
+@po_router.get("", response_model=list[POOut])
+async def list_purchase_orders(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    rows = (
+        await db.execute(select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc()).limit(200))
+    ).scalars().all()
+    return [await _po_out(db, po) for po in rows]
+
+
+@po_router.post("", response_model=POOut, status_code=201)
+async def create_purchase_order(
+    body: POCreateBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    from datetime import date as date_cls
+
+    from app.services.wfm.codes import generate_po_number
+
+    wh = await _get_warehouse_or_404(db, body.warehouse_id)
+    supplier_id = None
+    if body.supplier_partner_id:
+        supplier = (
+            await db.execute(
+                select(Partner).where(
+                    Partner.id == _parse_uuid(body.supplier_partner_id, "partner.not_found")
+                )
+            )
+        ).scalar_one_or_none()
+        if supplier is None:
+            raise HTTPException(status_code=404, detail={"code": "partner.not_found"})
+        supplier_id = supplier.id
+    expected = None
+    if body.expected_at:
+        try:
+            expected = date_cls.fromisoformat(body.expected_at)
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"code": "po.bad_date"})
+
+    po = PurchaseOrder(
+        order_no=await generate_po_number(db),
+        supplier_partner_id=supplier_id, warehouse_id=wh.id,
+        expected_at=expected, note=body.note, created_by=actor.id,
+    )
+    db.add(po)
+    await db.flush()
+    for line in body.lines:
+        product = await _get_product_or_404(db, line.product_id)
+        db.add(PurchaseOrderLine(
+            purchase_order_id=po.id, product_id=product.id,
+            quantity=line.quantity, unit_cost=line.unit_cost,
+        ))
+    await record_audit(
+        db, actor=actor, action="po.create", entity_type="purchase_order",
+        entity_id=str(po.id), detail={"order_no": po.order_no, "lines": len(body.lines)},
+        request=request,
+    )
+    await db.commit()
+    return await _po_out(db, po)
+
+
+@po_router.post("/{po_id}/order", response_model=POOut)
+async def mark_ordered(
+    po_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    po = await _get_po_or_404(db, po_id)
+    if po.status != "draft":
+        raise HTTPException(status_code=422, detail={"code": "po.bad_status"})
+    po.status = "ordered"
+    po.ordered_at = datetime.now(UTC)
+    await record_audit(
+        db, actor=actor, action="po.order", entity_type="purchase_order",
+        entity_id=str(po.id), detail={"order_no": po.order_no}, request=request,
+    )
+    await db.commit()
+    return await _po_out(db, po)
+
+
+class POReceiveLineIn(BaseModel):
+    line_id: str
+    quantity: float = Field(gt=0, le=100_000)
+
+
+class POReceiveBody(BaseModel):
+    # Üresen: minden tétel hátralévő mennyisége beérkezik.
+    lines: list[POReceiveLineIn] | None = None
+
+
+@po_router.post("/{po_id}/receive", response_model=POOut)
+async def receive_purchase_order(
+    po_id: str,
+    body: POReceiveBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Beérkeztetés a rendelés cél-raktárába. Részteljesítés támogatott; ha
+    minden tétel beérkezett, a rendelés received státuszba kerül."""
+    po = await _get_po_or_404(db, po_id)
+    if po.status not in ("draft", "ordered"):
+        raise HTTPException(status_code=422, detail={"code": "po.bad_status"})
+    if po.warehouse_id is None:
+        raise HTTPException(status_code=422, detail={"code": "po.no_warehouse"})
+
+    all_lines = (
+        await db.execute(
+            select(PurchaseOrderLine).where(PurchaseOrderLine.purchase_order_id == po.id)
+        )
+    ).scalars().all()
+    by_id = {ln.id: ln for ln in all_lines}
+
+    if body.lines:
+        to_receive = []
+        for item in body.lines:
+            ln = by_id.get(_parse_uuid(item.line_id, "po.line_not_found"))
+            if ln is None:
+                raise HTTPException(status_code=404, detail={"code": "po.line_not_found"})
+            to_receive.append((ln, item.quantity))
+    else:
+        to_receive = [
+            (ln, ln.quantity - ln.received_qty)
+            for ln in all_lines
+            if ln.quantity - ln.received_qty > 1e-9
+        ]
+
+    received_any = False
+    for ln, qty in to_receive:
+        if qty <= 1e-9:
+            continue
+        product = (
+            await db.execute(select(Product).where(Product.id == ln.product_id))
+        ).scalar_one()
+        stock = await _stock_row(db, po.warehouse_id, product.id)
+        stock.quantity += qty
+        ln.received_qty = round(ln.received_qty + qty, 3)
+        db.add(WarehouseMovement(
+            warehouse_id=po.warehouse_id, product_id=product.id, action="receive",
+            quantity_delta=qty, unit_cost=ln.unit_cost, ref_id=po.id,
+            note=po.order_no, actor_user_id=actor.id,
+        ))
+        if ln.unit_cost is not None:
+            product.purchase_price = ln.unit_cost
+        received_any = True
+
+    if received_any and all(
+        ln.received_qty + 1e-9 >= ln.quantity for ln in all_lines
+    ):
+        po.status = "received"
+        po.received_at = datetime.now(UTC)
+    elif received_any and po.status == "draft":
+        po.status = "ordered"
+        po.ordered_at = po.ordered_at or datetime.now(UTC)
+
+    await record_audit(
+        db, actor=actor, action="po.receive", entity_type="purchase_order",
+        entity_id=str(po.id),
+        detail={"order_no": po.order_no, "status": po.status},
+        request=request,
+    )
+    await db.commit()
+    return await _po_out(db, po)
+
+
+@po_router.post("/{po_id}/cancel", response_model=POOut)
+async def cancel_purchase_order(
+    po_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    po = await _get_po_or_404(db, po_id)
+    if po.status not in ("draft", "ordered"):
+        raise HTTPException(status_code=422, detail={"code": "po.bad_status"})
+    po.status = "cancelled"
+    await record_audit(
+        db, actor=actor, action="po.cancel", entity_type="purchase_order",
+        entity_id=str(po.id), detail={"order_no": po.order_no}, request=request,
+    )
+    await db.commit()
+    return await _po_out(db, po)

@@ -19,6 +19,8 @@ from app.models.models import (  # noqa: F401
     PermissionSettings,
     Product,
     ProductOrder,
+    PurchaseOrder,
+    PurchaseOrderLine,
     ServiceTicket,
     Settlement,
     SettlementLine,
@@ -33,6 +35,9 @@ from app.models.models import (  # noqa: F401
     TimeEntry,
     TimeOffRequest,
     User,
+    Warehouse,
+    WarehouseMovement,
+    WarehouseStock,
     Worksheet,
     WorksheetSettings,
 )

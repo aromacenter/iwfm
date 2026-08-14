@@ -33,6 +33,7 @@ from app.api import (
     tasks,
     timeclock,
     timeoff,
+    warehouse,
 )
 from app.core.config import get_settings
 from app.db import get_engine
@@ -175,6 +176,8 @@ def create_app() -> FastAPI:
     app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
+    app.include_router(warehouse.router, prefix="/api/warehouses", tags=["warehouses"])
+    app.include_router(warehouse.po_router, prefix="/api/purchase-orders", tags=["purchase-orders"])
     app.include_router(assistant_api.router, prefix="/api/assistant", tags=["assistant"])
     app.include_router(admin_tools.router, prefix="/api/admin", tags=["admin"])
     app.include_router(automation_api.router)

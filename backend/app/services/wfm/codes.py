@@ -1,4 +1,5 @@
-"""Azonosító-generálás: dolgozói törzsszám (6 jegy) + ügyfél-kód (PT-NNNN)."""
+"""Azonosító-generálás: dolgozói törzsszám (6 jegy) + ügyfél-kód (PT-NNNN) +
+beszerzési rendelésszám (PO-NNNN)."""
 
 from __future__ import annotations
 
@@ -48,6 +49,17 @@ async def generate_partner_code(session: AsyncSession) -> str:
     """Sorfolytonos ügyfél-azonosító: PT-0001, PT-0002, …"""
     codes = list((await session.execute(select(Partner.partner_code))).scalars())
     return f"PT-{_next_partner_number(codes):04d}"
+
+
+async def generate_po_number(session: AsyncSession) -> str:
+    """Sorfolytonos beszerzési rendelésszám: PO-0001, PO-0002, …"""
+    from app.models import PurchaseOrder
+
+    nums = []
+    for no in (await session.execute(select(PurchaseOrder.order_no))).scalars():
+        if no and no.startswith("PO-") and no[3:].isdigit():
+            nums.append(int(no[3:]))
+    return f"PO-{(max(nums) + 1) if nums else 1:04d}"
 
 
 async def backfill_partner_codes(session: AsyncSession) -> int:

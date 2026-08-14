@@ -274,6 +274,9 @@ class ReplenishBody(BaseModel):
     quantity: float = Field(gt=0)  # feltöltendő mennyiség (kg)
     unit_cost: float | None = Field(default=None, ge=0)  # beszerzési ár (Ft/kg, nettó)
     note: str | None = Field(default=None, max_length=512)
+    # Melyik saját raktárból (telephely/autó) megy ki az áru — ha meg van
+    # adva, a raktárkészlet csökken (elégtelen készletnél 422).
+    source_warehouse_id: str | None = None
 
 
 async def _get_partner_or_404(db: AsyncSession, partner_id: str) -> Partner:
@@ -351,9 +354,19 @@ async def replenish_partner_stock(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("settlements")),
 ):
-    """Termék feltöltése a partner külső raktárába (kg-ban)."""
+    """Termék feltöltése a partner külső raktárába (kg-ban). Ha forrás-raktár
+    van megadva, az áru onnan kerül kiadásra (raktárkészlet-csökkenéssel)."""
     partner = await _get_partner_or_404(db, partner_id)
     product = await _get_product_or_404(db, body.product_id)
+
+    if body.source_warehouse_id:
+        from app.api.warehouse import _get_warehouse_or_404, warehouse_issue
+
+        src = await _get_warehouse_or_404(db, body.source_warehouse_id)
+        await warehouse_issue(
+            db, warehouse_id=src.id, product=product, quantity=body.quantity,
+            partner_id=partner.id, actor_id=actor.id,
+        )
 
     stock = (
         await db.execute(
