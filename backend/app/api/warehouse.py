@@ -225,21 +225,30 @@ async def warehouse_stock(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("settlements")),
 ):
+    """A raktár készlete — MINDIG a teljes termék-katalógust tükrözi: minden
+    aktív termék megjelenik (készletsor nélkül 0-val), így a termékek és a
+    raktár folyamatosan szinkronban vannak. Inaktív termék csak akkor látszik,
+    ha még van belőle készlet."""
     wh = await _get_warehouse_or_404(db, warehouse_id)
     rows = (
         await db.execute(
-            select(WarehouseStock, Product)
-            .join(Product, Product.id == WarehouseStock.product_id)
-            .where(WarehouseStock.warehouse_id == wh.id)
+            select(Product, WarehouseStock)
+            .outerjoin(
+                WarehouseStock,
+                (WarehouseStock.product_id == Product.id)
+                & (WarehouseStock.warehouse_id == wh.id),
+            )
             .order_by(Product.name)
         )
     ).all()
     return [
         WarehouseStockOut(
             product_id=str(p.id), product_name=p.name, unit=p.unit,
-            quantity=round(s.quantity, 2), min_quantity=s.min_quantity,
+            quantity=round(s.quantity, 2) if s else 0.0,
+            min_quantity=s.min_quantity if s else None,
         )
-        for s, p in rows
+        for p, s in rows
+        if p.is_active or (s is not None and abs(s.quantity) > 1e-9)
     ]
 
 

@@ -100,6 +100,22 @@ async def test_warehouse_receive_transfer_adjust(client, manager):
     assert names["Uzletkötő autó"]["total_quantity"] == 8.0
 
 
+async def test_stock_mirrors_product_catalog(client, manager):
+    """A raktár készletnézete mindig a termék-katalógust tükrözi: új termék
+    azonnal megjelenik 0 készlettel (folyamatos szinkron)."""
+    _, mgr = manager
+    site = await _make_warehouse(client, mgr)
+    await _make_product(client, mgr, "Kávé A")
+    res = await client.get(f"/api/warehouses/{site['id']}/stock", headers=mgr)
+    assert [r["product_name"] for r in res.json()] == ["Kávé A"]
+    assert res.json()[0]["quantity"] == 0.0
+
+    # utólag felvett termék is automatikusan bekerül
+    await _make_product(client, mgr, "Kávé B")
+    res = await client.get(f"/api/warehouses/{site['id']}/stock", headers=mgr)
+    assert [r["product_name"] for r in res.json()] == ["Kávé A", "Kávé B"]
+
+
 async def test_reorder_suggestions(client, manager):
     """Küszöb alatti készletre javaslat készül (küszöb kétszereséig)."""
     _, mgr = manager
