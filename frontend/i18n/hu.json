@@ -17,15 +17,24 @@
   "route": {
     "allCities": "Minden település",
     "open": "Útvonal megnyitása ({count})",
-    "hint": "Jelöld ki a megállókat (max 10) — a sorrendjük mindegy, az útvonalat a leghatékonyabb sorrendbe rendezzük.",
+    "hint": "Jelöld ki a megállókat — a sorrendjük mindegy, a leghatékonyabb sorrendbe rendezzük. 10 megállóig egy térkép-link, több megállónál használd a heti tervet.",
     "optimized": "Útvonal optimalizálva: {km} km (légvonalban).",
     "optimizedSaved": "Útvonal optimalizálva: {km} km — {saved} km-rel rövidebb, mint a kijelölés sorrendje.",
     "addStop": "Hozzáadás az útvonalhoz",
     "forecast": "Előrejelzés",
     "daysLeft": "~{days} nap múlva fogy ki",
     "bring": "vinni: ~{kg} kg",
-    "maxStops": "Legfeljebb 10 megálló fér egy útvonalba.",
-    "stockShort": "termék kint"
+    "maxStops": "Legfeljebb 60 megálló jelölhető ki.",
+    "stockShort": "termék kint",
+    "optimizedRoad": "Útvonal optimalizálva: {km} km közúton (~{min} perc) — {saved} km-rel rövidebb, mint a kijelölés sorrendje.",
+    "weekDays": "Napok száma",
+    "weekDaysOpt": "{n} nap",
+    "weekPlan": "Heti terv",
+    "weekPlanTitle": "Heti körút-terv — összesen {km} km",
+    "roadBased": "közúti távolság",
+    "dayN": "{n}. nap",
+    "noCoords": "(nincs koordináta)",
+    "openDay": "Útvonal megnyitása"
   },
   "scanner": {
     "title": "Vonalkód beolvasása kamerával",
@@ -125,7 +134,8 @@
       "billing": "Elszámolás",
       "system": "Rendszer",
       "personal": "Saját"
-    }
+    },
+    "warehouse": "Raktár"
   },
   "roles": {
     "admin": "Admin",
@@ -360,7 +370,10 @@
     "emailPrompt": "Címzett email-címe",
     "emailSent": "Bizonylat elküldve emailben.",
     "emailSentAt": "Elküldve: {at}",
-    "legendDone": "már megtörtént (aláírva / elküldve)"
+    "legendDone": "már megtörtént (aláírva / elküldve)",
+    "sourceWarehouse": "Forrás raktár",
+    "sourceWarehouseNone": "— külső beszerzés (nem raktárból) —",
+    "sourceWarehouseNote": "Ha raktárt választasz, a mennyiség onnan kerül kiadásra, és a raktárkészlet csökken."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1261,7 +1274,15 @@
     "settlement.counter_below_prev": "A gép új számláló-állása kisebb az előző elszámoláskorinál.",
     "settlement.machine_wrong_partner": "A gép nem ehhez a partnerhez van kihelyezve.",
     "settlement.machine_no_product": "A gépen nincs termék beállítva, és a partnernek több készlet-terméke van — állítsd be a gépnél, melyikből főz.",
-    "stock.not_found": "Ez a készlet-sor nem található (talán már törölve lett)."
+    "stock.not_found": "Ez a készlet-sor nem található (talán már törölve lett).",
+    "warehouse.not_found": "A raktár nem található.",
+    "warehouse.insufficient_stock": "Nincs elég készlet a kiválasztott raktárban.",
+    "warehouse.same_warehouse": "A forrás- és a cél-raktár nem lehet azonos.",
+    "po.not_found": "A rendelés nem található.",
+    "po.bad_status": "Ebben a státuszban ez a művelet már nem végezhető el.",
+    "po.bad_date": "Érvénytelen dátum.",
+    "po.line_not_found": "A rendelés-tétel nem található.",
+    "po.no_warehouse": "A rendeléshez nincs cél-raktár beállítva."
   },
   "inv": {
     "title": "Gépek",
@@ -1343,5 +1364,55 @@
       "maintenance": "Szervizen",
       "retired": "Selejtezve"
     }
+  },
+  "wh": {
+    "title": "Raktár",
+    "new": "Új raktár",
+    "edit": "Raktár szerkesztése",
+    "kind": "Típus",
+    "kindSite": "Telephely",
+    "kindVan": "Üzletkötői autó",
+    "cardSummary": "{products} termék · összesen {qty}",
+    "empty": "Még nincs raktár — hozd létre az elsőt (pl. Telephely és egy-egy autó).",
+    "stockTitle": "Készlet — {name}",
+    "receive": "Bevételezés",
+    "transfer": "Áthelyezés",
+    "adjust": "Leltár / korrekció",
+    "receiveDone": "Bevételezve.",
+    "transferDone": "Áthelyezve.",
+    "adjustDone": "Leltár rögzítve.",
+    "quantity": "Mennyiség",
+    "minQuantity": "Riasztási küszöb",
+    "countedQty": "Számolt (tényleges) mennyiség",
+    "product": "Termék",
+    "transferTo": "Cél raktár",
+    "noStock": "Ebben a raktárban még nincs készlet.",
+    "reorderTitle": "Rendelési javaslat — küszöb alá csökkent raktárkészlet",
+    "reorderRow": "{warehouse}: {product} — készlet {qty} {unit}, javasolt rendelés: {suggested} {unit}"
+  },
+  "po": {
+    "title": "Beszerzési rendelések",
+    "new": "Új rendelés",
+    "orderNo": "Rendelésszám",
+    "supplier": "Szállító",
+    "warehouse": "Cél raktár",
+    "linesCol": "Tételek",
+    "expected": "Várható érkezés",
+    "status": "Státusz",
+    "status_draft": "Piszkozat",
+    "status_ordered": "Megrendelve",
+    "status_received": "Beérkezett",
+    "status_cancelled": "Lemondva",
+    "partial": "eddig {qty}",
+    "markOrdered": "Megrendeltnek jelöl",
+    "receiveAll": "Beérkeztetés",
+    "cancel": "Lemondás",
+    "empty": "Még nincs beszerzési rendelés.",
+    "created": "Rendelés létrehozva.",
+    "orderDone": "Megrendeltnek jelölve.",
+    "receiveDone": "Beérkeztetve — a raktárkészlet frissült.",
+    "cancelDone": "Rendelés lemondva.",
+    "addLine": "tétel hozzáadása",
+    "unitCost": "Ft/egység"
   }
 }

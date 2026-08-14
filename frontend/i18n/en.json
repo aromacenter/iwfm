@@ -17,15 +17,24 @@
   "route": {
     "allCities": "All towns",
     "open": "Open route ({count})",
-    "hint": "Select stops (max 10) — order doesn't matter, the route is arranged into the most efficient sequence.",
+    "hint": "Select the stops — order doesn't matter, we arrange the most efficient route. Up to 10 stops opens one map link; for more, use the weekly plan.",
     "optimized": "Route optimized: {km} km (as the crow flies).",
     "optimizedSaved": "Route optimized: {km} km — {saved} km shorter than the selection order.",
     "addStop": "Add to route",
     "forecast": "Forecast",
     "daysLeft": "runs out in ~{days} days",
     "bring": "bring: ~{kg} kg",
-    "maxStops": "A route can hold at most 10 stops.",
-    "stockShort": "products out"
+    "maxStops": "You can select at most 60 stops.",
+    "stockShort": "products out",
+    "optimizedRoad": "Route optimized: {km} km by road (~{min} min) — {saved} km shorter than the selection order.",
+    "weekDays": "Number of days",
+    "weekDaysOpt": "{n} days",
+    "weekPlan": "Weekly plan",
+    "weekPlanTitle": "Weekly route plan — {km} km total",
+    "roadBased": "road distance",
+    "dayN": "Day {n}",
+    "noCoords": "(no coordinates)",
+    "openDay": "Open route"
   },
   "scanner": {
     "title": "Scan barcode with camera",
@@ -125,7 +134,8 @@
       "billing": "Settlement",
       "system": "System",
       "personal": "Personal"
-    }
+    },
+    "warehouse": "Warehouse"
   },
   "roles": {
     "admin": "Admin",
@@ -360,7 +370,10 @@
     "emailPrompt": "Recipient email address",
     "emailSent": "Receipt sent by email.",
     "emailSentAt": "Sent: {at}",
-    "legendDone": "already done (signed / sent)"
+    "legendDone": "already done (signed / sent)",
+    "sourceWarehouse": "Source warehouse",
+    "sourceWarehouseNone": "— external purchase (not from a warehouse) —",
+    "sourceWarehouseNote": "If you pick a warehouse, the quantity is issued from it and its stock decreases."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1261,7 +1274,15 @@
     "settlement.counter_below_prev": "The machine's new counter is below the previous settlement reading.",
     "settlement.machine_wrong_partner": "The machine is not deployed at this partner.",
     "settlement.machine_no_product": "The machine has no product set and the partner has multiple stock products — set which product the machine brews.",
-    "stock.not_found": "This stock row was not found (it may have been deleted already)."
+    "stock.not_found": "This stock row was not found (it may have been deleted already).",
+    "warehouse.not_found": "Warehouse not found.",
+    "warehouse.insufficient_stock": "Not enough stock in the selected warehouse.",
+    "warehouse.same_warehouse": "Source and target warehouse must differ.",
+    "po.not_found": "Order not found.",
+    "po.bad_status": "This action is not allowed in the current status.",
+    "po.bad_date": "Invalid date.",
+    "po.line_not_found": "Order line not found.",
+    "po.no_warehouse": "The order has no target warehouse."
   },
   "inv": {
     "title": "Machines",
@@ -1343,5 +1364,55 @@
       "maintenance": "Maintenance",
       "retired": "Retired"
     }
+  },
+  "wh": {
+    "title": "Warehouse",
+    "new": "New warehouse",
+    "edit": "Edit warehouse",
+    "kind": "Type",
+    "kindSite": "Site",
+    "kindVan": "Sales rep van",
+    "cardSummary": "{products} products · {qty} total",
+    "empty": "No warehouses yet — create the first one (e.g. a site and one van per rep).",
+    "stockTitle": "Stock — {name}",
+    "receive": "Receive",
+    "transfer": "Transfer",
+    "adjust": "Stock count / adjust",
+    "receiveDone": "Received.",
+    "transferDone": "Transferred.",
+    "adjustDone": "Stock count saved.",
+    "quantity": "Quantity",
+    "minQuantity": "Alert threshold",
+    "countedQty": "Counted (actual) quantity",
+    "product": "Product",
+    "transferTo": "Target warehouse",
+    "noStock": "No stock in this warehouse yet.",
+    "reorderTitle": "Reorder suggestions — stock below threshold",
+    "reorderRow": "{warehouse}: {product} — {qty} {unit} on hand, suggested order: {suggested} {unit}"
+  },
+  "po": {
+    "title": "Purchase orders",
+    "new": "New order",
+    "orderNo": "Order no.",
+    "supplier": "Supplier",
+    "warehouse": "Target warehouse",
+    "linesCol": "Lines",
+    "expected": "Expected arrival",
+    "status": "Status",
+    "status_draft": "Draft",
+    "status_ordered": "Ordered",
+    "status_received": "Received",
+    "status_cancelled": "Cancelled",
+    "partial": "{qty} so far",
+    "markOrdered": "Mark as ordered",
+    "receiveAll": "Receive",
+    "cancel": "Cancel",
+    "empty": "No purchase orders yet.",
+    "created": "Order created.",
+    "orderDone": "Marked as ordered.",
+    "receiveDone": "Received — warehouse stock updated.",
+    "cancelDone": "Order cancelled.",
+    "addLine": "add line",
+    "unitCost": "Ft/unit"
   }
 }

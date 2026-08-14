@@ -497,6 +497,10 @@ class Partner(Base):
     billing_city: Mapped[str | None] = mapped_column(String(128), nullable=True)
     billing_street: Mapped[str | None] = mapped_column(String(256), nullable=True)
     billing_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Geokódolt székhely-koordináta (Nominatim/OSM) — az útvonaltervezés
+    # használja; cím-mentéskor a háttérben frissül.
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     bank_account: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fizetési határidő (nap)
     # Partner-portál: kitalálhatatlan token a csak-olvasható nyilvános nézethez.
@@ -1105,3 +1109,143 @@ class AuditEvent(Base):
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
+
+
+class Warehouse(Base):
+    """Saját raktár: telephely (site) vagy üzletkötői autó (van). Az áruút:
+    beszerzés → telephely → autó → partner külső raktára (feltöltés)."""
+
+    __tablename__ = "warehouses"
+    __table_args__ = (
+        CheckConstraint("kind IN ('site','van')", name="ck_warehouses_kind"),
+        Index("ix_warehouses_name", "name"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False, default="site")
+    # Autó raktárnál: melyik felhasználó (üzletkötő) autója.
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class WarehouseStock(Base):
+    """Aktuális készlet egy raktárban, termékenként (a termék egységében)."""
+
+    __tablename__ = "warehouse_stock"
+    __table_args__ = (
+        UniqueConstraint("warehouse_id", "product_id", name="uq_warehouse_stock"),
+        Index("ix_warehouse_stock_wh", "warehouse_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("warehouses.id", ondelete="CASCADE"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    # Riasztási/újrarendelési küszöb ebben a raktárban (egységben).
+    min_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class WarehouseMovement(Base):
+    """Raktári készletmozgás (append-only). action: receive (bevét) |
+    transfer_out / transfer_in (áthelyezés) | issue (kiadás partnernek,
+    feltöltéskor) | adjust (leltár-korrekció)."""
+
+    __tablename__ = "warehouse_movements"
+    __table_args__ = (Index("ix_warehouse_movements_wh", "warehouse_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("warehouses.id", ondelete="CASCADE"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    quantity_delta: Mapped[float] = mapped_column(Float, nullable=False)  # + be, − ki
+    # Bevételezési egységár (Ft/egység, nettó) — receive sorokon.
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Kapcsolódó entitás: áthelyezésnél a másik raktár, kiadásnál a partner,
+    # bevételezésnél a beszerzési rendelés azonosítója.
+    ref_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PurchaseOrder(Base):
+    """Beszerzési rendelés egy szállítótól (Partner, partner_type supplier/both)
+    egy cél-raktárba. Státusz: draft → ordered → received; cancelled."""
+
+    __tablename__ = "purchase_orders"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft','ordered','received','cancelled')",
+            name="ck_purchase_orders_status",
+        ),
+        Index("uq_purchase_orders_no", "order_no", unique=True),
+        Index("ix_purchase_orders_status", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    order_no: Mapped[str] = mapped_column(String(16), nullable=False)  # PO-0001
+    supplier_partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True
+    )
+    warehouse_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("warehouses.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    expected_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PurchaseOrderLine(Base):
+    """Beszerzési rendelés tétele. received_qty a részteljesítést követi."""
+
+    __tablename__ = "purchase_order_lines"
+    __table_args__ = (Index("ix_purchase_order_lines_po", "purchase_order_id"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    purchase_order_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("purchase_orders.id", ondelete="CASCADE", name="fk_po_lines_po"),
+        nullable=False,
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("products.id", ondelete="CASCADE", name="fk_po_lines_product"),
+        nullable=False,
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)  # Ft/egység, nettó
+    received_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

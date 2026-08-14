@@ -314,6 +314,10 @@ async def create_partner(
     )
     await db.commit()
 
+    from app.services.wfm.geocode import schedule_geocode
+
+    schedule_geocode(p.id)
+
     from app.services.wfm.automation import fire_event
 
     fire_event("partner.created", {
@@ -335,13 +339,21 @@ async def update_partner(
     actor: User = Depends(require_perm("partners")),
 ):
     p = await _get_partner_or_404(db, partner_id)
+    old_address = (p.address, p.address_zip, p.address_city, p.address_street, p.address_number)
     for key, value in body.resolved().items():
         setattr(p, key, value)
+    address_changed = old_address != (
+        p.address, p.address_zip, p.address_city, p.address_street, p.address_number
+    )
     await record_audit(
         db, actor=actor, action="partner.update", entity_type="partner",
         entity_id=str(p.id), request=request,
     )
     await db.commit()
+    if address_changed or (p.lat is None and p.address):
+        from app.services.wfm.geocode import schedule_geocode
+
+        schedule_geocode(p.id)
     return _partner_out(p)
 
 

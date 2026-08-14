@@ -23,6 +23,9 @@ async def client(tmp_path, monkeypatch):
     db_path = tmp_path / f"test_{uuid.uuid4().hex}.db"
     monkeypatch.setenv("WFM_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
     monkeypatch.setenv("WFM_DISABLE_SCHEDULER", "1")
+    # Hálózati szolgáltatások kikapcsolva tesztek alatt (best-effort hívások).
+    monkeypatch.setenv("WFM_GEOCODE", "0")
+    monkeypatch.setenv("WFM_OSRM_URL", "")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     get_settings.cache_clear()
     app_db.reset_engine()

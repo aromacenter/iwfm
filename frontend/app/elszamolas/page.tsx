@@ -212,7 +212,8 @@ export default function ElszamolasPage() {
   const [addProductId, setAddProductId] = useState("");
   const [history, setHistory] = useState<Settlement[]>([]);
   const [companyFilter, setCompanyFilter] = useState("");
-  const [replenish, setReplenish] = useState<{ product_id: string; quantity: string; unit_cost: string } | null>(null);
+  const [replenish, setReplenish] = useState<{ product_id: string; quantity: string; unit_cost: string; source_warehouse_id: string } | null>(null);
+  const [srcWarehouses, setSrcWarehouses] = useState<{ id: string; name: string; kind: string; is_active: boolean }[]>([]);
   const [due, setDue] = useState<DuePartner[]>([]);
   const [showDue, setShowDue] = useState(true);
   const [lowStock, setLowStock] = useState<LowStock[]>([]);
@@ -317,10 +318,11 @@ export default function ElszamolasPage() {
     setRouteSelected((s) => {
       const next = new Set(s);
       if (next.has(id)) next.delete(id);
-      else if (next.size < 10) next.add(id);
+      else if (next.size < 60) next.add(id);
       else toast(t("route.maxStops"), "error");
       return next;
     });
+    setWeekPlan(null);
   }
 
   async function openRoute() {
@@ -335,18 +337,29 @@ export default function ElszamolasPage() {
           stops: { partner_id: string; address: string | null; located: boolean }[];
           total_km: number | null;
           original_km: number | null;
+          total_min: number | null;
+          used_roads: boolean;
         }>("/api/geo/optimize-route", { partner_ids: selected.map((d) => d.partner_id) });
         addresses = res.stops
           .map((s) => s.address)
           .filter((a): a is string => !!a);
         if (res.total_km !== null && res.original_km !== null) {
           const saved = Math.max(Math.round(res.original_km - res.total_km), 0);
-          toast(
-            saved > 0
-              ? t("route.optimizedSaved", { km: res.total_km, saved })
-              : t("route.optimized", { km: res.total_km }),
-            "success",
-          );
+          if (res.used_roads && res.total_min !== null) {
+            toast(
+              t("route.optimizedRoad", {
+                km: res.total_km, min: Math.round(res.total_min), saved,
+              }),
+              "success",
+            );
+          } else {
+            toast(
+              saved > 0
+                ? t("route.optimizedSaved", { km: res.total_km, saved })
+                : t("route.optimized", { km: res.total_km }),
+              "success",
+            );
+          }
         }
       } catch {
         // koordináta-adat híján az eredeti sorrend megy
@@ -358,10 +371,48 @@ export default function ElszamolasPage() {
     );
   }
 
+  type WeekPlan = {
+    days: {
+      stops: { partner_id: string; name: string; address: string | null; located: boolean }[];
+      total_km: number | null;
+    }[];
+    total_km: number | null;
+    used_roads: boolean;
+  };
+  const [weekPlan, setWeekPlan] = useState<WeekPlan | null>(null);
+  const [weekDays, setWeekDays] = useState(3);
+
+  async function planWeek() {
+    const selected = due.filter((d) => routeSelected.has(d.partner_id) && d.address);
+    if (selected.length < 2) return;
+    try {
+      const res = await api.post<WeekPlan>("/api/geo/plan-week", {
+        partner_ids: selected.map((d) => d.partner_id),
+        days: weekDays,
+      });
+      setWeekPlan(res);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  function openDayRoute(day: WeekPlan["days"][number]) {
+    const addresses = day.stops.map((s) => s.address).filter((a): a is string => !!a);
+    if (!addresses.length) return;
+    window.open(
+      `https://www.google.com/maps/dir/${addresses.map(encodeURIComponent).join("/")}`,
+      "_blank",
+    );
+  }
+
   const loadDue = useCallback(() => {
     api.get<DuePartner[]>("/api/settlements/due?days=30").then(setDue).catch(() => {});
     api.get<LowStock[]>("/api/products/low-stock").then(setLowStock).catch(() => {});
     api.get<Order[]>("/api/orders?status=open").then(setOrders).catch(() => {});
+    api
+      .get<{ id: string; name: string; kind: string; is_active: boolean }[]>("/api/warehouses")
+      .then((rows) => setSrcWarehouses(rows.filter((w) => w.is_active)))
+      .catch(() => {});
   }, []);
 
   async function setOrderStatus(o: Order, status: "done" | "cancelled") {
@@ -548,6 +599,7 @@ export default function ElszamolasPage() {
         product_id: replenish.product_id,
         quantity: Number(replenish.quantity),
         unit_cost: replenish.unit_cost === "" ? null : Number(replenish.unit_cost),
+        source_warehouse_id: replenish.source_warehouse_id || null,
       });
       setReplenish(null);
       loadStock();
@@ -829,7 +881,7 @@ export default function ElszamolasPage() {
         />
         {partnerId && (
           <button
-            onClick={() => { setError(null); setReplenish({ product_id: activeProducts[0]?.id ?? "", quantity: "", unit_cost: activeProducts[0]?.purchase_price?.toString() ?? "" }); }}
+            onClick={() => { setError(null); setReplenish({ product_id: activeProducts[0]?.id ?? "", quantity: "", unit_cost: activeProducts[0]?.purchase_price?.toString() ?? "", source_warehouse_id: srcWarehouses.find((w) => w.kind === "van")?.id ?? "" }); }}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
           >
             {t("cons.replenish")}
@@ -947,14 +999,36 @@ export default function ElszamolasPage() {
                 </select>
                 {routeSelected.size > 0 && (
                   <>
+                    {routeSelected.size <= 10 && (
+                      <button
+                        onClick={openRoute}
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+                      >
+                        🗺 {t("route.open", { count: routeSelected.size })}
+                      </button>
+                    )}
+                    {routeSelected.size >= 2 && (
+                      <span className="flex items-center gap-1">
+                        <select
+                          value={weekDays}
+                          onChange={(e) => setWeekDays(Number(e.target.value))}
+                          className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
+                          title={t("route.weekDays")}
+                        >
+                          {[2, 3, 4, 5, 6].map((n) => (
+                            <option key={n} value={n}>{t("route.weekDaysOpt", { n })}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={planWeek}
+                          className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800"
+                        >
+                          📅 {t("route.weekPlan")}
+                        </button>
+                      </span>
+                    )}
                     <button
-                      onClick={openRoute}
-                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
-                    >
-                      🗺 {t("route.open", { count: routeSelected.size })}
-                    </button>
-                    <button
-                      onClick={() => setRouteSelected(new Set())}
+                      onClick={() => { setRouteSelected(new Set()); setWeekPlan(null); }}
                       className="rounded-lg border border-amber-300 px-2 py-1.5 text-xs text-amber-800 hover:bg-amber-100"
                     >
                       ✕
@@ -963,6 +1037,58 @@ export default function ElszamolasPage() {
                 )}
                 <span className="text-xs text-amber-700">{t("route.hint")}</span>
               </div>
+              {weekPlan && (
+                <div className="border-t border-amber-200 px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-amber-900">
+                      {t("route.weekPlanTitle", { km: weekPlan.total_km ?? 0 })}
+                      {weekPlan.used_roads && (
+                        <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
+                          {t("route.roadBased")}
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      onClick={() => setWeekPlan(null)}
+                      className="text-xs text-amber-700 hover:underline"
+                    >
+                      ✕ {t("common.close")}
+                    </button>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {weekPlan.days.map((day, i) => (
+                      <div key={i} className="rounded-xl border border-amber-200 bg-white p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-sm font-semibold text-amber-900">
+                            {t("route.dayN", { n: i + 1 })}
+                          </span>
+                          <span className="text-xs text-amber-700">
+                            {day.total_km !== null ? `${day.total_km} km` : ""}
+                          </span>
+                        </div>
+                        <ol className="mb-2 list-inside list-decimal space-y-0.5 text-xs text-slate-700">
+                          {day.stops.map((s) => (
+                            <li key={s.partner_id}>
+                              {s.name}
+                              {!s.located && (
+                                <span className="ml-1 text-amber-600">{t("route.noCoords")}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ol>
+                        {day.stops.some((s) => s.address) && (
+                          <button
+                            onClick={() => openDayRoute(day)}
+                            className="rounded-lg bg-amber-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-700"
+                          >
+                            🗺 {t("route.openDay")}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -1724,6 +1850,22 @@ export default function ElszamolasPage() {
               />
               <span className="mt-1 block text-xs text-slate-400">{t("cons.purchasePriceNote")}</span>
             </label>
+            {srcWarehouses.length > 0 && (
+              <label className="block text-sm">
+                {t("cons.sourceWarehouse")}
+                <select
+                  value={replenish.source_warehouse_id}
+                  onChange={(e) => setReplenish({ ...replenish, source_warehouse_id: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                >
+                  <option value="">{t("cons.sourceWarehouseNone")}</option>
+                  {srcWarehouses.map((w) => (
+                    <option key={w.id} value={w.id}>{w.kind === "van" ? "🚐" : "🏬"} {w.name}</option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-slate-400">{t("cons.sourceWarehouseNote")}</span>
+              </label>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setReplenish(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
