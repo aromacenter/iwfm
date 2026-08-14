@@ -1282,7 +1282,9 @@
     "po.bad_status": "This action is not allowed in the current status.",
     "po.bad_date": "Invalid date.",
     "po.line_not_found": "Order line not found.",
-    "po.no_warehouse": "The order has no target warehouse."
+    "po.no_warehouse": "The order has no target warehouse.",
+    "warehouse.product_exists": "This product is already assigned to the warehouse.",
+    "warehouse.stock_not_empty": "Only products with empty stock can be removed — count it to 0 or issue it first."
   },
   "inv": {
     "title": "Machines",
@@ -1376,7 +1378,7 @@
     "empty": "No warehouses yet — create the first one (e.g. a site and one van per rep).",
     "stockTitle": "Stock — {name}",
     "receive": "Receive",
-    "transfer": "Transfer",
+    "transfer": "Transfer / draw stock",
     "adjust": "Stock count / adjust",
     "receiveDone": "Received.",
     "transferDone": "Transferred.",
@@ -1388,7 +1390,26 @@
     "transferTo": "Target warehouse",
     "noStock": "No stock in this warehouse yet.",
     "reorderTitle": "Reorder suggestions — stock below threshold",
-    "reorderRow": "{warehouse}: {product} — {qty} {unit} on hand, suggested order: {suggested} {unit}"
+    "reorderRow": "{warehouse}: {product} — {qty} {unit} on hand, suggested order: {suggested} {unit}",
+    "addProduct": "Add product",
+    "addProductHint": "You pick manually which catalog products belong to this warehouse — the catalog and the warehouse assortment can differ.",
+    "allProductsAssigned": "Every active product is already assigned to this warehouse.",
+    "productAdded": "Product added to the warehouse (with 0 stock).",
+    "productRemoved": "Product removed from the warehouse assortment.",
+    "removeProduct": "Remove from assortment (empty stock only)",
+    "assignedUser": "Sales rep (van owner)",
+    "movements": "Movement log (31 days)",
+    "movement": "Action",
+    "movAll": "All",
+    "mov_receive": "Received",
+    "mov_transfer_in": "Drawn (in)",
+    "mov_transfer_out": "Transferred (out)",
+    "mov_issue": "Issued to partner",
+    "mov_adjust": "Stock-count adjustment",
+    "when": "When",
+    "who": "Who",
+    "counterparty": "From / to",
+    "noMovements": "No movements match the filter."
   },
   "po": {
     "title": "Purchase orders",

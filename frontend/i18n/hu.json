@@ -1282,7 +1282,9 @@
     "po.bad_status": "Ebben a státuszban ez a művelet már nem végezhető el.",
     "po.bad_date": "Érvénytelen dátum.",
     "po.line_not_found": "A rendelés-tétel nem található.",
-    "po.no_warehouse": "A rendeléshez nincs cél-raktár beállítva."
+    "po.no_warehouse": "A rendeléshez nincs cél-raktár beállítva.",
+    "warehouse.product_exists": "Ez a termék már hozzá van rendelve a raktárhoz.",
+    "warehouse.stock_not_empty": "Csak üres készletű termék vehető le a raktárról — előbb leltározd 0-ra vagy add ki."
   },
   "inv": {
     "title": "Gépek",
@@ -1376,7 +1378,7 @@
     "empty": "Még nincs raktár — hozd létre az elsőt (pl. Telephely és egy-egy autó).",
     "stockTitle": "Készlet — {name}",
     "receive": "Bevételezés",
-    "transfer": "Áthelyezés",
+    "transfer": "Áthelyezés / vételezés",
     "adjust": "Leltár / korrekció",
     "receiveDone": "Bevételezve.",
     "transferDone": "Áthelyezve.",
@@ -1388,7 +1390,26 @@
     "transferTo": "Cél raktár",
     "noStock": "Ebben a raktárban még nincs készlet.",
     "reorderTitle": "Rendelési javaslat — küszöb alá csökkent raktárkészlet",
-    "reorderRow": "{warehouse}: {product} — készlet {qty} {unit}, javasolt rendelés: {suggested} {unit}"
+    "reorderRow": "{warehouse}: {product} — készlet {qty} {unit}, javasolt rendelés: {suggested} {unit}",
+    "addProduct": "Termék hozzáadása",
+    "addProductHint": "A katalógusból kézzel választod ki, mi tartozzon ehhez a raktárhoz — a katalógus és a raktár-választék eltérhet.",
+    "allProductsAssigned": "Minden aktív termék hozzá van már rendelve ehhez a raktárhoz.",
+    "productAdded": "Termék hozzáadva a raktárhoz (0 készlettel).",
+    "productRemoved": "Termék levéve a raktár választékáról.",
+    "removeProduct": "Levétel a választékról (csak üres készletnél)",
+    "assignedUser": "Üzletkötő (az autó gazdája)",
+    "movements": "Mozgásnapló (31 nap)",
+    "movement": "Művelet",
+    "movAll": "Mind",
+    "mov_receive": "Bevételezés",
+    "mov_transfer_in": "Vételezés (be)",
+    "mov_transfer_out": "Áthelyezés (ki)",
+    "mov_issue": "Kiadás partnernek",
+    "mov_adjust": "Leltár-korrekció",
+    "when": "Mikor",
+    "who": "Ki",
+    "counterparty": "Honnan / hová",
+    "noMovements": "Nincs mozgás a szűrésnek megfelelően."
   },
   "po": {
     "title": "Beszerzési rendelések",

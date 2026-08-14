@@ -225,30 +225,197 @@ async def warehouse_stock(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("settlements")),
 ):
-    """A raktár készlete — MINDIG a teljes termék-katalógust tükrözi: minden
-    aktív termék megjelenik (készletsor nélkül 0-val), így a termékek és a
-    raktár folyamatosan szinkronban vannak. Inaktív termék csak akkor látszik,
-    ha még van belőle készlet."""
+    """A raktárhoz KÉZZEL hozzárendelt termékek készlete. A katalógusból a
+    /stock/add végponttal kerül be termék (a katalógus és a raktár-választék
+    tudatosan eltérhet)."""
     wh = await _get_warehouse_or_404(db, warehouse_id)
     rows = (
         await db.execute(
-            select(Product, WarehouseStock)
-            .outerjoin(
-                WarehouseStock,
-                (WarehouseStock.product_id == Product.id)
-                & (WarehouseStock.warehouse_id == wh.id),
-            )
+            select(WarehouseStock, Product)
+            .join(Product, Product.id == WarehouseStock.product_id)
+            .where(WarehouseStock.warehouse_id == wh.id)
             .order_by(Product.name)
         )
     ).all()
     return [
         WarehouseStockOut(
             product_id=str(p.id), product_name=p.name, unit=p.unit,
-            quantity=round(s.quantity, 2) if s else 0.0,
-            min_quantity=s.min_quantity if s else None,
+            quantity=round(s.quantity, 2), min_quantity=s.min_quantity,
         )
-        for p, s in rows
-        if p.is_active or (s is not None and abs(s.quantity) > 1e-9)
+        for s, p in rows
+    ]
+
+
+class StockAddBody(BaseModel):
+    product_id: str
+
+
+@router.post("/{warehouse_id}/stock/add", response_model=WarehouseStockOut, status_code=201)
+async def add_stock_product(
+    warehouse_id: str,
+    body: StockAddBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Termék kézi hozzárendelése a raktárhoz (0 induló készlettel)."""
+    wh = await _get_warehouse_or_404(db, warehouse_id)
+    product = await _get_product_or_404(db, body.product_id)
+    existing = (
+        await db.execute(
+            select(WarehouseStock).where(
+                WarehouseStock.warehouse_id == wh.id,
+                WarehouseStock.product_id == product.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=422, detail={"code": "warehouse.product_exists"})
+    row = WarehouseStock(warehouse_id=wh.id, product_id=product.id, quantity=0.0)
+    db.add(row)
+    await record_audit(
+        db, actor=actor, action="warehouse.stock_add", entity_type="warehouse",
+        entity_id=str(wh.id), detail={"product": product.name}, request=request,
+    )
+    await db.commit()
+    return WarehouseStockOut(
+        product_id=str(product.id), product_name=product.name, unit=product.unit,
+        quantity=0.0, min_quantity=None,
+    )
+
+
+@router.delete("/{warehouse_id}/stock/{product_id}")
+async def remove_stock_product(
+    warehouse_id: str,
+    product_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Termék levétele a raktár választékáról — csak nulla készletnél."""
+    wh = await _get_warehouse_or_404(db, warehouse_id)
+    product = await _get_product_or_404(db, product_id)
+    row = (
+        await db.execute(
+            select(WarehouseStock).where(
+                WarehouseStock.warehouse_id == wh.id,
+                WarehouseStock.product_id == product.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "product.not_found"})
+    if abs(row.quantity) > 1e-9:
+        raise HTTPException(status_code=422, detail={"code": "warehouse.stock_not_empty"})
+    await db.delete(row)
+    await record_audit(
+        db, actor=actor, action="warehouse.stock_remove", entity_type="warehouse",
+        entity_id=str(wh.id), detail={"product": product.name}, request=request,
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+class MovementOut(BaseModel):
+    id: str
+    created_at: datetime
+    action: str
+    product_name: str
+    unit: str
+    quantity_delta: float
+    unit_cost: float | None
+    actor_name: str | None
+    counterparty: str | None  # partner (kiadás), másik raktár (áthelyezés), PO
+    note: str | None
+
+
+@router.get("/{warehouse_id}/movements", response_model=list[MovementOut])
+async def warehouse_movements(
+    warehouse_id: str,
+    days: int = 31,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """Raktári mozgásnapló: ki, mikor, mit, mennyit vételezett / adott ki /
+    vett be — a napi forgalom követéséhez."""
+    from datetime import timedelta
+
+    wh = await _get_warehouse_or_404(db, warehouse_id)
+    days = max(1, min(days, 366))
+    since = datetime.now(UTC) - timedelta(days=days)
+    rows = (
+        await db.execute(
+            select(WarehouseMovement, Product)
+            .join(Product, Product.id == WarehouseMovement.product_id)
+            .where(
+                WarehouseMovement.warehouse_id == wh.id,
+                WarehouseMovement.created_at >= since,
+            )
+            .order_by(WarehouseMovement.created_at.desc())
+            .limit(1000)
+        )
+    ).all()
+
+    actor_ids = {m.actor_user_id for m, _p in rows if m.actor_user_id}
+    actors: dict = {}
+    if actor_ids:
+        for u in (
+            await db.execute(select(User).where(User.id.in_(actor_ids)))
+        ).scalars():
+            actors[u.id] = u.display_name
+
+    ref_ids = {m.ref_id for m, _p in rows if m.ref_id}
+    counterparties: dict = {}
+    if ref_ids:
+        for p in (
+            await db.execute(select(Partner).where(Partner.id.in_(ref_ids)))
+        ).scalars():
+            counterparties[p.id] = p.name
+        for w in (
+            await db.execute(select(Warehouse).where(Warehouse.id.in_(ref_ids)))
+        ).scalars():
+            counterparties[w.id] = w.name
+        for po in (
+            await db.execute(select(PurchaseOrder).where(PurchaseOrder.id.in_(ref_ids)))
+        ).scalars():
+            counterparties[po.id] = po.order_no
+
+    return [
+        MovementOut(
+            id=str(m.id), created_at=m.created_at, action=m.action,
+            product_name=p.name, unit=p.unit,
+            quantity_delta=round(m.quantity_delta, 3), unit_cost=m.unit_cost,
+            actor_name=actors.get(m.actor_user_id),
+            counterparty=counterparties.get(m.ref_id),
+            note=m.note,
+        )
+        for m, p in rows
+    ]
+
+
+class AssignableUserOut(BaseModel):
+    id: str
+    display_name: str
+    role: str
+
+
+@router.get("/assignable-users", response_model=list[AssignableUserOut])
+async def assignable_users(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """Autó-raktárhoz rendelhető felhasználók (üzletkötők, vezetők)."""
+    rows = (
+        await db.execute(
+            select(User).where(
+                User.is_active.is_(True),
+                User.role.in_(("admin", "manager", "uzletkoto")),
+            ).order_by(User.display_name)
+        )
+    ).scalars().all()
+    return [
+        AssignableUserOut(id=str(u.id), display_name=u.display_name, role=u.role)
+        for u in rows
     ]
 
 

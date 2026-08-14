@@ -77,6 +77,25 @@ interface Suggestion {
   suggested_qty: number;
 }
 
+interface Movement {
+  id: string;
+  created_at: string;
+  action: "receive" | "transfer_in" | "transfer_out" | "issue" | "adjust";
+  product_name: string;
+  unit: string;
+  quantity_delta: number;
+  unit_cost: number | null;
+  actor_name: string | null;
+  counterparty: string | null;
+  note: string | null;
+}
+
+interface AssignableUser {
+  id: string;
+  display_name: string;
+  role: string;
+}
+
 const PO_CHIP: Record<PO["status"], string> = {
   draft: "bg-slate-100 text-slate-700",
   ordered: "bg-sky-100 text-sky-800",
@@ -94,6 +113,9 @@ export default function RaktarPage() {
   const [partners, setPartners] = useState<PartnerLite[]>([]);
   const [pos, setPos] = useState<PO[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [movements, setMovements] = useState<Movement[]>([]);
+  const [movFilter, setMovFilter] = useState<"" | Movement["action"]>("");
+  const [assignUsers, setAssignUsers] = useState<AssignableUser[]>([]);
 
   const selected = warehouses.find((w) => w.id === selectedId) ?? null;
 
@@ -106,12 +128,14 @@ export default function RaktarPage() {
     api.get<PartnerLite[]>("/api/partners").then(setPartners).catch(() => {});
     api.get<PO[]>("/api/purchase-orders").then(setPos).catch(() => {});
     api.get<Suggestion[]>("/api/warehouses/reorder-suggestions").then(setSuggestions).catch(() => {});
+    api.get<AssignableUser[]>("/api/warehouses/assignable-users").then(setAssignUsers).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
   const loadStock = useCallback(() => {
-    if (!selectedId) { setStock([]); return; }
+    if (!selectedId) { setStock([]); setMovements([]); return; }
     api.get<WhStock[]>(`/api/warehouses/${selectedId}/stock`).then(setStock).catch(() => {});
+    api.get<Movement[]>(`/api/warehouses/${selectedId}/movements?days=31`).then(setMovements).catch(() => {});
   }, [selectedId]);
   useEffect(loadStock, [loadStock]);
 
@@ -122,7 +146,7 @@ export default function RaktarPage() {
   );
 
   // ── Raktár űrlap ──
-  const [whForm, setWhForm] = useState<{ id: string; name: string; kind: "site" | "van"; notes: string; is_active: boolean } | null>(null);
+  const [whForm, setWhForm] = useState<{ id: string; name: string; kind: "site" | "van"; user_id: string; notes: string; is_active: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,7 +156,11 @@ export default function RaktarPage() {
     setBusy(true);
     setError(null);
     try {
-      const body = { name: whForm.name, kind: whForm.kind, notes: whForm.notes || null, is_active: whForm.is_active };
+      const body = {
+        name: whForm.name, kind: whForm.kind,
+        user_id: whForm.kind === "van" && whForm.user_id ? whForm.user_id : null,
+        notes: whForm.notes || null, is_active: whForm.is_active,
+      };
       if (whForm.id) await api.patch(`/api/warehouses/${whForm.id}`, body);
       else await api.post("/api/warehouses", body);
       setWhForm(null);
@@ -199,6 +227,48 @@ export default function RaktarPage() {
       setError(errorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // ── Termék-hozzárendelés a raktárhoz ──
+  const [addProduct, setAddProduct] = useState<{ product_id: string } | null>(null);
+  const unassignedProducts = useMemo(
+    () => activeProducts.filter((p) => !stock.some((s) => s.product_id === p.id)),
+    [activeProducts, stock],
+  );
+
+  function openAddProduct() {
+    setError(null);
+    setAddProduct({ product_id: unassignedProducts[0]?.id ?? "" });
+  }
+
+  async function saveAddProduct(e: React.FormEvent) {
+    e.preventDefault();
+    if (!addProduct || !selectedId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/api/warehouses/${selectedId}/stock/add`, {
+        product_id: addProduct.product_id,
+      });
+      toast(t("wh.productAdded"), "success");
+      setAddProduct(null);
+      loadStock();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeStockProduct(productId: string) {
+    if (!selectedId) return;
+    try {
+      await api.delete(`/api/warehouses/${selectedId}/stock/${productId}`);
+      toast(t("wh.productRemoved"), "success");
+      loadStock();
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -273,7 +343,7 @@ export default function RaktarPage() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">{t("wh.title")}</h1>
         <button
-          onClick={() => { setError(null); setWhForm({ id: "", name: "", kind: "site", notes: "", is_active: true }); }}
+          onClick={() => { setError(null); setWhForm({ id: "", name: "", kind: "site", user_id: "", notes: "", is_active: true }); }}
           className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
         >
           {t("wh.new")}
@@ -313,7 +383,7 @@ export default function RaktarPage() {
                 onClick={(e) => {
                   e.stopPropagation();
                   setError(null);
-                  setWhForm({ id: w.id, name: w.name, kind: w.kind, notes: w.notes ?? "", is_active: w.is_active });
+                  setWhForm({ id: w.id, name: w.name, kind: w.kind, user_id: w.user_id ?? "", notes: w.notes ?? "", is_active: w.is_active });
                 }}
                 title={t("common.edit")}
                 className="cursor-pointer rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-100"
@@ -342,6 +412,9 @@ export default function RaktarPage() {
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3">
             <h2 className="font-semibold">{t("wh.stockTitle", { name: selected.name })}</h2>
             <div className="ml-auto flex flex-wrap gap-2">
+              <button onClick={openAddProduct} className="rounded-lg border border-indigo-300 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50">
+                ➕ {t("wh.addProduct")}
+              </button>
               <button onClick={() => openAction("receive")} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">
                 ⬇️ {t("wh.receive")}
               </button>
@@ -376,13 +449,24 @@ export default function RaktarPage() {
                       {s.min_quantity != null ? `${fmtQty(s.min_quantity)} ${s.unit}` : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <button
-                        onClick={() => openAction("adjust", s.product_id)}
-                        title={t("wh.adjust")}
-                        className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
-                      >
-                        📋
-                      </button>
+                      <div className="flex justify-end gap-1">
+                        <button
+                          onClick={() => openAction("adjust", s.product_id)}
+                          title={t("wh.adjust")}
+                          className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                        >
+                          📋
+                        </button>
+                        {Math.abs(s.quantity) < 1e-9 && (
+                          <button
+                            onClick={() => removeStockProduct(s.product_id)}
+                            title={t("wh.removeProduct")}
+                            className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -391,6 +475,63 @@ export default function RaktarPage() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="border-t border-slate-200">
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+              <h3 className="text-sm font-semibold">{t("wh.movements")}</h3>
+              <div className="ml-auto flex flex-wrap gap-1">
+                {([["", "wh.movAll"], ["receive", "wh.mov_receive"], ["transfer_in", "wh.mov_transfer_in"], ["transfer_out", "wh.mov_transfer_out"], ["issue", "wh.mov_issue"], ["adjust", "wh.mov_adjust"]] as const).map(([val, key]) => (
+                  <button
+                    key={val}
+                    onClick={() => setMovFilter(val as typeof movFilter)}
+                    className={`rounded-full px-2.5 py-1 text-xs ${
+                      movFilter === val
+                        ? "bg-indigo-600 font-medium text-white"
+                        : "border border-slate-300 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {t(key)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="max-h-80 overflow-y-auto overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="px-4 py-2">{t("wh.when")}</th>
+                    <th className="px-4 py-2">{t("wh.movement")}</th>
+                    <th className="px-4 py-2">{t("wh.product")}</th>
+                    <th className="px-4 py-2">{t("wh.quantity")}</th>
+                    <th className="px-4 py-2">{t("wh.who")}</th>
+                    <th className="px-4 py-2">{t("wh.counterparty")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movements
+                    .filter((m) => !movFilter || m.action === movFilter)
+                    .map((m) => (
+                      <tr key={m.id} className="border-t border-slate-100">
+                        <td className="whitespace-nowrap px-4 py-1.5 text-xs text-slate-500">
+                          {new Date(m.created_at).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" })}
+                        </td>
+                        <td className="px-4 py-1.5 text-xs">{t(`wh.mov_${m.action}`)}</td>
+                        <td className="px-4 py-1.5">{m.product_name}</td>
+                        <td className={`whitespace-nowrap px-4 py-1.5 font-medium ${m.quantity_delta < 0 ? "text-rose-700" : "text-emerald-700"}`}>
+                          {m.quantity_delta > 0 ? "+" : ""}{fmtQty(m.quantity_delta)} {m.unit}
+                        </td>
+                        <td className="px-4 py-1.5 text-slate-600">{m.actor_name ?? "—"}</td>
+                        <td className="px-4 py-1.5 text-slate-600">
+                          {m.counterparty ?? m.note ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  {movements.filter((m) => !movFilter || m.action === movFilter).length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-400">{t("wh.noMovements")}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -491,6 +632,17 @@ export default function RaktarPage() {
                 <option value="van">{t("wh.kindVan")}</option>
               </select>
             </label>
+            {whForm.kind === "van" && (
+              <label className="block text-sm">
+                {t("wh.assignedUser")}
+                <select value={whForm.user_id} onChange={(e) => setWhForm({ ...whForm, user_id: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
+                  <option value="">—</option>
+                  {assignUsers.map((u) => (
+                    <option key={u.id} value={u.id}>{u.display_name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="block text-sm">
               {t("cons.notes")}
               <textarea value={whForm.notes} onChange={(e) => setWhForm({ ...whForm, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
@@ -503,6 +655,39 @@ export default function RaktarPage() {
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setWhForm(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
               <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{busy ? t("common.saving") : t("common.save")}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {addProduct && selected && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setAddProduct(null); }}
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+        >
+          <form onSubmit={saveAddProduct} className="my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">{t("wh.addProduct")} — {selected.name}</h2>
+            <p className="text-xs text-slate-500">{t("wh.addProductHint")}</p>
+            <label className="block text-sm">
+              {t("wh.product")} *
+              <select
+                required
+                value={addProduct.product_id}
+                onChange={(e) => setAddProduct({ product_id: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              >
+                {unassignedProducts.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+            {unassignedProducts.length === 0 && (
+              <p className="text-sm text-slate-500">{t("wh.allProductsAssigned")}</p>
+            )}
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setAddProduct(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={busy || unassignedProducts.length === 0} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{busy ? t("common.saving") : t("common.save")}</button>
             </div>
           </form>
         </div>

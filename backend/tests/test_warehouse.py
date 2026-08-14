@@ -100,20 +100,103 @@ async def test_warehouse_receive_transfer_adjust(client, manager):
     assert names["Uzletkötő autó"]["total_quantity"] == 8.0
 
 
-async def test_stock_mirrors_product_catalog(client, manager):
-    """A raktár készletnézete mindig a termék-katalógust tükrözi: új termék
-    azonnal megjelenik 0 készlettel (folyamatos szinkron)."""
+async def test_stock_manual_assignment(client, manager):
+    """A raktár választéka kézzel épül a katalógusból: hozzáadás 0 készlettel,
+    duplikátum tiltva, levétel csak üres készletnél."""
     _, mgr = manager
     site = await _make_warehouse(client, mgr)
-    await _make_product(client, mgr, "Kávé A")
+    a = await _make_product(client, mgr, "Kávé A")
+    await _make_product(client, mgr, "Kávé B")  # katalógusban van, raktárban nem
+
+    res = await client.get(f"/api/warehouses/{site['id']}/stock", headers=mgr)
+    assert res.json() == []  # a katalógus NEM kerül be automatikusan
+
+    res = await client.post(
+        f"/api/warehouses/{site['id']}/stock/add", json={"product_id": a["id"]},
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
     res = await client.get(f"/api/warehouses/{site['id']}/stock", headers=mgr)
     assert [r["product_name"] for r in res.json()] == ["Kávé A"]
     assert res.json()[0]["quantity"] == 0.0
 
-    # utólag felvett termék is automatikusan bekerül
-    await _make_product(client, mgr, "Kávé B")
+    # duplikált hozzárendelés tiltva
+    res = await client.post(
+        f"/api/warehouses/{site['id']}/stock/add", json={"product_id": a["id"]},
+        headers=mgr,
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "warehouse.product_exists"
+
+    # készlettel nem vehető le, üresen igen
+    await client.post(
+        f"/api/warehouses/{site['id']}/receive",
+        json={"product_id": a["id"], "quantity": 2.0}, headers=mgr,
+    )
+    res = await client.delete(f"/api/warehouses/{site['id']}/stock/{a['id']}", headers=mgr)
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "warehouse.stock_not_empty"
+    await client.post(
+        f"/api/warehouses/{site['id']}/adjust",
+        json={"product_id": a["id"], "counted_qty": 0}, headers=mgr,
+    )
+    res = await client.delete(f"/api/warehouses/{site['id']}/stock/{a['id']}", headers=mgr)
+    assert res.status_code == 200
     res = await client.get(f"/api/warehouses/{site['id']}/stock", headers=mgr)
-    assert [r["product_name"] for r in res.json()] == ["Kávé A", "Kávé B"]
+    assert res.json() == []
+
+
+async def test_movements_log_who_what_when(client, manager):
+    """A mozgásnapló rögzíti: ki, mikor, mit, mennyit — vételezés (áthelyezés)
+    és partnernek kiadás ellenoldallal együtt."""
+    _, mgr = manager
+    product = await _make_product(client, mgr)
+    site = await _make_warehouse(client, mgr, "Telephely", "site")
+    van = await _make_warehouse(client, mgr, "Autó 1", "van")
+    await client.post(
+        f"/api/warehouses/{site['id']}/receive",
+        json={"product_id": product["id"], "quantity": 12.0, "unit_cost": 4000},
+        headers=mgr,
+    )
+    await client.post(
+        "/api/warehouses/transfer",
+        json={"from_warehouse_id": site["id"], "to_warehouse_id": van["id"],
+              "product_id": product["id"], "quantity": 7.0},
+        headers=mgr,
+    )
+    res = await client.post("/api/partners", json={"name": "Napi Bolt"}, headers=mgr)
+    partner = res.json()
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 3.0,
+              "source_warehouse_id": van["id"]},
+        headers=mgr,
+    )
+
+    # az autó naplója: vételezés (transfer_in +7) és kiadás a partnernek (−3)
+    res = await client.get(f"/api/warehouses/{van['id']}/movements", headers=mgr)
+    assert res.status_code == 200, res.text
+    moves = res.json()
+    by_action = {m["action"]: m for m in moves}
+    assert by_action["transfer_in"]["quantity_delta"] == 7.0
+    assert by_action["transfer_in"]["counterparty"] == "Telephely"
+    assert by_action["transfer_in"]["actor_name"] is not None
+    assert by_action["issue"]["quantity_delta"] == -3.0
+    assert by_action["issue"]["counterparty"] == "Napi Bolt"
+    # a telephely naplója: bevét (+12, egységárral) és áthelyezés ki (−7)
+    res = await client.get(f"/api/warehouses/{site['id']}/movements", headers=mgr)
+    by_action = {m["action"]: m for m in res.json()}
+    assert by_action["receive"]["quantity_delta"] == 12.0
+    assert by_action["receive"]["unit_cost"] == 4000
+    assert by_action["transfer_out"]["counterparty"] == "Autó 1"
+
+
+async def test_assignable_users(client, manager):
+    _, mgr = manager
+    res = await client.get("/api/warehouses/assignable-users", headers=mgr)
+    assert res.status_code == 200, res.text
+    names = [u["role"] for u in res.json()]
+    assert "manager" in names
 
 
 async def test_reorder_suggestions(client, manager):
