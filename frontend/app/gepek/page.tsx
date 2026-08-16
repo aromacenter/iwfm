@@ -9,6 +9,7 @@ import AppShell from "@/components/AppShell";
 import CameraScanner, { cameraScanSupported } from "@/components/CameraScanner";
 import IconLegend from "@/components/IconLegend";
 import PartnerPicker from "@/components/PartnerPicker";
+import SearchSelect from "@/components/SearchSelect";
 import { api, ApiError, downloadFile, downloadFilePost, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -192,12 +193,12 @@ export default function GepekPage() {
     }
   }
 
-  async function downloadQrLabels() {
+  async function downloadQrLabels(fmt: "a4" | "small" = "a4") {
     // kijelölés nélkül a szűrt lista ÖSSZES gépére készül címkeív
     const ids = selected.size > 0 ? [...selected] : assets.map((a) => a.id);
     if (ids.length === 0) return;
     try {
-      await downloadFilePost("/api/assets/qr-labels", { ids }, "QR-cimkek.pdf");
+      await downloadFilePost("/api/assets/qr-labels", { ids, fmt }, "QR-cimkek.pdf");
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -444,15 +445,24 @@ export default function GepekPage() {
           </button>
         )}
         {assets.length > 0 && (
-          <button
-            onClick={downloadQrLabels}
-            title={t("inv.qrLabelsHint")}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
-          >
-            {selected.size > 0
-              ? t("inv.qrLabels", { count: selected.size })
-              : t("inv.qrLabelsAll", { count: assets.length })}
-          </button>
+          <>
+            <button
+              onClick={() => downloadQrLabels("a4")}
+              title={t("inv.qrLabelsHint")}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
+            >
+              {selected.size > 0
+                ? t("inv.qrLabels", { count: selected.size })
+                : t("inv.qrLabelsAll", { count: assets.length })}
+            </button>
+            <button
+              onClick={() => downloadQrLabels("small")}
+              title={t("inv.qrLabelsSmallHint")}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
+            >
+              {t("inv.qrLabelsSmall")}
+            </button>
+          </>
         )}
         <Link href="/partnerek" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">
           {t("inv.partners")}
@@ -666,16 +676,14 @@ export default function GepekPage() {
             </div>
             <label className="block text-sm">
               {t("inv.defaultProduct")}
-              <select
+              <SearchSelect
+                items={products.map((p) => ({ id: p.id, label: p.name }))}
                 value={assetForm.default_product_id}
-                onChange={(e) => setAssetForm({ ...assetForm, default_product_id: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-              >
-                <option value="">{t("inv.defaultProductNone")}</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                onChange={(id) => setAssetForm({ ...assetForm, default_product_id: id })}
+                allowEmpty
+                emptyLabel={t("inv.defaultProductNone")}
+                className="mt-1"
+              />
               <span className="mt-1 block text-xs text-slate-400">{t("inv.defaultProductHint")}</span>
             </label>
             <label className="flex items-center gap-2 text-sm">

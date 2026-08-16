@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
+import SearchSelect from "@/components/SearchSelect";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -35,6 +36,7 @@ interface WhStock {
 interface Product {
   id: string;
   name: string;
+  category: string | null;
   unit: string;
   purchase_price: number | null;
   is_active: boolean;
@@ -660,12 +662,15 @@ export default function RaktarPage() {
             {whForm.kind === "van" && (
               <label className="block text-sm">
                 {t("wh.assignedUser")}
-                <select value={whForm.user_id} onChange={(e) => setWhForm({ ...whForm, user_id: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
-                  <option value="">—</option>
-                  {assignUsers.map((u) => (
-                    <option key={u.id} value={u.id}>{u.display_name}</option>
-                  ))}
-                </select>
+                <SearchSelect
+                  items={assignUsers.map((u) => ({
+                    id: u.id, label: u.display_name, sublabel: u.role,
+                  }))}
+                  value={whForm.user_id}
+                  onChange={(id) => setWhForm({ ...whForm, user_id: id })}
+                  allowEmpty
+                  className="mt-1"
+                />
               </label>
             )}
             <label className="block text-sm">
@@ -695,16 +700,15 @@ export default function RaktarPage() {
             <p className="text-xs text-slate-500">{t("wh.addProductHint")}</p>
             <label className="block text-sm">
               {t("wh.product")} *
-              <select
+              <SearchSelect
                 required
+                items={unassignedProducts.map((p) => ({
+                  id: p.id, label: p.name, sublabel: p.category, badge: p.unit,
+                }))}
                 value={addProduct.product_id}
-                onChange={(e) => setAddProduct({ product_id: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-              >
-                {unassignedProducts.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                onChange={(id) => setAddProduct({ product_id: id })}
+                className="mt-1"
+              />
             </label>
             {unassignedProducts.length === 0 && (
               <p className="text-sm text-slate-500">{t("wh.allProductsAssigned")}</p>
@@ -729,30 +733,32 @@ export default function RaktarPage() {
             </h2>
             <label className="block text-sm">
               {t("wh.product")} *
-              <select
+              <SearchSelect
                 required
+                items={activeProducts.map((p) => ({
+                  id: p.id, label: p.name, sublabel: p.category, badge: p.unit,
+                }))}
                 value={action.product_id}
-                onChange={(e) => setAction({ ...action, product_id: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-              >
-                {activeProducts.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                onChange={(id) => setAction({ ...action, product_id: id })}
+                className="mt-1"
+              />
             </label>
             {action.kind === "transfer" && (
               <label className="block text-sm">
                 {t("wh.transferTo")} *
-                <select
+                <SearchSelect
                   required
+                  items={warehouses
+                    .filter((w) => w.id !== selectedId)
+                    .map((w) => ({
+                      id: w.id,
+                      label: `${w.kind === "van" ? "🚐" : "🏬"} ${w.name}`,
+                      sublabel: w.user_name,
+                    }))}
                   value={action.to_id}
-                  onChange={(e) => setAction({ ...action, to_id: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                >
-                  {warehouses.filter((w) => w.id !== selectedId).map((w) => (
-                    <option key={w.id} value={w.id}>{w.kind === "van" ? "🚐" : "🏬"} {w.name}</option>
-                  ))}
-                </select>
+                  onChange={(id) => setAction({ ...action, to_id: id })}
+                  className="mt-1"
+                />
               </label>
             )}
             <label className="block text-sm">
@@ -794,20 +800,29 @@ export default function RaktarPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block text-sm">
                 {t("po.supplier")}
-                <select value={poForm.supplier_partner_id} onChange={(e) => setPoForm({ ...poForm, supplier_partner_id: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
-                  <option value="">—</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                <SearchSelect
+                  items={suppliers.map((s) => ({ id: s.id, label: s.name }))}
+                  value={poForm.supplier_partner_id}
+                  onChange={(id) => setPoForm({ ...poForm, supplier_partner_id: id })}
+                  allowEmpty
+                  className="mt-1"
+                />
               </label>
               <label className="block text-sm">
                 {t("po.warehouse")} *
-                <select required value={poForm.warehouse_id} onChange={(e) => setPoForm({ ...poForm, warehouse_id: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
-                  {warehouses.filter((w) => w.is_active).map((w) => (
-                    <option key={w.id} value={w.id}>{w.kind === "van" ? "🚐" : "🏬"} {w.name}</option>
-                  ))}
-                </select>
+                <SearchSelect
+                  required
+                  items={warehouses
+                    .filter((w) => w.is_active)
+                    .map((w) => ({
+                      id: w.id,
+                      label: `${w.kind === "van" ? "🚐" : "🏬"} ${w.name}`,
+                      sublabel: w.user_name,
+                    }))}
+                  value={poForm.warehouse_id}
+                  onChange={(id) => setPoForm({ ...poForm, warehouse_id: id })}
+                  className="mt-1"
+                />
               </label>
             </div>
             <label className="block text-sm">
@@ -818,23 +833,22 @@ export default function RaktarPage() {
               <div className="mb-1 text-sm font-medium">{t("po.linesCol")}</div>
               {poForm.lines.map((line, i) => (
                 <div key={i} className="mb-2 flex items-center gap-2">
-                  <select
+                  <SearchSelect
+                    items={activeProducts.map((p) => ({
+                      id: p.id, label: p.name, sublabel: p.category, badge: p.unit,
+                    }))}
                     value={line.product_id}
-                    onChange={(e) => {
-                      const prod = activeProducts.find((p) => p.id === e.target.value);
+                    onChange={(id) => {
+                      const prod = activeProducts.find((p) => p.id === id);
                       const lines = [...poForm.lines];
                       lines[i] = {
-                        ...line, product_id: e.target.value,
+                        ...line, product_id: id,
                         unit_cost: line.unit_cost || prod?.purchase_price?.toString() || "",
                       };
                       setPoForm({ ...poForm, lines });
                     }}
-                    className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-                  >
-                    {activeProducts.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                    className="flex-1"
+                  />
                   <input
                     type="number" min={0.001} step="0.001" required
                     placeholder={t("wh.quantity")}

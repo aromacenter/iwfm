@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
 import PartnerPicker from "@/components/PartnerPicker";
+import SearchSelect from "@/components/SearchSelect";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, ApiError, downloadFile, errorMessage } from "@/lib/api";
 import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT } from "@/lib/companies";
@@ -43,6 +44,7 @@ interface Stock {
 interface Product {
   id: string;
   name: string;
+  category: string | null;
   is_active: boolean;
   purchase_price: number | null;
   price_per_portion: number;
@@ -56,7 +58,7 @@ interface Settlement {
   partner_name: string | null;
   settled_by_name: string;
   invoicing_company: "xp" | "pc" | null;
-  payment_method: "cash" | "card" | "transfer";
+  payment_method: "cash" | "card" | "transfer" | "cod";
   no_vat: boolean;
   total_net: number;
   total_gross: number;
@@ -113,7 +115,7 @@ interface DuePartner {
   suggested_kg: number | null;
 }
 
-const PAYMENTS = ["cash", "card", "transfer"] as const;
+const PAYMENTS = ["cash", "card", "transfer", "cod"] as const;
 
 interface CtxMachine {
   asset_id: string;
@@ -139,7 +141,6 @@ interface MachineInput {
   newCounter: string;
   newCounters: string[];
   service: string;
-  discount: string;
 }
 
 interface MachinePayload {
@@ -248,13 +249,14 @@ export default function ElszamolasPage() {
   }, [partnerId]);
 
   const loadCtx = useCallback(() => {
+    setDiscountAll(false);
     if (!partnerId) { setCtx(null); setMachineInputs({}); setPaidAmount(""); return; }
     api.get<SettlementContext>(`/api/partners/${partnerId}/settlement-context`).then((c) => {
       setCtx(c);
       setMachineInputs(Object.fromEntries(c.machines.map((m) => [
         m.asset_id,
         { newCounter: "", newCounters: Array.from({ length: m.counter_count }, () => ""),
-          service: "", discount: "" },
+          service: "" },
       ])));
       setMachineProducts(Object.fromEntries(c.machines.map((m) => [
         m.asset_id,
@@ -500,9 +502,6 @@ export default function ElszamolasPage() {
       const belowPrev = filled && (newCounter as number) < m.prev_counter;
       const brewed = filled ? Math.max((newCounter as number) - m.prev_counter, 0) : 0;
       const service = Number(inp?.service) || 0;
-      // Kedvezmény-pipa: a NETTÓ ár a fizetendő (ÁFA és Billingó-számla
-      // nélkül) — az összeget nem csökkenti, a mentés no_vat-ként kezeli.
-      const discounted = (inp?.discount ?? "") !== "";
       const billed = Math.max(brewed - service, 0);
       const pid = machineProducts[m.asset_id] || m.default_product_id || ctx.single_product_id;
       const stockRow = pid ? stockRows.find((x) => x.product_id === pid) : undefined;
@@ -514,16 +513,33 @@ export default function ElszamolasPage() {
         billedByProduct[pid] = (billedByProduct[pid] ?? 0) + billed;
         amountByProduct[pid] = (amountByProduct[pid] ?? 0) + amount;
       }
-      return { ...m, filled, newCounter, brewed, billed, discounted, price, amount, belowPrev };
+      return { ...m, filled, newCounter, brewed, billed, price, amount, belowPrev };
     });
     return { rows, billedByProduct, amountByProduct };
   }, [ctx, machineInputs, machineProducts, stockRows, products]);
 
-  // Bármely gép-soron bepipált kedvezmény → az egész elszámolás ÁFA és
-  // Billingó-számla nélkül megy (a nettó a fizetendő).
-  const noVat = machinePreview.rows.some(
-    (r) => (machineInputs[r.asset_id]?.discount ?? "") !== "",
-  );
+  // Kedvezményes elszámolás: mindent-vagy-semmit kapcsoló — az egész
+  // elszámolás ÁFA és Billingó-számla nélkül megy (a nettó a fizetendő).
+  const [discountAll, setDiscountAll] = useState(false);
+  const noVat = discountAll;
+
+  // A következő kitöltendő számláló-mezőre ugrás (gomb + Enter a mezőkben).
+  function jumpToNextCounter(fromEl?: HTMLElement | null) {
+    const els = Array.from(
+      document.querySelectorAll<HTMLInputElement>("input[data-counter-input]"),
+    );
+    if (!els.length) return;
+    let start = 0;
+    if (fromEl) {
+      const i = els.indexOf(fromEl as HTMLInputElement);
+      start = i >= 0 ? i + 1 : 0;
+    }
+    const next = els.slice(start).find((el) => el.value === "") ?? els[start] ?? null;
+    if (next) {
+      next.focus();
+      next.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }
 
   // Élő fogyás-előnézet a beírt leltár alapján — a gép-sorok által lefedett
   // termékeknél a számlázott adag/összeg a gépekből jön.
@@ -1181,7 +1197,28 @@ export default function ElszamolasPage() {
 
       {partnerId && ctx && ctx.machines.length > 0 && (
         <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <p className="px-4 pt-3 text-sm font-semibold">{t("cons.machinesTitle")}</p>
+          <div className="flex flex-wrap items-center gap-3 px-4 pt-3">
+            <p className="text-sm font-semibold">{t("cons.machinesTitle")}</p>
+            <button
+              type="button"
+              onClick={() => jumpToNextCounter()}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+            >
+              ⏭ {t("cons.nextCounter")}
+            </button>
+            <label
+              title={t("cons.machineDiscountHint")}
+              className="ml-auto flex cursor-pointer items-center gap-2 text-sm"
+            >
+              <input
+                type="checkbox"
+                checked={discountAll}
+                onChange={(e) => setDiscountAll(e.target.checked)}
+                className="h-4 w-4"
+              />
+              {t("cons.discountAll")}
+            </label>
+          </div>
           <p className="px-4 pb-2 text-xs text-slate-400">{t("cons.machinesHint")}</p>
           <table className="w-full text-sm">
             <thead>
@@ -1193,7 +1230,7 @@ export default function ElszamolasPage() {
                 <th className="px-4 py-2.5">{t("cons.machineNewCounter")}</th>
                 <th className="px-4 py-2.5">{t("cons.machineBrewed")}</th>
                 <th className="px-4 py-2.5">{t("cons.machineService")}</th>
-                <th className="px-4 py-2.5">{t("cons.machineDiscount")}</th>
+                <th className="px-4 py-2.5 text-right">{t("cons.portionPrice")}</th>
                 <th className="px-4 py-2.5 text-right">{t("cons.amountNet")}</th>
               </tr>
             </thead>
@@ -1203,30 +1240,23 @@ export default function ElszamolasPage() {
                   <td className="px-4 py-2.5 font-mono text-xs">{m.barcode}</td>
                   <td className="px-4 py-2.5">
                     <div className="font-medium">{m.name}</div>
-                    <select
-                      value={machineProducts[m.asset_id] ?? ""}
-                      onChange={(e) =>
-                        setMachineProducts({ ...machineProducts, [m.asset_id]: e.target.value })
-                      }
-                      title={t("cons.machineProductHint")}
-                      className={`mt-0.5 max-w-44 rounded border px-1.5 py-1 text-xs ${machineProducts[m.asset_id] ? "border-slate-200 text-slate-500" : "border-amber-300 bg-amber-50 text-amber-700"}`}
-                    >
-                      <option value="">{t("cons.machineProductChoose")}</option>
-                      {stock.length > 0 && (
-                        <optgroup label={t("cons.partnerStockGroup")}>
-                          {stock.map((s) => (
-                            <option key={s.product_id} value={s.product_id}>{s.product_name}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      <optgroup label={t("cons.allProductsGroup")}>
-                        {activeProducts
+                    <SearchSelect
+                      items={[
+                        ...stock.map((s) => ({
+                          id: s.product_id, label: s.product_name,
+                          sublabel: t("cons.partnerStockGroup"),
+                        })),
+                        ...activeProducts
                           .filter((p) => !stock.some((s) => s.product_id === p.id))
-                          .map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                      </optgroup>
-                    </select>
+                          .map((p) => ({ id: p.id, label: p.name, sublabel: p.category })),
+                      ]}
+                      value={machineProducts[m.asset_id] ?? ""}
+                      onChange={(id) =>
+                        setMachineProducts({ ...machineProducts, [m.asset_id]: id })
+                      }
+                      placeholder={t("cons.machineProductChoose")}
+                      className="mt-0.5 max-w-52 text-xs"
+                    />
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-500">
                     {m.last_settled_at ? fmt(m.last_settled_at) : "—"}
@@ -1239,12 +1269,16 @@ export default function ElszamolasPage() {
                           <input
                             key={i}
                             type="number" min={0}
+                            data-counter-input={`${m.asset_id}-${i}`}
                             value={v}
                             onChange={(e) => {
                               const inp = machineInputs[m.asset_id];
                               const next = [...inp.newCounters];
                               next[i] = e.target.value;
                               setMachineInputs({ ...machineInputs, [m.asset_id]: { ...inp, newCounters: next } });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); jumpToNextCounter(e.currentTarget); }
                             }}
                             placeholder={String(m.counters?.[i] ?? "")}
                             className="w-20 rounded-lg border border-slate-300 px-2 py-1.5"
@@ -1254,6 +1288,7 @@ export default function ElszamolasPage() {
                     ) : (
                       <input
                         type="number" min={0}
+                        data-counter-input={m.asset_id}
                         value={machineInputs[m.asset_id]?.newCounter ?? ""}
                         onChange={(e) =>
                           setMachineInputs({
@@ -1261,6 +1296,9 @@ export default function ElszamolasPage() {
                             [m.asset_id]: { ...machineInputs[m.asset_id], newCounter: e.target.value },
                           })
                         }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); jumpToNextCounter(e.currentTarget); }
+                        }}
                         placeholder={String(m.prev_counter)}
                         className={`w-24 rounded-lg border px-2 py-1.5 ${m.belowPrev ? "border-rose-400 bg-rose-50" : "border-slate-300"}`}
                       />
@@ -1287,26 +1325,8 @@ export default function ElszamolasPage() {
                       className="w-16 rounded-lg border border-slate-300 px-2 py-1.5"
                     />
                   </td>
-                  <td className="px-4 py-2.5">
-                    <label
-                      title={t("cons.machineDiscountHint")}
-                      className="flex cursor-pointer items-center justify-center"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={(machineInputs[m.asset_id]?.discount ?? "") !== ""}
-                        onChange={(e) =>
-                          setMachineInputs({
-                            ...machineInputs,
-                            [m.asset_id]: {
-                              ...machineInputs[m.asset_id],
-                              discount: e.target.checked ? "1" : "",
-                            },
-                          })
-                        }
-                        className="h-4 w-4"
-                      />
-                    </label>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
+                    {m.price !== null ? ft(m.price) : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-right font-medium tabular-nums">
                     {m.filled ? (m.price !== null ? ft(Math.round(m.amount)) : "?") : "—"}
@@ -1433,18 +1453,15 @@ export default function ElszamolasPage() {
           </table>
           {/* Termék felvétele a leltárba — készlet-sor nélküli partnernél is */}
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2.5">
-            <select
-              value={addProductId}
-              onChange={(e) => setAddProductId(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm"
-            >
-              <option value="">{t("cons.addProductChoose")}</option>
-              {activeProducts
+            <SearchSelect
+              items={activeProducts
                 .filter((p) => !stockRows.some((s) => s.product_id === p.id))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-            </select>
+                .map((p) => ({ id: p.id, label: p.name, sublabel: p.category, badge: p.unit }))}
+              value={addProductId}
+              onChange={setAddProductId}
+              placeholder={t("cons.addProductChoose")}
+              className="w-72 text-sm"
+            />
             <button
               type="button"
               disabled={!addProductId}
@@ -1807,26 +1824,25 @@ export default function ElszamolasPage() {
             <h2 className="text-lg font-semibold">{t("cons.replenishTitle")}</h2>
             <label className="block text-sm">
               {t("cons.name")}
-              <select
+              <SearchSelect
                 required
+                items={activeProducts.map((p) => ({
+                  id: p.id, label: p.name, sublabel: p.category, badge: p.unit,
+                }))}
                 value={replenish.product_id}
-                onChange={(e) => {
-                  const prod = activeProducts.find((p) => p.id === e.target.value);
+                onChange={(id) => {
+                  const prod = activeProducts.find((p) => p.id === id);
                   setReplenish({
                     ...replenish,
-                    product_id: e.target.value,
+                    product_id: id,
                     unit_cost: prod?.purchase_price?.toString() ?? "",
                   });
                 }}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-              >
-                {activeProducts.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                className="mt-1"
+              />
             </label>
             <label className="block text-sm">
-              {t("cons.quantity")} (kg)
+              {t("cons.quantity")} ({activeProducts.find((p) => p.id === replenish.product_id)?.unit ?? "kg"})
               <input
                 required
                 type="number"
@@ -1853,16 +1869,17 @@ export default function ElszamolasPage() {
             {srcWarehouses.length > 0 && (
               <label className="block text-sm">
                 {t("cons.sourceWarehouse")}
-                <select
+                <SearchSelect
+                  items={srcWarehouses.map((w) => ({
+                    id: w.id,
+                    label: `${w.kind === "van" ? "🚐" : "🏬"} ${w.name}`,
+                  }))}
                   value={replenish.source_warehouse_id}
-                  onChange={(e) => setReplenish({ ...replenish, source_warehouse_id: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-                >
-                  <option value="">{t("cons.sourceWarehouseNone")}</option>
-                  {srcWarehouses.map((w) => (
-                    <option key={w.id} value={w.id}>{w.kind === "van" ? "🚐" : "🏬"} {w.name}</option>
-                  ))}
-                </select>
+                  onChange={(id) => setReplenish({ ...replenish, source_warehouse_id: id })}
+                  allowEmpty
+                  emptyLabel={t("cons.sourceWarehouseNone")}
+                  className="mt-1"
+                />
                 <span className="mt-1 block text-xs text-slate-400">{t("cons.sourceWarehouseNote")}</span>
               </label>
             )}

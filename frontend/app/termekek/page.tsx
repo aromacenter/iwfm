@@ -3,7 +3,7 @@
 /** Termékek (bizomány): a partnerekhez kihelyezhető fogyóeszközök (pl. kávé)
  *  katalógusa — gramm/adag és ár/adag beállítással (elszámolás alapja). */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
@@ -14,6 +14,7 @@ import { useUI } from "@/lib/ui";
 interface Product {
   id: string;
   name: string;
+  category: string | null;
   unit: string;
   grams_per_portion: number;
   price_per_portion: number;
@@ -30,9 +31,12 @@ function marginPerPortion(p: Product): number | null {
   return p.price_per_portion - (p.purchase_price * p.grams_per_portion) / 1000;
 }
 
+const DEFAULT_CATEGORIES = ["Kávék", "Kávégépek", "Alkatrészek", "Kellékek"];
+
 const EMPTY = {
   id: "",
   name: "",
+  category: "",
   unit: "kg",
   grams_per_portion: "7",
   price_per_portion: "",
@@ -58,11 +62,28 @@ export default function TermekekPage() {
   }, []);
   useEffect(load, [load]);
 
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) if (p.category) set.add(p.category);
+    return [...set].sort((a, b) => a.localeCompare(b, "hu"));
+  }, [products]);
+  const shownProducts = useMemo(
+    () =>
+      categoryFilter === ""
+        ? products
+        : products.filter((p) =>
+            categoryFilter === "__none__" ? !p.category : p.category === categoryFilter,
+          ),
+    [products, categoryFilter],
+  );
+
   function edit(p: Product) {
     setError(null);
     setForm({
       id: p.id,
       name: p.name,
+      category: p.category ?? "",
       unit: p.unit,
       grams_per_portion: String(p.grams_per_portion),
       price_per_portion: String(p.price_per_portion),
@@ -113,6 +134,7 @@ export default function TermekekPage() {
     try {
       const body = {
         name: form.name,
+        category: form.category.trim() || null,
         unit: form.unit || "kg",
         grams_per_portion: Number(form.grams_per_portion) || 7,
         price_per_portion: Number(form.price_per_portion) || 0,
@@ -154,6 +176,34 @@ export default function TermekekPage() {
         </button>
       </div>
 
+      {(categories.length > 0 || categoryFilter !== "") && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setCategoryFilter("")}
+            className={`rounded-full px-3 py-1 text-xs ${categoryFilter === "" ? "bg-indigo-600 font-medium text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-100"}`}
+          >
+            {t("cons.categoryAll")}
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategoryFilter(c)}
+              className={`rounded-full px-3 py-1 text-xs ${categoryFilter === c ? "bg-indigo-600 font-medium text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-100"}`}
+            >
+              {c}
+            </button>
+          ))}
+          {products.some((p) => !p.category) && (
+            <button
+              onClick={() => setCategoryFilter("__none__")}
+              className={`rounded-full px-3 py-1 text-xs ${categoryFilter === "__none__" ? "bg-indigo-600 font-medium text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-100"}`}
+            >
+              {t("cons.categoryNone")}
+            </button>
+          )}
+        </div>
+      )}
+
       <IconLegend items={[{ icon: "✏️", label: t("common.edit") }]} />
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -163,9 +213,9 @@ export default function TermekekPage() {
               <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                 <input
                   type="checkbox"
-                  checked={products.length > 0 && products.every((p) => selected.has(p.id))}
+                  checked={shownProducts.length > 0 && shownProducts.every((p) => selected.has(p.id))}
                   onChange={(e) =>
-                    setSelected(e.target.checked ? new Set(products.map((p) => p.id)) : new Set())
+                    setSelected(e.target.checked ? new Set(shownProducts.map((p) => p.id)) : new Set())
                   }
                   className="h-4 w-4"
                 />
@@ -182,7 +232,7 @@ export default function TermekekPage() {
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
+            {shownProducts.map((p) => (
               <tr key={p.id} className="border-b border-slate-100 last:border-0">
                 {canDelete && (
                 <td className="px-3 py-3">
@@ -201,7 +251,12 @@ export default function TermekekPage() {
                       <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-normal">{t("partners.inactive")}</span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-400">{p.unit}</div>
+                  <div className="text-xs text-slate-400">
+                    {p.unit}
+                    {p.category && (
+                      <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">{p.category}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">{p.grams_per_portion} g</td>
                 <td className="px-4 py-3 font-medium">{p.price_per_portion.toLocaleString("hu-HU")} Ft</td>
@@ -230,7 +285,7 @@ export default function TermekekPage() {
                 </td>
               </tr>
             ))}
-            {products.length === 0 && (
+            {shownProducts.length === 0 && (
               <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">{t("cons.noProducts")}</td></tr>
             )}
           </tbody>
@@ -247,6 +302,21 @@ export default function TermekekPage() {
             <label className="block text-sm">
               {t("cons.name")} *
               <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="block text-sm">
+              {t("cons.category")}
+              <input
+                list="category-options"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                placeholder={t("cons.categoryHint")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+              <datalist id="category-options">
+                {[...new Set([...DEFAULT_CATEGORIES, ...categories])].map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </label>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="block text-sm">
