@@ -1114,6 +1114,45 @@ class AuditEvent(Base):
     )
 
 
+class PartnerContract(Base):
+    """Partner-szerződés — a partnertől KÜLÖN kezelt feltétel-készlet,
+    érvényességi idővel. Egy partnernek több szerződése lehet (történet +
+    jövőbeli); az elszámolás mindig az adott napon érvényeset alkalmazza.
+    A partneren lévő contract_* mezők a mindenkor aktív szerződés tükrei
+    (apply_active_contract szinkronizálja) — a számítási kód ezekre épül."""
+
+    __tablename__ = "partner_contracts"
+    __table_args__ = (
+        Index("ix_partner_contracts_partner", "partner_id", "valid_from"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("partners.id", ondelete="CASCADE", name="fk_partner_contracts_partner"),
+        nullable=False,
+    )
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)  # None = határozatlan
+    # Feltételek (a korábbi partner-mezők megfelelői):
+    min_portions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    below_min_price: Mapped[float | None] = mapped_column(Float, nullable=True)  # Ft/adag
+    min_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    below_min_price_kg: Mapped[float | None] = mapped_column(Float, nullable=True)  # Ft/kg
+    rent_if_below_min: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_partner_contracts_user"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class Warehouse(Base):
     """Saját raktár: telephely (site) vagy üzletkötői autó (van). Az áruút:
     beszerzés → telephely → autó → partner külső raktára (feltöltés)."""

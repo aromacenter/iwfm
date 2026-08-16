@@ -515,6 +515,13 @@ async def settlement_context(
     és termék-hozzárendeléssel, nyitott tartozás, aktív szerződések száma."""
     partner = await _get_partner_or_404(db, partner_id)
 
+    # A tükör-mezők frissítése az aktuálisan érvényes szerződésből (jövőbeli
+    # szerződés élesedik, lejárt kikapcsol).
+    from app.services.wfm.contracts import apply_active_contract
+
+    await apply_active_contract(db, partner)
+    await db.commit()
+
     assets = (
         await db.execute(
             select(Asset)
@@ -1059,6 +1066,12 @@ async def create_settlement(
     if not body.lines and not body.machines:
         raise HTTPException(status_code=422, detail={"code": "settlement.empty"})
     partner = await _get_partner_or_404(db, body.partner_id)
+
+    # Az elszámolás a MA érvényes szerződés feltételeivel számol — a partner
+    # tükör-mezőit frissítjük az aktív szerződésből.
+    from app.services.wfm.contracts import apply_active_contract
+
+    await apply_active_contract(db, partner)
 
     settlement = Settlement(
         partner_id=partner.id,

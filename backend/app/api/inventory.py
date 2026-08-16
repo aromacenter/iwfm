@@ -78,13 +78,9 @@ class PartnerBody(BaseModel):
     billing_number: str | None = Field(default=None, max_length=32)
     bank_account: str | None = Field(default=None, max_length=64)
     payment_terms_days: int | None = Field(default=None, ge=0, le=365)
-    # Partner-szintű szerződés (felülírja a gépeken beállítottat)
-    contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
-    contract_below_min_price: float | None = Field(default=None, ge=0)  # Ft/adag
-    contract_min_kg: float | None = Field(default=None, ge=0, le=100_000)  # kg/hó
-    contract_below_min_price_kg: float | None = Field(default=None, ge=0)  # Ft/kg
-    contract_no_min_until: date | None = None  # türelmi időszak vége
-    contract_rent_if_below_min: bool = False  # minimum alatt bérleti díj a szankció
+    # A szerződéses feltételek KÜLÖN entitásban élnek (/contracts) — a
+    # partner-űrlap nem írja őket; a partneren lévő contract_* mezők a
+    # mindenkor aktív szerződés tükrei.
     notes: str | None = None
     is_active: bool = True
 

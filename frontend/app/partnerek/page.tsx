@@ -77,12 +77,6 @@ const EMPTY = {
   billing_number: "",
   bank_account: "",
   payment_terms_days: "",
-  contract_min_portions: "",
-  contract_below_min_price: "",
-  contract_min_kg: "",
-  contract_below_min_price_kg: "",
-  contract_no_min_until: "",
-  contract_rent_if_below_min: false,
   notes: "",
   is_active: true,
 };
@@ -173,12 +167,6 @@ export default function PartnerekPage() {
       billing_number: p.billing_number ?? "",
       bank_account: p.bank_account ?? "",
       payment_terms_days: p.payment_terms_days != null ? String(p.payment_terms_days) : "",
-      contract_min_portions: p.contract_min_portions != null ? String(p.contract_min_portions) : "",
-      contract_below_min_price: p.contract_below_min_price != null ? String(p.contract_below_min_price) : "",
-      contract_min_kg: p.contract_min_kg != null ? String(p.contract_min_kg) : "",
-      contract_below_min_price_kg: p.contract_below_min_price_kg != null ? String(p.contract_below_min_price_kg) : "",
-      contract_no_min_until: p.contract_no_min_until ?? "",
-      contract_rent_if_below_min: p.contract_rent_if_below_min,
       notes: p.notes ?? "",
       is_active: p.is_active,
     });
@@ -245,12 +233,6 @@ export default function PartnerekPage() {
         billing_number: form.billing_number || null,
         bank_account: form.bank_account || null,
         payment_terms_days: form.payment_terms_days ? Number(form.payment_terms_days) : null,
-        contract_min_portions: form.contract_min_portions ? Number(form.contract_min_portions) : null,
-        contract_below_min_price: form.contract_below_min_price ? Number(form.contract_below_min_price) : null,
-        contract_min_kg: form.contract_min_kg ? Number(form.contract_min_kg) : null,
-        contract_below_min_price_kg: form.contract_below_min_price_kg ? Number(form.contract_below_min_price_kg) : null,
-        contract_no_min_until: form.contract_no_min_until || null,
-        contract_rent_if_below_min: form.contract_rent_if_below_min,
         notes: form.notes || null,
         is_active: form.is_active,
       };
@@ -262,6 +244,103 @@ export default function PartnerekPage() {
       setError(errorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // ── Szerződések (külön entitás, érvényességgel) ──
+  interface Contract {
+    id: string;
+    valid_from: string;
+    valid_to: string | null;
+    min_portions: number | null;
+    below_min_price: number | null;
+    min_kg: number | null;
+    below_min_price_kg: number | null;
+    rent_if_below_min: boolean;
+    note: string | null;
+    status: "active" | "future" | "expired";
+  }
+  const [contractsFor, setContractsFor] = useState<{ id: string; name: string } | null>(null);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [cForm, setCForm] = useState<{
+    id: string; valid_from: string; valid_to: string; min_portions: string;
+    below_min_price: string; min_kg: string; below_min_price_kg: string;
+    rent_if_below_min: boolean; note: string;
+  } | null>(null);
+  const [cError, setCError] = useState<string | null>(null);
+  const [cBusy, setCBusy] = useState(false);
+
+  async function openContracts(p: { id: string; name: string }) {
+    setContractsFor(p);
+    setCForm(null);
+    setCError(null);
+    try {
+      setContracts(await api.get<Contract[]>(`/api/partners/${p.id}/contracts`));
+    } catch {
+      setContracts([]);
+    }
+  }
+
+  function newContractForm() {
+    setCError(null);
+    setCForm({
+      id: "", valid_from: new Date().toISOString().slice(0, 10), valid_to: "",
+      min_portions: "", below_min_price: "", min_kg: "", below_min_price_kg: "",
+      rent_if_below_min: false, note: "",
+    });
+  }
+
+  function editContractForm(c: Contract) {
+    setCError(null);
+    setCForm({
+      id: c.id, valid_from: c.valid_from, valid_to: c.valid_to ?? "",
+      min_portions: c.min_portions != null ? String(c.min_portions) : "",
+      below_min_price: c.below_min_price != null ? String(c.below_min_price) : "",
+      min_kg: c.min_kg != null ? String(c.min_kg) : "",
+      below_min_price_kg: c.below_min_price_kg != null ? String(c.below_min_price_kg) : "",
+      rent_if_below_min: c.rent_if_below_min, note: c.note ?? "",
+    });
+  }
+
+  async function saveContract(e: React.FormEvent) {
+    e.preventDefault();
+    if (!cForm || !contractsFor) return;
+    setCBusy(true);
+    setCError(null);
+    try {
+      const body = {
+        valid_from: cForm.valid_from,
+        valid_to: cForm.valid_to || null,
+        min_portions: cForm.min_portions ? Number(cForm.min_portions) : null,
+        below_min_price: cForm.below_min_price ? Number(cForm.below_min_price) : null,
+        min_kg: cForm.min_kg ? Number(cForm.min_kg) : null,
+        below_min_price_kg: cForm.below_min_price_kg ? Number(cForm.below_min_price_kg) : null,
+        rent_if_below_min: cForm.rent_if_below_min,
+        note: cForm.note || null,
+      };
+      if (cForm.id) await api.patch(`/api/partners/${contractsFor.id}/contracts/${cForm.id}`, body);
+      else await api.post(`/api/partners/${contractsFor.id}/contracts`, body);
+      toast(t("contracts.saved"), "success");
+      setCForm(null);
+      await openContracts(contractsFor);
+      load();
+    } catch (err) {
+      setCError(errorMessage(err));
+    } finally {
+      setCBusy(false);
+    }
+  }
+
+  async function deleteContract(c: Contract) {
+    if (!contractsFor) return;
+    if (!(await confirm(t("contracts.deleteConfirm", { from: c.valid_from })))) return;
+    try {
+      await api.delete(`/api/partners/${contractsFor.id}/contracts/${c.id}`);
+      toast(t("contracts.deleted"), "success");
+      await openContracts(contractsFor);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -394,6 +473,7 @@ export default function PartnerekPage() {
       <IconLegend
         items={[
           { icon: "🔗", label: t("portal.linkBtn") },
+          { icon: "📜", label: t("contracts.title") },
           { icon: "✏️", label: t("common.edit") },
         ]}
       />
@@ -470,6 +550,13 @@ export default function PartnerekPage() {
                       className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                     >
                       🔗
+                    </button>
+                    <button
+                      onClick={() => openContracts({ id: p.id, name: p.name })}
+                      title={t("contracts.title")}
+                      className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                    >
+                      📜
                     </button>
                     <button
                       onClick={() => edit(p)}
@@ -607,84 +694,20 @@ export default function PartnerekPage() {
               </div>
             </fieldset>
 
-            <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
+            <fieldset className="space-y-2 rounded-xl border border-slate-200 p-3">
               <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("partners.contractSection")}</legend>
-              <p className="text-xs text-slate-400">{t("partners.contractHint")}</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="block text-sm">
-                  {t("partners.contractMinPortions")}
-                  <input
-                    type="number" min={0}
-                    value={form.contract_min_portions}
-                    onChange={(e) => setForm({ ...form, contract_min_portions: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                  />
-                </label>
-                <label className="block text-sm">
-                  {t("partners.contractBelowMinPrice")}
-                  <input
-                    type="number" min={0} step="0.01"
-                    value={form.contract_below_min_price}
-                    onChange={(e) => setForm({ ...form, contract_below_min_price: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                  />
-                </label>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="block text-sm">
-                  {t("partners.contractMinKg")}
-                  <input
-                    type="number" min={0} step="0.1"
-                    value={form.contract_min_kg}
-                    onChange={(e) => setForm({ ...form, contract_min_kg: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                  />
-                </label>
-                <label className="block text-sm">
-                  {t("partners.contractBelowMinPriceKg")}
-                  <input
-                    type="number" min={0} step="0.01"
-                    value={form.contract_below_min_price_kg}
-                    onChange={(e) => setForm({ ...form, contract_below_min_price_kg: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                  />
-                </label>
-              </div>
-              <div className="flex flex-wrap items-end gap-3">
-                <label className="block flex-1 text-sm">
-                  {t("partners.contractNoMinUntil")}
-                  <input
-                    type="date"
-                    value={form.contract_no_min_until}
-                    onChange={(e) => setForm({ ...form, contract_no_min_until: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                  />
-                </label>
+              <p className="text-xs text-slate-400">{t("contracts.movedHint")}</p>
+              {form.id ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setMonth(d.getMonth() + 3);
-                    setForm({ ...form, contract_no_min_until: d.toISOString().slice(0, 10) });
-                  }}
-                  title={t("partners.contractGraceHint")}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100"
+                  onClick={() => openContracts({ id: form.id, name: form.name })}
+                  className="rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
                 >
-                  {t("partners.contractGrace3m")}
+                  📜 {t("contracts.manage")}
                 </button>
-              </div>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.contract_rent_if_below_min}
-                  onChange={(e) => setForm({ ...form, contract_rent_if_below_min: e.target.checked })}
-                  className="mt-0.5 h-4 w-4"
-                />
-                <span>
-                  {t("partners.contractRentIfBelowMin")}
-                  <span className="block text-xs text-slate-400">{t("partners.contractRentIfBelowMinHint")}</span>
-                </span>
-              </label>
+              ) : (
+                <p className="text-xs text-slate-400">{t("contracts.afterSaveHint")}</p>
+              )}
             </fieldset>
 
             <label className="block text-sm">
@@ -707,6 +730,121 @@ export default function PartnerekPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {contractsFor && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setContractsFor(null); }}
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+        >
+          <div className="my-8 w-full max-w-2xl space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">📜 {t("contracts.titleFor", { name: contractsFor.name })}</h2>
+              <button onClick={() => setContractsFor(null)} className="text-sm text-slate-500 hover:underline">
+                ✕ {t("common.close")}
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">{t("contracts.hint")}</p>
+
+            {!cForm && (
+              <>
+                <button
+                  onClick={newContractForm}
+                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                >
+                  {t("contracts.new")}
+                </button>
+                <div className="space-y-2">
+                  {contracts.map((c) => (
+                    <div key={c.id} className="rounded-xl border border-slate-200 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                          c.status === "active" ? "bg-emerald-100 text-emerald-800"
+                          : c.status === "future" ? "bg-sky-100 text-sky-800"
+                          : "bg-slate-200 text-slate-500"
+                        }`}>
+                          {t(`contracts.status_${c.status}`)}
+                        </span>
+                        <span className="text-sm font-medium">
+                          {c.valid_from} → {c.valid_to ?? t("contracts.openEnded")}
+                        </span>
+                        <span className="ml-auto flex gap-1">
+                          <button onClick={() => editContractForm(c)} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">✏️</button>
+                          <button onClick={() => deleteContract(c)} title={t("contracts.delete")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-red-50">🗑️</button>
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">
+                        {[
+                          c.min_portions != null ? t("contracts.sumMinPortions", { n: c.min_portions, price: c.below_min_price ?? "—" }) : null,
+                          c.min_kg != null ? t("contracts.sumMinKg", { n: c.min_kg, price: c.below_min_price_kg ?? "—" }) : null,
+                          c.rent_if_below_min ? t("contracts.sumRent") : null,
+                          c.note,
+                        ].filter(Boolean).join(" · ") || t("contracts.noTerms")}
+                      </div>
+                    </div>
+                  ))}
+                  {contracts.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-400">
+                      {t("contracts.empty")}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {cForm && (
+              <form onSubmit={saveContract} className="space-y-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    {t("contracts.validFrom")} *
+                    <input required type="date" value={cForm.valid_from} onChange={(e) => setCForm({ ...cForm, valid_from: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                  </label>
+                  <label className="block text-sm">
+                    {t("contracts.validTo")}
+                    <input type="date" value={cForm.valid_to} onChange={(e) => setCForm({ ...cForm, valid_to: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                    <span className="mt-0.5 block text-xs text-slate-400">{t("contracts.validToHint")}</span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    {t("partners.contractMinPortions")}
+                    <input type="number" min={0} value={cForm.min_portions} onChange={(e) => setCForm({ ...cForm, min_portions: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                  </label>
+                  <label className="block text-sm">
+                    {t("partners.contractBelowMinPrice")}
+                    <input type="number" min={0} step="0.01" value={cForm.below_min_price} onChange={(e) => setCForm({ ...cForm, below_min_price: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    {t("partners.contractMinKg")}
+                    <input type="number" min={0} step="0.1" value={cForm.min_kg} onChange={(e) => setCForm({ ...cForm, min_kg: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                  </label>
+                  <label className="block text-sm">
+                    {t("partners.contractBelowMinPriceKg")}
+                    <input type="number" min={0} step="0.01" value={cForm.below_min_price_kg} onChange={(e) => setCForm({ ...cForm, below_min_price_kg: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                  </label>
+                </div>
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" checked={cForm.rent_if_below_min} onChange={(e) => setCForm({ ...cForm, rent_if_below_min: e.target.checked })} className="mt-0.5 h-4 w-4" />
+                  <span>
+                    {t("partners.contractRentIfBelowMin")}
+                    <span className="block text-xs text-slate-400">{t("partners.contractRentIfBelowMinHint")}</span>
+                  </span>
+                </label>
+                <label className="block text-sm">
+                  {t("partners.notes")}
+                  <input value={cForm.note} onChange={(e) => setCForm({ ...cForm, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                </label>
+                {cError && <p className="text-sm text-red-600">{cError}</p>}
+                <div className="flex justify-end gap-2 pt-1">
+                  <button type="button" onClick={() => setCForm(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+                  <button disabled={cBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{cBusy ? t("common.saving") : t("common.save")}</button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       )}
     </AppShell>

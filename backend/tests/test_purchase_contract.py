@@ -7,9 +7,32 @@ from datetime import date, timedelta
 
 
 async def _partner(client, mgr, name, **contract):
-    res = await client.post("/api/partners", json={"name": name, **contract}, headers=mgr)
+    """Partner + (ha vannak feltételek) szerződés az ÚJ /contracts entitáson át.
+    A régi contract_* kulcsnevek ide képződnek le; a türelmi időszak =
+    a szerződés érvényessége a türelmi idő lejárta után kezdődik."""
+    res = await client.post("/api/partners", json={"name": name}, headers=mgr)
     assert res.status_code in (200, 201), res.text
-    return res.json()
+    partner = res.json()
+    if contract:
+        no_min_until = contract.pop("contract_no_min_until", None)
+        start = (
+            (date.fromisoformat(no_min_until) + timedelta(days=1)).isoformat()
+            if no_min_until
+            else "2020-01-01"
+        )
+        body = {
+            "valid_from": start,
+            "min_portions": contract.get("contract_min_portions"),
+            "below_min_price": contract.get("contract_below_min_price"),
+            "min_kg": contract.get("contract_min_kg"),
+            "below_min_price_kg": contract.get("contract_below_min_price_kg"),
+            "rent_if_below_min": contract.get("contract_rent_if_below_min", False),
+        }
+        res = await client.post(
+            f"/api/partners/{partner['id']}/contracts", json=body, headers=mgr
+        )
+        assert res.status_code == 201, res.text
+    return partner
 
 
 async def _settle(client, mgr, partner, product, physical=0.3):

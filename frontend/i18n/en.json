@@ -1014,7 +1014,11 @@
     "wsPhotoFill": "Fill from photo",
     "wsPhotoBusy": "Processing photo…",
     "wsPhotoFilled": "Filled from the photo — review and save.",
-    "sigClear": "Clear"
+    "sigClear": "Clear",
+    "wsEmpSigSaved": "Employee signature (saved)",
+    "wsClientSigSaved": "Client signature (saved)",
+    "wsSignAgain": "Sign again",
+    "wsShareCard": "Share worksheet ({serial})"
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1294,7 +1298,9 @@
     "warehouse.product_exists": "This product is already assigned to the warehouse.",
     "warehouse.stock_not_empty": "Only products with empty stock can be removed — count it to 0 or issue it first.",
     "warehouse.has_stock": "The warehouse cannot be deleted while it holds stock — transfer it or count it to 0 first.",
-    "warehouse.has_open_orders": "The warehouse cannot be deleted while an open purchase order targets it — receive or cancel it first."
+    "warehouse.has_open_orders": "The warehouse cannot be deleted while an open purchase order targets it — receive or cancel it first.",
+    "contract.not_found": "Contract not found.",
+    "contract.bad_dates": "The end of validity cannot precede its start."
   },
   "inv": {
     "title": "Machines",
@@ -1450,5 +1456,30 @@
     "cancelDone": "Order cancelled.",
     "addLine": "add line",
     "unitCost": "Ft/unit"
+  },
+  "contracts": {
+    "title": "Contracts",
+    "titleFor": "Contracts — {name}",
+    "manage": "Manage contracts",
+    "movedHint": "Contract terms live in their own entity: a partner can have multiple contracts with validity periods; settlements always apply the one in force that day.",
+    "afterSaveHint": "Contracts can be added after saving the partner.",
+    "hint": "Settlements use the contract in force on the given day. Future contracts activate automatically; expired ones switch off.",
+    "new": "New contract",
+    "delete": "Delete contract",
+    "deleteConfirm": "Delete the contract starting {from}?",
+    "saved": "Contract saved.",
+    "deleted": "Contract deleted.",
+    "empty": "No contracts for this partner yet — settlements run without a minimum.",
+    "validFrom": "Valid from",
+    "validTo": "Valid until",
+    "validToHint": "Leave empty for open-ended.",
+    "openEnded": "open-ended",
+    "status_active": "Active",
+    "status_future": "Future",
+    "status_expired": "Expired",
+    "sumMinPortions": "min. {n} portions/month ({price} Ft/portion for the shortfall)",
+    "sumMinKg": "min. {n} kg/month ({price} Ft/kg for the shortfall)",
+    "sumRent": "below minimum the rent fee is the penalty",
+    "noTerms": "No terms (record only)."
   }
 }

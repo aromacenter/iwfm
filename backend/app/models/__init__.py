@@ -14,6 +14,7 @@ from app.models.models import (  # noqa: F401
     KnowledgeEntry,
     NotificationSettings,
     Partner,
+    PartnerContract,
     PartnerPrice,
     PartnerStock,
     PermissionSettings,

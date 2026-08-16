@@ -1014,7 +1014,11 @@
     "wsPhotoFill": "Kitöltés fotóból",
     "wsPhotoBusy": "Fotó feldolgozása…",
     "wsPhotoFilled": "A fotóból kinyert adatok kitöltve — ellenőrizd, majd mentsd.",
-    "sigClear": "Törlés"
+    "sigClear": "Törlés",
+    "wsEmpSigSaved": "Dolgozói aláírás (mentve)",
+    "wsClientSigSaved": "Ügyfél-aláírás (mentve)",
+    "wsSignAgain": "Új aláírás",
+    "wsShareCard": "Munkalap megosztása ({serial})"
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1294,7 +1298,9 @@
     "warehouse.product_exists": "Ez a termék már hozzá van rendelve a raktárhoz.",
     "warehouse.stock_not_empty": "Csak üres készletű termék vehető le a raktárról — előbb leltározd 0-ra vagy add ki.",
     "warehouse.has_stock": "A raktár nem törölhető, amíg készlet van benne — előbb helyezd át vagy leltározd 0-ra.",
-    "warehouse.has_open_orders": "A raktár nem törölhető, amíg nyitott beszerzési rendelés céloz rá — előbb érkeztesd be vagy mondd le."
+    "warehouse.has_open_orders": "A raktár nem törölhető, amíg nyitott beszerzési rendelés céloz rá — előbb érkeztesd be vagy mondd le.",
+    "contract.not_found": "A szerződés nem található.",
+    "contract.bad_dates": "Az érvényesség vége nem lehet korábbi a kezdeténél."
   },
   "inv": {
     "title": "Gépek",
@@ -1450,5 +1456,30 @@
     "cancelDone": "Rendelés lemondva.",
     "addLine": "tétel hozzáadása",
     "unitCost": "Ft/egység"
+  },
+  "contracts": {
+    "title": "Szerződések",
+    "titleFor": "Szerződések — {name}",
+    "manage": "Szerződések kezelése",
+    "movedHint": "A szerződéses feltételek külön entitásban élnek: egy partnerhez több szerződés tartozhat érvényességi idővel, az elszámolás mindig az adott napon érvényeset alkalmazza.",
+    "afterSaveHint": "A szerződések a partner mentése után vehetők fel.",
+    "hint": "Az elszámolás a mindenkor érvényes szerződés feltételeivel számol. Jövőbeli szerződés magától élesedik, a lejárt magától kikapcsol.",
+    "new": "Új szerződés",
+    "delete": "Szerződés törlése",
+    "deleteConfirm": "Biztosan törlöd a(z) {from} kezdetű szerződést?",
+    "saved": "Szerződés mentve.",
+    "deleted": "Szerződés törölve.",
+    "empty": "Ehhez a partnerhez még nincs szerződés — minimum-elvárás nélkül számolódik el.",
+    "validFrom": "Érvényes ettől",
+    "validTo": "Érvényes eddig",
+    "validToHint": "Üresen: határozatlan idejű.",
+    "openEnded": "határozatlan",
+    "status_active": "Aktív",
+    "status_future": "Jövőbeli",
+    "status_expired": "Lejárt",
+    "sumMinPortions": "min. {n} adag/hó ({price} Ft/adag a különbözetre)",
+    "sumMinKg": "min. {n} kg/hó ({price} Ft/kg a különbözetre)",
+    "sumRent": "minimum alatt bérleti díj a szankció",
+    "noTerms": "Feltételek nélkül (csak nyilvántartás)."
   }
 }
