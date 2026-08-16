@@ -17,6 +17,7 @@ from app.api import (
     consignment,
     contracts as contracts_api,
     dashboard,
+    delivery as delivery_api,
     employees,
     geo,
     import_export,
@@ -179,6 +180,7 @@ def create_app() -> FastAPI:
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
     app.include_router(warehouse.router, prefix="/api/warehouses", tags=["warehouses"])
+    app.include_router(delivery_api.router, prefix="/api/deliveries", tags=["deliveries"])
     app.include_router(warehouse.po_router, prefix="/api/purchase-orders", tags=["purchase-orders"])
     app.include_router(assistant_api.router, prefix="/api/assistant", tags=["assistant"])
     app.include_router(admin_tools.router, prefix="/api/admin", tags=["admin"])

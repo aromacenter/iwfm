@@ -135,6 +135,8 @@ interface SettlementContext {
   active_contracts: number;
   last_visit: string | null;
   single_product_id: string | null;
+  open_deliveries: number;
+  open_deliveries_net: number;
 }
 
 interface MachineInput {
@@ -602,6 +604,56 @@ export default function ElszamolasPage() {
       loadDue();
     } catch (err) {
       toast(errorMessage(err), "error");
+    }
+  }
+
+  // ── Kiszállítás (digitális szállítólevél): áru elszámolás nélkül — a
+  // következő elszámolás betölti és kiszámlázza.
+  const [delivery, setDelivery] = useState<{
+    source_warehouse_id: string;
+    note: string;
+    lines: { product_id: string; quantity: string; unit_price: string }[];
+  } | null>(null);
+  const [deliveryBusy, setDeliveryBusy] = useState(false);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+
+  function openDelivery() {
+    setDeliveryError(null);
+    setDelivery({
+      source_warehouse_id: srcWarehouses.find((w) => w.kind === "van")?.id ?? "",
+      note: "",
+      lines: [{ product_id: "", quantity: "", unit_price: "" }],
+    });
+  }
+
+  async function saveDelivery(e: React.FormEvent) {
+    e.preventDefault();
+    if (!delivery || !partnerId) return;
+    const lines = delivery.lines.filter((l) => l.product_id && Number(l.quantity) > 0);
+    if (!lines.length) {
+      setDeliveryError(t("delivery.needLine"));
+      return;
+    }
+    setDeliveryBusy(true);
+    setDeliveryError(null);
+    try {
+      const res = await api.post<{ serial: string; total_net: number }>("/api/deliveries", {
+        partner_id: partnerId,
+        source_warehouse_id: delivery.source_warehouse_id || null,
+        note: delivery.note || null,
+        lines: lines.map((l) => ({
+          product_id: l.product_id,
+          quantity: Number(l.quantity),
+          unit_price: Number(l.unit_price) || 0,
+        })),
+      });
+      toast(t("delivery.created", { serial: res.serial }), "success");
+      setDelivery(null);
+      loadCtx();
+    } catch (err) {
+      setDeliveryError(errorMessage(err));
+    } finally {
+      setDeliveryBusy(false);
     }
   }
 
@@ -1192,6 +1244,22 @@ export default function ElszamolasPage() {
               {ft(Math.round(ctx.debt))}
             </span>
           </span>
+          <button
+            type="button"
+            onClick={openDelivery}
+            className="ml-auto rounded-lg border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
+          >
+            🚚 {t("delivery.new")}
+          </button>
+        </div>
+      )}
+
+      {partnerId && ctx && ctx.open_deliveries > 0 && (
+        <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          🚚 {t("delivery.openBanner", {
+            count: ctx.open_deliveries,
+            net: Math.round(ctx.open_deliveries_net).toLocaleString("hu-HU"),
+          })}
         </div>
       )}
 
@@ -1812,6 +1880,102 @@ export default function ElszamolasPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {delivery && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setDelivery(null); }}
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+        >
+          <form onSubmit={saveDelivery} className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">🚚 {t("delivery.title")}</h2>
+            <p className="text-xs text-slate-500">{t("delivery.hint")}</p>
+            {delivery.lines.map((line, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <SearchSelect
+                  items={activeProducts.map((p) => ({
+                    id: p.id, label: p.name, sublabel: p.category, badge: p.unit,
+                  }))}
+                  value={line.product_id}
+                  onChange={(id) => {
+                    const prod = activeProducts.find((p) => p.id === id);
+                    const lines = [...delivery.lines];
+                    lines[i] = {
+                      ...line, product_id: id,
+                      unit_price: line.unit_price || (prod ? String(prod.price_per_portion) : ""),
+                    };
+                    setDelivery({ ...delivery, lines });
+                  }}
+                  placeholder={t("cons.addProductChoose")}
+                  className="flex-1"
+                />
+                <input
+                  type="number" min={0.001} step="0.001"
+                  placeholder={t("cons.quantity")}
+                  value={line.quantity}
+                  onChange={(e) => {
+                    const lines = [...delivery.lines];
+                    lines[i] = { ...line, quantity: e.target.value };
+                    setDelivery({ ...delivery, lines });
+                  }}
+                  className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                />
+                <input
+                  type="number" min={0} step="0.01"
+                  placeholder={t("delivery.unitPrice")}
+                  title={t("delivery.unitPrice")}
+                  value={line.unit_price}
+                  onChange={(e) => {
+                    const lines = [...delivery.lines];
+                    lines[i] = { ...line, unit_price: e.target.value };
+                    setDelivery({ ...delivery, lines });
+                  }}
+                  className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                />
+                {delivery.lines.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setDelivery({ ...delivery, lines: delivery.lines.filter((_, j) => j !== i) })}
+                    className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setDelivery({ ...delivery, lines: [...delivery.lines, { product_id: "", quantity: "", unit_price: "" }] })}
+              className="text-sm text-indigo-600 hover:underline"
+            >
+              + {t("po.addLine")}
+            </button>
+            {srcWarehouses.length > 0 && (
+              <label className="block text-sm">
+                {t("cons.sourceWarehouse")}
+                <SearchSelect
+                  items={srcWarehouses.map((w) => ({
+                    id: w.id, label: `${w.kind === "van" ? "🚐" : "🏬"} ${w.name}`,
+                  }))}
+                  value={delivery.source_warehouse_id}
+                  onChange={(id) => setDelivery({ ...delivery, source_warehouse_id: id })}
+                  allowEmpty
+                  emptyLabel={t("cons.sourceWarehouseNone")}
+                  className="mt-1"
+                />
+              </label>
+            )}
+            <label className="block text-sm">
+              {t("cons.notes")}
+              <input value={delivery.note} onChange={(e) => setDelivery({ ...delivery, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            {deliveryError && <p className="text-sm text-red-600">{deliveryError}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setDelivery(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={deliveryBusy} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50">{deliveryBusy ? t("common.saving") : t("delivery.save")}</button>
+            </div>
+          </form>
         </div>
       )}
 

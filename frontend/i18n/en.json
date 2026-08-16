@@ -1282,7 +1282,7 @@
     "asset.bad_status": "Invalid status.",
     "asset.not_deployed": "The asset is not deployed.",
     "asset.retired": "A retired asset cannot be deployed.",
-    "settlement.empty": "Provide at least one inventory line or machine counter.",
+    "settlement.empty": "Add at least one stock line or machine counter — or have an open delivery note for the partner.",
     "settlement.counter_below_prev": "The machine's new counter is below the previous settlement reading.",
     "settlement.machine_wrong_partner": "The machine is not deployed at this partner.",
     "settlement.machine_no_product": "The machine has no product set and the partner has multiple stock products — set which product the machine brews.",
@@ -1300,7 +1300,9 @@
     "warehouse.has_stock": "The warehouse cannot be deleted while it holds stock — transfer it or count it to 0 first.",
     "warehouse.has_open_orders": "The warehouse cannot be deleted while an open purchase order targets it — receive or cancel it first.",
     "contract.not_found": "Contract not found.",
-    "contract.bad_dates": "The end of validity cannot precede its start."
+    "contract.bad_dates": "The end of validity cannot precede its start.",
+    "delivery.not_found": "Delivery note not found.",
+    "delivery.bad_status": "Only open delivery notes can be cancelled."
   },
   "inv": {
     "title": "Machines",
@@ -1481,5 +1483,15 @@
     "sumMinKg": "min. {n} kg/month ({price} Ft/kg for the shortfall)",
     "sumRent": "below minimum the rent fee is the penalty",
     "noTerms": "No terms (record only)."
+  },
+  "delivery": {
+    "title": "Delivery (delivery note)",
+    "new": "Delivery",
+    "hint": "Hand over goods without a settlement — recorded on a digital delivery note (SZL number) and invoiced automatically on the partner's NEXT settlement. Any rep can record it for any partner.",
+    "unitPrice": "Ft/unit (net)",
+    "needLine": "Add at least one line (product + quantity).",
+    "created": "Delivery note saved: {serial} — it will be invoiced at the next settlement.",
+    "save": "Save delivery note",
+    "openBanner": "{count} open delivery note(s) ({net} Ft net) — this settlement will invoice them automatically."
   }
 }

@@ -1282,7 +1282,7 @@
     "asset.bad_status": "Érvénytelen állapot.",
     "asset.not_deployed": "Az eszköz nincs kihelyezve.",
     "asset.retired": "A selejtezett eszköz nem helyezhető ki.",
-    "settlement.empty": "Adj meg legalább egy leltár-sort vagy gép-számlálót.",
+    "settlement.empty": "Adj meg legalább egy leltár-sort vagy gép-számlálót — vagy legyen nyitott szállítólevél a partnernél.",
     "settlement.counter_below_prev": "A gép új számláló-állása kisebb az előző elszámoláskorinál.",
     "settlement.machine_wrong_partner": "A gép nem ehhez a partnerhez van kihelyezve.",
     "settlement.machine_no_product": "A gépen nincs termék beállítva, és a partnernek több készlet-terméke van — állítsd be a gépnél, melyikből főz.",
@@ -1300,7 +1300,9 @@
     "warehouse.has_stock": "A raktár nem törölhető, amíg készlet van benne — előbb helyezd át vagy leltározd 0-ra.",
     "warehouse.has_open_orders": "A raktár nem törölhető, amíg nyitott beszerzési rendelés céloz rá — előbb érkeztesd be vagy mondd le.",
     "contract.not_found": "A szerződés nem található.",
-    "contract.bad_dates": "Az érvényesség vége nem lehet korábbi a kezdeténél."
+    "contract.bad_dates": "Az érvényesség vége nem lehet korábbi a kezdeténél.",
+    "delivery.not_found": "A szállítólevél nem található.",
+    "delivery.bad_status": "Csak nyitott szállítólevél vonható vissza."
   },
   "inv": {
     "title": "Gépek",
@@ -1481,5 +1483,15 @@
     "sumMinKg": "min. {n} kg/hó ({price} Ft/kg a különbözetre)",
     "sumRent": "minimum alatt bérleti díj a szankció",
     "noTerms": "Feltételek nélkül (csak nyilvántartás)."
+  },
+  "delivery": {
+    "title": "Kiszállítás (szállítólevél)",
+    "new": "Kiszállítás",
+    "hint": "Áru átadása elszámolás nélkül — digitális szállítólevélre kerül (SZL-szám), és a partner KÖVETKEZŐ elszámolásán automatikusan kiszámlázódik. Bármelyik képviselő rögzítheti bármelyik partnernél.",
+    "unitPrice": "Ft/egység (nettó)",
+    "needLine": "Vegyél fel legalább egy tételt (termék + mennyiség).",
+    "created": "Szállítólevél rögzítve: {serial} — a következő elszámoláskor számlázódik.",
+    "save": "Szállítólevél mentése",
+    "openBanner": "{count} nyitott szállítólevél ({net} Ft nettó) — ez az elszámolás automatikusan kiszámlázza."
   }
 }

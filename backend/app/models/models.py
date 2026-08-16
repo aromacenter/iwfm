@@ -1114,6 +1114,79 @@ class AuditEvent(Base):
     )
 
 
+class DeliveryNote(Base):
+    """Digitális szállítólevél: áru kiszállítása egy partnerhez ELSZÁMOLÁS
+    NÉLKÜL — bármelyik képviselő viheti bármelyik partnernek. A tételek a
+    partner KÖVETKEZŐ elszámolásán töltődnek be és kerülnek kiszámlázásra
+    (a bizonylaton/számlán SZL-hivatkozással). status: open → settled;
+    cancelled = visszavont (nem számlázódik)."""
+
+    __tablename__ = "delivery_notes"
+    __table_args__ = (
+        UniqueConstraint("serial", name="uq_delivery_notes_serial"),
+        CheckConstraint(
+            "status IN ('open','settled','cancelled')", name="ck_delivery_notes_status"
+        ),
+        Index("ix_delivery_notes_partner", "partner_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    serial: Mapped[str] = mapped_column(String(20), nullable=False)  # SZL-2026-0001
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("partners.id", ondelete="CASCADE", name="fk_delivery_notes_partner"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    # Melyik saját raktárból (autóból) ment ki az áru — a készlet levonódott.
+    source_warehouse_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("warehouses.id", ondelete="SET NULL", name="fk_delivery_notes_wh"),
+        nullable=True,
+    )
+    settlement_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("settlements.id", ondelete="SET NULL", name="fk_delivery_notes_settlement"),
+        nullable=True,
+    )
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_delivery_notes_user"),
+        nullable=True,
+    )
+    created_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class DeliveryNoteLine(Base):
+    """Szállítólevél-tétel: termék + mennyiség + rögzített nettó egységár
+    (elszámoláskor ezzel számlázódik)."""
+
+    __tablename__ = "delivery_note_lines"
+    __table_args__ = (Index("ix_delivery_note_lines_note", "delivery_note_id"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    delivery_note_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("delivery_notes.id", ondelete="CASCADE", name="fk_dn_lines_note"),
+        nullable=False,
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="SET NULL", name="fk_dn_lines_product"),
+        nullable=True,
+    )
+    product_name: Mapped[str] = mapped_column(String(256), nullable=False)  # pillanatkép
+    unit: Mapped[str] = mapped_column(String(16), nullable=False, default="db")
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit_price: Mapped[float] = mapped_column(Float, nullable=False)  # Ft/egység, nettó
+    vat_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=27)
+
+
 class PartnerContract(Base):
     """Partner-szerződés — a partnertől KÜLÖN kezelt feltétel-készlet,
     érvényességi idővel. Egy partnernek több szerződése lehet (történet +

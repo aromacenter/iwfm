@@ -503,6 +503,10 @@ class SettlementContextOut(BaseModel):
     active_contracts: int
     last_visit: datetime | None
     single_product_id: str | None  # ha a partnernek pontosan 1 készlet-terméke van
+    # Nyitott szállítólevelek — a következő elszámoláson automatikusan
+    # kiszámlázódnak.
+    open_deliveries: int = 0
+    open_deliveries_net: float = 0.0
 
 
 @stock_router.get("/{partner_id}/settlement-context", response_model=SettlementContextOut)
@@ -572,12 +576,36 @@ async def settlement_context(
         )
     ).scalar_one_or_none()
 
+    from app.models import DeliveryNote, DeliveryNoteLine
+
+    open_notes = (
+        await db.execute(
+            select(DeliveryNote.id).where(
+                DeliveryNote.partner_id == partner.id, DeliveryNote.status == "open"
+            )
+        )
+    ).scalars().all()
+    open_net = 0.0
+    if open_notes:
+        open_net = (
+            await db.execute(
+                select(
+                    sa_func.coalesce(
+                        sa_func.sum(DeliveryNoteLine.quantity * DeliveryNoteLine.unit_price),
+                        0.0,
+                    )
+                ).where(DeliveryNoteLine.delivery_note_id.in_(open_notes))
+            )
+        ).scalar_one()
+
     return SettlementContextOut(
         machines=machines,
         debt=await _partner_debt(db, partner.id),
         active_contracts=contracts,
         last_visit=last_visit,
         single_product_id=single_pid,
+        open_deliveries=len(open_notes),
+        open_deliveries_net=_money(open_net),
     )
 
 
@@ -1063,9 +1091,22 @@ async def create_settlement(
     A számlázás külön lépés (POST /{id}/invoice)."""
     if body.payment_method not in PAYMENT_METHODS:
         raise HTTPException(status_code=422, detail={"code": "settlement.bad_payment"})
-    if not body.lines and not body.machines:
-        raise HTTPException(status_code=422, detail={"code": "settlement.empty"})
     partner = await _get_partner_or_404(db, body.partner_id)
+
+    if not body.lines and not body.machines:
+        # Üres leltár/gép-lista is elfogadható, ha van betöltendő nyitott
+        # szállítólevél — az elszámolás csak azokat számlázza ki.
+        from app.models import DeliveryNote as _DN
+
+        has_open = (
+            await db.execute(
+                select(_DN.id).where(
+                    _DN.partner_id == partner.id, _DN.status == "open"
+                ).limit(1)
+            )
+        ).scalar_one_or_none()
+        if has_open is None:
+            raise HTTPException(status_code=422, detail={"code": "settlement.empty"})
 
     # Az elszámolás a MA érvényes szerződés feltételeivel számol — a partner
     # tükör-mezőit frissítjük az aktív szerződésből.
@@ -1329,6 +1370,42 @@ async def create_settlement(
         ))
         if h.unit_cost is not None:
             product.purchase_price = h.unit_cost
+
+    # Nyitott szállítólevelek betöltése: a korábban (elszámolás nélkül)
+    # kiszállított áru itt számlázódik ki, SZL-hivatkozással.
+    from app.models import DeliveryNote, DeliveryNoteLine
+
+    open_notes = (
+        await db.execute(
+            select(DeliveryNote).where(
+                DeliveryNote.partner_id == partner.id, DeliveryNote.status == "open"
+            ).order_by(DeliveryNote.created_at)
+        )
+    ).scalars().all()
+    for dn in open_notes:
+        dn_lines = (
+            await db.execute(
+                select(DeliveryNoteLine).where(DeliveryNoteLine.delivery_note_id == dn.id)
+            )
+        ).scalars().all()
+        for ln in dn_lines:
+            line_vat = 0 if body.no_vat else ln.vat_percent
+            amount_net = _money(ln.quantity * ln.unit_price)
+            db.add(SettlementLine(
+                settlement_id=settlement.id,
+                product_id=ln.product_id,
+                product_name=f"{ln.product_name} ({dn.serial})",
+                previous_qty=0.0, physical_qty=0.0, consumed_qty=ln.quantity,
+                portions=ln.quantity,
+                counter_portions=None,
+                price_per_portion=ln.unit_price,
+                vat_percent=line_vat,
+                amount_net=amount_net,
+            ))
+            total_net += amount_net
+            total_gross += _money(amount_net * (1 + line_vat / 100))
+        dn.status = "settled"
+        dn.settlement_id = settlement.id
 
     # Szerződéses tételek: bérleti díj + minimum különbözet (automatikus).
     # total_portions/total_consumed_kg a termék-sorokból gyűlt a ciklusban.
