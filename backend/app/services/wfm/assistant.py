@@ -546,8 +546,8 @@ async def _t_create_settlement(db: AsyncSession, actor: User, args: dict):
     if not isinstance(raw_lines, list) or not raw_lines:
         return {"error": "lines kötelező: [{product, physical_qty}]"}, None
     payment = str(args.get("payment_method") or "cash")
-    if payment not in ("cash", "card", "transfer"):
-        return {"error": "payment_method: cash | card | transfer"}, None
+    if payment not in ("cash", "card", "transfer", "cod"):
+        return {"error": "payment_method: cash | card | transfer | cod"}, None
 
     settlement = Settlement(
         partner_id=partner.id,
@@ -851,7 +851,7 @@ TOOLS: list[dict] = [
                         "required": ["product", "physical_qty"],
                     },
                 },
-                "payment_method": {"type": "string", "enum": ["cash", "card", "transfer"]},
+                "payment_method": {"type": "string", "enum": ["cash", "card", "transfer", "cod"]},
                 "note": {"type": "string"},
             },
             "required": ["partner", "lines"],

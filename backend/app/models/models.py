@@ -652,6 +652,9 @@ class Product(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # Csoportosítás (pl. Kávék, Kávégépek, Alkatrészek, Kellékek) — szabad
+    # szöveg, a felület a meglévő értékekből ajánl.
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     unit: Mapped[str] = mapped_column(String(16), nullable=False, default="kg")  # feltöltés egysége
     grams_per_portion: Mapped[int] = mapped_column(Integer, nullable=False, default=7)  # 1 adag = X g
     price_per_portion: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)  # Ft/adag (nettó)
@@ -756,7 +759,7 @@ class Settlement(Base):
     __tablename__ = "settlements"
     __table_args__ = (
         CheckConstraint(
-            "payment_method IN ('cash','card','transfer')", name="ck_settlement_payment"
+            "payment_method IN ('cash','card','transfer','cod')", name="ck_settlement_payment"
         ),
         Index("ix_settlements_partner", "partner_id", "created_at"),
         Index("ix_settlements_user", "settled_by_user_id", "created_at"),

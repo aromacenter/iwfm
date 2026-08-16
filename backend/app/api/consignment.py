@@ -44,7 +44,7 @@ products_router = APIRouter()  # /api/products
 stock_router = APIRouter()  # /api/partners (kiegészíti az inventory partner-útvonalait)
 settlements_router = APIRouter()  # /api/settlements
 
-PAYMENT_METHODS = ("cash", "card", "transfer")
+PAYMENT_METHODS = ("cash", "card", "transfer", "cod")
 
 
 # ─── Termékek ────────────────────────────────────────────────────────────────
@@ -52,6 +52,8 @@ PAYMENT_METHODS = ("cash", "card", "transfer")
 
 class ProductBody(BaseModel):
     name: str = Field(min_length=1, max_length=256)
+    # Csoport (pl. Kávék, Kávégépek, Alkatrészek, Kellékek) — szabad szöveg.
+    category: str | None = Field(default=None, max_length=64)
     unit: str = Field(default="kg", max_length=16)
     grams_per_portion: int = Field(default=7, ge=1, le=100000)
     price_per_portion: float = Field(default=0.0, ge=0)
@@ -65,6 +67,7 @@ class ProductBody(BaseModel):
 class ProductOut(BaseModel):
     id: str
     name: str
+    category: str | None
     unit: str
     grams_per_portion: int
     price_per_portion: float
@@ -79,6 +82,7 @@ def _product_out(p: Product) -> ProductOut:
     return ProductOut(
         id=str(p.id),
         name=p.name,
+        category=p.category,
         unit=p.unit,
         grams_per_portion=p.grams_per_portion,
         price_per_portion=p.price_per_portion,
@@ -2017,8 +2021,20 @@ async def invoice_settlement(
 # ─── Bizonylat: PDF + aláírás + email ────────────────────────────────────────
 
 
+def _budapest(dt: datetime | None) -> datetime | None:
+    """UTC (vagy naiv-UTC) időbélyeg budapesti helyi időre — a bizonylaton a
+    helyi idő szerepel."""
+    from zoneinfo import ZoneInfo
+
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(ZoneInfo("Europe/Budapest"))
+
+
 def _receipt_no(s: Settlement) -> str:
-    return f"ELSZ-{s.created_at:%Y%m%d}-{str(s.id)[:8].upper()}"
+    return f"ELSZ-{_budapest(s.created_at):%Y%m%d}-{str(s.id)[:8].upper()}"
 
 
 async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes, str]:
@@ -2058,8 +2074,8 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes,
     pdf = build_settlement_pdf(
         {
             "receipt_no": receipt_no,
-            "created_at": f"{s.created_at:%Y-%m-%d %H:%M}",
-            "previous_at": f"{previous_at:%Y-%m-%d %H:%M}" if previous_at else None,
+            "created_at": f"{_budapest(s.created_at):%Y-%m-%d %H:%M}",
+            "previous_at": f"{_budapest(previous_at):%Y-%m-%d %H:%M}" if previous_at else None,
             "partner_name": partner.name if partner else "—",
             "partner_code": partner.partner_code if partner else None,
             "partner_address": partner.address if partner else None,

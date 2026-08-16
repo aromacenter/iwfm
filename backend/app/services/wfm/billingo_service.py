@@ -29,6 +29,7 @@ PAYMENT_METHOD_MAP = {
     "cash": "cash",
     "card": "bankcard",
     "transfer": "wire_transfer",
+    "cod": "cash_on_delivery",
 }
 
 

@@ -118,11 +118,12 @@ def _labels_response(pdf: bytes, filename: str):
 async def asset_qr_label(
     asset_id: str,
     request: Request,
+    fmt: str = "a4",
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("machines")),
 ):
-    """Egy gép QR-címkéje (PDF). Ha még nincs tokenje, itt kap."""
-    from app.services.wfm.qr_label import build_qr_labels_pdf
+    """Egy gép QR-címkéje (PDF). fmt=small → 51×25 mm címkenyomtatóra."""
+    from app.services.wfm.qr_label import build_qr_labels_pdf, build_qr_labels_small_pdf
 
     try:
         aid = uuid.UUID(asset_id)
@@ -138,11 +139,13 @@ async def asset_qr_label(
         entity_id=asset.barcode, request=request,
     )
     await db.commit()
-    return _labels_response(build_qr_labels_pdf(items), f"QR-{asset.barcode}.pdf")
+    build = build_qr_labels_small_pdf if fmt == "small" else build_qr_labels_pdf
+    return _labels_response(build(items), f"QR-{asset.barcode}.pdf")
 
 
 class LabelBatchBody(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=500)
+    fmt: str = "a4"  # a4 (2×4 ív) | small (51×25 mm címkenyomtató)
 
 
 @labels_router.post("/qr-labels")
@@ -152,8 +155,8 @@ async def asset_qr_labels(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("machines")),
 ):
-    """Több gép címkéje egy PDF-ben (A4, 2×4 rács)."""
-    from app.services.wfm.qr_label import build_qr_labels_pdf
+    """Több gép címkéje egy PDF-ben (A4 ív vagy 51×25 mm címkék)."""
+    from app.services.wfm.qr_label import build_qr_labels_pdf, build_qr_labels_small_pdf
 
     ids = []
     for raw in body.ids:
@@ -173,7 +176,8 @@ async def asset_qr_labels(
         detail={"count": len(items)}, request=request,
     )
     await db.commit()
-    return _labels_response(build_qr_labels_pdf(items), "QR-cimkek.pdf")
+    build = build_qr_labels_small_pdf if body.fmt == "small" else build_qr_labels_pdf
+    return _labels_response(build(items), "QR-cimkek.pdf")
 
 
 # ─── Nyilvános: támogatási oldal ─────────────────────────────────────────────

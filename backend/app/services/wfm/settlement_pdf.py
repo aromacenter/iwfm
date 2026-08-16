@@ -22,7 +22,9 @@ from app.services.wfm.worksheet_pdf import (
     _signature_image,
 )
 
-PAYMENT_LABELS = {"cash": "Készpénz", "card": "Bankkártya", "transfer": "Átutalás"}
+PAYMENT_LABELS = {
+    "cash": "Készpénz", "card": "Bankkártya", "transfer": "Átutalás", "cod": "Utánvét",
+}
 
 
 def _fmt_money(value: float) -> str:

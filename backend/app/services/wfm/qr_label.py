@@ -1,8 +1,12 @@
-"""Gép QR-címkék (reportlab, A4 rács).
+"""Gép QR-címkék (reportlab).
 
 Címkénként: QR-kód (a nyilvános támogatási oldal URL-je), a gép típusa,
-vonalkódja (gép kód), gyári száma és a kihelyezési partner. A4-en 2×4 címke
-(105 × 74,25 mm), vágójelek nélkül — sima papírra vagy öntapadós címkeívre.
+vonalkódja (gép kód), gyári száma és a tulajdonos-felirat. A partner neve
+SZÁNDÉKOSAN nincs rajta — gépcserénél így nem kell matricát cserélni.
+
+Két formátum:
+- A4 ív: 2×4 címke (105 × 74,25 mm), sima papírra / öntapadós ívre
+- 51 × 25 mm: címkenyomtatóra (VOID címke), címkénként egy oldal
 """
 
 from __future__ import annotations
@@ -22,6 +26,8 @@ LABEL_W = 105 * mm
 LABEL_H = 74.25 * mm
 COLS = 2
 ROWS = 4
+
+OWNER_TEXT = "X-Presso Coffee Kft tulajdona"
 
 
 def _draw_qr(c: pdf_canvas.Canvas, url: str, x: float, y: float, size: float) -> None:
@@ -58,10 +64,9 @@ def _draw_label(c: pdf_canvas.Canvas, item: dict, x: float, y: float) -> None:
     if item.get("serial_number"):
         c.drawString(text_x, text_y, f"Gyári szám: {str(item['serial_number'])[:20]}")
         text_y -= 5 * mm
-    if item.get("partner_name"):
-        c.setFillColorRGB(0.35, 0.4, 0.5)
-        c.drawString(text_x, text_y, str(item["partner_name"])[:24])
-        c.setFillColorRGB(0, 0, 0)
+    c.setFillColorRGB(0.35, 0.4, 0.5)
+    c.drawString(text_x, text_y, OWNER_TEXT)
+    c.setFillColorRGB(0, 0, 0)
 
     # alsó sáv: felszólítás + a QR-oldal funkciói (link nélkül)
     c.setFont(FONT_BOLD, 10.5)
@@ -73,9 +78,52 @@ def _draw_label(c: pdf_canvas.Canvas, item: dict, x: float, y: float) -> None:
     c.setFillColorRGB(0, 0, 0)
 
 
+SMALL_W = 51 * mm
+SMALL_H = 25 * mm
+
+
+def _draw_small_label(c: pdf_canvas.Canvas, item: dict) -> None:
+    """51 × 25 mm-es címke (címkenyomtató, VOID címke): QR balra, mellette a
+    gép típusa, kódja és a tulajdonos-felirat."""
+    pad = 1.5 * mm
+    qr_size = SMALL_H - 2 * pad  # ~22 mm
+    _draw_qr(c, item["url"], pad, pad, qr_size)
+
+    text_x = pad + qr_size + 2 * mm
+    max_w = SMALL_W - text_x - pad
+    c.setFillColorRGB(0, 0, 0)
+    c.setFont(FONT_BOLD, 7)
+    name = str(item.get("name") or "")
+    while name and c.stringWidth(name, FONT_BOLD, 7) > max_w:
+        name = name[:-1]
+    c.drawString(text_x, SMALL_H - pad - 3 * mm, name)
+    c.setFont(FONT, 6)
+    c.drawString(text_x, SMALL_H - pad - 6.5 * mm, f"Kód: {item.get('barcode') or '—'}")
+    if item.get("serial_number"):
+        c.drawString(text_x, SMALL_H - pad - 9.5 * mm, f"Gy.sz.: {str(item['serial_number'])[:16]}")
+    c.setFont(FONT, 5.5)
+    c.setFillColorRGB(0.3, 0.35, 0.45)
+    c.drawString(text_x, pad + 4.5 * mm, OWNER_TEXT)
+    c.drawString(text_x, pad + 1.5 * mm, "Olvassa be a QR-kódot!")
+    c.setFillColorRGB(0, 0, 0)
+
+
+def build_qr_labels_small_pdf(items: list[dict]) -> bytes:
+    """51 × 25 mm-es címkék — címkénként egy PDF-oldal (címkenyomtatóhoz)."""
+    buf = io.BytesIO()
+    c = pdf_canvas.Canvas(buf, pagesize=(SMALL_W, SMALL_H))
+    for index, item in enumerate(items):
+        if index > 0:
+            c.showPage()
+            c.setPageSize((SMALL_W, SMALL_H))
+        _draw_small_label(c, item)
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
 def build_qr_labels_pdf(items: list[dict]) -> bytes:
-    """Címkeív PDF. ``items`` elemei: url, name, barcode, serial_number,
-    partner_name."""
+    """Címkeív PDF (A4). ``items`` elemei: url, name, barcode, serial_number."""
     buf = io.BytesIO()
     c = pdf_canvas.Canvas(buf, pagesize=A4)
     _width, height = A4
