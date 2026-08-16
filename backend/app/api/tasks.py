@@ -131,6 +131,10 @@ class WorksheetOut(BaseModel):
     client_location: str | None
     has_employee_signature: bool
     has_client_signature: bool
+    # A mentett aláírás-képek (data URL) — újranyitáskor a felület megjeleníti
+    # őket, hogy ne tűnjenek "elveszettnek".
+    employee_signature: str | None
+    client_signature: str | None
     updated_at: datetime
 
 
@@ -152,6 +156,8 @@ def _worksheet_out(ws: Worksheet) -> WorksheetOut:
         client_location=ws.client_location,
         has_employee_signature=ws.employee_signature is not None,
         has_client_signature=ws.client_signature is not None,
+        employee_signature=ws.employee_signature,
+        client_signature=ws.client_signature,
         updated_at=ws.updated_at,
     )
 
@@ -187,9 +193,11 @@ async def _upsert_worksheet(
     ws.hours_spent = body.hours_spent
     ws.client_name = (body.client_name or "").strip() or None
     ws.client_location = (body.client_location or "").strip() or None
-    if body.employee_signature is not None:
+    # Csak KITÖLTÖTT aláírás ír felül — üres/None sosem törli a mentettet,
+    # így az újranyitott munkalap mentése nem "tünteti el" az aláírásokat.
+    if body.employee_signature:
         ws.employee_signature = _validate_signature(body.employee_signature)
-    if body.client_signature is not None:
+    if body.client_signature:
         ws.client_signature = _validate_signature(body.client_signature)
     await db.flush()
     await record_audit(

@@ -56,8 +56,18 @@ async def test_employee_fills_worksheet(client, manager):
     assert body["serial"].startswith("ML-")
     assert body["has_employee_signature"] is True
     assert body["materials"][0]["name"] == "kapcsoló"
-    # aláírás tartalma nem megy vissza
-    assert "employee_signature" not in body
+    # a mentett aláírás visszajön (újranyitáskor a felület megjeleníti),
+    # és üres/None aláírással mentve NEM törlődik
+    assert body["employee_signature"].startswith("data:image/png;base64,")
+    res = await client.put(
+        f"/api/me/tasks/{task['id']}/worksheet",
+        json={**ws_payload(), "employee_signature": None, "client_signature": ""},
+        headers=emp_h,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["has_employee_signature"] is True
+    assert body["has_client_signature"] is True
 
     # frissítés: a sorszám marad
     res2 = await client.put(

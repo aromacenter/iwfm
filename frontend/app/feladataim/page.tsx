@@ -116,9 +116,15 @@ export default function FeladataimPage() {
     }
   }
 
+  // A már mentett aláírás-képek (megjelenítésre) + "új aláírás" kapcsolók.
+  const [wsSaved, setWsSaved] = useState<{ emp: string | null; client: string | null }>({ emp: null, client: null });
+  const [redoSig, setRedoSig] = useState<{ emp: boolean; client: boolean }>({ emp: false, client: false });
+
   async function openWorksheet(task: TaskOut) {
     setWsError(null);
     setWs(EMPTY_WS);
+    setWsSaved({ emp: null, client: null });
+    setRedoSig({ emp: false, client: false });
     setWsTask(task);
     if (task.worksheet_serial) {
       try {
@@ -128,6 +134,8 @@ export default function FeladataimPage() {
           hours_spent: number | null;
           client_name: string | null;
           client_location: string | null;
+          employee_signature: string | null;
+          client_signature: string | null;
         }>(`/api/me/tasks/${task.id}/worksheet`);
         setWs({
           work_description: existing.work_description,
@@ -138,9 +146,25 @@ export default function FeladataimPage() {
           employee_signature: null,
           client_signature: null,
         });
+        setWsSaved({
+          emp: existing.employee_signature ?? null,
+          client: existing.client_signature ?? null,
+        });
       } catch {
         /* friss űrlap marad */
       }
+    }
+  }
+
+  async function shareWorksheetFor(task: TaskOut) {
+    try {
+      const result = await shareOrDownloadFile(
+        `/api/me/tasks/${task.id}/worksheet/pdf`,
+        `${task.worksheet_serial ?? "munkalap"}.pdf`,
+      );
+      if (result === "downloaded") toast(t("myTasks.wsDownloaded"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -286,6 +310,14 @@ export default function FeladataimPage() {
                     ? t("myTasks.fillWorksheetSerial", { serial: task.worksheet_serial })
                     : t("myTasks.fillWorksheet")}
               </button>
+              {task.worksheet_serial && (
+                <button
+                  onClick={() => shareWorksheetFor(task)}
+                  className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+                >
+                  📤 {t("myTasks.wsShareCard", { serial: task.worksheet_serial })}
+                </button>
+              )}
               <div className="flex gap-2">
                 <input
                   value={comments[task.id] ?? ""}
@@ -441,14 +473,48 @@ export default function FeladataimPage() {
               </label>
             </div>
 
-            <SignatureCanvas
-              label={wsTask.worksheet_completed ? t("myTasks.wsEmpSigKeep") : t("myTasks.wsEmpSig")}
-              onChange={(d) => setWs((w) => ({ ...w, employee_signature: d }))}
-            />
-            <SignatureCanvas
-              label={wsTask.worksheet_completed ? t("myTasks.wsClientSigKeep") : t("myTasks.wsClientSig")}
-              onChange={(d) => setWs((w) => ({ ...w, client_signature: d }))}
-            />
+            {wsSaved.emp && !redoSig.emp ? (
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-sm font-medium">{t("myTasks.wsEmpSigSaved")}</span>
+                  <button
+                    type="button"
+                    onClick={() => setRedoSig((r) => ({ ...r, emp: true }))}
+                    className="text-xs text-indigo-600 hover:underline"
+                  >
+                    {t("myTasks.wsSignAgain")}
+                  </button>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={wsSaved.emp} alt="" className="h-24 w-full rounded-lg border border-emerald-200 bg-white object-contain" />
+              </div>
+            ) : (
+              <SignatureCanvas
+                label={wsTask.worksheet_completed ? t("myTasks.wsEmpSigKeep") : t("myTasks.wsEmpSig")}
+                onChange={(d) => setWs((w) => ({ ...w, employee_signature: d }))}
+              />
+            )}
+            {wsSaved.client && !redoSig.client ? (
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-sm font-medium">{t("myTasks.wsClientSigSaved")}</span>
+                  <button
+                    type="button"
+                    onClick={() => setRedoSig((r) => ({ ...r, client: true }))}
+                    className="text-xs text-indigo-600 hover:underline"
+                  >
+                    {t("myTasks.wsSignAgain")}
+                  </button>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={wsSaved.client} alt="" className="h-24 w-full rounded-lg border border-emerald-200 bg-white object-contain" />
+              </div>
+            ) : (
+              <SignatureCanvas
+                label={wsTask.worksheet_completed ? t("myTasks.wsClientSigKeep") : t("myTasks.wsClientSig")}
+                onChange={(d) => setWs((w) => ({ ...w, client_signature: d }))}
+              />
+            )}
 
             {wsError && <p className="text-sm text-red-600">{wsError}</p>}
             <div className="flex flex-wrap justify-end gap-2 pt-1">
