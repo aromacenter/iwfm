@@ -1388,7 +1388,9 @@
     "qrLabelsSmall": "QR 51×25 mm",
     "qrLabelsSmallHint": "Címkenyomtatóra (VOID címke): címkénként egy oldal, partner-név nélkül",
     "qrLabelsEzpl": "Godex (EZPL)",
-    "qrLabelsEzplHint": "Natív Godex címkefájl (.ezp) az 51×25 mm-es VOID címkéhez — a GoLabel megnyitja és a nyomtatóra tölti, vagy raw-nyomtatással közvetlenül kiküldhető."
+    "qrLabelsEzplHint": "Natív Godex címkefájl (.ezp) az 51×25 mm-es VOID címkéhez — a GoLabel megnyitja és a nyomtatóra tölti, vagy raw-nyomtatással közvetlenül kiküldhető.",
+    "qrLabelsEzpx": "GoLabel (EZPX)",
+    "qrLabelsEzpxHint": "GoLabel projektfájl (.ezpx) a saját VOID-címke sablonotokkal: gyári szám vonalkód + X-Presso Coffee Kft. TULAJDONA — a G300 nyomtatóra beállítva. Több gépnél ZIP-ben, gépenként egy fájl."
   },
   "wh": {
     "title": "Raktár",

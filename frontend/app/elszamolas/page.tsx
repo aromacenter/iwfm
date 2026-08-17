@@ -1289,10 +1289,7 @@ export default function ElszamolasPage() {
             >
               ⏭ {t("cons.nextCounter")}
             </button>
-            <label
-              title={t("cons.machineDiscountHint")}
-              className="ml-auto flex cursor-pointer items-center gap-2 text-sm"
-            >
+            <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={discountAll}

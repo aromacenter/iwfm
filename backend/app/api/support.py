@@ -139,11 +139,17 @@ async def asset_qr_label(
         entity_id=asset.barcode, request=request,
     )
     await db.commit()
-    if fmt == "ezpl":
-        from app.services.wfm.qr_label import build_qr_labels_ezpl
-
+    if fmt in ("ezpl", "ezpx"):
         from fastapi import Response
 
+        from app.services.wfm.qr_label import build_qr_label_ezpx, build_qr_labels_ezpl
+
+        if fmt == "ezpx":
+            return Response(
+                content=build_qr_label_ezpx(items[0]),
+                media_type="application/xml",
+                headers={"Content-Disposition": f'attachment; filename="{asset.barcode}.ezpx"'},
+            )
         return Response(
             content=build_qr_labels_ezpl(items),
             media_type="text/plain",
@@ -186,11 +192,27 @@ async def asset_qr_labels(
         detail={"count": len(items)}, request=request,
     )
     await db.commit()
-    if body.fmt == "ezpl":
-        from app.services.wfm.qr_label import build_qr_labels_ezpl
-
+    if body.fmt in ("ezpl", "ezpx"):
         from fastapi import Response
 
+        from app.services.wfm.qr_label import (
+            build_qr_label_ezpx,
+            build_qr_labels_ezpl,
+            build_qr_labels_ezpx_zip,
+        )
+
+        if body.fmt == "ezpx":
+            if len(items) == 1:
+                return Response(
+                    content=build_qr_label_ezpx(items[0]),
+                    media_type="application/xml",
+                    headers={"Content-Disposition": 'attachment; filename="cimke.ezpx"'},
+                )
+            return Response(
+                content=build_qr_labels_ezpx_zip(items),
+                media_type="application/zip",
+                headers={"Content-Disposition": 'attachment; filename="cimkek-ezpx.zip"'},
+            )
         return Response(
             content=build_qr_labels_ezpl(items),
             media_type="text/plain",
