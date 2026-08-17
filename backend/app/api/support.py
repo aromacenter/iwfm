@@ -139,6 +139,16 @@ async def asset_qr_label(
         entity_id=asset.barcode, request=request,
     )
     await db.commit()
+    if fmt == "ezpl":
+        from app.services.wfm.qr_label import build_qr_labels_ezpl
+
+        from fastapi import Response
+
+        return Response(
+            content=build_qr_labels_ezpl(items),
+            media_type="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="QR-{asset.barcode}.ezp"'},
+        )
     build = build_qr_labels_small_pdf if fmt == "small" else build_qr_labels_pdf
     return _labels_response(build(items), f"QR-{asset.barcode}.pdf")
 
@@ -176,6 +186,16 @@ async def asset_qr_labels(
         detail={"count": len(items)}, request=request,
     )
     await db.commit()
+    if body.fmt == "ezpl":
+        from app.services.wfm.qr_label import build_qr_labels_ezpl
+
+        from fastapi import Response
+
+        return Response(
+            content=build_qr_labels_ezpl(items),
+            media_type="text/plain",
+            headers={"Content-Disposition": 'attachment; filename="QR-cimkek.ezp"'},
+        )
     build = build_qr_labels_small_pdf if body.fmt == "small" else build_qr_labels_pdf
     return _labels_response(build(items), "QR-cimkek.pdf")
 

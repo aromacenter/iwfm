@@ -379,9 +379,10 @@
     "categoryHint": "e.g. Coffees, Machines, Parts, Supplies",
     "categoryAll": "All",
     "categoryNone": "Uncategorized",
-    "discountAll": "Discounted settlement (net payable, no VAT, no invoice)",
+    "discountAll": "Discounted",
     "nextCounter": "Next counter",
-    "portionPrice": "Price/portion"
+    "portionPrice": "Price/portion",
+    "priceOverrideHint": "Unit-price override for this settlement (empty = automatic price) — overrides are logged."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1385,7 +1386,9 @@
       "retired": "Retired"
     },
     "qrLabelsSmall": "QR 51×25 mm",
-    "qrLabelsSmallHint": "For label printers (VOID label): one page per label, without partner name"
+    "qrLabelsSmallHint": "For label printers (VOID label): one page per label, without partner name",
+    "qrLabelsEzpl": "Godex (EZPL)",
+    "qrLabelsEzplHint": "Native Godex label file (.ezp) for the 51×25 mm VOID label — open/send with GoLabel or raw-print directly."
   },
   "wh": {
     "title": "Warehouse",

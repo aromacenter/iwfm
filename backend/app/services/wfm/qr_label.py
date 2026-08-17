@@ -122,6 +122,56 @@ def build_qr_labels_small_pdf(items: list[dict]) -> bytes:
     return buf.getvalue()
 
 
+def _ascii(s: str) -> str:
+    """Ékezet-mentesítés az EZPL belső fontjaihoz (kódlap-független)."""
+    import unicodedata
+
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s) if not unicodedata.combining(c)
+    )
+
+
+def build_qr_labels_ezpl(items: list[dict]) -> bytes:
+    """Godex EZPL parancsfájl (.ezp) az 51×25 mm-es VOID címkéhez — a GoLabel
+    megnyitja és a nyomtatóra tölti, vagy raw-nyomtatással közvetlenül
+    kiküldhető. 203 dpi (8 dot/mm): 51 mm = 408 dot, 25 mm = 200 dot.
+    QR: W parancs (x,y,mode,type,ec,mask,mul,len,rotate + adatsor)."""
+    out: list[str] = []
+    for item in items:
+        url = str(item["url"])
+        name = _ascii(str(item.get("name") or ""))[:24]
+        barcode = str(item.get("barcode") or "")
+        serial = _ascii(str(item.get("serial_number") or ""))[:18]
+        out += [
+            "^Q25,3",   # címkemagasság 25 mm, rés 3 mm
+            "^W51",     # címkeszélesség 51 mm
+            "^H8",      # sötétség
+            "^P1",      # példányszám
+            "^S3",      # sebesség
+            "^AT",
+            "^C1",
+            "^R0",
+            "~Q+0",
+            "^O0",
+            "^D0",
+            "^E12",
+            "~R255",
+            "^L",
+            f"W12,12,5,2,M,8,3,{len(url)},0",
+            url,
+            f"AB,170,16,1,1,0,0,{name}",
+            f"AA,170,52,1,1,0,0,Kod: {barcode}",
+        ]
+        if serial:
+            out.append(f"AA,170,80,1,1,0,0,Gy.sz: {serial}")
+        out += [
+            "AA,170,128,1,1,0,0,X-Presso Coffee Kft tulajdona",
+            "AA,170,156,1,1,0,0,Olvassa be a QR-kodot!",
+            "E",
+        ]
+    return ("\n".join(out) + "\n").encode("ascii", errors="replace")
+
+
 def build_qr_labels_pdf(items: list[dict]) -> bytes:
     """Címkeív PDF (A4). ``items`` elemei: url, name, barcode, serial_number."""
     buf = io.BytesIO()

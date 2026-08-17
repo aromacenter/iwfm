@@ -84,6 +84,48 @@ async def test_delivery_note_lifecycle(client, manager):
     assert res.status_code == 422
 
 
+async def test_settlement_line_price_override_and_audit(client, manager):
+    """Kézi egységár-átírás a leltár-soron: az összeg az átírt árral számol,
+    és settlement.override audit-esemény keletkezik."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = await _partner(client, mgr, "Átírós Bolt")
+    product = await make_product(client, mgr)  # 50 Ft/adag alapár
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 1.0},
+        headers=mgr,
+    )
+    res = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [{"product_id": product["id"], "physical_qty": 0.3,
+                         "price_per_portion": 80}]},
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    detail = (
+        await client.get(f"/api/settlements?partner_id={partner['id']}", headers=mgr)
+    ).json()[0]
+    # 0.7 kg = 100 adag × 80 (átírt ár) = 8 000 nettó
+    assert abs(detail["total_net"] - 8000) < 1, detail
+
+    import app.db as app_db
+    from sqlalchemy import select
+
+    from app.models import AuditEvent
+
+    async with app_db.get_session_factory()() as session:
+        events = (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.action == "settlement.override")
+            )
+        ).scalars().all()
+    assert len(events) == 1
+    assert events[0].detail["overrides"][0]["to"] == 80
+
+
 async def test_delivery_cancel_restores_stock(client, manager):
     _, mgr = manager
     partner = await _partner(client, mgr, "Visszavonós Bolt")

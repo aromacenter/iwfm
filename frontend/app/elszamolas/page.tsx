@@ -152,6 +152,7 @@ interface MachinePayload {
   service_portions: number;
   discount_pct: number;
   product_id?: string | null;
+  price_per_portion?: number | null;
 }
 
 interface HandoverPayload {
@@ -169,7 +170,7 @@ interface QueuedSettlement {
   partner_name: string;
   payment_method: (typeof PAYMENTS)[number];
   no_vat?: boolean;
-  lines: { product_id: string; physical_qty: number; counter_portions?: number | null }[];
+  lines: { product_id: string; physical_qty: number; counter_portions?: number | null; price_per_portion?: number | null }[];
   machines?: MachinePayload[];
   handovers?: HandoverPayload[];
   paid_amount?: number | null;
@@ -208,6 +209,10 @@ export default function ElszamolasPage() {
   const [ctx, setCtx] = useState<SettlementContext | null>(null);
   const [machineInputs, setMachineInputs] = useState<Record<string, MachineInput>>({});
   const [machineProducts, setMachineProducts] = useState<Record<string, string>>({});
+  // Kézi egységár-átírás (Ft/adag, nettó) — üresen az automatikus ár érvényes;
+  // az átírás a mentéskor audit-naplóba kerül.
+  const [machinePrices, setMachinePrices] = useState<Record<string, string>>({});
+  const [linePrices, setLinePrices] = useState<Record<string, string>>({});
   const [handovers, setHandovers] = useState<Record<string, { qty: string; cost: string }>>({});
   const [paidAmount, setPaidAmount] = useState("");
   // Készlet-sor nélküli partnernél is elszámolható: kézzel felvett termék-sorok
@@ -252,6 +257,8 @@ export default function ElszamolasPage() {
 
   const loadCtx = useCallback(() => {
     setDiscountAll(false);
+    setMachinePrices({});
+    setLinePrices({});
     if (!partnerId) { setCtx(null); setMachineInputs({}); setPaidAmount(""); return; }
     api.get<SettlementContext>(`/api/partners/${partnerId}/settlement-context`).then((c) => {
       setCtx(c);
@@ -507,18 +514,20 @@ export default function ElszamolasPage() {
       const billed = Math.max(brewed - service, 0);
       const pid = machineProducts[m.asset_id] || m.default_product_id || ctx.single_product_id;
       const stockRow = pid ? stockRows.find((x) => x.product_id === pid) : undefined;
-      const price = stockRow
+      const autoPrice = stockRow
         ? stockRow.price_per_portion
         : (pid ? products.find((x) => x.id === pid)?.price_per_portion ?? null : null);
+      const manual = machinePrices[m.asset_id] ?? "";
+      const price = manual !== "" ? Number(manual) : autoPrice;
       const amount = filled && price !== null ? billed * price : 0;
       if (filled && pid) {
         billedByProduct[pid] = (billedByProduct[pid] ?? 0) + billed;
         amountByProduct[pid] = (amountByProduct[pid] ?? 0) + amount;
       }
-      return { ...m, filled, newCounter, brewed, billed, price, amount, belowPrev };
+      return { ...m, filled, newCounter, brewed, billed, price, autoPrice, amount, belowPrev };
     });
     return { rows, billedByProduct, amountByProduct };
-  }, [ctx, machineInputs, machineProducts, stockRows, products]);
+  }, [ctx, machineInputs, machineProducts, machinePrices, stockRows, products]);
 
   // Kedvezményes elszámolás: mindent-vagy-semmit kapcsoló — az egész
   // elszámolás ÁFA és Billingó-számla nélkül megy (a nettó a fizetendő).
@@ -556,6 +565,8 @@ export default function ElszamolasPage() {
       // keresztellenőrzés (a hiányt a mentés kg-áron külön sorban számolja).
       const counterStr = counters[s.product_id] ?? "";
       const counterNum = counterStr === "" ? null : Number(counterStr);
+      const manual = linePrices[s.product_id] ?? "";
+      const unitPrice = manual !== "" ? Number(manual) : s.price_per_portion;
       let portions: number;
       let amount: number;
       if (machineBilled !== undefined) {
@@ -563,10 +574,10 @@ export default function ElszamolasPage() {
         amount = machinePreview.amountByProduct[s.product_id] ?? 0;
       } else if (counterNum !== null) {
         portions = counterNum;
-        amount = portions * s.price_per_portion;
+        amount = portions * unitPrice;
       } else {
         portions = s.grams_per_portion > 0 ? (consumed * 1000) / s.grams_per_portion : 0;
-        amount = portions * s.price_per_portion;
+        amount = portions * unitPrice;
       }
       net += amount;
       return {
@@ -688,6 +699,8 @@ export default function ElszamolasPage() {
         physical_qty: Number(physical[s.product_id]),
         counter_portions:
           (counters[s.product_id] ?? "") === "" ? null : Number(counters[s.product_id]),
+        price_per_portion:
+          (linePrices[s.product_id] ?? "") === "" ? null : Number(linePrices[s.product_id]),
       }));
     // Gép-sorok: csak a kitöltött (új számlálós) gépek kerülnek be
     if (machinePreview.rows.some((r) => r.belowPrev)) {
@@ -706,6 +719,8 @@ export default function ElszamolasPage() {
         service_portions: Number(machineInputs[r.asset_id]?.service) || 0,
         discount_pct: 0, // a Kedv. pipa nem árcsökkentés: no_vat-ként érvényesül
         product_id: machineProducts[r.asset_id] || null,
+        price_per_portion:
+          (machinePrices[r.asset_id] ?? "") === "" ? null : Number(machinePrices[r.asset_id]),
       }));
     const handoverList: HandoverPayload[] = stockRows
       .filter((s) => (handovers[s.product_id]?.qty ?? "") !== "" && Number(handovers[s.product_id].qty) > 0)
@@ -1393,8 +1408,17 @@ export default function ElszamolasPage() {
                       className="w-16 rounded-lg border border-slate-300 px-2 py-1.5"
                     />
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
-                    {m.price !== null ? ft(m.price) : "—"}
+                  <td className="px-4 py-2.5 text-right">
+                    <input
+                      type="number" min={0} step="0.01"
+                      value={machinePrices[m.asset_id] ?? ""}
+                      onChange={(e) =>
+                        setMachinePrices({ ...machinePrices, [m.asset_id]: e.target.value })
+                      }
+                      placeholder={m.autoPrice !== null ? String(m.autoPrice) : "?"}
+                      title={t("cons.priceOverrideHint")}
+                      className={`w-20 rounded-lg border px-2 py-1.5 text-right tabular-nums ${(machinePrices[m.asset_id] ?? "") !== "" ? "border-amber-400 bg-amber-50" : "border-slate-300"}`}
+                    />
                   </td>
                   <td className="px-4 py-2.5 text-right font-medium tabular-nums">
                     {m.filled ? (m.price !== null ? ft(Math.round(m.amount)) : "?") : "—"}
@@ -1441,7 +1465,16 @@ export default function ElszamolasPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3">
-                    {ft(s.price_per_portion)}
+                    <input
+                      type="number" min={0} step="0.01"
+                      value={linePrices[s.product_id] ?? ""}
+                      onChange={(e) =>
+                        setLinePrices({ ...linePrices, [s.product_id]: e.target.value })
+                      }
+                      placeholder={String(s.price_per_portion)}
+                      title={t("cons.priceOverrideHint")}
+                      className={`w-24 rounded-lg border px-2 py-1.5 tabular-nums ${(linePrices[s.product_id] ?? "") !== "" ? "border-amber-400 bg-amber-50" : "border-slate-300"}`}
+                    />
                     {s.has_price_override && (
                       <span title={t("prices.overrideHint", { base: ft(s.base_price_per_portion) })} className="ml-1 text-xs text-indigo-600">*</span>
                     )}

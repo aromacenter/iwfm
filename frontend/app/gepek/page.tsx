@@ -193,12 +193,15 @@ export default function GepekPage() {
     }
   }
 
-  async function downloadQrLabels(fmt: "a4" | "small" = "a4") {
+  async function downloadQrLabels(fmt: "a4" | "small" | "ezpl" = "a4") {
     // kijelölés nélkül a szűrt lista ÖSSZES gépére készül címkeív
     const ids = selected.size > 0 ? [...selected] : assets.map((a) => a.id);
     if (ids.length === 0) return;
     try {
-      await downloadFilePost("/api/assets/qr-labels", { ids, fmt }, "QR-cimkek.pdf");
+      await downloadFilePost(
+        "/api/assets/qr-labels", { ids, fmt },
+        fmt === "ezpl" ? "QR-cimkek.ezp" : "QR-cimkek.pdf",
+      );
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -461,6 +464,13 @@ export default function GepekPage() {
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
             >
               {t("inv.qrLabelsSmall")}
+            </button>
+            <button
+              onClick={() => downloadQrLabels("ezpl")}
+              title={t("inv.qrLabelsEzplHint")}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
+            >
+              🖨 {t("inv.qrLabelsEzpl")}
             </button>
           </>
         )}

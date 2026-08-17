@@ -379,9 +379,10 @@
     "categoryHint": "pl. Kávék, Kávégépek, Alkatrészek, Kellékek",
     "categoryAll": "Mind",
     "categoryNone": "Kategória nélkül",
-    "discountAll": "Kedvezményes elszámolás (nettó fizetendő, ÁFA és számla nélkül)",
+    "discountAll": "Kedvezményes",
     "nextCounter": "Következő számláló",
-    "portionPrice": "Adagár"
+    "portionPrice": "Adagár",
+    "priceOverrideHint": "Egységár-átírás erre az elszámolásra (üresen az automatikus ár érvényes) — az átírás naplózódik."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1385,7 +1386,9 @@
       "retired": "Selejtezve"
     },
     "qrLabelsSmall": "QR 51×25 mm",
-    "qrLabelsSmallHint": "Címkenyomtatóra (VOID címke): címkénként egy oldal, partner-név nélkül"
+    "qrLabelsSmallHint": "Címkenyomtatóra (VOID címke): címkénként egy oldal, partner-név nélkül",
+    "qrLabelsEzpl": "Godex (EZPL)",
+    "qrLabelsEzplHint": "Natív Godex címkefájl (.ezp) az 51×25 mm-es VOID címkéhez — a GoLabel megnyitja és a nyomtatóra tölti, vagy raw-nyomtatással közvetlenül kiküldhető."
   },
   "wh": {
     "title": "Raktár",

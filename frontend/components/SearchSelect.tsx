@@ -6,6 +6,7 @@
  *  szállító, felhasználó). */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "@/lib/i18n";
 
 export interface SearchItem {
@@ -49,9 +50,27 @@ export default function SearchSelect({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  // A lista PORTÁLBAN nyílik (document.body), fix pozícióval — így az
+  // overflow-os táblázat-konténerek nem vágják le a találatokat.
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function place() {
+      const r = rootRef.current?.getBoundingClientRect();
+      if (r) setRect({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 256) });
+    }
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
 
   const selected = useMemo(() => items.find((i) => i.id === value) ?? null, [items, value]);
 
@@ -66,7 +85,13 @@ export default function SearchSelect({
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (
+        rootRef.current && !rootRef.current.contains(target)
+        && !(listRef.current && listRef.current.contains(target))
+      ) {
+        setOpen(false);
+      }
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -162,10 +187,11 @@ export default function SearchSelect({
         )}
       </div>
 
-      {open && (
+      {open && rect && createPortal(
         <div
           ref={listRef}
-          className="absolute z-30 mt-1 max-h-80 w-full min-w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+          style={{ position: "fixed", top: rect.top, left: rect.left, width: rect.width }}
+          className="z-[70] max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
         >
           {allowEmpty && (
             <button
@@ -211,7 +237,8 @@ export default function SearchSelect({
               {t("picker.more", { count: results.length - MAX_SHOWN })}
             </div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

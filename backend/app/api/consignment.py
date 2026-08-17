@@ -726,6 +726,9 @@ class SettlementLineIn(BaseModel):
     # a számláló szerint vártnál kisebb fizikai készlet hiánya kg-áron kerül
     # felszámításra.
     counter_portions: float | None = Field(default=None, ge=0)
+    # Kézi egységár-felülírás ERRE az elszámolásra (Ft/adag, nettó) — az
+    # átírás audit-naplóba kerül (settlement.override).
+    price_per_portion: float | None = Field(default=None, ge=0)
 
 
 class SettlementMachineIn(BaseModel):
@@ -739,6 +742,8 @@ class SettlementMachineIn(BaseModel):
     # Termék-felülírás erre az elszámolásra — ha a gépen nincs beállítva
     # „ebből főz", az itt választott termék kerül a gépre is (megjegyezzük).
     product_id: str | None = None
+    # Kézi egységár-felülírás (Ft/adag, nettó) — audit-naplózva.
+    price_per_portion: float | None = Field(default=None, ge=0)
 
 
 class HandoverIn(BaseModel):
@@ -1129,6 +1134,8 @@ async def create_settlement(
     await db.flush()
 
     price_overrides = await _partner_price_map(db, partner.id)
+    # Kézi átírások gyűjtése (egységár, szerviz-adag) — riporthoz auditálva.
+    manual_overrides: list[dict] = []
 
     # ── Gép-soros elszámolás: gépenként lefőzött adag (számláló-különbség) −
     # szerviz-adag, kedvezménnyel árazva; termékenként összegződik és a
@@ -1191,6 +1198,19 @@ async def create_settlement(
             if asset.default_product_id is None:
                 asset.default_product_id = product.id
             unit_price = _effective_price(product, price_overrides)
+            if m_in.price_per_portion is not None:
+                if abs(m_in.price_per_portion - unit_price) > 1e-9:
+                    manual_overrides.append({
+                        "field": "unit_price", "target": asset.barcode,
+                        "product": product.name,
+                        "from": unit_price, "to": m_in.price_per_portion,
+                    })
+                unit_price = m_in.price_per_portion
+            if m_in.service_portions:
+                manual_overrides.append({
+                    "field": "service_portions", "target": asset.barcode,
+                    "product": product.name, "from": 0, "to": m_in.service_portions,
+                })
             amount = _money(billed * unit_price * (1 - m_in.discount_pct / 100.0))
             db.add(SettlementMachine(
                 settlement_id=settlement.id,
@@ -1242,6 +1262,14 @@ async def create_settlement(
         # A kg-keresztellenőrzés alapja a LEFŐZÖTT adag (szerviz-adagokkal
         # együtt — azok is fogyasztottak kávét, csak nem számlázzuk őket).
         unit_price = _effective_price(product, price_overrides)
+        if line_in.price_per_portion is not None:
+            if abs(line_in.price_per_portion - unit_price) > 1e-9:
+                manual_overrides.append({
+                    "field": "unit_price", "target": "leltár",
+                    "product": product.name,
+                    "from": unit_price, "to": line_in.price_per_portion,
+                })
+            unit_price = line_in.price_per_portion
         if product.id in machine_billed:
             portions = machine_billed[product.id]
             amount_net = _money(machine_amount[product.id])
@@ -1428,6 +1456,15 @@ async def create_settlement(
         detail={"partner": partner.name, "gross": settlement.total_gross},
         request=request,
     )
+    if manual_overrides:
+        # Kézi átírások (egységár, szerviz-adag) — riport a Naplóból
+        # (action = settlement.override) szűrhető.
+        await record_audit(
+            db, actor=actor, action="settlement.override", entity_type="settlement",
+            entity_id=str(settlement.id),
+            detail={"partner": partner.name, "overrides": manual_overrides[:50]},
+            request=request,
+        )
     await db.commit()
 
     # Automatizálások (háttérben, saját sessionnel)
