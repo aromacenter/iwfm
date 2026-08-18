@@ -21,6 +21,9 @@ from app.services.wfm.contracts import apply_active_contract
 
 router = APIRouter()
 
+# /api/contracts — minden szerződés egy listában (áttekintő oldal)
+overview_router = APIRouter()
+
 
 async def _get_partner_or_404(db: AsyncSession, partner_id: str) -> Partner:
     try:
@@ -184,3 +187,135 @@ async def delete_contract(
     await apply_active_contract(db, partner)
     await db.commit()
     return {"ok": True}
+
+
+class ContractRowOut(BaseModel):
+    """Egy sor az áttekintőben: szerződés + partner + kihelyezett gépek árral."""
+
+    id: str
+    partner_id: str
+    partner_name: str
+    partner_active: bool
+    status: str  # active | future | expired
+    valid_from: date
+    valid_to: date | None
+    min_portions: int | None
+    below_min_price: float | None
+    min_kg: float | None
+    below_min_price_kg: float | None
+    rent_if_below_min: bool
+    note: str | None
+    machines: list[dict]
+
+
+class NoContractRowOut(BaseModel):
+    """Partner kihelyezett géppel, de szerződés nélkül — behajtandó hiányosság."""
+
+    partner_id: str
+    partner_name: str
+    partner_active: bool
+    machines: list[dict]
+
+
+class ContractsOverviewOut(BaseModel):
+    contracts: list[ContractRowOut]
+    no_contract: list[NoContractRowOut]
+
+
+@overview_router.get("", response_model=ContractsOverviewOut)
+async def contracts_overview(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("partners")),
+):
+    """Szerződések oldal adatai: ki, milyen gép, mikortól meddig, milyen áron.
+
+    A gép adagára a gép termékének partner-ára (felülírás), különben a termék
+    alapára — ugyanaz a feloldás, mint az elszámolásban. Külön lista azokról a
+    partnerekről, akiknél van kihelyezett gép, de nincs egyetlen szerződés sem.
+    """
+    from app.models import Asset, PartnerPrice, PartnerStock, Product
+
+    contracts = (
+        await db.execute(
+            select(PartnerContract, Partner)
+            .join(Partner, Partner.id == PartnerContract.partner_id)
+            .order_by(Partner.name, PartnerContract.valid_from.desc())
+        )
+    ).all()
+    assets = (
+        await db.execute(
+            select(Asset)
+            .where(Asset.partner_id.is_not(None), Asset.status == "deployed")
+            .order_by(Asset.barcode)
+        )
+    ).scalars().all()
+    products = {
+        p.id: p for p in (await db.execute(select(Product))).scalars().all()
+    }
+    overrides = {
+        (pp.partner_id, pp.product_id): pp.price_per_portion
+        for pp in (await db.execute(select(PartnerPrice))).scalars().all()
+    }
+    # Elszámolás-fallback: ha a gépnek nincs terméke, a partner EGYETLEN
+    # készlet-terméke érvényes (ha pont egy van).
+    stock_products: dict = {}
+    for pid, prod_id in (
+        await db.execute(select(PartnerStock.partner_id, PartnerStock.product_id))
+    ).all():
+        stock_products.setdefault(pid, set()).add(prod_id)
+
+    def machine_dict(a: Asset) -> dict:
+        prod_id = a.default_product_id
+        if prod_id is None:
+            single = stock_products.get(a.partner_id) or set()
+            if len(single) == 1:
+                prod_id = next(iter(single))
+        prod = products.get(prod_id)
+        price = None
+        if prod is not None:
+            price = overrides.get((a.partner_id, prod.id), prod.price_per_portion)
+        return {
+            "id": str(a.id), "barcode": a.barcode, "name": a.name,
+            "counter": a.counter, "customer_owned": a.customer_owned,
+            "deployed_at": a.deployed_at.date().isoformat() if a.deployed_at else None,
+            "product_name": prod.name if prod else None,
+            "price_per_portion": price,
+            "rent_fee": a.rent_fee,
+        }
+
+    machines_by_partner: dict = {}
+    for a in assets:
+        machines_by_partner.setdefault(a.partner_id, []).append(machine_dict(a))
+
+    today = date.today()
+    rows = [
+        ContractRowOut(
+            id=str(c.id), partner_id=str(p.id), partner_name=p.name,
+            partner_active=p.is_active, status=_status(c, today),
+            valid_from=c.valid_from, valid_to=c.valid_to,
+            min_portions=c.min_portions, below_min_price=c.below_min_price,
+            min_kg=c.min_kg, below_min_price_kg=c.below_min_price_kg,
+            rent_if_below_min=c.rent_if_below_min, note=c.note,
+            machines=machines_by_partner.get(p.id, []),
+        )
+        for c, p in contracts
+    ]
+
+    contracted_ids = {c.partner_id for c, _p in contracts}
+    orphan_ids = [pid for pid in machines_by_partner if pid not in contracted_ids]
+    orphans = []
+    if orphan_ids:
+        orphan_partners = (
+            await db.execute(
+                select(Partner).where(Partner.id.in_(orphan_ids)).order_by(Partner.name)
+            )
+        ).scalars().all()
+        orphans = [
+            NoContractRowOut(
+                partner_id=str(p.id), partner_name=p.name, partner_active=p.is_active,
+                machines=machines_by_partner[p.id],
+            )
+            for p in orphan_partners
+        ]
+
+    return ContractsOverviewOut(contracts=rows, no_contract=orphans)

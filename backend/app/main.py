@@ -165,6 +165,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks.me_router, prefix="/api/me/tasks", tags=["self-service"])
     app.include_router(inventory.router, prefix="/api/partners", tags=["partners"])
     app.include_router(contracts_api.router, prefix="/api/partners", tags=["contracts"])
+    app.include_router(contracts_api.overview_router, prefix="/api/contracts", tags=["contracts"])
     app.include_router(inventory.assets_router, prefix="/api/assets", tags=["assets"])
     app.include_router(consignment.products_router, prefix="/api/products", tags=["products"])
     app.include_router(consignment.stock_router, prefix="/api/partners", tags=["partner-stock"])

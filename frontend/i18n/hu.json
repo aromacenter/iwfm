@@ -135,7 +135,8 @@
       "system": "Rendszer",
       "personal": "Saját"
     },
-    "warehouse": "Raktár"
+    "warehouse": "Raktár",
+    "contracts": "Szerződések"
   },
   "roles": {
     "admin": "Admin",
@@ -1488,7 +1489,19 @@
     "sumMinPortions": "min. {n} adag/hó ({price} Ft/adag a különbözetre)",
     "sumMinKg": "min. {n} kg/hó ({price} Ft/kg a különbözetre)",
     "sumRent": "minimum alatt bérleti díj a szankció",
-    "noTerms": "Feltételek nélkül (csak nyilvántartás)."
+    "noTerms": "Feltételek nélkül (csak nyilvántartás).",
+    "filterAll": "Mind",
+    "noContractFilter": "Szerződés nélkül",
+    "noContractHint": "Ezeknél a partnereknél van kihelyezett gép, de egyetlen szerződés sincs rögzítve — érdemes pótolni.",
+    "searchPlaceholder": "Keresés: partner, gép, vonalkód, termék…",
+    "validity": "Érvényesség",
+    "termsCol": "Feltételek",
+    "noMachines": "nincs kihelyezett gép",
+    "perPortion": "Ft/adag",
+    "noProduct": "nincs termék hozzárendelve",
+    "rentFee": "bérleti díj",
+    "deployedAt": "kihelyezve",
+    "listEmpty": "Nincs találat."
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",

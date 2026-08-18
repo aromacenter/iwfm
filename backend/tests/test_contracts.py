@@ -131,3 +131,72 @@ async def test_partner_update_keeps_contract_mirror(client, manager):
     assert res.status_code == 200
     row = await _partner_row(client, mgr, partner["id"])
     assert row["contract_min_kg"] is None
+
+
+async def test_contracts_overview_page(client, manager):
+    """/api/contracts: minden szerződés + gépek feloldott adagárral + szerződés
+    nélküli gépes partnerek."""
+    from tests.test_consignment import make_product
+    from tests.test_inventory import asset_payload
+
+    _, mgr = manager
+    product = await make_product(client, mgr, price_per_portion=50.0)
+
+    # Szerződéses partner géppel + partner-áras felülírással
+    p1 = await _partner(client, mgr, "Áttekintős Bolt")
+    res = await client.post(
+        f"/api/partners/{p1['id']}/contracts",
+        json={"valid_from": "2020-01-01", "min_portions": 300, "below_min_price": 35},
+        headers=mgr,
+    )
+    assert res.status_code == 201
+    asset = (
+        await client.post(
+            "/api/assets",
+            json=asset_payload(barcode="OVW-1", name="Áttekintő gép",
+                               default_product_id=product["id"]),
+            headers=mgr,
+        )
+    ).json()
+    await client.post(
+        f"/api/assets/{asset['id']}/deploy", json={"partner_id": p1["id"]}, headers=mgr
+    )
+    res = await client.put(
+        f"/api/partners/{p1['id']}/prices/{product['id']}",
+        json={"price_per_portion": 42.0},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+
+    # Gépes partner szerződés NÉLKÜL
+    p2 = await _partner(client, mgr, "Szerződéstelen Bolt")
+    orphan = (
+        await client.post(
+            "/api/assets", json=asset_payload(barcode="OVW-2", name="Kóbor gép"),
+            headers=mgr,
+        )
+    ).json()
+    await client.post(
+        f"/api/assets/{orphan['id']}/deploy", json={"partner_id": p2["id"]}, headers=mgr
+    )
+
+    res = await client.get("/api/contracts", headers=mgr)
+    assert res.status_code == 200, res.text
+    data = res.json()
+
+    row = next(c for c in data["contracts"] if c["partner_name"] == "Áttekintős Bolt")
+    assert row["status"] == "active"
+    assert row["min_portions"] == 300
+    machines = row["machines"]
+    assert len(machines) == 1
+    assert machines[0]["barcode"] == "OVW-1"
+    assert machines[0]["product_name"] == product["name"]
+    # a partner-ár felülírás érvényesül, nem a termék alapára
+    assert machines[0]["price_per_portion"] == 42.0
+
+    orphan_row = next(
+        r for r in data["no_contract"] if r["partner_name"] == "Szerződéstelen Bolt"
+    )
+    assert orphan_row["machines"][0]["barcode"] == "OVW-2"
+    # a szerződéses partner nem szerepel a szerződés nélküliek közt
+    assert all(r["partner_name"] != "Áttekintős Bolt" for r in data["no_contract"])

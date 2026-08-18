@@ -135,7 +135,8 @@
       "system": "System",
       "personal": "Personal"
     },
-    "warehouse": "Warehouse"
+    "warehouse": "Warehouse",
+    "contracts": "Contracts"
   },
   "roles": {
     "admin": "Admin",
@@ -1488,7 +1489,19 @@
     "sumMinPortions": "min. {n} portions/month ({price} Ft/portion for the shortfall)",
     "sumMinKg": "min. {n} kg/month ({price} Ft/kg for the shortfall)",
     "sumRent": "below minimum the rent fee is the penalty",
-    "noTerms": "No terms (record only)."
+    "noTerms": "No terms (record only).",
+    "filterAll": "All",
+    "noContractFilter": "No contract",
+    "noContractHint": "These partners have deployed machines but no contract on file — worth fixing.",
+    "searchPlaceholder": "Search: partner, machine, barcode, product…",
+    "validity": "Validity",
+    "termsCol": "Terms",
+    "noMachines": "no deployed machines",
+    "perPortion": "Ft/portion",
+    "noProduct": "no product assigned",
+    "rentFee": "rent",
+    "deployedAt": "deployed",
+    "listEmpty": "No results."
   },
   "delivery": {
     "title": "Delivery (delivery note)",
