@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import PartnerInfo from "@/components/PartnerInfo";
 import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -22,6 +23,7 @@ interface Ticket {
   description: string | null;
   asset_id: string | null;
   asset_label: string | null;
+  partner_id: string | null;
   partner_label: string | null;
   assigned_to_user_id: string | null;
   assigned_to_name: string | null;
@@ -113,6 +115,7 @@ export default function SzervizPage() {
   const { toast, confirm } = useUI();
   const canDelete = usePerms().can("delete");
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [assets, setAssets] = useState<AssetOption[]>([]);
   const [maintDue, setMaintDue] = useState<MaintenanceDue[]>([]);
@@ -440,7 +443,18 @@ export default function SzervizPage() {
                 </td>
                 <td className="px-4 py-3">
                   {tk.asset_label ?? "—"}
-                  {tk.partner_label && <div className="text-xs text-slate-400">{tk.partner_label}</div>}
+                  {tk.partner_label && (
+                    tk.partner_id ? (
+                      <button
+                        onClick={() => setInfoPartner(tk.partner_id)}
+                        className="block text-left text-xs text-indigo-600 hover:underline"
+                      >
+                        {tk.partner_label}
+                      </button>
+                    ) : (
+                      <div className="text-xs text-slate-400">{tk.partner_label}</div>
+                    )
+                  )}
                 </td>
                 <td className="px-4 py-3">{tk.assigned_to_name ?? "—"}</td>
                 <td className="px-4 py-3">
@@ -690,6 +704,8 @@ export default function SzervizPage() {
           </form>
         </div>
       )}
+
+      <PartnerInfo partnerId={infoPartner} onClose={() => setInfoPartner(null)} />
     </AppShell>
   );
 }

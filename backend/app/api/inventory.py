@@ -204,6 +204,127 @@ async def _get_partner_or_404(db: AsyncSession, partner_id: str) -> Partner:
     return p
 
 
+class PartnerOverviewOut(BaseModel):
+    partner: PartnerOut
+    debt: float
+    contracts: list[dict]
+    machines: list[dict]
+    stock: list[dict]
+    recent_settlements: list[dict]
+    open_deliveries: int
+    open_deliveries_net: float
+    open_tickets: int
+
+
+@router.get("/{partner_id}/overview", response_model=PartnerOverviewOut)
+async def partner_overview(
+    partner_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("partners")),
+):
+    """Minden a partnerről egy nézetben — a listákból kattintva nyíló
+    partner-adatlap adatai: törzsadatok, szerződések, kihelyezett gépek,
+    készlet, tartozás, utolsó elszámolások, nyitott szállítólevelek."""
+    from sqlalchemy import func as sa_func
+
+    from app.api.consignment import _partner_debt
+    from app.api.contracts import _out as contract_out
+    from app.models import (
+        Asset,
+        DeliveryNote,
+        DeliveryNoteLine,
+        PartnerContract,
+        PartnerStock,
+        Product,
+        ServiceTicket,
+        Settlement,
+    )
+
+    p = await _get_partner_or_404(db, partner_id)
+
+    assets = (
+        await db.execute(
+            select(Asset)
+            .where(Asset.partner_id == p.id, Asset.status == "deployed")
+            .order_by(Asset.barcode)
+        )
+    ).scalars().all()
+    stock_rows = (
+        await db.execute(
+            select(PartnerStock, Product)
+            .join(Product, Product.id == PartnerStock.product_id)
+            .where(PartnerStock.partner_id == p.id)
+            .order_by(Product.name)
+        )
+    ).all()
+    contracts = (
+        await db.execute(
+            select(PartnerContract)
+            .where(PartnerContract.partner_id == p.id)
+            .order_by(PartnerContract.valid_from.desc())
+        )
+    ).scalars().all()
+    settlements = (
+        await db.execute(
+            select(Settlement)
+            .where(Settlement.partner_id == p.id)
+            .order_by(Settlement.created_at.desc())
+            .limit(5)
+        )
+    ).scalars().all()
+    open_notes = (
+        await db.execute(
+            select(DeliveryNote.id).where(
+                DeliveryNote.partner_id == p.id, DeliveryNote.status == "open"
+            )
+        )
+    ).scalars().all()
+    open_net = 0.0
+    if open_notes:
+        open_net = (
+            await db.execute(
+                select(
+                    sa_func.coalesce(
+                        sa_func.sum(DeliveryNoteLine.quantity * DeliveryNoteLine.unit_price),
+                        0.0,
+                    )
+                ).where(DeliveryNoteLine.delivery_note_id.in_(open_notes))
+            )
+        ).scalar_one()
+    open_tickets = (
+        await db.execute(
+            select(sa_func.count()).select_from(ServiceTicket).where(
+                ServiceTicket.partner_id == p.id,
+                ServiceTicket.status.in_(("open", "in_progress")),
+            )
+        )
+    ).scalar_one()
+
+    return PartnerOverviewOut(
+        partner=_partner_out(p, asset_count=len(assets)),
+        debt=await _partner_debt(db, p.id),
+        contracts=[contract_out(c).model_dump(mode="json") for c in contracts],
+        machines=[
+            {"id": str(a.id), "barcode": a.barcode, "name": a.name,
+             "counter": a.counter, "customer_owned": a.customer_owned}
+            for a in assets
+        ],
+        stock=[
+            {"product_name": prod.name, "quantity": round(s.quantity, 2), "unit": prod.unit}
+            for s, prod in stock_rows
+        ],
+        recent_settlements=[
+            {"id": str(s.id), "created_at": s.created_at.isoformat(),
+             "total_gross": s.total_gross, "paid_amount": s.paid_amount,
+             "invoiced": s.invoiced, "payment_method": s.payment_method}
+            for s in settlements
+        ],
+        open_deliveries=len(open_notes),
+        open_deliveries_net=round(open_net, 2),
+        open_tickets=open_tickets,
+    )
+
+
 @router.get("", response_model=list[PartnerOut])
 async def list_partners(
     db: AsyncSession = Depends(get_db),

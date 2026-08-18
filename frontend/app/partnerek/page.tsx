@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
+import PartnerInfo from "@/components/PartnerInfo";
 import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
 import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT, type CompanyKey } from "@/lib/companies";
@@ -97,6 +98,7 @@ export default function PartnerekPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [companyFilter, setCompanyFilter] = useState("");
   const [form, setForm] = useState<typeof EMPTY | null>(null);
+  const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -514,7 +516,12 @@ export default function PartnerekPage() {
                 </td>
                 )}
                 <td className="px-4 py-3">
-                  <div className="font-medium">{p.name}</div>
+                  <button
+                    onClick={() => setInfoPartner(p.id)}
+                    className="text-left font-medium text-indigo-700 hover:underline"
+                  >
+                    {p.name}
+                  </button>
                   {p.company_name && p.company_name !== p.name && (
                     <div className="text-xs text-slate-400">{p.company_name}</div>
                   )}
@@ -847,6 +854,8 @@ export default function PartnerekPage() {
           </div>
         </div>
       )}
+
+      <PartnerInfo partnerId={infoPartner} onClose={() => setInfoPartner(null)} />
     </AppShell>
   );
 }

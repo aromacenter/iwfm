@@ -8,6 +8,7 @@ import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import CameraScanner, { cameraScanSupported } from "@/components/CameraScanner";
 import IconLegend from "@/components/IconLegend";
+import PartnerInfo from "@/components/PartnerInfo";
 import PartnerPicker from "@/components/PartnerPicker";
 import SearchSelect from "@/components/SearchSelect";
 import { api, ApiError, downloadFile, downloadFilePost, errorMessage } from "@/lib/api";
@@ -104,6 +105,7 @@ export default function GepekPage() {
   const [scanMsg, setScanMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const [assetForm, setAssetForm] = useState<typeof EMPTY_ASSET | null>(null);
   const [deployFor, setDeployFor] = useState<Asset | null>(null);
   const [deploy, setDeploy] = useState({ partner_id: "", note: "" });
@@ -551,7 +553,18 @@ export default function GepekPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <div>{a.partner_name ?? <span className="text-slate-300">—</span>}</div>
+                  <div>
+                    {a.partner_id && a.partner_name ? (
+                      <button
+                        onClick={() => setInfoPartner(a.partner_id)}
+                        className="text-left text-indigo-700 hover:underline"
+                      >
+                        {a.partner_name}
+                      </button>
+                    ) : (
+                      a.partner_name ?? <span className="text-slate-300">—</span>
+                    )}
+                  </div>
                   {a.location_type && <div className="text-xs text-slate-400">{a.location_type}</div>}
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -862,6 +875,7 @@ export default function GepekPage() {
         </div>
       )}
 
+      <PartnerInfo partnerId={infoPartner} onClose={() => setInfoPartner(null)} />
     </AppShell>
   );
 }

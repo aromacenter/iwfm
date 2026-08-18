@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
+import PartnerInfo from "@/components/PartnerInfo";
 import PartnerPicker from "@/components/PartnerPicker";
 import SearchSelect from "@/components/SearchSelect";
 import SignatureCanvas from "@/components/SignatureCanvas";
@@ -219,6 +220,7 @@ export default function ElszamolasPage() {
   const [extraProducts, setExtraProducts] = useState<string[]>([]);
   const [addProductId, setAddProductId] = useState("");
   const [history, setHistory] = useState<Settlement[]>([]);
+  const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const [companyFilter, setCompanyFilter] = useState("");
   const [replenish, setReplenish] = useState<{ product_id: string; quantity: string; unit_cost: string; source_warehouse_id: string } | null>(null);
   const [srcWarehouses, setSrcWarehouses] = useState<{ id: string; name: string; kind: string; is_active: boolean }[]>([]);
@@ -1199,7 +1201,12 @@ export default function ElszamolasPage() {
                         )}
                       </td>
                       <td className="px-4 py-2 font-medium text-amber-950">
-                        {d.name}
+                        <button
+                          onClick={() => setInfoPartner(d.partner_id)}
+                          className="text-left hover:underline"
+                        >
+                          {d.name}
+                        </button>
                         {d.partner_code && <span className="ml-2 text-xs text-amber-600">{d.partner_code}</span>}
                         {d.city && <div className="text-xs font-normal text-amber-700">{d.city}</div>}
                       </td>
@@ -1725,7 +1732,12 @@ export default function ElszamolasPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="font-medium">{s.partner_name}</div>
+                  <button
+                    onClick={() => setInfoPartner(s.partner_id)}
+                    className="text-left font-medium text-indigo-700 hover:underline"
+                  >
+                    {s.partner_name}
+                  </button>
                   <div className="flex items-center gap-1.5 text-xs text-slate-400">
                     <span>{s.settled_by_name}</span>
                     {s.invoicing_company && (
@@ -2085,6 +2097,8 @@ export default function ElszamolasPage() {
           </form>
         </div>
       )}
+
+      <PartnerInfo partnerId={infoPartner} onClose={() => setInfoPartner(null)} />
     </AppShell>
   );
 }
