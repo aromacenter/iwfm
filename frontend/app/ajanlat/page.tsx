@@ -13,6 +13,7 @@ interface MachineType {
   name: string;
   description: string | null;
   ideal_for: string | null;
+  has_image: boolean;
 }
 
 const EMPTY = {
@@ -37,6 +38,7 @@ export default function AjanlatPage() {
   const { t } = useT();
   const [types, setTypes] = useState<MachineType[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [form, setForm] = useState({ ...EMPTY });
   const [sameBilling, setSameBilling] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -108,39 +110,85 @@ export default function AjanlatPage() {
       </header>
 
       <form onSubmit={submit} className="mx-auto mt-8 max-w-3xl space-y-6 px-4">
-        {/* Gépválasztó */}
+        {/* Gépválasztó: kompakt legördülő + összecsukható infó-sáv */}
         {types.length > 0 && (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-1 text-lg font-semibold text-slate-900">{t("quote.chooseMachine")}</h2>
-            <p className="mb-4 text-sm text-slate-500">{t("quote.chooseMachineHint")}</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {types.map((m) => (
-                <button
-                  type="button"
-                  key={m.id}
-                  onClick={() => setSelected(selected === m.id ? null : m.id)}
-                  className={`rounded-xl border-2 p-4 text-left transition ${
-                    selected === m.id
-                      ? "border-indigo-600 bg-indigo-50"
-                      : "border-slate-200 bg-white hover:border-indigo-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold text-slate-900">{m.name}</span>
-                    {selected === m.id && <span className="text-indigo-600">✓</span>}
+            <label className="mt-3 block text-sm">
+              <span className="mb-1 block text-slate-600">{t("quote.machineSelectLabel")}</span>
+              <select
+                value={selected ?? ""}
+                onChange={(e) => setSelected(e.target.value || null)}
+                className={inputCls}
+              >
+                <option value="">{t("quote.machineSelectEmpty")}</option>
+                {types.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => setGuideOpen((v) => !v)}
+              className="mt-4 flex w-full items-center gap-3 rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3 text-left transition hover:from-amber-100 hover:to-orange-100"
+            >
+              <span className="text-2xl">💡</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-amber-900">{t("quote.guideTitle")}</span>
+                <span className="block text-xs text-amber-700">{t("quote.guideSubtitle")}</span>
+              </span>
+              <span className={`text-amber-600 transition-transform ${guideOpen ? "rotate-180" : ""}`}>▼</span>
+            </button>
+
+            {guideOpen && (
+              <div className="mt-3 space-y-2">
+                {types.map((m) => (
+                  <div
+                    key={m.id}
+                    className={`rounded-xl border p-4 ${
+                      selected === m.id ? "border-indigo-400 bg-indigo-50" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex gap-3">
+                      {m.has_image && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`/api/public/quotes/machine-types/${m.id}/image`}
+                          alt={m.name}
+                          className="h-24 w-24 shrink-0 rounded-lg border border-slate-200 bg-white object-contain"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-semibold text-slate-900">{m.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => { setSelected(m.id); setGuideOpen(false); }}
+                            className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                              selected === m.id
+                                ? "bg-indigo-600 text-white"
+                                : "border border-indigo-300 text-indigo-700 hover:bg-indigo-100"
+                            }`}
+                          >
+                            {selected === m.id ? "✓ " + t("quote.chosen") : t("quote.chooseThis")}
+                          </button>
+                        </div>
+                        {m.description && (
+                          <p className="mt-1.5 text-sm text-slate-600">{m.description}</p>
+                        )}
+                        {m.ideal_for && (
+                          <p className="mt-1.5 text-xs text-slate-500">
+                            <span className="font-semibold text-emerald-700">{t("quote.idealFor")}:</span>{" "}
+                            {m.ideal_for}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  {m.description && (
-                    <p className="mt-1.5 text-sm text-slate-600">{m.description}</p>
-                  )}
-                  {m.ideal_for && (
-                    <p className="mt-1.5 text-xs text-slate-500">
-                      <span className="font-semibold text-emerald-700">{t("quote.idealFor")}:</span>{" "}
-                      {m.ideal_for}
-                    </p>
-                  )}
-                </button>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 

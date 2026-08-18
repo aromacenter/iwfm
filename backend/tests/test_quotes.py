@@ -211,3 +211,51 @@ async def test_template_editing_and_machine_type_crud(client, manager):
     # törlés
     res = await client.delete(f"/api/quotes/machine-types/{m['id']}", headers=mgr)
     assert res.status_code == 200
+
+
+async def test_machine_type_image(client, manager):
+    """Gép-fotó: feltöltés data URL-lel, publikus kiszolgálás, törlés."""
+    import base64
+
+    _, mgr = manager
+    png_hex = (
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c626001000000ffff03000006000557bfabd4"
+        "0000000049454e44ae426082"
+    )
+    data_url = "data:image/png;base64," + base64.b64encode(bytes.fromhex(png_hex)).decode()
+
+    m = await _machine_type(client, mgr, name="Fotós gép")
+    assert m["has_image"] is False
+
+    res = await client.patch(
+        f"/api/quotes/machine-types/{m['id']}",
+        json={"name": "Fotós gép", "image": data_url},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["has_image"] is True
+
+    # publikus kiszolgálás (auth nélkül)
+    res = await client.get(f"/api/public/quotes/machine-types/{m['id']}/image")
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("image/png")
+
+    # rossz formátum
+    res = await client.patch(
+        f"/api/quotes/machine-types/{m['id']}",
+        json={"name": "Fotós gép", "image": "data:image/gif;base64,AAAA"},
+        headers=mgr,
+    )
+    assert res.status_code == 422
+
+    # törlés
+    res = await client.patch(
+        f"/api/quotes/machine-types/{m['id']}",
+        json={"name": "Fotós gép", "remove_image": True},
+        headers=mgr,
+    )
+    assert res.status_code == 200
+    assert res.json()["has_image"] is False
+    res = await client.get(f"/api/public/quotes/machine-types/{m['id']}/image")
+    assert res.status_code == 404

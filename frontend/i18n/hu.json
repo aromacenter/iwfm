@@ -1315,7 +1315,8 @@
     "quote.bad_machine_type": "A választott géptípus nem elérhető.",
     "quote.bad_signature": "Az aláírás formátuma nem megfelelő.",
     "quote.machine_type_not_found": "A géptípus nem található.",
-    "quote.cancelled": "Ez az ajánlatkérés vissza lett vonva."
+    "quote.cancelled": "Ez az ajánlatkérés vissza lett vonva.",
+    "quote.bad_image": "A kép formátuma nem megfelelő (PNG/JPEG/WebP, max 2 MB)."
   },
   "inv": {
     "title": "Gépek",
@@ -1613,6 +1614,15 @@
     "templateBtn": "Szerződés-sablon",
     "templateTitle": "Szerződés-sablon",
     "templateHint": "A generálás ezt a sablont tölti ki az ajánlat adataival. Üresen hagyva a beépített alapszöveg érvényes. Használható változók:",
-    "templateReset": "Alapértelmezett visszaállítása"
+    "templateReset": "Alapértelmezett visszaállítása",
+    "typePhoto": "Fotó feltöltése",
+    "removePhoto": "Fotó törlése",
+    "imageTooBig": "A kép túl nagy (max 2 MB).",
+    "machineSelectLabel": "Melyik gépet szeretné?",
+    "machineSelectEmpty": "Még nem tudom — kérek segítséget a választásban",
+    "guideTitle": "Nem tudja, melyik gépet válassza?",
+    "guideSubtitle": "Kattintson ide — minden gépről leírtuk, mit tud és kiknek a legmegfelelőbb.",
+    "chooseThis": "Ezt választom",
+    "chosen": "Kiválasztva"
   }
 }

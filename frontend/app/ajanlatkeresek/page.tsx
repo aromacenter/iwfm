@@ -56,6 +56,7 @@ interface MachineType {
   ideal_for: string | null;
   sort_order: number;
   active: boolean;
+  has_image: boolean;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -84,6 +85,23 @@ export default function AjanlatkeresekPage() {
   const [types, setTypes] = useState<MachineType[]>([]);
   const [mtForm, setMtForm] = useState<{ [k: string]: string | boolean }>({ ...EMPTY_MT });
   const [mtEditId, setMtEditId] = useState<string | null>(null);
+  const [mtImage, setMtImage] = useState<string | null>(null); // új data URL
+  const [mtRemoveImage, setMtRemoveImage] = useState(false);
+  const [mtHasImage, setMtHasImage] = useState(false);
+
+  function readImageFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast(t("quote.imageTooBig"), "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setMtImage(String(reader.result));
+      setMtRemoveImage(false);
+    };
+    reader.readAsDataURL(file);
+  }
   const [showTemplate, setShowTemplate] = useState(false);
   const [template, setTemplate] = useState("");
   const [defaultTemplate, setDefaultTemplate] = useState("");
@@ -236,12 +254,17 @@ export default function AjanlatkeresekPage() {
       ideal_for: String(mtForm.ideal_for) || null,
       sort_order: Number(mtForm.sort_order) || 0,
       active: Boolean(mtForm.active),
+      image: mtImage,
+      remove_image: mtRemoveImage,
     };
     try {
       if (mtEditId) await api.patch(`/api/quotes/machine-types/${mtEditId}`, body);
       else await api.post("/api/quotes/machine-types", body);
       setMtForm({ ...EMPTY_MT });
       setMtEditId(null);
+      setMtImage(null);
+      setMtRemoveImage(false);
+      setMtHasImage(false);
       loadTypes();
       toast(t("common.saved"), "success");
     } catch (err) {
@@ -544,7 +567,7 @@ export default function AjanlatkeresekPage() {
           <div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold">☕ {t("quote.machineCatalog")}</h2>
-              <button onClick={() => { setShowTypes(false); setMtEditId(null); setMtForm({ ...EMPTY_MT }); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
+              <button onClick={() => { setShowTypes(false); setMtEditId(null); setMtForm({ ...EMPTY_MT }); setMtImage(null); setMtRemoveImage(false); setMtHasImage(false); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
                 ✕ {t("common.close")}
               </button>
             </div>
@@ -552,7 +575,15 @@ export default function AjanlatkeresekPage() {
             <div className="mb-4 space-y-2">
               {types.map((m) => (
                 <div key={m.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 p-3">
-                  <div className="min-w-0">
+                  {m.has_image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/api/public/quotes/machine-types/${m.id}/image`}
+                      alt={m.name}
+                      className="h-14 w-14 shrink-0 rounded-lg border border-slate-200 bg-white object-contain"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
                     <div className="font-medium text-slate-900">
                       {m.name}
                       {!m.active && (
@@ -576,6 +607,9 @@ export default function AjanlatkeresekPage() {
                           ideal_for: m.ideal_for ?? "", sort_order: String(m.sort_order),
                           active: m.active,
                         });
+                        setMtImage(null);
+                        setMtRemoveImage(false);
+                        setMtHasImage(m.has_image);
                       }}
                       className="rounded-lg border border-slate-300 px-2 py-1 text-sm hover:bg-slate-100"
                     >
@@ -597,6 +631,34 @@ export default function AjanlatkeresekPage() {
                 <input value={String(mtForm.name)} onChange={(e) => setMtForm((f) => ({ ...f, name: e.target.value }))} className={inputCls} placeholder={t("quote.typeName")} />
                 <textarea value={String(mtForm.description)} onChange={(e) => setMtForm((f) => ({ ...f, description: e.target.value }))} rows={2} className={inputCls} placeholder={t("quote.typeDescription")} />
                 <textarea value={String(mtForm.ideal_for)} onChange={(e) => setMtForm((f) => ({ ...f, ideal_for: e.target.value }))} rows={2} className={inputCls} placeholder={t("quote.typeIdealFor")} />
+                <div className="flex items-center gap-3">
+                  {(mtImage || (mtHasImage && !mtRemoveImage)) && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={mtImage ?? `/api/public/quotes/machine-types/${mtEditId}/image`}
+                      alt=""
+                      className="h-16 w-16 rounded-lg border border-slate-200 bg-white object-contain"
+                    />
+                  )}
+                  <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100">
+                    📷 {t("quote.typePhoto")}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => { readImageFile(e.target.files?.[0]); e.target.value = ""; }}
+                    />
+                  </label>
+                  {(mtImage || (mtHasImage && !mtRemoveImage)) && (
+                    <button
+                      type="button"
+                      onClick={() => { setMtImage(null); setMtRemoveImage(true); }}
+                      className="text-xs text-slate-400 hover:text-red-600"
+                    >
+                      ✕ {t("quote.removePhoto")}
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center gap-3">
                   <label className="flex items-center gap-2 text-sm text-slate-600">
                     {t("quote.sortOrder")}

@@ -1377,6 +1377,9 @@ class QuoteMachineType(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)  # mit tud
     ideal_for: Mapped[str | None] = mapped_column(Text, nullable=True)  # kiknek ajánljuk
+    # Gép-fotó a publikus oldalra (PNG/JPEG/WebP, max 2 MB):
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    image_mime: Mapped[str | None] = mapped_column(String(32), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

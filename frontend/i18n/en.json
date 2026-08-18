@@ -1315,7 +1315,8 @@
     "quote.bad_machine_type": "The selected machine type is not available.",
     "quote.bad_signature": "Invalid signature format.",
     "quote.machine_type_not_found": "Machine type not found.",
-    "quote.cancelled": "This quote request has been cancelled."
+    "quote.cancelled": "This quote request has been cancelled.",
+    "quote.bad_image": "Invalid image (PNG/JPEG/WebP, max 2 MB)."
   },
   "inv": {
     "title": "Machines",
@@ -1613,6 +1614,15 @@
     "templateBtn": "Contract template",
     "templateTitle": "Contract template",
     "templateHint": "Generation fills this template with the request's data. Leave empty to use the built-in default. Available variables:",
-    "templateReset": "Restore default"
+    "templateReset": "Restore default",
+    "typePhoto": "Upload photo",
+    "removePhoto": "Remove photo",
+    "imageTooBig": "Image too large (max 2 MB).",
+    "machineSelectLabel": "Which machine would you like?",
+    "machineSelectEmpty": "Not sure yet — I'd like help choosing",
+    "guideTitle": "Not sure which machine to pick?",
+    "guideSubtitle": "Click here — we describe what each machine does and who it suits best.",
+    "chooseThis": "Choose this",
+    "chosen": "Selected"
   }
 }

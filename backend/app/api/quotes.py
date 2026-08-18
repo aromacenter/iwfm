@@ -16,7 +16,9 @@ import time as _time
 import uuid
 from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import base64
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -182,13 +184,33 @@ class MachineTypeOut(BaseModel):
     ideal_for: str | None
     sort_order: int
     active: bool
+    has_image: bool
 
 
 def _mtype_out(m: QuoteMachineType) -> MachineTypeOut:
     return MachineTypeOut(
         id=str(m.id), name=m.name, description=m.description,
         ideal_for=m.ideal_for, sort_order=m.sort_order, active=m.active,
+        has_image=m.image_data is not None,
     )
+
+
+_IMAGE_MIME = {"image/png", "image/jpeg", "image/webp"}
+_MAX_IMAGE_BYTES = 2 * 1024 * 1024
+
+
+def _decode_image(data_url: str) -> tuple[bytes, str]:
+    if not data_url.startswith("data:"):
+        raise HTTPException(status_code=422, detail={"code": "quote.bad_image"})
+    try:
+        header, b64 = data_url.split(",", 1)
+        mime = header.split(";")[0].removeprefix("data:").lower()
+        raw = base64.b64decode(b64)
+    except Exception:
+        raise HTTPException(status_code=422, detail={"code": "quote.bad_image"})
+    if mime not in _IMAGE_MIME or len(raw) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=422, detail={"code": "quote.bad_image"})
+    return raw, mime
 
 
 class QuoteOut(BaseModel):
@@ -284,6 +306,24 @@ async def public_machine_types(db: AsyncSession = Depends(get_db)):
         )
     ).scalars().all()
     return [_mtype_out(m) for m in rows]
+
+
+@public_router.get("/quotes/machine-types/{type_id}/image")
+async def public_machine_type_image(type_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        mid = uuid.UUID(type_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "quote.machine_type_not_found"})
+    m = (
+        await db.execute(select(QuoteMachineType).where(QuoteMachineType.id == mid))
+    ).scalar_one_or_none()
+    if m is None or m.image_data is None:
+        raise HTTPException(status_code=404, detail={"code": "quote.machine_type_not_found"})
+    return Response(
+        content=bytes(m.image_data),
+        media_type=m.image_mime or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 class PublicQuoteBody(BaseModel):
@@ -567,6 +607,8 @@ class MachineTypeBody(BaseModel):
     ideal_for: str | None = Field(default=None, max_length=4000)
     sort_order: int = Field(default=0, ge=0, le=10_000)
     active: bool = True
+    image: str | None = None  # data URL — csak megadva változtat
+    remove_image: bool = False
 
 
 @router.get("/machine-types", response_model=list[MachineTypeOut])
@@ -591,7 +633,10 @@ async def create_machine_type(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("partners")),
 ):
-    m = QuoteMachineType(**body.model_dump())
+    data = body.model_dump(exclude={"image", "remove_image"})
+    m = QuoteMachineType(**data)
+    if body.image:
+        m.image_data, m.image_mime = _decode_image(body.image)
     db.add(m)
     await db.flush()
     await record_audit(
@@ -625,8 +670,13 @@ async def update_machine_type(
     actor: User = Depends(require_perm("partners")),
 ):
     m = await _get_mtype_or_404(db, type_id)
-    for key, value in body.model_dump().items():
+    for key, value in body.model_dump(exclude={"image", "remove_image"}).items():
         setattr(m, key, value)
+    if body.remove_image:
+        m.image_data = None
+        m.image_mime = None
+    elif body.image:
+        m.image_data, m.image_mime = _decode_image(body.image)
     await record_audit(
         db, actor=actor, action="quote.machine_type_update",
         entity_type="quote_machine_type", entity_id=str(m.id),
