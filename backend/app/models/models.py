@@ -1364,3 +1364,110 @@ class PurchaseOrderLine(Base):
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)  # Ft/egység, nettó
     received_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+
+class QuoteMachineType(Base):
+    """Ajánlatkérő gép-katalógus: a publikus árajánlat-oldalon választható
+    géptípusok leírással ("mit tud") és célcsoporttal ("kiknek a legjobb")."""
+
+    __tablename__ = "quote_machine_types"
+    __table_args__ = (Index("ix_quote_machine_types_active", "active", "sort_order"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)  # mit tud
+    ideal_for: Mapped[str | None] = mapped_column(Text, nullable=True)  # kiknek ajánljuk
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class QuoteRequest(Base):
+    """Publikus árajánlat-kérés → szerződés → aláírás → partner.
+
+    A vevő a nyilvános űrlapon adja meg a cégadatait és a kívánt gépet;
+    mi töltjük ki az adagárat és a dátumokat, ebből készül a szerződés
+    szövege; az aláíró-linket (sign_token) emailben küldjük. Aláírás után
+    automatikusan létrejön a Partner + PartnerContract (partner_id).
+    status: new → sent → signed; cancelled."""
+
+    __tablename__ = "quote_requests"
+    __table_args__ = (
+        UniqueConstraint("serial", name="uq_quote_requests_serial"),
+        Index("uq_quote_requests_sign_token", "sign_token", unique=True),
+        CheckConstraint(
+            "status IN ('new','sent','signed','cancelled')",
+            name="ck_quote_requests_status",
+        ),
+        Index("ix_quote_requests_status", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    serial: Mapped[str] = mapped_column(String(20), nullable=False)  # AJ-2026-0001
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="new")
+    # A vevő által megadott adatok (a későbbi Partner minden kötelező mezője):
+    company_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    contact_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    contact_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    contact_phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    tax_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    address_zip: Mapped[str] = mapped_column(String(16), nullable=False)
+    address_city: Mapped[str] = mapped_column(String(128), nullable=False)
+    address_street: Mapped[str] = mapped_column(String(256), nullable=False)
+    address_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    billing_zip: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    billing_city: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    billing_street: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    billing_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    bank_account: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    machine_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("quote_machine_types.id", ondelete="SET NULL", name="fk_quotes_mtype"),
+        nullable=True,
+    )
+    machine_type_name: Mapped[str | None] = mapped_column(String(256), nullable=True)  # pillanatkép
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)  # vevő üzenete
+    # Általunk kitöltött ajánlati/szerződéses feltételek (nettó árak):
+    price_per_portion: Mapped[float | None] = mapped_column(Float, nullable=True)  # adagár Ft
+    min_portions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    below_min_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rent_if_below_min: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Szerződés + aláírás:
+    contract_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sign_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    signature: Mapped[str | None] = mapped_column(Text, nullable=True)  # PNG data URL
+    signed_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    signed_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="SET NULL", name="fk_quotes_partner"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class QuoteSettings(Base):
+    """Szerződés-sablon az ajánlatkérés-folyamathoz — egyetlen sor (id=1).
+    contract_template: {{változós}} szöveg; None = beépített alapértelmezés."""
+
+    __tablename__ = "quote_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    contract_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

@@ -28,6 +28,7 @@ from app.api import (
     orders,
     payroll,
     portal,
+    quotes as quotes_api,
     service,
     support,
     settings as settings_api,
@@ -182,6 +183,8 @@ def create_app() -> FastAPI:
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
     app.include_router(warehouse.router, prefix="/api/warehouses", tags=["warehouses"])
     app.include_router(delivery_api.router, prefix="/api/deliveries", tags=["deliveries"])
+    app.include_router(quotes_api.router, prefix="/api/quotes", tags=["quotes"])
+    app.include_router(quotes_api.public_router, prefix="/api/public", tags=["quotes"])
     app.include_router(warehouse.po_router, prefix="/api/purchase-orders", tags=["purchase-orders"])
     app.include_router(assistant_api.router, prefix="/api/assistant", tags=["assistant"])
     app.include_router(admin_tools.router, prefix="/api/admin", tags=["admin"])

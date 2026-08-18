@@ -45,6 +45,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dolgozok", key: "nav.employees", perm: "employees", icon: "👥" },
       { href: "/partnerek", key: "nav.partners", perm: "partners", icon: "🤝" },
       { href: "/szerzodesek", key: "nav.contracts", perm: "partners", icon: "📜" },
+      { href: "/ajanlatkeresek", key: "nav.quotes", perm: "partners", icon: "📨" },
       { href: "/gepek", key: "nav.inventory", perm: "machines", icon: "☕" },
       { href: "/termekek", key: "nav.products", perm: "products", icon: "📦" },
       { href: "/raktar", key: "nav.warehouse", perm: "settlements", icon: "🏬" },
