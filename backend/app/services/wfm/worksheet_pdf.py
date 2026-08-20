@@ -154,7 +154,7 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
 
     c.setFillColorRGB(0, 0, 0)
     c.setFont(FONT_BOLD, 16)
-    c.drawRightString(right, y, "MUNKALAP")
+    c.drawRightString(right, y, data.get("title") or "MUNKALAP")
     c.setFont(FONT_BOLD, 11)
     c.drawRightString(right, y - 6 * mm, data.get("serial", ""))
     c.setFont(FONT, 8)
@@ -197,21 +197,41 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         y -= 1 * mm
         line("Ráfordított idő:", f"{data['hours_spent']:g} óra")
 
-    # ─── Anyagok ───
+    # ─── Anyagok / tételek ───
     materials = data.get("materials") or [] if show_materials else []
+    # Külső szervizes munkalapon ár-oszlop: belső példányon a szerviz nettó
+    # költsége (cost_net), ügyfél-példányon a mi áraink (price_net).
+    price_col = data.get("price_column")  # {"field": ..., "label": ...} | None
     if materials:
-        section("Felhasznált anyagok")
+        section("Felhasznált anyagok / tételek" if price_col else "Felhasznált anyagok")
         c.setFont(FONT_BOLD, 9)
         c.drawString(left, y, "Megnevezés")
-        c.drawString(left + 110 * mm, y, "Mennyiség")
-        c.drawString(left + 145 * mm, y, "Egység")
+        c.drawString(left + 95 * mm, y, "Mennyiség")
+        c.drawString(left + 125 * mm, y, "Egység")
+        if price_col:
+            c.drawRightString(right, y, price_col["label"])
         y -= 5 * mm
         c.setFont(FONT, 9)
+        total = 0.0
         for item in materials[:25]:
-            c.drawString(left, y, str(item.get("name", ""))[:70])
-            c.drawString(left + 110 * mm, y, str(item.get("qty", "")))
-            c.drawString(left + 145 * mm, y, str(item.get("unit", "")))
+            c.drawString(left, y, str(item.get("name", ""))[:60])
+            c.drawString(left + 95 * mm, y, str(item.get("qty", "")))
+            c.drawString(left + 125 * mm, y, str(item.get("unit", "")))
+            if price_col:
+                price = item.get(price_col["field"])
+                if price is not None:
+                    try:
+                        qty_num = float(str(item.get("qty", "1")).replace(",", "."))
+                    except ValueError:
+                        qty_num = 1.0
+                    amount = float(price) * (qty_num if qty_num > 0 else 1.0)
+                    total += amount
+                    c.drawRightString(right, y, f"{amount:,.0f} Ft".replace(",", " "))
             y -= 4.5 * mm
+        if price_col and total > 0:
+            c.setFont(FONT_BOLD, 9)
+            c.drawRightString(right, y, f"Összesen (nettó): {total:,.0f} Ft".replace(",", " "))
+            y -= 5 * mm
 
     # ─── Megjegyzések ───
     comments = data.get("comments") or [] if show_comments else []

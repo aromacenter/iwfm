@@ -981,7 +981,15 @@
       "needs_more_work": "További munkát igényel"
     },
     "autoAssign": "🤖 Az AI válassza ki automatikusan",
-    "aiAssignedAlert": "Az AI {name} dolgozót jelölte ki a feladatra.\nIndoklás: {reason}"
+    "aiAssignedAlert": "Az AI {name} dolgozót jelölte ki a feladatra.\nIndoklás: {reason}",
+    "externalBadge": "Külső szerviz",
+    "externalCheckbox": "Külső szerviznek átadott gép munkalapja",
+    "externalCheckboxHint": "KSZ-sorszámot kap, és külön nézetben él. A szerviz visszaigazolt nettó költségei belső adatok — az ügyfél a −1-es példányt kapja, rajta a mi szerviz-árainkkal.",
+    "kindNormal": "Sima munkalapok",
+    "kindExternal": "Külső szerviz",
+    "worksheetPdfInternal": "📄 Belső PDF (költségek)",
+    "customerCopy": "👤 Ügyfél-példány (−1)",
+    "customerCopyTitle": "A −1-es példány: a mi szerviz-árainkkal, a belső költségek nélkül — ezt kapja az ügyfél."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1021,7 +1029,10 @@
     "wsEmpSigSaved": "Dolgozói aláírás (mentve)",
     "wsClientSigSaved": "Ügyfél-aláírás (mentve)",
     "wsSignAgain": "Új aláírás",
-    "wsShareCard": "Munkalap megosztása ({serial})"
+    "wsShareCard": "Munkalap megosztása ({serial})",
+    "wsCostNet": "Szerviz nettó ktg. (Ft)",
+    "wsPriceNet": "Ügyfél-ár (Ft, nettó)",
+    "wsExternalHint": "Narancs mező: a külső szerviz nettó költsége (belső adat). Zöld mező: a mi ügyfél-árunk — ez kerül az ügyfél −1-es példányára."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",

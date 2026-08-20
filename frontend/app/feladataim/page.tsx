@@ -27,12 +27,17 @@ interface TaskOut {
   comments: CommentOut[];
   worksheet_serial: string | null;
   worksheet_completed: boolean;
+  worksheet_external: boolean;
 }
 
 interface MaterialRow {
   name: string;
   qty: string;
   unit: string;
+  // Külső szervizes (KSZ) munkalapon: a szerviz nettó költsége (belső) és
+  // a mi ügyfél-árunk (az ügyfél -1-es példányára kerül).
+  cost_net?: string;
+  price_net?: string;
 }
 
 interface WorksheetForm {
@@ -130,7 +135,10 @@ export default function FeladataimPage() {
       try {
         const existing = await api.get<{
           work_description: string;
-          materials: MaterialRow[];
+          materials: (Omit<MaterialRow, "cost_net" | "price_net"> & {
+            cost_net: number | null;
+            price_net: number | null;
+          })[];
           hours_spent: number | null;
           client_name: string | null;
           client_location: string | null;
@@ -140,7 +148,11 @@ export default function FeladataimPage() {
         setWs({
           work_description: existing.work_description,
           hours_spent: existing.hours_spent != null ? String(existing.hours_spent) : "",
-          materials: existing.materials ?? [],
+          materials: (existing.materials ?? []).map((m) => ({
+            ...m,
+            cost_net: m.cost_net != null ? String(m.cost_net) : "",
+            price_net: m.price_net != null ? String(m.price_net) : "",
+          })),
           client_name: existing.client_name ?? "",
           client_location: existing.client_location ?? "",
           employee_signature: null,
@@ -237,7 +249,13 @@ export default function FeladataimPage() {
       await api.put(`/api/me/tasks/${wsTask.id}/worksheet`, {
         work_description: ws.work_description,
         hours_spent: ws.hours_spent ? Number(ws.hours_spent) : null,
-        materials: ws.materials.filter((m) => m.name.trim()),
+        materials: ws.materials
+          .filter((m) => m.name.trim())
+          .map((m) => ({
+            name: m.name, qty: m.qty, unit: m.unit,
+            cost_net: m.cost_net ? Number(m.cost_net) : null,
+            price_net: m.price_net ? Number(m.price_net) : null,
+          })),
         client_name: ws.client_name || null,
         client_location: ws.client_location || null,
         employee_signature: ws.employee_signature,
@@ -410,7 +428,7 @@ export default function FeladataimPage() {
                 </button>
               </div>
               {ws.materials.map((m, i) => (
-                <div key={i} className="mb-1 flex gap-1">
+                <div key={i} className="mb-1 flex flex-wrap gap-1">
                   <input
                     value={m.name}
                     onChange={(e) => {
@@ -450,8 +468,39 @@ export default function FeladataimPage() {
                   >
                     ✕
                   </button>
+                  {wsTask?.worksheet_external && (
+                    <div className="mt-1 flex w-full gap-1 pl-2">
+                      <input
+                        type="number" min={0}
+                        value={m.cost_net ?? ""}
+                        onChange={(e) => {
+                          const next = [...ws.materials];
+                          next[i] = { ...m, cost_net: e.target.value };
+                          setWs({ ...ws, materials: next });
+                        }}
+                        placeholder={t("myTasks.wsCostNet")}
+                        title={t("myTasks.wsCostNet")}
+                        className="flex-1 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1.5 text-sm"
+                      />
+                      <input
+                        type="number" min={0}
+                        value={m.price_net ?? ""}
+                        onChange={(e) => {
+                          const next = [...ws.materials];
+                          next[i] = { ...m, price_net: e.target.value };
+                          setWs({ ...ws, materials: next });
+                        }}
+                        placeholder={t("myTasks.wsPriceNet")}
+                        title={t("myTasks.wsPriceNet")}
+                        className="flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
+              {wsTask?.worksheet_external && ws.materials.length > 0 && (
+                <p className="text-xs text-slate-400">{t("myTasks.wsExternalHint")}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

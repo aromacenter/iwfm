@@ -59,6 +59,10 @@ class TaskCreateBody(BaseModel):
     # Online munkalap fejléc-adatai — a feladattal együtt áll ki a munkalap.
     client_name: str | None = Field(default=None, max_length=256)
     client_location: str | None = Field(default=None, max_length=512)
+    # Külső szerviznek átadott gép munkalapja (KSZ-sorszám, külön nézet;
+    # a visszaigazolt nettó költségek belsők, az ügyfél a -1-es példányt
+    # kapja a mi szerviz-árainkkal).
+    external_service: bool = False
 
 
 class TaskPatchBody(BaseModel):
@@ -100,6 +104,7 @@ class TaskOut(BaseModel):
     created_at: datetime
     worksheet_serial: str | None = None  # ML-2026-0001, ha van munkalap
     worksheet_completed: bool = False  # kitöltötte-e már a dolgozó
+    worksheet_external: bool = False  # külső szerviznek átadott gép munkalapja
     ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
 
 
@@ -110,6 +115,10 @@ class MaterialItem(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     qty: str = Field(default="", max_length=32)
     unit: str = Field(default="db", max_length=16)
+    # Külső szervizes munkalapon: a szerviz nettó költsége (BELSŐ adat) és a
+    # mi ügyfél-áraink (ez kerül az ügyfél -1-es példányára).
+    cost_net: float | None = Field(default=None, ge=0)
+    price_net: float | None = Field(default=None, ge=0)
 
 
 class WorksheetBody(BaseModel):
@@ -124,6 +133,7 @@ class WorksheetBody(BaseModel):
 
 class WorksheetOut(BaseModel):
     serial: str
+    external_service: bool = False
     work_description: str
     materials: list[MaterialItem]
     hours_spent: float | None
@@ -149,6 +159,7 @@ def _validate_signature(value: str | None) -> str | None:
 def _worksheet_out(ws: Worksheet) -> WorksheetOut:
     return WorksheetOut(
         serial=ws.serial,
+        external_service=ws.external_service,
         work_description=ws.work_description,
         materials=[MaterialItem(**m) for m in (ws.materials or [])],
         hours_spent=ws.hours_spent,
@@ -162,16 +173,19 @@ def _worksheet_out(ws: Worksheet) -> WorksheetOut:
     )
 
 
-async def _next_worksheet_serial(db: AsyncSession) -> str:
+async def _next_worksheet_serial(db: AsyncSession, external: bool = False) -> str:
+    """Sima munkalap: ML-ÉÉÉÉ-NNNN; külső szervizes: KSZ-ÉÉÉÉ-NNNN — a két
+    tartomány külön számozódik."""
+    prefix = "KSZ" if external else "ML"
     year = datetime.now(UTC).year
     count = (
         await db.execute(
             select(sa_func.count()).select_from(Worksheet).where(
-                Worksheet.serial.like(f"ML-{year}-%")
+                Worksheet.serial.like(f"{prefix}-{year}-%")
             )
         )
     ).scalar_one()
-    return f"ML-{year}-{count + 1:04d}"
+    return f"{prefix}-{year}-{count + 1:04d}"
 
 
 async def _get_worksheet(db: AsyncSession, task_id: uuid.UUID) -> Worksheet | None:
@@ -253,13 +267,15 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
     comments = await _comments_map(db, [t.id for t in tasks])
     ws_rows = (
         await db.execute(
-            select(Worksheet.task_id, Worksheet.serial, Worksheet.work_description).where(
-                Worksheet.task_id.in_([t.id for t in tasks])
-            )
+            select(
+                Worksheet.task_id, Worksheet.serial, Worksheet.work_description,
+                Worksheet.external_service,
+            ).where(Worksheet.task_id.in_([t.id for t in tasks]))
         )
     ).all()
-    worksheet_serials = {tid: serial for tid, serial, _ in ws_rows}
-    worksheet_done = {tid: bool((desc or "").strip()) for tid, _, desc in ws_rows}
+    worksheet_serials = {tid: serial for tid, serial, _, _ in ws_rows}
+    worksheet_done = {tid: bool((desc or "").strip()) for tid, _, desc, _ in ws_rows}
+    worksheet_external = {tid: ext for tid, _, _, ext in ws_rows}
     return [
         TaskOut(
             id=str(t.id),
@@ -278,6 +294,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             created_at=t.created_at,
             worksheet_serial=worksheet_serials.get(t.id),
             worksheet_completed=worksheet_done.get(t.id, False),
+            worksheet_external=worksheet_external.get(t.id, False),
         )
         for t in tasks
     ]
@@ -380,7 +397,8 @@ async def create_task(
     # az elvégzett munkát/anyagokat/aláírást a dolgozó tölti ki később.
     ws = Worksheet(
         task_id=task.id,
-        serial=await _next_worksheet_serial(db),
+        serial=await _next_worksheet_serial(db, body.external_service),
+        external_service=body.external_service,
         work_description="",
         materials=[],
         client_name=(body.client_name or "").strip() or None,
@@ -479,8 +497,15 @@ async def manager_upsert_worksheet(
     return _worksheet_out(await _upsert_worksheet(db, task, body, actor, request))
 
 
-async def _build_worksheet_pdf(db: AsyncSession, task: Task) -> tuple[bytes, str]:
-    """A munkalap PDF-jét állítja elő — (pdf_bytes, sorszám). 404, ha nincs ML."""
+async def _build_worksheet_pdf(
+    db: AsyncSession, task: Task, variant: str = "internal"
+) -> tuple[bytes, str]:
+    """A munkalap PDF-jét állítja elő — (pdf_bytes, sorszám). 404, ha nincs ML.
+
+    Külső szervizes (KSZ) munkalapnál két példány van:
+    - internal: a szerviz visszaigazolása a NETTÓ költségekkel — csak belső;
+    - customer: a "-1"-es ügyfél-példány a MI szerviz-árainkkal (a költségek
+      nem szerepelnek rajta)."""
     ws = await _get_worksheet(db, task.id)
     if ws is None:
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
@@ -490,9 +515,28 @@ async def _build_worksheet_pdf(db: AsyncSession, task: Task) -> tuple[bytes, str
     ).scalar_one_or_none()
     comments = (await _comments_map(db, [task.id])).get(task.id, [])
 
+    serial = ws.serial
+    title = None
+    price_column = None
+    materials = list(ws.materials or [])
+    if ws.external_service:
+        if variant == "customer":
+            serial = f"{ws.serial}-1"
+            title = "SZERVIZ MUNKALAP"
+            price_column = {"field": "price_net", "label": "Ár (Ft, nettó)"}
+            # az ügyfél-példányra a belső költség SOSEM kerülhet rá
+            materials = [
+                {k: v for k, v in m.items() if k != "cost_net"} for m in materials
+            ]
+        else:
+            title = "KÜLSŐ SZERVIZ MUNKALAP (belső példány)"
+            price_column = {"field": "cost_net", "label": "Nettó költség (Ft)"}
+
     pdf = build_worksheet_pdf(
         {
-            "serial": ws.serial,
+            "serial": serial,
+            "title": title,
+            "price_column": price_column,
             "task_title": task.title,
             "task_description": task.description,
             "due_date": task.due_date.isoformat(),
@@ -501,7 +545,7 @@ async def _build_worksheet_pdf(db: AsyncSession, task: Task) -> tuple[bytes, str
             "employee_code": emp.employee_code if emp else None,
             "job_title": emp.job_title if emp else None,
             "work_description": ws.work_description,
-            "materials": ws.materials or [],
+            "materials": materials,
             "hours_spent": ws.hours_spent,
             "client_name": ws.client_name,
             "client_location": ws.client_location,
@@ -512,7 +556,7 @@ async def _build_worksheet_pdf(db: AsyncSession, task: Task) -> tuple[bytes, str
         },
         await _worksheet_pdf_settings(db),
     )
-    return pdf, ws.serial
+    return pdf, serial
 
 
 async def _worksheet_pdf_settings(db: AsyncSession) -> dict | None:
@@ -567,11 +611,14 @@ class WorksheetEmailBody(BaseModel):
 async def worksheet_pdf(
     task_id: str,
     request: Request,
+    variant: str = "internal",  # internal | customer (KSZ-nél a -1-es példány)
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("tasks")),
 ):
     task = await _get_task_or_404(db, task_id)
-    pdf, serial = await _build_worksheet_pdf(db, task)
+    pdf, serial = await _build_worksheet_pdf(
+        db, task, "customer" if variant == "customer" else "internal"
+    )
     await record_audit(
         db, actor=actor, action="worksheet.pdf", entity_type="worksheet",
         entity_id=serial, request=request,
@@ -589,7 +636,9 @@ async def email_worksheet(
     actor: User = Depends(require_perm("tasks")),
 ):
     task = await _get_task_or_404(db, task_id)
-    pdf, serial = await _build_worksheet_pdf(db, task)
+    # Emailben az ügyfél felé KSZ-munkalapnál mindig a -1-es (ügyfél-áras)
+    # példány megy — a belső költségek nem hagyhatják el a céget.
+    pdf, serial = await _build_worksheet_pdf(db, task, "customer")
     await _email_worksheet_pdf(db, body.to, pdf, serial)
     await record_audit(
         db, actor=actor, action="worksheet.email", entity_type="worksheet",
@@ -844,9 +893,11 @@ async def my_worksheet_pdf(
     emp: Employee = Depends(get_own_employee),
     user: User = Depends(get_current_user),
 ):
-    """A dolgozó letöltheti/megoszthatja a saját munkalapja PDF-jét (telefonon)."""
+    """A dolgozó letöltheti/megoszthatja a saját munkalapja PDF-jét (telefonon).
+    KSZ-munkalapnál mindig az ügyfél-példányt (-1) kapja — a megosztás az
+    ügyfél felé megy, a belső költségek nem kerülhetnek ki."""
     task = await _own_task_or_404(db, emp, task_id)
-    pdf, serial = await _build_worksheet_pdf(db, task)
+    pdf, serial = await _build_worksheet_pdf(db, task, "customer")
     await record_audit(
         db, actor=user, action="worksheet.pdf_self", entity_type="worksheet",
         entity_id=serial, request=request,

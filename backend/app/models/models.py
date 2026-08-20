@@ -324,7 +324,10 @@ class Worksheet(Base):
     task_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
     )
-    serial: Mapped[str] = mapped_column(String(20), nullable=False)  # ML-2026-0001
+    serial: Mapped[str] = mapped_column(String(20), nullable=False)  # ML-2026-0001 / KSZ-2026-0001
+    # Külső szerviznek átadott gép munkalapja — külön sorszám-tartomány (KSZ-)
+    # és külön nézet a sima munkalapoktól.
+    external_service: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     work_description: Mapped[str] = mapped_column(Text, nullable=False)
     # [{"name": "...", "qty": "...", "unit": "db"}, ...]
     materials: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

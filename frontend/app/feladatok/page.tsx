@@ -35,6 +35,7 @@ interface TaskOut {
   created_at: string;
   worksheet_serial: string | null;
   worksheet_completed: boolean;
+  worksheet_external: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -55,6 +56,8 @@ export default function FeladatokPage() {
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
+  const [kindFilter, setKindFilter] = useState<"all" | "normal" | "external">("all");
+  const [externalService, setExternalService] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -148,8 +151,10 @@ export default function FeladatokPage() {
         required_skill_id: form.required_skill_id || null,
         client_name: form.client_name || null,
         client_location: form.client_location || null,
+        external_service: externalService,
       });
       setShowForm(false);
+      setExternalService(false);
       setForm({
         title: "", description: "", employee_id: "", due_date: todayIso(),
         required_skill_id: 0, client_name: "", client_location: "",
@@ -206,6 +211,18 @@ export default function FeladatokPage() {
     }
   }
 
+  // KSZ-munkalap ügyfél-példánya (-1): a mi szerviz-árainkkal, költségek nélkül
+  async function downloadCustomerCopy(task: TaskOut) {
+    try {
+      await downloadFile(
+        `/api/tasks/${task.id}/worksheet/pdf?variant=customer`,
+        `${task.worksheet_serial ?? "munkalap"}-1.pdf`
+      );
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function remove(task: TaskOut) {
     if (!(await confirm(t("tasks.deleteConfirm", { title: task.title })))) return;
     try {
@@ -230,6 +247,21 @@ export default function FeladatokPage() {
             <option key={status} value={status}>{t(`tasks.statuses.${status}`)}</option>
           ))}
         </select>
+        <div className="flex gap-1.5">
+          {([["all", t("contracts.filterAll")], ["normal", t("tasks.kindNormal")], ["external", t("tasks.kindExternal")]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setKindFilter(key)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                kindFilter === key
+                  ? "bg-indigo-600 text-white"
+                  : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <button
           onClick={() => setShowForm(true)}
           className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
@@ -239,7 +271,15 @@ export default function FeladatokPage() {
       </div>
 
       <div className="space-y-3">
-        {tasks.map((task) => (
+        {tasks
+          .filter((task) =>
+            kindFilter === "all"
+              ? true
+              : kindFilter === "external"
+                ? task.worksheet_external
+                : !task.worksheet_external
+          )
+          .map((task) => (
           <div key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
@@ -265,6 +305,11 @@ export default function FeladatokPage() {
                       📝 {task.worksheet_serial} · {task.worksheet_completed ? t("tasks.worksheetDone") : t("tasks.worksheetIssued")}
                     </span>
                   )}
+                  {task.worksheet_external && (
+                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">
+                      🔧 {t("tasks.externalBadge")}
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-slate-500">
                   {task.employee_name} · {task.due_date}
@@ -278,8 +323,17 @@ export default function FeladatokPage() {
                       onClick={() => downloadWorksheet(task)}
                       className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
                     >
-                      {t("tasks.worksheetPdf")}
+                      {task.worksheet_external ? t("tasks.worksheetPdfInternal") : t("tasks.worksheetPdf")}
                     </button>
+                    {task.worksheet_external && (
+                      <button
+                        onClick={() => downloadCustomerCopy(task)}
+                        title={t("tasks.customerCopyTitle")}
+                        className="rounded-lg border border-orange-300 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
+                      >
+                        {t("tasks.customerCopy")}
+                      </button>
+                    )}
                     <button
                       onClick={() => emailWorksheet(task)}
                       className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
@@ -429,6 +483,18 @@ export default function FeladatokPage() {
                 <input value={form.client_location} onChange={(e) => setForm({ ...form, client_location: e.target.value })} placeholder={t("tasks.locationPlaceholder")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
             </div>
+            <label className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+              <input
+                type="checkbox"
+                checked={externalService}
+                onChange={(e) => setExternalService(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                <span className="font-semibold">🔧 {t("tasks.externalCheckbox")}</span>
+                <span className="mt-0.5 block text-xs text-orange-700">{t("tasks.externalCheckboxHint")}</span>
+              </span>
+            </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>

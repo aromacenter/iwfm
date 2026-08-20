@@ -981,7 +981,15 @@
       "needs_more_work": "Needs more work"
     },
     "autoAssign": "🤖 Let the AI choose automatically",
-    "aiAssignedAlert": "The AI assigned {name} to the task.\nReason: {reason}"
+    "aiAssignedAlert": "The AI assigned {name} to the task.\nReason: {reason}",
+    "externalBadge": "External service",
+    "externalCheckbox": "Worksheet for a machine handed to external service",
+    "externalCheckboxHint": "Gets a KSZ serial and its own view. The confirmed net service costs are internal — the customer receives the −1 copy with our service prices.",
+    "kindNormal": "Regular worksheets",
+    "kindExternal": "External service",
+    "worksheetPdfInternal": "📄 Internal PDF (costs)",
+    "customerCopy": "👤 Customer copy (−1)",
+    "customerCopyTitle": "The −1 copy: our service prices, without internal costs — this is what the customer gets."
   },
   "myTasks": {
     "title": "My tasks",
@@ -1021,7 +1029,10 @@
     "wsEmpSigSaved": "Employee signature (saved)",
     "wsClientSigSaved": "Client signature (saved)",
     "wsSignAgain": "Sign again",
-    "wsShareCard": "Share worksheet ({serial})"
+    "wsShareCard": "Share worksheet ({serial})",
+    "wsCostNet": "Service net cost (Ft)",
+    "wsPriceNet": "Customer price (Ft, net)",
+    "wsExternalHint": "Orange field: the external shop's net cost (internal). Green field: our customer price — appears on the customer's −1 copy."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
