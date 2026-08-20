@@ -33,6 +33,8 @@ export interface EmployeeOut {
   weekly_hours: number;
   wage_type: "monthly" | "hourly";
   annual_leave_days: number;
+  // Heti elérhetőség: {"0": ["08:00","16:00"], …} (0=hétfő … 6=vasárnap)
+  availability: Record<string, [string, string]> | null;
   notes: string | null;
   tax_id_masked: string | null;
   taj_masked: string | null;

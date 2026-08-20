@@ -138,6 +138,10 @@ class Employee(Base):
     annual_leave_days: Mapped[int] = mapped_column(Integer, nullable=False, default=20)  # Mt. 116.§ alapszabadság
 
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    # Heti elérhetőség a beosztás-generáláshoz: {"0": ["08:00","16:00"], …}
+    # — kulcs a hét napja (0=hétfő … 6=vasárnap), érték [tól, ig]. None = nincs
+    # megadva (a generálás kihagyja).
+    availability: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

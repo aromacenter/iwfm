@@ -836,7 +836,23 @@
     "fixMarked": "Javítsd a pirossal jelölt mezőket.",
     "createdInfo": "Dolgozó létrehozva — add át neki:",
     "createdCode": "Törzsszám (blokkoláshoz): {code}",
-    "createdPassword": "Belépési jelszó (csak most jelenik meg): {password}"
+    "createdPassword": "Belépési jelszó (csak most jelenik meg): {password}",
+    "filterActive": "Aktív",
+    "filterArchived": "Archivált",
+    "archivedBadge": "Munkaviszony megszűnt",
+    "terminationSection": "Munkaviszony megszüntetése",
+    "terminateCheckbox": "Munkaviszony megszüntetése (archiválás)",
+    "terminateHint": "A dolgozó archiválódik: nem tud belépni, nem jelenik meg az éles beosztásban és a feladat-kiosztásban. Minden adata megmarad, a pipa kivételével bármikor visszaállítható.",
+    "terminationDate": "Munkaviszony vége",
+    "availabilitySection": "Elérhetőség (beosztás-generáláshoz)",
+    "availabilityHint": "Mely napokon és milyen idősávban osztható be a dolgozó — a ✨ Generálás ebből készít beosztás-vázlatot.",
+    "day0": "Hétfő",
+    "day1": "Kedd",
+    "day2": "Szerda",
+    "day3": "Csütörtök",
+    "day4": "Péntek",
+    "day5": "Szombat",
+    "day6": "Vasárnap"
   },
   "sched": {
     "title": "Beosztás",
@@ -875,7 +891,16 @@
       "Péntek",
       "Szombat",
       "Vasárnap"
-    ]
+    ],
+    "generate": "Generálás",
+    "generateHint": "Beosztás-vázlat a dolgozók elérhetőségéből. Ünnepre és áthelyezett pihenőnapra nem tervez; a ledolgozó szombatra automatikus szabadságot ír ki.",
+    "generateConfirm": "Beosztás-vázlat generálása a(z) {week} héttől a dolgozók elérhetősége alapján? A meglévő műszakok érintetlenek maradnak.",
+    "genCreated": "✨ {count} vázlat-műszak létrehozva.",
+    "genHolidays": "🎌 Ünnep / pihenőnap kihagyva: {days}",
+    "genAutoLeave": "🏖 Ledolgozó szombat: {count} automatikus szabadság kiírva.",
+    "genTimeoff": "Távollét miatt kihagyva: {count}",
+    "genExisting": "Már volt műszak: {count}",
+    "genNoAvail": "Elérhetőség nélküli dolgozó: {count} (Dolgozók → szerkesztés)."
   },
   "leave": {
     "title": "Távollét",

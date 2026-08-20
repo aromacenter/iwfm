@@ -836,7 +836,23 @@
     "fixMarked": "Fix the fields marked in red.",
     "createdInfo": "Employee created — hand these over:",
     "createdCode": "Employee ID (for clocking): {code}",
-    "createdPassword": "Login password (shown only now): {password}"
+    "createdPassword": "Login password (shown only now): {password}",
+    "filterActive": "Active",
+    "filterArchived": "Archived",
+    "archivedBadge": "Employment ended",
+    "terminationSection": "Termination of employment",
+    "terminateCheckbox": "Terminate employment (archive)",
+    "terminateHint": "The employee is archived: cannot log in, no longer appears in live scheduling or task assignment. All data is retained and can be restored by unticking.",
+    "terminationDate": "Employment end date",
+    "availabilitySection": "Availability (for schedule generation)",
+    "availabilityHint": "Days and time ranges the employee can be scheduled — ✨ Generate builds the draft week from this.",
+    "day0": "Monday",
+    "day1": "Tuesday",
+    "day2": "Wednesday",
+    "day3": "Thursday",
+    "day4": "Friday",
+    "day5": "Saturday",
+    "day6": "Sunday"
   },
   "sched": {
     "title": "Schedule",
@@ -875,7 +891,16 @@
       "Friday",
       "Saturday",
       "Sunday"
-    ]
+    ],
+    "generate": "Generate",
+    "generateHint": "Draft schedule from employee availability. Skips public holidays and moved rest days; auto-books leave on worked Saturdays.",
+    "generateConfirm": "Generate a draft schedule for the week of {week} from employee availability? Existing shifts stay untouched.",
+    "genCreated": "✨ {count} draft shifts created.",
+    "genHolidays": "🎌 Holidays / rest days skipped: {days}",
+    "genAutoLeave": "🏖 Worked Saturday: {count} automatic leave entries.",
+    "genTimeoff": "Skipped due to time off: {count}",
+    "genExisting": "Shift already existed: {count}",
+    "genNoAvail": "Employees without availability: {count} (Employees → edit)."
   },
   "leave": {
     "title": "Time off",

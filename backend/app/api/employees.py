@@ -58,7 +58,32 @@ class EmployeeBase(BaseModel):
     weekly_hours: int = Field(default=40, ge=1, le=60)
     wage_type: str = "monthly"
     annual_leave_days: int = Field(default=20, ge=0, le=60)
+    # Heti elérhetőség a beosztás-generáláshoz: {"0": ["08:00","16:00"], …}
+    # (0=hétfő … 6=vasárnap). None/üres = a generálás kihagyja a dolgozót.
+    availability: dict[str, list[str]] | None = None
     notes: str | None = None
+
+    @field_validator("availability")
+    @classmethod
+    def _availability(cls, v: dict | None) -> dict | None:
+        if not v:
+            return None
+        from datetime import time as _time
+
+        out: dict[str, list[str]] = {}
+        for key, interval in v.items():
+            if key not in {"0", "1", "2", "3", "4", "5", "6"}:
+                raise ValueError("availability: nap-kulcs 0–6 lehet")
+            if not isinstance(interval, list) or len(interval) != 2:
+                raise ValueError("availability: [tól, ig] pár kell")
+            try:
+                start, end = _time.fromisoformat(interval[0]), _time.fromisoformat(interval[1])
+            except ValueError:
+                raise ValueError("availability: HH:MM formátum kell")
+            if end <= start:
+                raise ValueError("availability: a vége a kezdet után legyen")
+            out[key] = [interval[0], interval[1]]
+        return out or None
 
     @field_validator("employment_type")
     @classmethod
@@ -130,9 +155,15 @@ class EmployeeUpdate(BaseModel):
     weekly_hours: int | None = Field(default=None, ge=1, le=60)
     wage_type: str | None = None
     annual_leave_days: int | None = Field(default=None, ge=0, le=60)
+    availability: dict[str, list[str]] | None = None
     notes: str | None = None
     status: str | None = None
     tax_id: str | None = None
+
+    @field_validator("availability")
+    @classmethod
+    def _availability(cls, v: dict | None) -> dict | None:
+        return EmployeeBase._availability(v)
     taj: str | None = None
     bank_account: str | None = None
     wage_amount: str | None = None
@@ -263,6 +294,7 @@ def _employee_out(emp: Employee, email: str | None = None, role: str | None = No
         weekly_hours=emp.weekly_hours,
         wage_type=emp.wage_type,
         annual_leave_days=emp.annual_leave_days,
+        availability=emp.availability,
         notes=emp.notes,
         tax_id_masked=emp.tax_id_masked,
         taj_masked=emp.taj_masked,

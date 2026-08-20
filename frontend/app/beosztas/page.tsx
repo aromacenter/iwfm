@@ -217,6 +217,35 @@ export default function BeosztasPage() {
     }
   }
 
+  // Beosztás-vázlat generálása a dolgozók elérhetőségéből (ünnep-kezeléssel)
+  async function generate() {
+    if (!(await confirm(t("sched.generateConfirm", { week: weekIso })))) return;
+    setBusy(true);
+    try {
+      const res = await api.post<{
+        created: number;
+        skipped_existing: number;
+        skipped_timeoff: number;
+        skipped_holiday: string[];
+        auto_leave: number;
+        no_availability: number;
+      }>("/api/shifts/generate", { week_start: weekIso });
+      const bits = [t("sched.genCreated", { count: res.created })];
+      if (res.skipped_holiday.length > 0)
+        bits.push(t("sched.genHolidays", { days: res.skipped_holiday.join(", ") }));
+      if (res.auto_leave > 0) bits.push(t("sched.genAutoLeave", { count: res.auto_leave }));
+      if (res.skipped_timeoff > 0) bits.push(t("sched.genTimeoff", { count: res.skipped_timeoff }));
+      if (res.skipped_existing > 0) bits.push(t("sched.genExisting", { count: res.skipped_existing }));
+      if (res.no_availability > 0) bits.push(t("sched.genNoAvail", { count: res.no_availability }));
+      toast(bits.join("\n"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const employeeName = (id: string) => {
     const emp = employees.find((e) => e.id === id);
     return emp ? `${emp.last_name} ${emp.first_name}` : "?";
@@ -247,6 +276,14 @@ export default function BeosztasPage() {
           {draftCount > 0 && (
             <span className="text-sm text-slate-500">{t("sched.drafts", { count: draftCount })}</span>
           )}
+          <button
+            onClick={generate}
+            disabled={busy}
+            title={t("sched.generateHint")}
+            className="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-40"
+          >
+            ✨ {t("sched.generate")}
+          </button>
           <button
             onClick={() => publish(false)}
             disabled={busy || draftCount === 0}

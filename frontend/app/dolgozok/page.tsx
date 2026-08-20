@@ -54,6 +54,22 @@ const EMPTY_FORM = {
 
 type FormState = typeof EMPTY_FORM;
 
+type AvailDay = { on: boolean; from: string; to: string };
+
+function emptyAvail(): Record<string, AvailDay> {
+  const out: Record<string, AvailDay> = {};
+  for (let i = 0; i < 7; i++) out[String(i)] = { on: false, from: "08:00", to: "16:00" };
+  return out;
+}
+
+function availToApi(avail: Record<string, AvailDay>): Record<string, [string, string]> | null {
+  const out: Record<string, [string, string]> = {};
+  for (const [day, v] of Object.entries(avail)) {
+    if (v.on && v.from && v.to) out[day] = [v.from, v.to];
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block text-sm">
@@ -70,6 +86,10 @@ export default function DolgozokPage() {
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<EmployeeOut | null>(null);
+  const [archive, setArchive] = useState(false);
+  const [termDate, setTermDate] = useState("");
+  const [avail, setAvail] = useState<Record<string, AvailDay>>(emptyAvail());
+  const [showArchived, setShowArchived] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -113,6 +133,9 @@ export default function DolgozokPage() {
     setEditing(null);
     setForm(EMPTY_FORM);
     setSkillIds([]);
+    setArchive(false);
+    setTermDate("");
+    setAvail(emptyAvail());
     setError(null);
     setShowForm(true);
   }
@@ -143,6 +166,13 @@ export default function DolgozokPage() {
       annual_leave_days: emp.annual_leave_days,
     });
     setSkillIds((emp.skills ?? []).map((s) => s.id));
+    setArchive(emp.status === "inactive");
+    setTermDate(emp.termination_date ?? "");
+    const av = emptyAvail();
+    for (const [day, iv] of Object.entries(emp.availability ?? {})) {
+      if (iv && av[day]) av[day] = { on: true, from: iv[0], to: iv[1] };
+    }
+    setAvail(av);
     setError(null);
     setShowForm(true);
   }
@@ -176,6 +206,13 @@ export default function DolgozokPage() {
           annual_leave_days: form.annual_leave_days,
           skill_ids: skillIds,
           role: form.role,
+          availability: availToApi(avail),
+          // Munkaviszony megszüntetése: archivált (inactive) státusz + dátum;
+          // visszavonva újra aktív, a dátum törlődik.
+          status: archive ? "inactive" : "active",
+          termination_date: archive
+            ? (termDate || new Date().toISOString().slice(0, 10))
+            : null,
         };
         for (const k of ["tax_id", "taj", "bank_account", "wage_amount"] as const) {
           if (form[k].trim() !== "") body[k] = form[k].trim();
@@ -184,6 +221,7 @@ export default function DolgozokPage() {
       } else {
         const created = await api.post<EmployeeOut & { generated_password?: string }>("/api/employees", {
           ...form,
+          availability: availToApi(avail),
           skill_ids: skillIds,
           birth_name: clean(form.birth_name),
           mother_name: clean(form.mother_name),
@@ -250,6 +288,21 @@ export default function DolgozokPage() {
     <AppShell>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold">{t("emp.title")}</h1>
+        <div className="mr-auto ml-3 flex gap-1.5">
+          {([[false, t("emp.filterActive")], [true, t("emp.filterArchived")]] as const).map(([val, label]) => (
+            <button
+              key={String(val)}
+              onClick={() => setShowArchived(val)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                showArchived === val
+                  ? "bg-indigo-600 text-white"
+                  : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {label} ({employees.filter((e) => (val ? e.status === "inactive" : e.status === "active")).length})
+            </button>
+          ))}
+        </div>
         {isAdmin && (
           <button
             onClick={openCreate}
@@ -281,7 +334,9 @@ export default function DolgozokPage() {
             </tr>
           </thead>
           <tbody>
-            {employees.map((emp) => {
+            {employees
+              .filter((emp) => (showArchived ? emp.status === "inactive" : emp.status === "active"))
+              .map((emp) => {
               const rev = revealed[emp.id];
               return (
                 <tr key={emp.id} className="border-b border-slate-100 last:border-0">
@@ -289,7 +344,10 @@ export default function DolgozokPage() {
                     <div className="font-medium">
                       {emp.last_name} {emp.first_name}
                       {emp.status === "inactive" && (
-                        <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs">{t("emp.inactive")}</span>
+                        <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">
+                          {t("emp.archivedBadge")}
+                          {emp.termination_date && <> · {emp.termination_date}</>}
+                        </span>
                       )}
                     </div>
                     <div className="text-xs text-slate-400">
@@ -487,6 +545,43 @@ export default function DolgozokPage() {
             </fieldset>
 
             <fieldset>
+              <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.availabilitySection")}</legend>
+              <p className="mb-2 text-xs text-slate-400">{t("emp.availabilityHint")}</p>
+              <div className="space-y-1">
+                {["0", "1", "2", "3", "4", "5", "6"].map((day) => (
+                  <div key={day} className="flex items-center gap-2 text-sm">
+                    <label className="flex w-28 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={avail[day].on}
+                        onChange={(e) => setAvail({ ...avail, [day]: { ...avail[day], on: e.target.checked } })}
+                        className="h-4 w-4"
+                      />
+                      {t(`emp.day${day}`)}
+                    </label>
+                    {avail[day].on && (
+                      <>
+                        <input
+                          type="time"
+                          value={avail[day].from}
+                          onChange={(e) => setAvail({ ...avail, [day]: { ...avail[day], from: e.target.value } })}
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                        />
+                        <span className="text-slate-400">–</span>
+                        <input
+                          type="time"
+                          value={avail[day].to}
+                          onChange={(e) => setAvail({ ...avail, [day]: { ...avail[day], to: e.target.value } })}
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset>
               <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.skillsSection")}</legend>
               {allSkills.length === 0 ? (
                 <p className="text-xs text-slate-400">{t("emp.noSkillsYet")}</p>
@@ -543,6 +638,36 @@ export default function DolgozokPage() {
               </Field>
             </fieldset>
 
+            {editing && (
+              <fieldset className="rounded-xl border border-red-200 bg-red-50 p-3">
+                <legend className="px-1 text-xs font-semibold uppercase text-red-500">
+                  {t("emp.terminationSection")}
+                </legend>
+                <label className="flex items-start gap-2 text-sm text-red-900">
+                  <input
+                    type="checkbox"
+                    checked={archive}
+                    onChange={(e) => setArchive(e.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>
+                    <span className="font-semibold">{t("emp.terminateCheckbox")}</span>
+                    <span className="mt-0.5 block text-xs text-red-700">{t("emp.terminateHint")}</span>
+                  </span>
+                </label>
+                {archive && (
+                  <label className="mt-2 block text-sm text-red-900">
+                    {t("emp.terminationDate")}
+                    <input
+                      type="date"
+                      value={termDate}
+                      onChange={(e) => setTermDate(e.target.value)}
+                      className="mt-1 w-48 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm"
+                    />
+                  </label>
+                )}
+              </fieldset>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button

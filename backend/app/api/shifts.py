@@ -546,3 +546,136 @@ async def publish_week(
         "warnings": len(warnings),
         "emails_queued": emails_queued,
     }
+
+
+# ─── Beosztás-generálás elérhetőségből ───────────────────────────────────────
+
+
+class GenerateBody(BaseModel):
+    week_start: date  # hétfő
+
+
+class GenerateOut(BaseModel):
+    created: int            # létrehozott vázlat-műszakok
+    skipped_existing: int   # már volt műszak aznap
+    skipped_timeoff: int    # szabadság/távollét miatt kihagyva
+    skipped_holiday: list[date]   # ünnep / áthelyezett pihenőnap — nincs műszak
+    auto_leave: int         # ledolgozó szombatra automatikusan kiírt szabadság
+    no_availability: int    # dolgozó, akinél nincs elérhetőség megadva
+
+
+@router.post("/generate", response_model=GenerateOut)
+async def generate_week(
+    body: GenerateBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("schedule")),
+):
+    """Heti beosztás-vázlat generálása a dolgozók elérhetősége alapján.
+
+    - piros betűs ünnepre és áthelyezett pihenőnapra NEM tervez műszakot;
+    - a ledolgozó szombati munkanapra műszak helyett automatikusan JÓVÁHAGYOTT
+      szabadságot ír ki minden aktív dolgozónak (ha még nincs);
+    - meglévő műszakot és jóváhagyott/függő távollétet nem ír felül;
+    - minden generált műszak VÁZLAT — a közzététel (Mt.-ellenőrzéssel) külön lépés.
+    """
+    from app.services.wfm.holidays import is_non_working_day, is_worked_saturday
+
+    week_start = body.week_start - timedelta(days=body.week_start.weekday())
+    days = [week_start + timedelta(days=i) for i in range(7)]
+
+    employees = (
+        await db.execute(select(Employee).where(Employee.status == "active"))
+    ).scalars().all()
+
+    existing = (
+        await db.execute(
+            select(Shift.employee_id, Shift.work_date).where(
+                Shift.work_date >= days[0], Shift.work_date <= days[-1]
+            )
+        )
+    ).all()
+    existing_set = {(eid, d) for eid, d in existing}
+
+    timeoff_rows = (
+        await db.execute(
+            select(TimeOffRequest).where(
+                TimeOffRequest.status.in_(("pending", "approved")),
+                TimeOffRequest.start_date <= days[-1],
+                TimeOffRequest.end_date >= days[0],
+            )
+        )
+    ).scalars().all()
+
+    def off(eid: uuid.UUID, d: date) -> bool:
+        return any(
+            r.employee_id == eid and r.start_date <= d <= r.end_date
+            for r in timeoff_rows
+        )
+
+    created = skipped_existing = skipped_timeoff = auto_leave = no_availability = 0
+    skipped_holiday: list[date] = []
+
+    for d in days:
+        if is_non_working_day(d):
+            skipped_holiday.append(d)
+            continue
+        if is_worked_saturday(d):
+            # Nálunk a ledolgozó szombat nem munkanap: automatikus szabadság.
+            for emp in employees:
+                if off(emp.id, d):
+                    continue
+                db.add(TimeOffRequest(
+                    employee_id=emp.id, type="annual", start_date=d, end_date=d,
+                    reason="Ledolgozó szombati munkanap — automatikus szabadság",
+                    status="approved", decided_by=actor.id,
+                    decided_at=datetime.now(UTC),
+                    decision_note="Beosztás-generálás",
+                ))
+                auto_leave += 1
+            continue
+        weekday_key = str(d.weekday())
+        for emp in employees:
+            avail = emp.availability if isinstance(emp.availability, dict) else None
+            if not avail:
+                continue
+            interval = avail.get(weekday_key)
+            if not interval:
+                continue
+            if (emp.id, d) in existing_set:
+                skipped_existing += 1
+                continue
+            if off(emp.id, d):
+                skipped_timeoff += 1
+                continue
+            try:
+                start = time.fromisoformat(str(interval[0]))
+                end = time.fromisoformat(str(interval[1]))
+            except (ValueError, IndexError, TypeError):
+                continue
+            db.add(Shift(
+                employee_id=emp.id, work_date=d, start_time=start, end_time=end,
+                status="draft", created_by=actor.id,
+                note="Elérhetőségből generálva",
+            ))
+            created += 1
+
+    no_availability = sum(
+        1 for emp in employees if not (isinstance(emp.availability, dict) and emp.availability)
+    )
+
+    await record_audit(
+        db, actor=actor, action="schedule.generate", entity_type="shift",
+        detail={
+            "week_start": str(week_start), "created": created,
+            "auto_leave": auto_leave,
+            "holidays": [str(x) for x in skipped_holiday],
+        },
+        request=request,
+    )
+    await db.commit()
+    return GenerateOut(
+        created=created, skipped_existing=skipped_existing,
+        skipped_timeoff=skipped_timeoff, skipped_holiday=skipped_holiday,
+        auto_leave=auto_leave, no_availability=no_availability,
+    )
