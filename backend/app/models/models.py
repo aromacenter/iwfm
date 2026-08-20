@@ -551,6 +551,10 @@ class Asset(Base):
     counter_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     counters: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [állás1, állás2…]
     norm: Mapped[float | None] = mapped_column(Float, nullable=True)  # norma
+    # Számlálónkénti norma (g kávé/adag) több számlálós gépnél — 0 = az adott
+    # számláló terméke (pl. forró csoki) NEM használ kávét; a kg-
+    # keresztellenőrzés ezzel súlyozza a lefőzött adagokat.
+    norms: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Melyik terméket (kávét) főzi a gép — a gép-soros elszámolás ez alapján
     # árazza az adagokat. None: a partner egyetlen készlet-terméke érvényes.
     default_product_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -1443,6 +1447,11 @@ class QuoteRequest(Base):
     valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
     admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Melyik üzletkötőhöz tartozik az ügylet (admin rendeli hozzá):
+    agent_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_quotes_agent"),
+        nullable=True,
+    )
     # Szerződés + aláírás:
     contract_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     sign_token: Mapped[str | None] = mapped_column(String(64), nullable=True)

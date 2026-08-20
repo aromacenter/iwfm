@@ -213,6 +213,61 @@ async def test_template_editing_and_machine_type_crud(client, manager):
     assert res.status_code == 200
 
 
+async def test_quote_agent_assignment(client, manager):
+    """Az ajánlathoz üzletkötő rendelhető; aláíráskor a partner-jegyzetbe kerül."""
+    _, mgr = manager
+    res = await client.post("/api/public/quotes", json={
+        **QUOTE_BODY, "company_name": "Üzletkötős Bolt Kft.",
+    })
+    assert res.status_code == 201
+    quote = next(
+        q for q in (await client.get("/api/quotes", headers=mgr)).json()
+        if q["company_name"] == "Üzletkötős Bolt Kft."
+    )
+    agents = (await client.get("/api/quotes/agents", headers=mgr)).json()
+    assert agents, "nincs hozzárendelhető üzletkötő"
+    agent = agents[0]
+
+    res = await client.patch(
+        f"/api/quotes/{quote['id']}",
+        json={"agent_user_id": agent["id"], "price_per_portion": 60,
+              "valid_from": "2026-08-01"},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["agent_name"] == agent["display_name"]
+
+    # rossz id → 422; törlés üres stringgel
+    res = await client.patch(
+        f"/api/quotes/{quote['id']}", json={"agent_user_id": "nem-uuid"}, headers=mgr
+    )
+    assert res.status_code == 422
+    # a lista is hozza a nevet
+    listed = next(
+        q for q in (await client.get("/api/quotes", headers=mgr)).json()
+        if q["id"] == quote["id"]
+    )
+    assert listed["agent_name"] == agent["display_name"]
+
+    # aláírás után a partner jegyzetében szerepel az üzletkötő
+    await client.post(f"/api/quotes/{quote['id']}/prepare", headers=mgr)
+    sign_url = (
+        await client.post(f"/api/quotes/{quote['id']}/send", headers=mgr)
+    ).json()["sign_url"]
+    token = sign_url.rsplit("/", 1)[-1]
+    res = await client.post(
+        f"/api/public/contract/{token}/sign",
+        json={"signature": SIG, "signed_name": "Aláíró Aliz"},
+    )
+    assert res.status_code == 200, res.text
+    code = res.json()["partner_code"]
+    p = next(
+        x for x in (await client.get("/api/partners", headers=mgr)).json()
+        if x["partner_code"] == code
+    )
+    assert f"Üzletkötő: {agent['display_name']}" in (p["notes"] or "")
+
+
 async def test_machine_type_image(client, manager):
     """Gép-fotó: feltöltés data URL-lel, publikus kiszolgálás, törlés."""
     import base64

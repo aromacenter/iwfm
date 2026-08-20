@@ -241,6 +241,8 @@ class QuoteOut(BaseModel):
     valid_from: date | None
     valid_to: date | None
     admin_note: str | None
+    agent_user_id: str | None
+    agent_name: str | None
     contract_text: str | None
     sign_url: str | None
     sent_at: datetime | None
@@ -256,7 +258,7 @@ def _sign_url(q: QuoteRequest) -> str | None:
     return f"{get_settings().frontend_origin.rstrip('/')}/szerzodes/{q.sign_token}"
 
 
-def _quote_out(q: QuoteRequest) -> QuoteOut:
+def _quote_out(q: QuoteRequest, agent_name: str | None = None) -> QuoteOut:
     return QuoteOut(
         id=str(q.id), serial=q.serial, status=q.status,
         company_name=q.company_name, contact_name=q.contact_name,
@@ -271,6 +273,8 @@ def _quote_out(q: QuoteRequest) -> QuoteOut:
         price_per_portion=q.price_per_portion, min_portions=q.min_portions,
         below_min_price=q.below_min_price, rent_if_below_min=q.rent_if_below_min,
         valid_from=q.valid_from, valid_to=q.valid_to, admin_note=q.admin_note,
+        agent_user_id=str(q.agent_user_id) if q.agent_user_id else None,
+        agent_name=agent_name,
         contract_text=q.contract_text, sign_url=_sign_url(q),
         sent_at=q.sent_at, signed_at=q.signed_at, signed_name=q.signed_name,
         partner_id=str(q.partner_id) if q.partner_id else None,
@@ -491,6 +495,12 @@ async def _create_partner_from_quote(db: AsyncSession, q: QuoteRequest) -> Partn
         if has_billing else address
     )
     note_bits = [f"Online ajánlatkérésből: {q.serial}"]
+    if q.agent_user_id:
+        agent = (
+            await db.execute(select(User).where(User.id == q.agent_user_id))
+        ).scalar_one_or_none()
+        if agent is not None:
+            note_bits.append(f"Üzletkötő: {agent.display_name}")
     if q.machine_type_name:
         note_bits.append(f"Kért gép: {q.machine_type_name}")
     if q.price_per_portion is not None:
@@ -543,6 +553,14 @@ async def _create_partner_from_quote(db: AsyncSession, q: QuoteRequest) -> Partn
 # ---------------------------------------------------------------------------
 
 
+async def _agent_names(db: AsyncSession, quotes: list[QuoteRequest]) -> dict:
+    ids = {q.agent_user_id for q in quotes if q.agent_user_id}
+    if not ids:
+        return {}
+    rows = (await db.execute(select(User).where(User.id.in_(ids)))).scalars().all()
+    return {u.id: u.display_name for u in rows}
+
+
 @router.get("", response_model=list[QuoteOut])
 async def list_quotes(
     status: str | None = None,
@@ -553,7 +571,31 @@ async def list_quotes(
     if status:
         stmt = stmt.where(QuoteRequest.status == status)
     rows = (await db.execute(stmt)).scalars().all()
-    return [_quote_out(q) for q in rows]
+    names = await _agent_names(db, rows)
+    return [_quote_out(q, names.get(q.agent_user_id)) for q in rows]
+
+
+class AgentOut(BaseModel):
+    id: str
+    display_name: str
+    role: str
+
+
+@router.get("/agents", response_model=list[AgentOut])
+async def list_agents(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("partners")),
+):
+    """Ajánlathoz rendelhető üzletkötők (admin/vezető/üzletkötő)."""
+    rows = (
+        await db.execute(
+            select(User).where(
+                User.is_active.is_(True),
+                User.role.in_(("admin", "manager", "uzletkoto")),
+            ).order_by(User.display_name)
+        )
+    ).scalars().all()
+    return [AgentOut(id=str(u.id), display_name=u.display_name, role=u.role) for u in rows]
 
 
 class TemplateBody(BaseModel):
@@ -740,6 +782,7 @@ class QuotePatchBody(BaseModel):
     valid_from: date | None = None
     valid_to: date | None = None
     admin_note: str | None = Field(default=None, max_length=4000)
+    agent_user_id: str | None = None  # "" → törlés
     contract_text: str | None = None
 
 
@@ -761,6 +804,21 @@ async def update_quote(
         and data["valid_to"] < (data.get("valid_from") or q.valid_from)
     ):
         raise HTTPException(status_code=422, detail={"code": "contract.bad_dates"})
+    if "agent_user_id" in data:
+        raw = (data.pop("agent_user_id") or "").strip()
+        if not raw:
+            q.agent_user_id = None
+        else:
+            try:
+                uid = uuid.UUID(raw)
+            except ValueError:
+                raise HTTPException(status_code=422, detail={"code": "quote.bad_agent"})
+            agent = (
+                await db.execute(select(User).where(User.id == uid))
+            ).scalar_one_or_none()
+            if agent is None:
+                raise HTTPException(status_code=422, detail={"code": "quote.bad_agent"})
+            q.agent_user_id = agent.id
     for key, value in data.items():
         setattr(q, key, value)
     await record_audit(
@@ -768,7 +826,8 @@ async def update_quote(
         entity_id=str(q.id), detail={"serial": q.serial}, request=request,
     )
     await db.commit()
-    return _quote_out(q)
+    names = await _agent_names(db, [q])
+    return _quote_out(q, names.get(q.agent_user_id))
 
 
 @router.post("/{quote_id}/prepare", response_model=QuoteOut)

@@ -40,6 +40,8 @@ interface Quote {
   valid_from: string | null;
   valid_to: string | null;
   admin_note: string | null;
+  agent_user_id: string | null;
+  agent_name: string | null;
   contract_text: string | null;
   sign_url: string | null;
   sent_at: string | null;
@@ -79,6 +81,8 @@ export default function AjanlatkeresekPage() {
   const [contractText, setContractText] = useState("");
   const [busy, setBusy] = useState(false);
   const [infoPartner, setInfoPartner] = useState<string | null>(null);
+  const [agents, setAgents] = useState<{ id: string; display_name: string }[]>([]);
+  const [agentId, setAgentId] = useState("");
 
   // katalógus + sablon modalok
   const [showTypes, setShowTypes] = useState(false);
@@ -113,6 +117,9 @@ export default function AjanlatkeresekPage() {
     api.get<Quote[]>("/api/quotes").then(setQuotes).catch(() => {});
   }, []);
   useEffect(load, [load]);
+  useEffect(() => {
+    api.get<{ id: string; display_name: string }[]>("/api/quotes/agents").then(setAgents).catch(() => {});
+  }, []);
 
   const loadTypes = useCallback(() => {
     api.get<MachineType[]>("/api/quotes/machine-types").then(setTypes).catch(() => {});
@@ -125,6 +132,7 @@ export default function AjanlatkeresekPage() {
   function openQuote(q: Quote) {
     setOpen(q);
     setRentBelow(q.rent_if_below_min);
+    setAgentId(q.agent_user_id ?? "");
     setContractText(q.contract_text ?? "");
     setForm({
       company_name: q.company_name,
@@ -168,6 +176,7 @@ export default function AjanlatkeresekPage() {
       valid_from: form.valid_from || null,
       valid_to: form.valid_to || null,
       admin_note: form.admin_note || null,
+      agent_user_id: agentId,
       contract_text: contractText || null,
     };
   }
@@ -380,7 +389,12 @@ export default function AjanlatkeresekPage() {
                   </div>
                   <div className="text-xs text-slate-500">{q.contact_name} · {q.contact_email}</div>
                 </td>
-                <td className="px-4 py-2.5 text-slate-600">{q.machine_type_name ?? "—"}</td>
+                <td className="px-4 py-2.5 text-slate-600">
+                  {q.machine_type_name ?? "—"}
+                  {q.agent_name && (
+                    <div className="text-xs text-slate-400">💼 {q.agent_name}</div>
+                  )}
+                </td>
                 <td className="px-4 py-2.5 text-xs text-slate-500">
                   {q.price_per_portion != null ? (
                     <>
@@ -501,6 +515,20 @@ export default function AjanlatkeresekPage() {
               <label className="flex items-end gap-2 pb-2 text-sm text-slate-600">
                 <input type="checkbox" checked={rentBelow} disabled={!editable} onChange={(e) => setRentBelow(e.target.checked)} />
                 {t("partners.contractRentIfBelowMin")}
+              </label>
+              <label className={labelCls}>
+                <span className={spanCls}>{t("quote.agent")}</span>
+                <select
+                  value={agentId}
+                  onChange={(e) => setAgentId(e.target.value)}
+                  disabled={!editable}
+                  className={inputCls + " disabled:bg-slate-50 disabled:text-slate-500"}
+                >
+                  <option value="">—</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>{a.display_name}</option>
+                  ))}
+                </select>
               </label>
             </div>
             <label className={labelCls + " mb-4 block"}>
