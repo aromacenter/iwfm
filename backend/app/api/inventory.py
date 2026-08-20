@@ -552,11 +552,13 @@ class AssetBody(BaseModel):
     manufacturer: str | None = Field(default=None, max_length=128)
     article_number: str | None = Field(default=None, max_length=64)
     serial_number: str | None = Field(default=None, max_length=128)
-    location_type: str | None = Field(default=None, max_length=64)
+    location_type: str | None = Field(default=None, max_length=64)  # figyelmen kívül — származtatott
     counter: int | None = Field(default=None, ge=0)
     counter_count: int = Field(default=1, ge=1, le=8)  # hány számláló van a gépen
     counters: list[int] | None = Field(default=None, max_length=8)  # állások (több számlálós)
     norm: float | None = Field(default=None, ge=0)
+    # Számlálónkénti norma (g kávé/adag) több számlálós gépnél; 0 = nem használ kávét.
+    norms: list[float] | None = Field(default=None, max_length=8)
     default_product_id: str | None = None  # melyik terméket (kávét) főzi
     tangible: bool = False
     customer_owned: bool = False  # az ügyfél saját gépe
@@ -575,11 +577,12 @@ class AssetPatch(BaseModel):
     manufacturer: str | None = None
     article_number: str | None = None
     serial_number: str | None = None
-    location_type: str | None = None
+    location_type: str | None = None  # figyelmen kívül — származtatott
     counter: int | None = Field(default=None, ge=0)
     counter_count: int | None = Field(default=None, ge=1, le=8)
     counters: list[int] | None = Field(default=None, max_length=8)
     norm: float | None = Field(default=None, ge=0)
+    norms: list[float] | None = Field(default=None, max_length=8)
     default_product_id: str | None = None  # "" → törlés
     tangible: bool | None = None
     customer_owned: bool | None = None
@@ -622,6 +625,7 @@ class AssetOut(BaseModel):
     counter_count: int = 1
     counters: list[int] | None = None
     norm: float | None
+    norms: list[float] | None = None
     default_product_id: str | None = None
     tangible: bool
     customer_owned: bool
@@ -637,6 +641,18 @@ class AssetOut(BaseModel):
     movements: list[MovementOut] | None = None
 
 
+def _derived_location(a: Asset) -> str:
+    """A gép aktuális helye — nem kézzel töltött adat, a státuszból következik.
+    Kód megy ki, a kliens i18n-nel fordítja (inv.loc_*)."""
+    if a.status == "deployed":
+        return "customer" if a.customer_owned else "partner"
+    if a.status == "maintenance":
+        return "service"
+    if a.status == "retired":
+        return "retired"
+    return "warehouse"
+
+
 def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
     return AssetOut(
         id=str(a.id),
@@ -647,11 +663,12 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         manufacturer=a.manufacturer,
         article_number=a.article_number,
         serial_number=a.serial_number,
-        location_type=a.location_type,
+        location_type=_derived_location(a),
         counter=a.counter,
         counter_count=a.counter_count or 1,
         counters=a.counters,
         norm=a.norm,
+        norms=a.norms,
         default_product_id=str(a.default_product_id) if a.default_product_id else None,
         tangible=a.tangible,
         customer_owned=a.customer_owned,
@@ -755,6 +772,38 @@ async def list_assets(
     assets = list((await db.execute(query.limit(1000))).scalars())
     names = await _partner_names(db, {a.partner_id for a in assets})
     return [_asset_out(a, names.get(a.partner_id)) for a in assets]
+
+
+class TypeDefaultsOut(BaseModel):
+    manufacturer: str | None
+    article_number: str | None
+    norm: float | None
+    norms: list[float] | None
+    counter_count: int
+
+
+@assets_router.get("/type-defaults", response_model=TypeDefaultsOut | None)
+async def asset_type_defaults(
+    name: str = Query(min_length=2, max_length=256),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("machines")),
+):
+    """Új gép felvételekor: ha van már ilyen nevű (típusú) gép, annak adatai
+    előtölthetők (cikkszám, gyártó, norma, számláló-szám)."""
+    a = (
+        await db.execute(
+            select(Asset)
+            .where(func.lower(Asset.name) == name.strip().lower())
+            .order_by(Asset.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if a is None:
+        return None
+    return TypeDefaultsOut(
+        manufacturer=a.manufacturer, article_number=a.article_number,
+        norm=a.norm, norms=a.norms, counter_count=a.counter_count or 1,
+    )
 
 
 @assets_router.get("/by-barcode/{barcode}", response_model=AssetOut)
@@ -959,12 +1008,13 @@ async def create_asset(
         manufacturer=(body.manufacturer or "").strip() or None,
         article_number=(body.article_number or "").strip() or None,
         serial_number=(body.serial_number or "").strip() or None,
-        location_type=(body.location_type or "").strip() or None,
+        # location_type nem kézzel töltött — a kimenetben a státuszból származik
         # Több számlálós gép: a `counter` mindig az állások összege
         counter=sum(body.counters) if body.counters else body.counter,
         counter_count=body.counter_count,
         counters=body.counters,
         norm=body.norm,
+        norms=body.norms,
         default_product_id=await _parse_default_product(db, body.default_product_id),
         tangible=body.tangible,
         customer_owned=body.customer_owned,
@@ -999,6 +1049,7 @@ async def update_asset(
 ):
     a = await _get_asset_or_404(db, asset_id)
     data = body.model_dump(exclude_unset=True)
+    data.pop("location_type", None)  # származtatott — kézzel nem írható
 
     if "status" in data:
         if data["status"] not in ("in_stock", "maintenance", "retired"):

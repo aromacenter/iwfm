@@ -1316,7 +1316,8 @@
     "quote.bad_signature": "Invalid signature format.",
     "quote.machine_type_not_found": "Machine type not found.",
     "quote.cancelled": "This quote request has been cancelled.",
-    "quote.bad_image": "Invalid image (PNG/JPEG/WebP, max 2 MB)."
+    "quote.bad_image": "Invalid image (PNG/JPEG/WebP, max 2 MB).",
+    "quote.bad_agent": "The selected sales rep was not found."
   },
   "inv": {
     "title": "Machines",
@@ -1404,7 +1405,14 @@
     "qrLabelsEzplHint": "Native Godex label file (.ezp) for the 51×25 mm VOID label — open/send with GoLabel or raw-print directly.",
     "qrLabelsEzpx": "GoLabel (EZPX)",
     "qrLabelsEzpxHint": "GoLabel project file (.ezpx) using your own VOID label template: serial barcode + owner text, preconfigured for the G300 printer. Multiple machines download as a ZIP.",
-    "customerOwnedShort": "customer-owned"
+    "customerOwnedShort": "customer-owned",
+    "normN": "Norm {n} (g/portion)",
+    "normPerCounterHint": "Per-counter norm: grams of coffee one portion uses on that counter. 0 = uses no coffee (e.g. hot chocolate) — keeps the kg check accurate.",
+    "loc_partner": "At partner",
+    "loc_customer": "At customer",
+    "loc_service": "In service",
+    "loc_warehouse": "Internal warehouse",
+    "loc_retired": "Retired"
   },
   "wh": {
     "title": "Warehouse",
@@ -1623,6 +1631,7 @@
     "guideTitle": "Not sure which machine to pick?",
     "guideSubtitle": "Click here — we describe what each machine does and who it suits best.",
     "chooseThis": "Choose this",
-    "chosen": "Selected"
+    "chosen": "Selected",
+    "agent": "Sales rep"
   }
 }

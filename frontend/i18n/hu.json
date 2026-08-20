@@ -1316,7 +1316,8 @@
     "quote.bad_signature": "Az aláírás formátuma nem megfelelő.",
     "quote.machine_type_not_found": "A géptípus nem található.",
     "quote.cancelled": "Ez az ajánlatkérés vissza lett vonva.",
-    "quote.bad_image": "A kép formátuma nem megfelelő (PNG/JPEG/WebP, max 2 MB)."
+    "quote.bad_image": "A kép formátuma nem megfelelő (PNG/JPEG/WebP, max 2 MB).",
+    "quote.bad_agent": "A megadott üzletkötő nem található."
   },
   "inv": {
     "title": "Gépek",
@@ -1404,7 +1405,14 @@
     "qrLabelsEzplHint": "Natív Godex címkefájl (.ezp) az 51×25 mm-es VOID címkéhez — a GoLabel megnyitja és a nyomtatóra tölti, vagy raw-nyomtatással közvetlenül kiküldhető.",
     "qrLabelsEzpx": "GoLabel (EZPX)",
     "qrLabelsEzpxHint": "GoLabel projektfájl (.ezpx) a saját VOID-címke sablonotokkal: gyári szám vonalkód + X-Presso Coffee Kft. TULAJDONA — a G300 nyomtatóra beállítva. Több gépnél ZIP-ben, gépenként egy fájl.",
-    "customerOwnedShort": "ügyfél gépe"
+    "customerOwnedShort": "ügyfél gépe",
+    "normN": "Norma {n} (g/adag)",
+    "normPerCounterHint": "Norma számlálónként: hány gramm kávét használ egy adag az adott számlálón. 0 = nem használ kávét (pl. forró csoki) — a kg-ellenőrzés így pontos marad.",
+    "loc_partner": "Partnernél",
+    "loc_customer": "Ügyfélnél",
+    "loc_service": "Szervizben",
+    "loc_warehouse": "Belső raktár",
+    "loc_retired": "Selejtezve"
   },
   "wh": {
     "title": "Raktár",
@@ -1623,6 +1631,7 @@
     "guideTitle": "Nem tudja, melyik gépet válassza?",
     "guideSubtitle": "Kattintson ide — minden gépről leírtuk, mit tud és kiknek a legmegfelelőbb.",
     "chooseThis": "Ezt választom",
-    "chosen": "Kiválasztva"
+    "chosen": "Kiválasztva",
+    "agent": "Üzletkötő"
   }
 }

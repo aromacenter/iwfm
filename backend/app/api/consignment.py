@@ -1175,6 +1175,18 @@ async def create_settlement(
                             "barcode": asset.barcode},
                 )
             brewed = new_counter - prev_counter
+            # Számlálónkénti különbség a norma-súlyozott kg-ellenőrzéshez
+            # (a korábbi állások a gépen tárolt `counters` pillanatképből).
+            per_counter_diffs: list[float] | None = None
+            if (
+                m_in.new_counters
+                and isinstance(asset.counters, list)
+                and len(asset.counters) == len(m_in.new_counters)
+            ):
+                per_counter_diffs = [
+                    max(new_c - (asset.counters[i] or 0), 0)
+                    for i, new_c in enumerate(m_in.new_counters)
+                ]
             billed = max(brewed - m_in.service_portions, 0)
             # Termék (erősorrend): kérésbeli felülírás → a gép beállítása →
             # a partner egyetlen készlet-terméke.
@@ -1227,8 +1239,26 @@ async def create_settlement(
                 price_per_portion=unit_price,
                 amount_net=amount,
             ))
+            # Kg-keresztellenőrzés: számlálónkénti normával (g/adag) súlyozva —
+            # a 0 normájú számláló (pl. forró csoki) nem fogyaszt kávét.
+            cross_brewed = float(brewed)
+            norms = asset.norms if isinstance(asset.norms, list) else None
+            if (
+                per_counter_diffs is not None
+                and norms
+                and product.grams_per_portion
+            ):
+                grams = sum(
+                    diff * (
+                        norms[i]
+                        if i < len(norms) and norms[i] is not None
+                        else product.grams_per_portion
+                    )
+                    for i, diff in enumerate(per_counter_diffs)
+                )
+                cross_brewed = grams / product.grams_per_portion
             machine_billed[product.id] = machine_billed.get(product.id, 0.0) + billed
-            machine_brewed[product.id] = machine_brewed.get(product.id, 0.0) + brewed
+            machine_brewed[product.id] = machine_brewed.get(product.id, 0.0) + cross_brewed
             machine_amount[product.id] = machine_amount.get(product.id, 0.0) + amount
             old_counter = asset.counter
             asset.counter = new_counter
