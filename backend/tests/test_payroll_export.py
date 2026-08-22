@@ -107,7 +107,9 @@ async def test_csv_export_content(client, admin, manager):
     cells = row.split(";")
     assert cells[7] == "40.0"  # beosztott óra
     assert cells[8] == "8.0"  # ledolgozott óra
-    assert cells[9] == "2"  # szabadság nap
+    assert cells[9] == "Blokkolás"  # bérszámfejtés alapja (alapértelmezés)
+    assert cells[10] == "8.0"  # fizetendő óra = ledolgozott (blokkolás)
+    assert cells[11] == "2"  # szabadság nap
 
 
 async def test_xlsx_export_content(client, admin, manager):

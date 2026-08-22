@@ -45,6 +45,7 @@ const EMPTY_FORM = {
   weekly_hours: 40,
   wage_type: "monthly",
   annual_leave_days: 20,
+  payroll_source: "attendance" as "attendance" | "schedule",
   tax_id: "",
   taj: "",
   bank_account: "",
@@ -170,6 +171,7 @@ export default function DolgozokPage() {
       weekly_hours: emp.weekly_hours,
       wage_type: emp.wage_type,
       annual_leave_days: emp.annual_leave_days,
+      payroll_source: emp.payroll_source ?? "attendance",
     });
     setSkillIds((emp.skills ?? []).map((s) => s.id));
     setArchive(emp.status === "inactive");
@@ -212,6 +214,7 @@ export default function DolgozokPage() {
           weekly_hours: form.weekly_hours,
           wage_type: form.wage_type,
           annual_leave_days: form.annual_leave_days,
+          payroll_source: form.payroll_source,
           skill_ids: skillIds,
           role: form.role,
           availability: availToApi(avail),
@@ -590,6 +593,17 @@ export default function DolgozokPage() {
                   onChange={(e) => set("annual_leave_days", Number(e.target.value))}
                   className={inputCls}
                 />
+              </Field>
+              <Field label={t("emp.payrollSource")}>
+                <select
+                  value={form.payroll_source}
+                  onChange={(e) => set("payroll_source", e.target.value as "attendance" | "schedule")}
+                  className={inputCls}
+                >
+                  <option value="attendance">{t("emp.payrollAttendance")}</option>
+                  <option value="schedule">{t("emp.payrollSchedule")}</option>
+                </select>
+                <span className="mt-1 block text-xs text-slate-400">{t("emp.payrollSourceHint")}</span>
               </Field>
             </fieldset>
 

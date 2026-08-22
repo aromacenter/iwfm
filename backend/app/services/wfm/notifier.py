@@ -152,8 +152,16 @@ async def build_daily_digest(db: AsyncSession) -> str:
 async def run_pending_notifications(db: AsyncSession) -> dict:
     """Egy ellenőrzési kör: ha esedékes, kiküldi a napit és/vagy a heti
     mentést. Visszaadja, mi ment ki (teszthez is)."""
+    # Nyitva felejtett jelenlétek automatikus zárása a munkaidő végén —
+    # SMTP-beállítástól függetlenül fut minden körben.
+    from app.services.wfm.timeclock_auto import auto_clockout
+
+    closed = await auto_clockout(db)
+    if closed:
+        await db.commit()
+
     row = await get_or_create_settings(db)
-    result = {"daily": False, "backup": False}
+    result = {"daily": False, "backup": False, "auto_clockout": closed}
     recipients = _recipients(row)
     if not recipients:
         return result

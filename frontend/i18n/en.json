@@ -887,7 +887,11 @@
     "contractorCheckbox": "Subcontractor (invoicing)",
     "contractorHint": "Not employed: only name, address, contact, tax number (if invoiceable) and bank account are needed. Switchable to employee and back any time.",
     "contractorBadge": "Subcontractor",
-    "companyTaxNumber": "Tax number (if invoiceable)"
+    "companyTaxNumber": "Tax number (if invoiceable)",
+    "payrollSource": "Payroll basis",
+    "payrollAttendance": "By clock-in (attendance)",
+    "payrollSchedule": "By schedule",
+    "payrollSourceHint": "Payable hours in the export come from this. With attendance: auto clock-in on the day's first app login, auto clock-out at end of working time (shift end → availability end → 20:00) if they forgot."
   },
   "sched": {
     "title": "Schedule",

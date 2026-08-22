@@ -136,6 +136,11 @@ class Employee(Base):
     weekly_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
     wage_type: Mapped[str] = mapped_column(String(16), nullable=False, default="monthly")
     annual_leave_days: Mapped[int] = mapped_column(Integer, nullable=False, default=20)  # Mt. 116.§ alapszabadság
+    # Bérszámfejtés alapja: 'attendance' = blokkolás (jelenlét) szerint,
+    # 'schedule' = a közzétett beosztás szerint — dolgozónként kapcsolható.
+    payroll_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="attendance"
+    )
 
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     # Alvállalkozó (számlás) — nem munkaviszonyos: csak név/cím/elérhetőség/

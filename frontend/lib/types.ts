@@ -36,6 +36,8 @@ export interface EmployeeOut {
   // Alvállalkozó (számlás) — bármikor átváltható alkalmazottira és vissza
   is_contractor: boolean;
   company_tax_number: string | null;
+  // Bérszámfejtés alapja: blokkolás (attendance) vagy beosztás (schedule)
+  payroll_source: "attendance" | "schedule";
   // Heti elérhetőség: {"0": ["08:00","16:00"], …} (0=hétfő … 6=vasárnap)
   availability: Record<string, [string, string]> | null;
   notes: string | null;

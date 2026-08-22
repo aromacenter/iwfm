@@ -144,6 +144,11 @@ async def login(
         raise HTTPException(status_code=401, detail={"code": "auth.bad_credentials"})
 
     _failed_logins.pop(throttle_key, None)
+    # Aznapi első belépéskor automatikus jelenlét-nyitás (látszik, mikor
+    # kezdett) — a kiléptetést a háttérhurok végzi a munkaidő végén.
+    from app.services.wfm.timeclock_auto import auto_clockin_on_login
+
+    await auto_clockin_on_login(db, user.id)
     await record_audit(
         db, actor=user, action="auth.login", entity_type="user",
         entity_id=str(user.id), request=request,

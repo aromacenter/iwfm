@@ -62,6 +62,15 @@ class EmployeeBase(BaseModel):
     # bármikor átváltható alkalmazottira és vissza.
     is_contractor: bool = False
     company_tax_number: str | None = Field(default=None, max_length=32)
+    # Bérszámfejtés alapja: blokkolás (attendance) vagy beosztás (schedule).
+    payroll_source: str = "attendance"
+
+    @field_validator("payroll_source")
+    @classmethod
+    def _payroll_source(cls, v: str) -> str:
+        if v not in ("attendance", "schedule"):
+            raise ValueError("payroll_source must be attendance|schedule")
+        return v
     # Heti elérhetőség a beosztás-generáláshoz: {"0": ["08:00","16:00"], …}
     # (0=hétfő … 6=vasárnap). None/üres = a generálás kihagyja a dolgozót.
     availability: dict[str, list[str]] | None = None
@@ -161,7 +170,15 @@ class EmployeeUpdate(BaseModel):
     annual_leave_days: int | None = Field(default=None, ge=0, le=60)
     is_contractor: bool | None = None
     company_tax_number: str | None = None
+    payroll_source: str | None = None
     availability: dict[str, list[str]] | None = None
+
+    @field_validator("payroll_source")
+    @classmethod
+    def _payroll_source(cls, v: str | None) -> str | None:
+        if v is not None and v not in ("attendance", "schedule"):
+            raise ValueError("payroll_source must be attendance|schedule")
+        return v
     notes: str | None = None
     status: str | None = None
     tax_id: str | None = None
@@ -302,6 +319,7 @@ def _employee_out(emp: Employee, email: str | None = None, role: str | None = No
         annual_leave_days=emp.annual_leave_days,
         is_contractor=emp.is_contractor,
         company_tax_number=emp.company_tax_number,
+        payroll_source=emp.payroll_source or "attendance",
         availability=emp.availability,
         notes=emp.notes,
         tax_id_masked=emp.tax_id_masked,

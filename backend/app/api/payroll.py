@@ -116,6 +116,7 @@ async def export_payroll(
                 weekly_hours=emp.weekly_hours,
                 scheduled_hours=scheduled,
                 worked_hours=worked,
+                payroll_source=emp.payroll_source or "attendance",
                 annual_leave_days=leave_days["annual"],
                 sick_days=leave_days["sick"],
                 unpaid_days=leave_days["unpaid"],

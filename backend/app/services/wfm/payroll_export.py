@@ -32,6 +32,8 @@ HEADERS = [
     "Heti óraszám",
     "Beosztott óra",
     "Ledolgozott óra",
+    "Bérszámfejtés alapja",
+    "Fizetendő óra",
     "Szabadság (nap)",
     "Betegszabadság (nap)",
     "Fizetés nélküli (nap)",
@@ -50,6 +52,8 @@ class PayrollRow:
     weekly_hours: int
     scheduled_hours: float
     worked_hours: float
+    # 'attendance' = blokkolás szerint fizetünk, 'schedule' = beosztás szerint
+    payroll_source: str
     annual_leave_days: int
     sick_days: int
     unpaid_days: int
@@ -66,6 +70,12 @@ class PayrollRow:
             self.weekly_hours,
             round(self.scheduled_hours, 2),
             round(self.worked_hours, 2),
+            "Beosztás" if self.payroll_source == "schedule" else "Blokkolás",
+            round(
+                self.scheduled_hours if self.payroll_source == "schedule"
+                else self.worked_hours,
+                2,
+            ),
             self.annual_leave_days,
             self.sick_days,
             self.unpaid_days,

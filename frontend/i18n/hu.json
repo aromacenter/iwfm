@@ -887,7 +887,11 @@
     "contractorCheckbox": "Alvállalkozó (számlás)",
     "contractorHint": "Nem munkaviszonyos: csak név, cím, elérhetőség, adószám (ha számlaképes) és bankszámla kell. Bármikor átváltható alkalmazottira és vissza.",
     "contractorBadge": "Alvállalkozó",
-    "companyTaxNumber": "Adószám (ha számlaképes)"
+    "companyTaxNumber": "Adószám (ha számlaképes)",
+    "payrollSource": "Bérszámfejtés alapja",
+    "payrollAttendance": "Blokkolás (jelenlét) szerint",
+    "payrollSchedule": "Beosztás szerint",
+    "payrollSourceHint": "A bérexportban a Fizetendő óra ebből számolódik. Blokkolásnál: aznapi első app-belépéskor automatikus beléptetés, a munkaidő végén (műszak vége → elérhetőség vége → 20:00) automatikus kiléptetés, ha elfelejtett kilépni."
   },
   "sched": {
     "title": "Beosztás",
