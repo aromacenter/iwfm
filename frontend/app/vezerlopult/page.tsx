@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import PartnerInfo from "@/components/PartnerInfo";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -62,11 +63,29 @@ interface PartnerPerformance {
   bottom: PerfRow[];
 }
 
+interface ReceivablesStats {
+  total: number;
+  overdue_total: number;
+  aging: { b0_30: number; b31_60: number; b61_90: number; b90_plus: number };
+  debtor_count: number;
+  top_debtors: {
+    partner_id: string;
+    partner_name: string;
+    remaining: number;
+    items: number;
+    oldest_at: string;
+    oldest_days: number;
+    overdue_items: number;
+  }[];
+}
+
 export default function VezerlopultPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [stats, setStats] = useState<ConsStats | null>(null);
   const [performance, setPerformance] = useState<PartnerPerformance | null>(null);
   const [coverage, setCoverage] = useState<CoverageRow[]>([]);
+  const [receivables, setReceivables] = useState<ReceivablesStats | null>(null);
+  const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const { t, lang } = useT();
   const { toast } = useUI();
 
@@ -75,6 +94,7 @@ export default function VezerlopultPage() {
     api.get<ConsStats>("/api/dashboard/consignment-stats").then(setStats).catch(() => {});
     api.get<PartnerPerformance>("/api/dashboard/partner-performance").then(setPerformance).catch(() => {});
     api.get<CoverageRow[]>("/api/dashboard/coverage").then(setCoverage).catch(() => {});
+    api.get<ReceivablesStats>("/api/dashboard/receivables-stats").then(setReceivables).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
@@ -290,6 +310,78 @@ export default function VezerlopultPage() {
             </Link>
           </div>
 
+          {/* Kintlévőség-statisztika: ki, mennyivel, mióta tartozik (korosítva) */}
+          {receivables && receivables.total > 0 && (
+            <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <h3 className="font-semibold text-rose-800">💸 {t("dash.recvTitle")}</h3>
+                <span className="text-sm text-slate-500">
+                  {t("dash.recvSummary", {
+                    total: ft(Math.round(receivables.total)),
+                    count: receivables.debtor_count,
+                  })}
+                </span>
+                {receivables.overdue_total > 0 && (
+                  <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
+                    {t("dash.recvOverdue", { amount: ft(Math.round(receivables.overdue_total)) })}
+                  </span>
+                )}
+              </div>
+              <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {([
+                  ["b0_30", t("dash.recvAge0")],
+                  ["b31_60", t("dash.recvAge31")],
+                  ["b61_90", t("dash.recvAge61")],
+                  ["b90_plus", t("dash.recvAge90")],
+                ] as const).map(([key, label], i) => (
+                  <div key={key} className={`rounded-xl p-3 ${["bg-amber-50", "bg-orange-50", "bg-rose-50", "bg-rose-100"][i]}`}>
+                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className="mt-0.5 font-bold tabular-nums">{ft(Math.round(receivables.aging[key]))}</p>
+                  </div>
+                ))}
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-400">
+                    <th className="py-1.5 pr-3">{t("cons.partner")}</th>
+                    <th className="py-1.5 pr-3 text-right">{t("dash.recvAmount")}</th>
+                    <th className="py-1.5 pr-3 text-right">{t("dash.recvItems")}</th>
+                    <th className="py-1.5">{t("dash.recvSince")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receivables.top_debtors.map((d) => (
+                    <tr key={d.partner_id} className="border-t border-slate-100">
+                      <td className="py-1.5 pr-3">
+                        <button
+                          onClick={() => setInfoPartner(d.partner_id)}
+                          className="text-left font-medium text-indigo-700 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-900"
+                        >
+                          {d.partner_name}
+                        </button>
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-semibold text-rose-700 tabular-nums">
+                        {ft(Math.round(d.remaining))}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right text-slate-500">{d.items}</td>
+                      <td className="py-1.5 text-slate-500">
+                        {d.oldest_at}
+                        <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold ${d.oldest_days > 60 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"}`}>
+                          {t("dash.recvDays", { days: d.oldest_days })}
+                        </span>
+                        {d.overdue_items > 0 && (
+                          <span className="ml-1 rounded bg-rose-200 px-1.5 py-0.5 text-[11px] font-semibold text-rose-800">
+                            {t("cons.debtOverdue")}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
               <h3 className="mb-4 font-semibold">{t("dash.monthlyRevenue")}</h3>
@@ -437,6 +529,7 @@ export default function VezerlopultPage() {
           </div>
         </>
       )}
+      <PartnerInfo partnerId={infoPartner} onClose={() => setInfoPartner(null)} />
     </AppShell>
   );
 }

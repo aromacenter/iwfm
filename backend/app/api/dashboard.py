@@ -372,3 +372,71 @@ async def dashboard(
         },
         "active_employees": active_employees,
     }
+
+
+@router.get("/receivables-stats")
+async def receivables_stats(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("dashboard")),
+):
+    """Kintlévőség-statisztika a vezérlőpultra: ki, mennyivel, mióta tartozik.
+
+    A ki nem egyenlített elszámolásokból (bruttó − fizetett > 0) épül — a
+    Billingó fizetés-szinkron (sync-payment) után ez a friss állapot.
+    Korosítás a bizonylat kelte szerint: 0–30 / 31–60 / 61–90 / 90+ nap."""
+    today = date.today()
+    rows = (
+        await db.execute(
+            select(Settlement, Partner.name)
+            .join(Partner, Partner.id == Settlement.partner_id)
+            .order_by(Settlement.created_at)
+        )
+    ).all()
+
+    aging = {"b0_30": 0.0, "b31_60": 0.0, "b61_90": 0.0, "b90_plus": 0.0}
+    by_partner: dict = {}
+    total = 0.0
+    overdue_total = 0.0
+    for s, pname in rows:
+        paid = s.paid_amount if s.paid_amount is not None else s.total_gross
+        remaining = round(s.total_gross - paid, 2)
+        if remaining <= 0.5:
+            continue
+        total += remaining
+        days = (today - s.created_at.date()).days
+        if days <= 30:
+            aging["b0_30"] += remaining
+        elif days <= 60:
+            aging["b31_60"] += remaining
+        elif days <= 90:
+            aging["b61_90"] += remaining
+        else:
+            aging["b90_plus"] += remaining
+        if s.due_date and s.due_date < today:
+            overdue_total += remaining
+        entry = by_partner.setdefault(
+            s.partner_id,
+            {"partner_id": str(s.partner_id), "partner_name": pname,
+             "remaining": 0.0, "items": 0, "oldest_at": s.created_at.date(),
+             "overdue_items": 0},
+        )
+        entry["remaining"] += remaining
+        entry["items"] += 1
+        if s.created_at.date() < entry["oldest_at"]:
+            entry["oldest_at"] = s.created_at.date()
+        if s.due_date and s.due_date < today:
+            entry["overdue_items"] += 1
+
+    debtors = sorted(by_partner.values(), key=lambda x: -x["remaining"])
+    for d in debtors:
+        d["remaining"] = round(d["remaining"], 2)
+        d["oldest_days"] = (today - d["oldest_at"]).days
+        d["oldest_at"] = d["oldest_at"].isoformat()
+
+    return {
+        "total": round(total, 2),
+        "overdue_total": round(overdue_total, 2),
+        "aging": {k: round(v, 2) for k, v in aging.items()},
+        "debtor_count": len(debtors),
+        "top_debtors": debtors[:15],
+    }

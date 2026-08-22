@@ -443,6 +443,100 @@ async def delete_partner_stock(
     return {"ok": True}
 
 
+class StockReturnItem(BaseModel):
+    product_id: str
+    quantity: float = Field(gt=0, le=100_000)
+
+
+class StockReturnBody(BaseModel):
+    target_warehouse_id: str  # a képviselő autója / raktár
+    items: list[StockReturnItem] | None = None
+    all: bool = False  # True: a partner TELJES készletének visszavétele
+    note: str | None = Field(default=None, max_length=512)
+
+
+@stock_router.post("/{partner_id}/stock/return")
+async def return_partner_stock(
+    partner_id: str,
+    body: StockReturnBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Ki nem fizetett termékek visszavétele a partnertől a képviselő
+    raktárába (autójába) — szerződés-lezáráskor a teljes készlet (all=true),
+    egyébként (pl. kávéváltás) kiválasztott termékek/mennyiségek.
+
+    A partner-készlet csökken (return mozgás), a cél-raktár készlete nő
+    (receive mozgás, ellenoldal: a partner) — a lánc követhető marad."""
+    from app.api.warehouse import _get_warehouse_or_404, warehouse_receive_return
+
+    partner = await _get_partner_or_404(db, partner_id)
+    warehouse = await _get_warehouse_or_404(db, body.target_warehouse_id)
+
+    stock_rows = (
+        await db.execute(
+            select(PartnerStock, Product)
+            .join(Product, Product.id == PartnerStock.product_id)
+            .where(PartnerStock.partner_id == partner.id)
+        )
+    ).all()
+    by_pid = {product.id: (stock, product) for stock, product in stock_rows}
+
+    worklist: list[tuple[PartnerStock, Product, float]] = []
+    if body.all:
+        for stock, product in stock_rows:
+            if stock.quantity > 1e-9:
+                worklist.append((stock, product, stock.quantity))
+    else:
+        if not body.items:
+            raise HTTPException(status_code=422, detail={"code": "stock.return_empty"})
+        for item in body.items:
+            try:
+                pid = uuid.UUID(item.product_id)
+            except ValueError:
+                raise HTTPException(status_code=404, detail={"code": "product.not_found"})
+            if pid not in by_pid:
+                raise HTTPException(status_code=404, detail={"code": "stock.not_found"})
+            stock, product = by_pid[pid]
+            if item.quantity > stock.quantity + 1e-9:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "stock.return_too_much",
+                            "product": product.name, "available": stock.quantity},
+                )
+            worklist.append((stock, product, min(item.quantity, stock.quantity)))
+
+    if not worklist:
+        raise HTTPException(status_code=422, detail={"code": "stock.return_empty"})
+
+    returned = []
+    for stock, product, qty in worklist:
+        stock.quantity -= qty
+        db.add(StockMovement(
+            partner_id=partner.id, product_id=product.id, action="return",
+            quantity_delta=-qty,
+            note=body.note or f"Visszavét → {warehouse.name}",
+            actor_user_id=actor.id,
+        ))
+        await warehouse_receive_return(
+            db, warehouse_id=warehouse.id, product=product, quantity=qty,
+            partner_id=partner.id, actor_id=actor.id,
+        )
+        returned.append({"product_name": product.name, "quantity": round(qty, 2),
+                         "unit": product.unit})
+
+    await record_audit(
+        db, actor=actor, action="stock.return", entity_type="partner_stock",
+        entity_id=str(partner.id),
+        detail={"warehouse": warehouse.name, "all": body.all,
+                "items": [{"p": r["product_name"], "q": r["quantity"]} for r in returned]},
+        request=request,
+    )
+    await db.commit()
+    return {"ok": True, "returned": returned, "warehouse_name": warehouse.name}
+
+
 class StockMinBody(BaseModel):
     product_id: str
     min_quantity: float | None = Field(default=None, ge=0)  # None = globális küszöb
@@ -497,9 +591,22 @@ class SettlementCtxMachine(BaseModel):
     product_name: str | None
 
 
+class DebtItemOut(BaseModel):
+    """Egy kifizetetlen elszámolás — a tartozás tételes bontásához."""
+
+    settlement_id: str
+    created_at: datetime
+    total_gross: float
+    paid_amount: float
+    remaining: float
+    due_date: date | None
+    invoiced: bool
+
+
 class SettlementContextOut(BaseModel):
     machines: list[SettlementCtxMachine]
     debt: float  # nyitott egyenleg (Σ bruttó − fizetett)
+    debt_items: list[DebtItemOut] = []  # melyik elszámolásokból, dátumokkal
     active_contracts: int
     last_visit: datetime | None
     single_product_id: str | None  # ha a partnernek pontosan 1 készlet-terméke van
@@ -598,9 +705,30 @@ async def settlement_context(
             )
         ).scalar_one()
 
+    # Tartozás tételesen: mely elszámolásokból áll, dátummal és határidővel —
+    # a képviselő a helyszínen látja, mit kell behajtania.
+    unpaid = (
+        await db.execute(
+            select(Settlement)
+            .where(Settlement.partner_id == partner.id)
+            .order_by(Settlement.created_at.desc())
+        )
+    ).scalars().all()
+    debt_items = []
+    for s in unpaid:
+        paid = s.paid_amount if s.paid_amount is not None else s.total_gross
+        remaining = _money(s.total_gross - paid)
+        if remaining > 0.5:
+            debt_items.append(DebtItemOut(
+                settlement_id=str(s.id), created_at=s.created_at,
+                total_gross=s.total_gross, paid_amount=_money(paid),
+                remaining=remaining, due_date=s.due_date, invoiced=s.invoiced,
+            ))
+
     return SettlementContextOut(
         machines=machines,
         debt=await _partner_debt(db, partner.id),
+        debt_items=debt_items,
         active_contracts=contracts,
         last_visit=last_visit,
         single_product_id=single_pid,

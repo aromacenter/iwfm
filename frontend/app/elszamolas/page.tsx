@@ -130,9 +130,20 @@ interface CtxMachine {
   product_name: string | null;
 }
 
+interface DebtItem {
+  settlement_id: string;
+  created_at: string;
+  total_gross: number;
+  paid_amount: number;
+  remaining: number;
+  due_date: string | null;
+  invoiced: boolean;
+}
+
 interface SettlementContext {
   machines: CtxMachine[];
   debt: number;
+  debt_items: DebtItem[];
   active_contracts: number;
   last_visit: string | null;
   single_product_id: string | null;
@@ -223,6 +234,10 @@ export default function ElszamolasPage() {
   const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const [companyFilter, setCompanyFilter] = useState("");
   const [replenish, setReplenish] = useState<{ product_id: string; quantity: string; unit_cost: string; source_warehouse_id: string } | null>(null);
+  const [showDebt, setShowDebt] = useState(false);
+  // Készlet-visszavét a partnertől raktárba/autóba: null = zárva;
+  // product_id "" = TELJES készlet (szerződés-lezárás).
+  const [stockReturn, setStockReturn] = useState<{ product_id: string; quantity: string; warehouse_id: string } | null>(null);
   const [srcWarehouses, setSrcWarehouses] = useState<{ id: string; name: string; kind: string; is_active: boolean }[]>([]);
   const [due, setDue] = useState<DuePartner[]>([]);
   const [showDue, setShowDue] = useState(true);
@@ -939,6 +954,50 @@ export default function ElszamolasPage() {
     }
   }
 
+  // Készlet-visszavét a partnertől a képviselő raktárába/autójába:
+  // product_id "" = a TELJES készlet (szerződés-lezárás), különben egy termék.
+  async function doStockReturn() {
+    if (!stockReturn || !stockReturn.warehouse_id) return;
+    const isAll = stockReturn.product_id === "";
+    if (isAll) {
+      const whName = srcWarehouses.find((w) => w.id === stockReturn.warehouse_id)?.name ?? "?";
+      if (!(await confirm(t("cons.returnAllConfirm", { warehouse: whName })))) return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.post<{ returned: { product_name: string; quantity: number; unit: string }[]; warehouse_name: string }>(
+        `/api/partners/${partnerId}/stock/return`,
+        isAll
+          ? { target_warehouse_id: stockReturn.warehouse_id, all: true }
+          : {
+              target_warehouse_id: stockReturn.warehouse_id,
+              items: [{ product_id: stockReturn.product_id, quantity: Number(stockReturn.quantity) }],
+            }
+      );
+      toast(
+        t("cons.returnDone", {
+          items: res.returned.map((r) => `${r.product_name}: ${r.quantity} ${r.unit}`).join(", "),
+          warehouse: res.warehouse_name,
+        }),
+        "success"
+      );
+      setStockReturn(null);
+      loadStock();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openStockReturn(productId: string, qty?: number) {
+    setStockReturn({
+      product_id: productId,
+      quantity: qty != null ? String(qty) : "",
+      warehouse_id: srcWarehouses.find((w) => w.kind === "van")?.id ?? srcWarehouses[0]?.id ?? "",
+    });
+  }
+
   // Partner kiválasztásakor az elszámolás-munkaterület azonnal fókuszba kerül:
   // a lista-panelek (riasztás/rendelés/esedékes) eltűnnek, a nézet felugrik.
   useEffect(() => {
@@ -970,6 +1029,15 @@ export default function ElszamolasPage() {
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
           >
             {t("cons.replenish")}
+          </button>
+        )}
+        {partnerId && stock.length > 0 && (
+          <button
+            onClick={() => openStockReturn("")}
+            title={t("cons.returnBtnHint")}
+            className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm text-amber-700 hover:bg-amber-50"
+          >
+            ↩ {t("cons.returnBtn")}
           </button>
         )}
         {partnerId && canPrices && (
@@ -1262,9 +1330,18 @@ export default function ElszamolasPage() {
           </span>
           <span className="text-slate-500">
             {t("cons.debt")}:{" "}
-            <span className={`font-semibold ${ctx.debt > 0.5 ? "text-rose-600" : "text-emerald-600"}`}>
-              {ft(Math.round(ctx.debt))}
-            </span>
+            {ctx.debt > 0.5 ? (
+              <button
+                type="button"
+                onClick={() => setShowDebt((v) => !v)}
+                title={t("cons.debtDetailHint")}
+                className="font-semibold text-rose-600 underline decoration-rose-300 underline-offset-2 hover:text-rose-800"
+              >
+                {ft(Math.round(ctx.debt))} {showDebt ? "▲" : "▼"}
+              </button>
+            ) : (
+              <span className="font-semibold text-emerald-600">{ft(Math.round(ctx.debt))}</span>
+            )}
           </span>
           <button
             type="button"
@@ -1273,6 +1350,42 @@ export default function ElszamolasPage() {
           >
             🚚 {t("delivery.new")}
           </button>
+        </div>
+      )}
+
+      {/* Tartozás tételesen: melyik elszámolásból, mikor, mennyi maradt */}
+      {partnerId && ctx && showDebt && ctx.debt_items.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm shadow-sm">
+          <div className="mb-1.5 font-semibold text-rose-800">{t("cons.debtDetailTitle")}</div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left uppercase text-rose-400">
+                <th className="py-1 pr-3">{t("cons.debtDate")}</th>
+                <th className="py-1 pr-3 text-right">{t("cons.totalGross")}</th>
+                <th className="py-1 pr-3 text-right">{t("cons.paid")}</th>
+                <th className="py-1 pr-3 text-right">{t("cons.debtRemaining")}</th>
+                <th className="py-1">{t("cons.debtDue")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ctx.debt_items.map((d) => (
+                <tr key={d.settlement_id} className="border-t border-rose-100 text-rose-900">
+                  <td className="py-1 pr-3">{fmt(d.created_at)}</td>
+                  <td className="py-1 pr-3 text-right">{ft(Math.round(d.total_gross))}</td>
+                  <td className="py-1 pr-3 text-right">{ft(Math.round(d.paid_amount))}</td>
+                  <td className="py-1 pr-3 text-right font-semibold">{ft(Math.round(d.remaining))}</td>
+                  <td className="py-1">
+                    {d.due_date ?? "—"}
+                    {d.due_date && new Date(d.due_date) < new Date() && (
+                      <span className="ml-1 rounded bg-rose-200 px-1 py-0.5 text-[10px] font-semibold">
+                        {t("cons.debtOverdue")}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -1485,6 +1598,15 @@ export default function ElszamolasPage() {
                   </td>
                   <td className="px-4 py-3">
                     {s.quantity} {s.unit}
+                    {s.quantity > 0 && !extraProducts.includes(s.product_id) && (
+                      <button
+                        onClick={() => openStockReturn(s.product_id, s.quantity)}
+                        title={t("cons.returnRowHint")}
+                        className="ml-2 rounded border border-amber-300 px-1.5 py-0.5 text-xs leading-none text-amber-700 hover:bg-amber-50"
+                      >
+                        ↩
+                      </button>
+                    )}
                     <button
                       onClick={() => setStockMin(s)}
                       title={t("cons.minStockHint")}
@@ -2095,6 +2217,70 @@ export default function ElszamolasPage() {
               <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{busy ? t("common.saving") : t("common.save")}</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Készlet-visszavét modal: partnertől a képviselő raktárába/autójába */}
+      {stockReturn && (
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setStockReturn(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">↩ {t("cons.returnTitle")}</h2>
+            <p className="text-xs text-slate-500">{t("cons.returnHint")}</p>
+            <label className="block text-sm">
+              {t("cons.returnWhat")}
+              <SearchSelect
+                items={stock.filter((s) => s.quantity > 0).map((s) => ({
+                  id: s.product_id,
+                  label: `${s.product_name} (${s.quantity} ${s.unit})`,
+                }))}
+                value={stockReturn.product_id}
+                onChange={(id) => {
+                  const row = stock.find((s) => s.product_id === id);
+                  setStockReturn({
+                    ...stockReturn,
+                    product_id: id,
+                    quantity: row ? String(row.quantity) : "",
+                  });
+                }}
+                allowEmpty
+                emptyLabel={t("cons.returnAllOption")}
+                className="mt-1"
+              />
+            </label>
+            {stockReturn.product_id !== "" && (
+              <label className="block text-sm">
+                {t("cons.returnQty")}
+                <input
+                  type="number" min={0} step="0.01"
+                  value={stockReturn.quantity}
+                  onChange={(e) => setStockReturn({ ...stockReturn, quantity: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </label>
+            )}
+            <label className="block text-sm">
+              {t("cons.returnTarget")}
+              <SearchSelect
+                items={srcWarehouses.map((w) => ({
+                  id: w.id,
+                  label: `${w.kind === "van" ? "🚐" : "🏬"} ${w.name}`,
+                }))}
+                value={stockReturn.warehouse_id}
+                onChange={(id) => setStockReturn({ ...stockReturn, warehouse_id: id })}
+                className="mt-1"
+              />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setStockReturn(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button
+                onClick={doStockReturn}
+                disabled={busy || !stockReturn.warehouse_id || (stockReturn.product_id !== "" && !(Number(stockReturn.quantity) > 0))}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {busy ? t("common.saving") : t("cons.returnDo")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

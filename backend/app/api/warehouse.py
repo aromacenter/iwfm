@@ -109,6 +109,38 @@ async def warehouse_issue(
     ))
 
 
+async def warehouse_receive_return(
+    db: AsyncSession,
+    *,
+    warehouse_id: uuid.UUID,
+    product: Product,
+    quantity: float,
+    partner_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
+) -> None:
+    """Partnertől visszavett készlet bevételezése a raktárba (autóba).
+    Ha a termék még nincs a raktár választékában, a sor létrejön — a fizikai
+    áru megérkezett. A consignment stock/return hívja."""
+    stock = (
+        await db.execute(
+            select(WarehouseStock).where(
+                WarehouseStock.warehouse_id == warehouse_id,
+                WarehouseStock.product_id == product.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if stock is None:
+        stock = WarehouseStock(
+            warehouse_id=warehouse_id, product_id=product.id, quantity=0.0
+        )
+        db.add(stock)
+    stock.quantity += quantity
+    db.add(WarehouseMovement(
+        warehouse_id=warehouse_id, product_id=product.id, action="receive",
+        quantity_delta=quantity, ref_id=partner_id, actor_user_id=actor_id,
+    ))
+
+
 # ─── Raktárak ───────────────────────────────────────────────────────────────
 
 
