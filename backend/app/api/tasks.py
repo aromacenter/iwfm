@@ -195,7 +195,8 @@ async def _get_worksheet(db: AsyncSession, task_id: uuid.UUID) -> Worksheet | No
 
 
 async def _upsert_worksheet(
-    db: AsyncSession, task: Task, body: WorksheetBody, actor: User, request: Request
+    db: AsyncSession, task: Task, body: WorksheetBody, actor: User, request: Request,
+    preserve_prices: bool = False,
 ) -> Worksheet:
     ws = await _get_worksheet(db, task.id)
     created = ws is None
@@ -203,7 +204,19 @@ async def _upsert_worksheet(
         ws = Worksheet(task_id=task.id, serial=await _next_worksheet_serial(db), created_by=actor.id)
         db.add(ws)
     ws.work_description = body.work_description.strip()
-    ws.materials = [m.model_dump() for m in body.materials]
+    materials = [m.model_dump() for m in body.materials]
+    if preserve_prices and ws.external_service:
+        # Az ügyfél-árakat a KÉPVISELŐ állítja be — a dolgozói (szervizes)
+        # mentés nem írhatja felül/törölheti: név szerint átörökítjük.
+        old_prices = {
+            str(m.get("name", "")).strip().lower(): m.get("price_net")
+            for m in (ws.materials or [])
+            if m.get("price_net") is not None
+        }
+        for m in materials:
+            if m.get("price_net") is None:
+                m["price_net"] = old_prices.get(str(m.get("name", "")).strip().lower())
+    ws.materials = materials
     ws.hours_spent = body.hours_spent
     ws.client_name = (body.client_name or "").strip() or None
     ws.client_location = (body.client_location or "").strip() or None
@@ -857,9 +870,13 @@ async def my_upsert_worksheet(
     emp: Employee = Depends(get_own_employee),
     user: User = Depends(get_current_user),
 ):
-    """A dolgozó kitölti (vagy frissíti) a saját feladatának munkalapját."""
+    """A dolgozó kitölti (vagy frissíti) a saját feladatának munkalapját.
+    KSZ-munkalapon az ügyfél-árakat a képviselő kezeli — a dolgozói mentés
+    nem írja felül őket (preserve_prices)."""
     task = await _own_task_or_404(db, emp, task_id)
-    return _worksheet_out(await _upsert_worksheet(db, task, body, user, request))
+    return _worksheet_out(
+        await _upsert_worksheet(db, task, body, user, request, preserve_prices=True)
+    )
 
 
 @me_router.post("/{task_id}/status", response_model=TaskOut)

@@ -482,24 +482,12 @@ export default function FeladataimPage() {
                         title={t("myTasks.wsCostNet")}
                         className="flex-1 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1.5 text-sm"
                       />
-                      <input
-                        type="number" min={0}
-                        value={m.price_net ?? ""}
-                        onChange={(e) => {
-                          const next = [...ws.materials];
-                          next[i] = { ...m, price_net: e.target.value };
-                          setWs({ ...ws, materials: next });
-                        }}
-                        placeholder={t("myTasks.wsPriceNet")}
-                        title={t("myTasks.wsPriceNet")}
-                        className="flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-sm"
-                      />
                     </div>
                   )}
                 </div>
               ))}
               {wsTask?.worksheet_external && ws.materials.length > 0 && (
-                <p className="text-xs text-slate-400">{t("myTasks.wsExternalHint")}</p>
+                <p className="text-xs text-slate-400">{t("myTasks.wsExternalHint2")}</p>
               )}
             </div>
 

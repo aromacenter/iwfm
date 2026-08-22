@@ -211,6 +211,51 @@ export default function FeladatokPage() {
     }
   }
 
+  // KSZ-munkalap ügyfél-árainak szerkesztése — a képviselő állítja be, nem a
+  // szervizes; a -1-es ügyfél-példányra ezek az árak kerülnek.
+  interface WsData {
+    work_description: string;
+    materials: { name: string; qty: string; unit: string; cost_net: number | null; price_net: number | null }[];
+    hours_spent: number | null;
+    client_name: string | null;
+    client_location: string | null;
+  }
+  const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[] } | null>(null);
+
+  async function openPriceEdit(task: TaskOut) {
+    try {
+      const ws = await api.get<WsData>(`/api/tasks/${task.id}/worksheet`);
+      setPriceEdit({
+        task,
+        ws,
+        prices: (ws.materials ?? []).map((m) => (m.price_net != null ? String(m.price_net) : "")),
+      });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function savePrices() {
+    if (!priceEdit) return;
+    try {
+      await api.put(`/api/tasks/${priceEdit.task.id}/worksheet`, {
+        work_description: priceEdit.ws.work_description,
+        hours_spent: priceEdit.ws.hours_spent,
+        client_name: priceEdit.ws.client_name,
+        client_location: priceEdit.ws.client_location,
+        materials: priceEdit.ws.materials.map((m, i) => ({
+          name: m.name, qty: m.qty, unit: m.unit,
+          cost_net: m.cost_net,
+          price_net: priceEdit.prices[i] ? Number(priceEdit.prices[i]) : null,
+        })),
+      });
+      setPriceEdit(null);
+      toast(t("common.saved"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   // KSZ-munkalap ügyfél-példánya (-1): a mi szerviz-árainkkal, költségek nélkül
   async function downloadCustomerCopy(task: TaskOut) {
     try {
@@ -319,19 +364,37 @@ export default function FeladatokPage() {
               <div className="flex gap-2">
                 {task.worksheet_serial && (
                   <>
-                    <button
-                      onClick={() => downloadWorksheet(task)}
-                      className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
-                    >
-                      {task.worksheet_external ? t("tasks.worksheetPdfInternal") : t("tasks.worksheetPdf")}
-                    </button>
-                    {task.worksheet_external && (
+                    {/* KSZ: alapból az ÜGYFÉL példánya — a belső (költséges) külön gombra */}
+                    {task.worksheet_external ? (
+                      <>
+                        <button
+                          onClick={() => downloadCustomerCopy(task)}
+                          title={t("tasks.customerCopyTitle")}
+                          className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                        >
+                          {t("tasks.worksheetPdf")}
+                        </button>
+                        <button
+                          onClick={() => openPriceEdit(task)}
+                          title={t("tasks.priceEditHint")}
+                          className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                        >
+                          💰 {t("tasks.priceEdit")}
+                        </button>
+                        <button
+                          onClick={() => downloadWorksheet(task)}
+                          title={t("tasks.internalCopyHint")}
+                          className="rounded-lg border border-orange-300 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
+                        >
+                          {t("tasks.worksheetPdfInternal")}
+                        </button>
+                      </>
+                    ) : (
                       <button
-                        onClick={() => downloadCustomerCopy(task)}
-                        title={t("tasks.customerCopyTitle")}
-                        className="rounded-lg border border-orange-300 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
+                        onClick={() => downloadWorksheet(task)}
+                        className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
                       >
-                        {t("tasks.customerCopy")}
+                        {t("tasks.worksheetPdf")}
                       </button>
                     )}
                     <button
@@ -501,6 +564,71 @@ export default function FeladatokPage() {
               <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{t("tasks.assign")}</button>
             </div>
           </form>
+        </div>
+      )}
+      {/* KSZ ügyfél-árak szerkesztése (képviselő) */}
+      {priceEdit && (
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setPriceEdit(null); }} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+          <div className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">💰 {t("tasks.priceEditTitle")}</h2>
+            <p className="text-xs text-slate-500">
+              {priceEdit.task.worksheet_serial} · {t("tasks.priceEditHint")}
+            </p>
+            {!priceEdit.ws.work_description.trim() && (
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {t("tasks.priceEditNotFilled")}
+              </p>
+            )}
+            {priceEdit.ws.materials.length === 0 ? (
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {t("tasks.priceEditEmpty")}
+              </p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-400">
+                    <th className="py-1 pr-2">{t("myTasks.wsItemName")}</th>
+                    <th className="py-1 pr-2">{t("myTasks.wsQty")}</th>
+                    <th className="py-1 pr-2 text-right">{t("myTasks.wsCostNet")}</th>
+                    <th className="py-1 text-right">{t("myTasks.wsPriceNet")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceEdit.ws.materials.map((m, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="py-1.5 pr-2">{m.name}</td>
+                      <td className="py-1.5 pr-2 text-slate-500">{m.qty} {m.unit}</td>
+                      <td className="py-1.5 pr-2 text-right text-orange-700">
+                        {m.cost_net != null ? `${m.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
+                      </td>
+                      <td className="py-1.5 text-right">
+                        <input
+                          type="number" min={0}
+                          value={priceEdit.prices[i] ?? ""}
+                          onChange={(e) => {
+                            const next = [...priceEdit.prices];
+                            next[i] = e.target.value;
+                            setPriceEdit({ ...priceEdit, prices: next });
+                          }}
+                          className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setPriceEdit(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button
+                onClick={savePrices}
+                disabled={!priceEdit.ws.work_description.trim()}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
+              >
+                💾 {t("common.save")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </AppShell>
