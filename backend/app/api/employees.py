@@ -58,6 +58,10 @@ class EmployeeBase(BaseModel):
     weekly_hours: int = Field(default=40, ge=1, le=60)
     wage_type: str = "monthly"
     annual_leave_days: int = Field(default=20, ge=0, le=60)
+    # Alvállalkozó (számlás): csak név/cím/elérhetőség/adószám/bankszámla —
+    # bármikor átváltható alkalmazottira és vissza.
+    is_contractor: bool = False
+    company_tax_number: str | None = Field(default=None, max_length=32)
     # Heti elérhetőség a beosztás-generáláshoz: {"0": ["08:00","16:00"], …}
     # (0=hétfő … 6=vasárnap). None/üres = a generálás kihagyja a dolgozót.
     availability: dict[str, list[str]] | None = None
@@ -155,6 +159,8 @@ class EmployeeUpdate(BaseModel):
     weekly_hours: int | None = Field(default=None, ge=1, le=60)
     wage_type: str | None = None
     annual_leave_days: int | None = Field(default=None, ge=0, le=60)
+    is_contractor: bool | None = None
+    company_tax_number: str | None = None
     availability: dict[str, list[str]] | None = None
     notes: str | None = None
     status: str | None = None
@@ -294,6 +300,8 @@ def _employee_out(emp: Employee, email: str | None = None, role: str | None = No
         weekly_hours=emp.weekly_hours,
         wage_type=emp.wage_type,
         annual_leave_days=emp.annual_leave_days,
+        is_contractor=emp.is_contractor,
+        company_tax_number=emp.company_tax_number,
         availability=emp.availability,
         notes=emp.notes,
         tax_id_masked=emp.tax_id_masked,

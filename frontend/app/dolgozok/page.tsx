@@ -88,6 +88,10 @@ export default function DolgozokPage() {
   const [editing, setEditing] = useState<EmployeeOut | null>(null);
   const [archive, setArchive] = useState(false);
   const [termDate, setTermDate] = useState("");
+  // Alvállalkozó (számlás): csak név/cím/elérhetőség/adószám/bankszámla kell;
+  // bármikor átváltható alkalmazottira és vissza.
+  const [contractor, setContractor] = useState(false);
+  const [companyTax, setCompanyTax] = useState("");
   const [avail, setAvail] = useState<Record<string, AvailDay>>(emptyAvail());
   const [showArchived, setShowArchived] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -135,6 +139,8 @@ export default function DolgozokPage() {
     setSkillIds([]);
     setArchive(false);
     setTermDate("");
+    setContractor(false);
+    setCompanyTax("");
     setAvail(emptyAvail());
     setError(null);
     setShowForm(true);
@@ -168,6 +174,8 @@ export default function DolgozokPage() {
     setSkillIds((emp.skills ?? []).map((s) => s.id));
     setArchive(emp.status === "inactive");
     setTermDate(emp.termination_date ?? "");
+    setContractor(emp.is_contractor);
+    setCompanyTax(emp.company_tax_number ?? "");
     const av = emptyAvail();
     for (const [day, iv] of Object.entries(emp.availability ?? {})) {
       if (iv && av[day]) av[day] = { on: true, from: iv[0], to: iv[1] };
@@ -207,6 +215,8 @@ export default function DolgozokPage() {
           skill_ids: skillIds,
           role: form.role,
           availability: availToApi(avail),
+          is_contractor: contractor,
+          company_tax_number: contractor ? (companyTax.trim() || null) : null,
           // Munkaviszony megszüntetése: archivált (inactive) státusz + dátum;
           // visszavonva újra aktív, a dátum törlődik.
           status: archive ? "inactive" : "active",
@@ -221,6 +231,11 @@ export default function DolgozokPage() {
       } else {
         const created = await api.post<EmployeeOut & { generated_password?: string }>("/api/employees", {
           ...form,
+          // Alvállalkozónál a munkaügyi mezők nem látszanak — a kötelező
+          // hire_date a felvétel napja lesz.
+          hire_date: form.hire_date || new Date().toISOString().slice(0, 10),
+          is_contractor: contractor,
+          company_tax_number: contractor ? (companyTax.trim() || null) : null,
           availability: availToApi(avail),
           skill_ids: skillIds,
           birth_name: clean(form.birth_name),
@@ -343,6 +358,11 @@ export default function DolgozokPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium">
                       {emp.last_name} {emp.first_name}
+                      {emp.is_contractor && (
+                        <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-xs text-indigo-700">
+                          🧾 {t("emp.contractorBadge")}
+                        </span>
+                      )}
                       {emp.status === "inactive" && (
                         <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">
                           {t("emp.archivedBadge")}
@@ -440,6 +460,19 @@ export default function DolgozokPage() {
                 : t("emp.newTitle")}
             </h2>
 
+            <label className="flex items-start gap-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">
+              <input
+                type="checkbox"
+                checked={contractor}
+                onChange={(e) => setContractor(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                <span className="font-semibold">🧾 {t("emp.contractorCheckbox")}</span>
+                <span className="mt-0.5 block text-xs text-indigo-700">{t("emp.contractorHint")}</span>
+              </span>
+            </label>
+
             <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.personalSection")}</legend>
               <Field label={t("emp.lastName")}>
@@ -448,6 +481,8 @@ export default function DolgozokPage() {
               <Field label={t("emp.firstName")}>
                 <input required value={form.first_name} onChange={(e) => set("first_name", e.target.value)} className={inputCls} />
               </Field>
+              {!contractor && (
+              <>
               <Field label={t("emp.birthName")}>
                 <input value={form.birth_name} onChange={(e) => set("birth_name", e.target.value)} className={inputCls} />
               </Field>
@@ -463,40 +498,54 @@ export default function DolgozokPage() {
               <Field label={t("emp.citizenship")}>
                 <input value={form.citizenship} onChange={(e) => set("citizenship", e.target.value)} className={inputCls} />
               </Field>
+              </>
+              )}
               <Field label={t("emp.phone")}>
                 <input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+36 30 123 4567" className={inputCls} />
               </Field>
               <Field label={t("emp.address")}>
                 <input value={form.address} onChange={(e) => set("address", e.target.value)} className={inputCls} />
               </Field>
+              {!contractor && (
               <Field label={t("emp.residenceAddress")}>
                 <input value={form.residence_address} onChange={(e) => set("residence_address", e.target.value)} className={inputCls} />
               </Field>
+              )}
             </fieldset>
 
             <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.idsSection")}</legend>
-              <Field label={editing ? t("emp.taxIdLabelEdit") : t("emp.taxIdLabel")}>
-                <input value={form.tax_id} onChange={(e) => set("tax_id", e.target.value)} placeholder="8xxxxxxxxx" className={fieldCls("tax_id")} />
-                {fieldErrors.tax_id && <p className="mt-1 text-xs text-red-600">{fieldErrors.tax_id}</p>}
-              </Field>
-              <Field label={editing ? t("emp.tajLabelEdit") : t("emp.tajLabel")}>
-                <input value={form.taj} onChange={(e) => set("taj", e.target.value)} placeholder="xxx xxx xxx" className={fieldCls("taj")} />
-                {fieldErrors.taj && <p className="mt-1 text-xs text-red-600">{fieldErrors.taj}</p>}
-              </Field>
+              {contractor ? (
+                <Field label={t("emp.companyTaxNumber")}>
+                  <input value={companyTax} onChange={(e) => setCompanyTax(e.target.value)} placeholder="12345678-1-42" className={inputCls} />
+                </Field>
+              ) : (
+                <>
+                <Field label={editing ? t("emp.taxIdLabelEdit") : t("emp.taxIdLabel")}>
+                  <input value={form.tax_id} onChange={(e) => set("tax_id", e.target.value)} placeholder="8xxxxxxxxx" className={fieldCls("tax_id")} />
+                  {fieldErrors.tax_id && <p className="mt-1 text-xs text-red-600">{fieldErrors.tax_id}</p>}
+                </Field>
+                <Field label={editing ? t("emp.tajLabelEdit") : t("emp.tajLabel")}>
+                  <input value={form.taj} onChange={(e) => set("taj", e.target.value)} placeholder="xxx xxx xxx" className={fieldCls("taj")} />
+                  {fieldErrors.taj && <p className="mt-1 text-xs text-red-600">{fieldErrors.taj}</p>}
+                </Field>
+                </>
+              )}
               <Field label={editing ? t("emp.bankLabelEdit") : t("emp.bankLabel")}>
                 <input value={form.bank_account} onChange={(e) => set("bank_account", e.target.value)} placeholder="xxxxxxxx-xxxxxxxx" className={fieldCls("bank_account")} />
                 {fieldErrors.bank_account && <p className="mt-1 text-xs text-red-600">{fieldErrors.bank_account}</p>}
               </Field>
+              {!contractor && (
               <Field label={t("emp.wage")}>
                 <input value={form.wage_amount} onChange={(e) => set("wage_amount", e.target.value)} placeholder={t("emp.wagePlaceholder")} className={inputCls} />
               </Field>
+              )}
             </fieldset>
 
-            <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <fieldset className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${contractor ? "hidden" : ""}`}>
               <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.employmentSection")}</legend>
               <Field label={t("emp.hireDateLabel")}>
-                <input required type="date" value={form.hire_date} onChange={(e) => set("hire_date", e.target.value)} className={inputCls} />
+                <input required={!contractor} type="date" value={form.hire_date} onChange={(e) => set("hire_date", e.target.value)} className={inputCls} />
               </Field>
               <Field label={t("emp.jobTitleLabel")}>
                 <input value={form.job_title} onChange={(e) => set("job_title", e.target.value)} className={inputCls} />

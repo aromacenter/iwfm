@@ -138,6 +138,11 @@ class Employee(Base):
     annual_leave_days: Mapped[int] = mapped_column(Integer, nullable=False, default=20)  # Mt. 116.§ alapszabadság
 
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    # Alvállalkozó (számlás) — nem munkaviszonyos: csak név/cím/elérhetőség/
+    # adószám/bankszámla kell; bármikor átváltható alkalmazottira és vissza.
+    is_contractor: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Alvállalkozó adószáma (ha számlaképes) — nem titkosított, céges adat.
+    company_tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Heti elérhetőség a beosztás-generáláshoz: {"0": ["08:00","16:00"], …}
     # — kulcs a hét napja (0=hétfő … 6=vasárnap), érték [tól, ig]. None = nincs
     # megadva (a generálás kihagyja).

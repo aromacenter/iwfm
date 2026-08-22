@@ -384,7 +384,27 @@
     "discountAll": "Discounted",
     "nextCounter": "Next counter",
     "portionPrice": "Price/portion",
-    "priceOverrideHint": "Unit-price override for this settlement (empty = automatic price) — overrides are logged."
+    "priceOverrideHint": "Unit-price override for this settlement (empty = automatic price) — overrides are logged.",
+    "debtDetailHint": "Click for the breakdown: which settlements make up the debt.",
+    "debtDetailTitle": "Unpaid settlements",
+    "debtDate": "Date",
+    "totalGross": "Gross",
+    "paid": "Paid",
+    "debtRemaining": "Remaining",
+    "debtDue": "Due",
+    "debtOverdue": "OVERDUE",
+    "returnBtn": "Take back",
+    "returnBtnHint": "Return unpaid goods from the partner to the rep's warehouse/van (contract closure or coffee change).",
+    "returnTitle": "Stock return",
+    "returnHint": "The partner's stock decreases, the chosen warehouse (van) increases — logged on both sides.",
+    "returnWhat": "What are you taking back?",
+    "returnAllOption": "ENTIRE stock (contract closure)",
+    "returnQty": "Quantity",
+    "returnTarget": "Target warehouse (van)",
+    "returnDo": "↩ Take back",
+    "returnAllConfirm": "Take back the partner's ENTIRE stock to {warehouse}?",
+    "returnDone": "↩ Returned: {items} → {warehouse}",
+    "returnRowHint": "Return this product to a warehouse/van"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -771,7 +791,18 @@
     "draftWarning": "⚠️ {count} shifts still in draft — the schedule must be published at least 7 days before the week starts (Hungarian Labour Code 97.§ (4)).",
     "goToSchedule": "Go to schedule →",
     "noDrafts": "No drafts waiting to be published. Active employees: {count}.",
-    "editSchedule": "Edit schedule →"
+    "editSchedule": "Edit schedule →",
+    "recvTitle": "Receivables",
+    "recvSummary": "{total} total · {count} partners owe",
+    "recvOverdue": "Overdue: {amount}",
+    "recvAge0": "0–30 days",
+    "recvAge31": "31–60 days",
+    "recvAge61": "61–90 days",
+    "recvAge90": "90+ days",
+    "recvAmount": "Owed",
+    "recvItems": "Settlements",
+    "recvSince": "Oldest",
+    "recvDays": "{days} days"
   },
   "emp": {
     "title": "Employees",
@@ -852,7 +883,11 @@
     "day3": "Thursday",
     "day4": "Friday",
     "day5": "Saturday",
-    "day6": "Sunday"
+    "day6": "Sunday",
+    "contractorCheckbox": "Subcontractor (invoicing)",
+    "contractorHint": "Not employed: only name, address, contact, tax number (if invoiceable) and bank account are needed. Switchable to employee and back any time.",
+    "contractorBadge": "Subcontractor",
+    "companyTaxNumber": "Tax number (if invoiceable)"
   },
   "sched": {
     "title": "Schedule",
@@ -1014,7 +1049,13 @@
     "kindExternal": "External service",
     "worksheetPdfInternal": "📄 Internal PDF (costs)",
     "customerCopy": "👤 Customer copy (−1)",
-    "customerCopyTitle": "The −1 copy: our service prices, without internal costs — this is what the customer gets."
+    "customerCopyTitle": "The −1 copy: our service prices, without internal costs — this is what the customer gets.",
+    "priceEdit": "Customer prices",
+    "priceEditTitle": "Set customer prices",
+    "priceEditHint": "These prices appear on the customer's −1 worksheet copy — set by the rep, not the technician.",
+    "priceEditEmpty": "No items on the worksheet yet — the technician records them first.",
+    "priceEditNotFilled": "The worksheet is not filled in yet — prices can be saved once it is.",
+    "internalCopyHint": "Internal copy with the external shop's net costs — must not reach the customer."
   },
   "myTasks": {
     "title": "My tasks",
@@ -1057,7 +1098,8 @@
     "wsShareCard": "Share worksheet ({serial})",
     "wsCostNet": "Service net cost (Ft)",
     "wsPriceNet": "Customer price (Ft, net)",
-    "wsExternalHint": "Orange field: the external shop's net cost (internal). Green field: our customer price — appears on the customer's −1 copy."
+    "wsExternalHint": "Orange field: the external shop's net cost (internal). Green field: our customer price — appears on the customer's −1 copy.",
+    "wsExternalHint2": "Orange field: the external shop's confirmed net cost (internal). Customer prices are set by the rep on the Tasks page."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1353,7 +1395,9 @@
     "quote.machine_type_not_found": "Machine type not found.",
     "quote.cancelled": "This quote request has been cancelled.",
     "quote.bad_image": "Invalid image (PNG/JPEG/WebP, max 2 MB).",
-    "quote.bad_agent": "The selected sales rep was not found."
+    "quote.bad_agent": "The selected sales rep was not found.",
+    "stock.return_empty": "Nothing to take back — the partner's stock is empty.",
+    "stock.return_too_much": "The returned quantity exceeds the partner's stock."
   },
   "inv": {
     "title": "Machines",

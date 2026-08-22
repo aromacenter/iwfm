@@ -384,7 +384,27 @@
     "discountAll": "Kedvezményes",
     "nextCounter": "Következő számláló",
     "portionPrice": "Adagár",
-    "priceOverrideHint": "Egységár-átírás erre az elszámolásra (üresen az automatikus ár érvényes) — az átírás naplózódik."
+    "priceOverrideHint": "Egységár-átírás erre az elszámolásra (üresen az automatikus ár érvényes) — az átírás naplózódik.",
+    "debtDetailHint": "Kattints a tételes bontáshoz: melyik elszámolásokból áll a tartozás.",
+    "debtDetailTitle": "Kifizetetlen elszámolások",
+    "debtDate": "Kelt",
+    "totalGross": "Bruttó",
+    "paid": "Fizetve",
+    "debtRemaining": "Fennmaradó",
+    "debtDue": "Határidő",
+    "debtOverdue": "LEJÁRT",
+    "returnBtn": "Visszavét",
+    "returnBtnHint": "Ki nem fizetett termékek visszavétele a partnertől a képviselő raktárába/autójába (szerződés-lezárás vagy kávéváltás).",
+    "returnTitle": "Készlet-visszavét",
+    "returnHint": "A partner készlete csökken, a választott raktár (autó) készlete nő — a mozgás mindkét oldalon naplózódik.",
+    "returnWhat": "Mit veszel vissza?",
+    "returnAllOption": "TELJES készlet (szerződés-lezárás)",
+    "returnQty": "Mennyiség",
+    "returnTarget": "Cél-raktár (autó)",
+    "returnDo": "↩ Visszavét",
+    "returnAllConfirm": "Biztosan visszaveszed a partner TELJES készletét ide: {warehouse}?",
+    "returnDone": "↩ Visszavéve: {items} → {warehouse}",
+    "returnRowHint": "Ennek a terméknek a visszavétele raktárba/autóba"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -771,7 +791,18 @@
     "draftWarning": "⚠️ {count} műszak még piszkozatban — a beosztást legkésőbb 7 nappal a hét kezdete előtt közölni kell (Mt. 97.§ (4)).",
     "goToSchedule": "Ugrás a beosztáshoz →",
     "noDrafts": "Nincs közlésre váró piszkozat. Aktív dolgozók: {count}.",
-    "editSchedule": "Beosztás szerkesztése →"
+    "editSchedule": "Beosztás szerkesztése →",
+    "recvTitle": "Kintlévőségek",
+    "recvSummary": "{total} összesen · {count} partner tartozik",
+    "recvOverdue": "Lejárt: {amount}",
+    "recvAge0": "0–30 nap",
+    "recvAge31": "31–60 nap",
+    "recvAge61": "61–90 nap",
+    "recvAge90": "90+ nap",
+    "recvAmount": "Tartozás",
+    "recvItems": "Elszámolás",
+    "recvSince": "Legrégebbi",
+    "recvDays": "{days} napja"
   },
   "emp": {
     "title": "Dolgozók",
@@ -852,7 +883,11 @@
     "day3": "Csütörtök",
     "day4": "Péntek",
     "day5": "Szombat",
-    "day6": "Vasárnap"
+    "day6": "Vasárnap",
+    "contractorCheckbox": "Alvállalkozó (számlás)",
+    "contractorHint": "Nem munkaviszonyos: csak név, cím, elérhetőség, adószám (ha számlaképes) és bankszámla kell. Bármikor átváltható alkalmazottira és vissza.",
+    "contractorBadge": "Alvállalkozó",
+    "companyTaxNumber": "Adószám (ha számlaképes)"
   },
   "sched": {
     "title": "Beosztás",
@@ -1014,7 +1049,13 @@
     "kindExternal": "Külső szerviz",
     "worksheetPdfInternal": "📄 Belső PDF (költségek)",
     "customerCopy": "👤 Ügyfél-példány (−1)",
-    "customerCopyTitle": "A −1-es példány: a mi szerviz-árainkkal, a belső költségek nélkül — ezt kapja az ügyfél."
+    "customerCopyTitle": "A −1-es példány: a mi szerviz-árainkkal, a belső költségek nélkül — ezt kapja az ügyfél.",
+    "priceEdit": "Ügyfél-árak",
+    "priceEditTitle": "Ügyfél-árak beállítása",
+    "priceEditHint": "Ezek az árak kerülnek az ügyfél −1-es munkalap-példányára — a képviselő állítja be, nem a szervizes.",
+    "priceEditEmpty": "A munkalapon még nincsenek tételek — előbb a szervizes rögzíti őket.",
+    "priceEditNotFilled": "A munkalap még nincs kitöltve — az árak mentése a kitöltés után lehetséges.",
+    "internalCopyHint": "Belső példány a külső szerviz nettó költségeivel — nem kerülhet az ügyfélhez."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1057,7 +1098,8 @@
     "wsShareCard": "Munkalap megosztása ({serial})",
     "wsCostNet": "Szerviz nettó ktg. (Ft)",
     "wsPriceNet": "Ügyfél-ár (Ft, nettó)",
-    "wsExternalHint": "Narancs mező: a külső szerviz nettó költsége (belső adat). Zöld mező: a mi ügyfél-árunk — ez kerül az ügyfél −1-es példányára."
+    "wsExternalHint": "Narancs mező: a külső szerviz nettó költsége (belső adat). Zöld mező: a mi ügyfél-árunk — ez kerül az ügyfél −1-es példányára.",
+    "wsExternalHint2": "Narancs mező: a külső szerviz visszaigazolt nettó költsége (belső adat). Az ügyfél-árakat a képviselő állítja be a Feladatok oldalon."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1353,7 +1395,9 @@
     "quote.machine_type_not_found": "A géptípus nem található.",
     "quote.cancelled": "Ez az ajánlatkérés vissza lett vonva.",
     "quote.bad_image": "A kép formátuma nem megfelelő (PNG/JPEG/WebP, max 2 MB).",
-    "quote.bad_agent": "A megadott üzletkötő nem található."
+    "quote.bad_agent": "A megadott üzletkötő nem található.",
+    "stock.return_empty": "Nincs mit visszavenni — a partner készlete üres.",
+    "stock.return_too_much": "A visszavett mennyiség több, mint a partner készlete."
   },
   "inv": {
     "title": "Gépek",
