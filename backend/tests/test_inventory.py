@@ -30,13 +30,15 @@ async def test_create_asset_unique_barcode(client, manager):
     assert dup.json()["detail"]["code"] == "asset.barcode_taken"
 
 
-async def test_generate_barcode_increments(client, manager):
+async def test_generate_barcode_plain_numeric(client, manager):
+    """Előtag NÉLKÜLI, 11 jegyű számsor — így vannak tárolva a meglévő gépek."""
     _, mgr = manager
     g1 = (await client.get("/api/assets/generate-barcode", headers=mgr)).json()["barcode"]
-    assert g1 == "ESZ-000001"
+    assert g1.isdigit() and len(g1) == 11
     await client.post("/api/assets", json=asset_payload(barcode=g1), headers=mgr)
     g2 = (await client.get("/api/assets/generate-barcode", headers=mgr)).json()["barcode"]
-    assert g2 == "ESZ-000002"
+    assert g2.isdigit() and len(g2) == 11
+    assert g2 != g1
 
 
 async def test_barcode_lookup(client, manager):
