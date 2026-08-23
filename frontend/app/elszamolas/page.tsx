@@ -51,6 +51,7 @@ interface Product {
   price_per_portion: number;
   grams_per_portion: number;
   unit: string;
+  is_consignment: boolean;
 }
 
 interface Settlement {
@@ -114,6 +115,8 @@ interface DuePartner {
   avg_daily_kg: number | null;
   days_left: number | null;
   suggested_kg: number | null;
+  interval_weeks: number;
+  next_due: string | null;
 }
 
 const PAYMENTS = ["cash", "card", "transfer", "cod"] as const;
@@ -149,6 +152,9 @@ interface SettlementContext {
   single_product_id: string | null;
   open_deliveries: number;
   open_deliveries_net: number;
+  default_payment_method: "cash" | "card" | "transfer" | "cod" | null;
+  payment_terms_days: number | null;
+  settlement_weeks: number | null;
 }
 
 interface MachineInput {
@@ -171,6 +177,7 @@ interface HandoverPayload {
   product_id: string;
   quantity: number;
   unit_cost?: number | null;
+  price?: number | null; // eladási egységár nem-bizományos terméknél
 }
 
 // Offline-várólista: hálózati hiba esetén ide kerül az elszámolás, és
@@ -225,7 +232,7 @@ export default function ElszamolasPage() {
   // az átírás a mentéskor audit-naplóba kerül.
   const [machinePrices, setMachinePrices] = useState<Record<string, string>>({});
   const [linePrices, setLinePrices] = useState<Record<string, string>>({});
-  const [handovers, setHandovers] = useState<Record<string, { qty: string; cost: string }>>({});
+  const [handovers, setHandovers] = useState<Record<string, { qty: string; cost: string; price?: string }>>({});
   const [paidAmount, setPaidAmount] = useState("");
   // Készlet-sor nélküli partnernél is elszámolható: kézzel felvett termék-sorok
   const [extraProducts, setExtraProducts] = useState<string[]>([]);
@@ -300,6 +307,9 @@ export default function ElszamolasPage() {
         m.default_product_id ?? c.single_product_id ?? "",
       ])));
       setPaidAmount("");
+      // Fizetési mód a szerződésből — itt csak felülírni kell, ha eltér.
+      if (c.default_payment_method) setPayment(c.default_payment_method);
+      else setPayment("cash");
     }).catch(() => setCtx(null));
   }, [partnerId]);
 
@@ -622,9 +632,27 @@ export default function ElszamolasPage() {
     return { rows, net };
   }, [stockRows, physical, counters, machinePreview]);
 
+  // Átadott NEM-bizományos áruk: azonnal fizetendők — csak a kávé bizomány.
+  const handoverSale = useMemo(() => {
+    let net = 0;
+    const items: { product_id: string; name: string; qty: number; unit: string; unitPrice: number; amount: number }[] = [];
+    for (const s of stockRows) {
+      const h = handovers[s.product_id];
+      if (!h || h.qty === "" || Number(h.qty) <= 0) continue;
+      const p = products.find((x) => x.id === s.product_id);
+      if (!p || p.is_consignment) continue;
+      const unitPrice = (h.price ?? "") !== "" ? Number(h.price) : s.price_per_portion;
+      const amount = Number(h.qty) * unitPrice;
+      net += amount;
+      items.push({ product_id: s.product_id, name: s.product_name, qty: Number(h.qty), unit: s.unit, unitPrice, amount });
+    }
+    return { net, items };
+  }, [stockRows, handovers, products]);
+
   // Becsült fizetendő: nettó × ÁFA + korábbi tartozás (a szerződéses tételeket
-  // — bérleti díj, minimum — a mentés számolja hozzá).
-  const grossEstimate = Math.round(preview.net * (noVat ? 1 : 1.27));
+  // — bérleti díj, minimum — a mentés számolja hozzá). Az átadott eladási
+  // áruk azonnal fizetendők, ezért az összesítőbe beleszámítanak.
+  const grossEstimate = Math.round((preview.net + handoverSale.net) * (noVat ? 1 : 1.27));
   const totalPayable = grossEstimate + Math.round(ctx?.debt ?? 0);
 
   // Partnerenkénti minimum készlet (riasztási küszöb) beállítása egy termékre.
@@ -757,6 +785,7 @@ export default function ElszamolasPage() {
         product_id: s.product_id,
         quantity: Number(handovers[s.product_id].qty),
         unit_cost: handovers[s.product_id].cost === "" ? null : Number(handovers[s.product_id].cost),
+        price: (handovers[s.product_id].price ?? "") === "" ? null : Number(handovers[s.product_id].price),
       }));
     if (lines.length === 0 && machines.length === 0) return;
     const paid = paidAmount.trim() === "" ? null : Number(paidAmount);
@@ -1295,6 +1324,10 @@ export default function ElszamolasPage() {
                       </td>
                       <td className="px-4 py-2 text-amber-800">
                         {d.days_since !== null ? t("cons.dueDaysAgo", { days: d.days_since }) : "—"}
+                        <div className="text-xs text-amber-600">
+                          {t("cons.dueEveryWeeks", { weeks: d.interval_weeks })}
+                          {d.next_due && <> · {new Date(d.next_due).toLocaleDateString(lang === "hu" ? "hu-HU" : "en-GB", { month: "short", day: "numeric", weekday: "short" })}</>}
+                        </div>
                       </td>
                       <td className="px-4 py-2 text-amber-800">
                         {d.days_left !== null && d.days_left !== undefined ? (
@@ -1682,6 +1715,35 @@ export default function ElszamolasPage() {
                       />
                       <span className="text-xs text-slate-400">{s.unit}</span>
                     </div>
+                    {/* Nem-bizományos termék: az átadás azonnal fizetendő —
+                        egységár (felülírható) + sor-összeg */}
+                    {(() => {
+                      const p = products.find((x) => x.id === s.product_id);
+                      const h = handovers[s.product_id];
+                      if (!p || p.is_consignment || !h || h.qty === "" || Number(h.qty) <= 0) return null;
+                      const unitPrice = (h.price ?? "") !== "" ? Number(h.price) : s.price_per_portion;
+                      return (
+                        <div className="mt-1 flex items-center gap-1 text-xs">
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">💰 {t("cons.handoverPayable")}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={h.price ?? ""}
+                            onChange={(e) =>
+                              setHandovers({
+                                ...handovers,
+                                [s.product_id]: { ...h, price: e.target.value },
+                              })
+                            }
+                            placeholder={String(s.price_per_portion)}
+                            title={t("cons.handoverPriceHint")}
+                            className="w-20 rounded border border-amber-300 px-1.5 py-1"
+                          />
+                          <span className="font-semibold text-amber-900">= {ft(Math.round(Number(h.qty) * unitPrice))}</span>
+                        </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}
@@ -1718,10 +1780,20 @@ export default function ElszamolasPage() {
           {(stockRows.length > 0 || (ctx?.machines.length ?? 0) > 0) && (
             <div className="space-y-3 border-t border-slate-200 px-4 py-3">
               {/* Összesítő: elszámolás + tartozás = összes fizetendő, fizetve */}
+              {handoverSale.items.length > 0 && (
+                <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-sm">
+                  <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">💰 {t("cons.handoverSaleTitle")}</span>
+                  {handoverSale.items.map((it) => (
+                    <span key={it.product_id} className="text-amber-800">
+                      {it.name}: {it.qty} {it.unit} × {ft(Math.round(it.unitPrice))} = <span className="font-semibold">{ft(Math.round(it.amount))}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
                 <span className="text-slate-500">
                   {t("cons.amountNet")}:{" "}
-                  <span className="font-semibold text-slate-800">{ft(Math.round(preview.net))}</span>
+                  <span className="font-semibold text-slate-800">{ft(Math.round(preview.net + handoverSale.net))}</span>
                 </span>
                 <span className="text-slate-500">
                   {t("cons.grossEstimate")}:{" "}

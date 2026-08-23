@@ -259,6 +259,9 @@ export default function PartnerekPage() {
     min_kg: number | null;
     below_min_price_kg: number | null;
     rent_if_below_min: boolean;
+    settlement_weeks: number;
+    payment_method: string | null;
+    payment_terms_days: number | null;
     note: string | null;
     status: "active" | "future" | "expired";
   }
@@ -267,7 +270,8 @@ export default function PartnerekPage() {
   const [cForm, setCForm] = useState<{
     id: string; valid_from: string; valid_to: string; min_portions: string;
     below_min_price: string; min_kg: string; below_min_price_kg: string;
-    rent_if_below_min: boolean; note: string;
+    rent_if_below_min: boolean; settlement_weeks: string;
+    payment_method: string; payment_terms_days: string; note: string;
   } | null>(null);
   const [cError, setCError] = useState<string | null>(null);
   const [cBusy, setCBusy] = useState(false);
@@ -288,7 +292,8 @@ export default function PartnerekPage() {
     setCForm({
       id: "", valid_from: new Date().toISOString().slice(0, 10), valid_to: "",
       min_portions: "", below_min_price: "", min_kg: "", below_min_price_kg: "",
-      rent_if_below_min: false, note: "",
+      rent_if_below_min: false, settlement_weeks: "4",
+      payment_method: "", payment_terms_days: "", note: "",
     });
   }
 
@@ -300,7 +305,11 @@ export default function PartnerekPage() {
       below_min_price: c.below_min_price != null ? String(c.below_min_price) : "",
       min_kg: c.min_kg != null ? String(c.min_kg) : "",
       below_min_price_kg: c.below_min_price_kg != null ? String(c.below_min_price_kg) : "",
-      rent_if_below_min: c.rent_if_below_min, note: c.note ?? "",
+      rent_if_below_min: c.rent_if_below_min,
+      settlement_weeks: String(c.settlement_weeks || 4),
+      payment_method: c.payment_method ?? "",
+      payment_terms_days: c.payment_terms_days != null ? String(c.payment_terms_days) : "",
+      note: c.note ?? "",
     });
   }
 
@@ -318,6 +327,9 @@ export default function PartnerekPage() {
         min_kg: cForm.min_kg ? Number(cForm.min_kg) : null,
         below_min_price_kg: cForm.below_min_price_kg ? Number(cForm.below_min_price_kg) : null,
         rent_if_below_min: cForm.rent_if_below_min,
+        settlement_weeks: Number(cForm.settlement_weeks) || 4,
+        payment_method: cForm.payment_method || null,
+        payment_terms_days: cForm.payment_terms_days ? Number(cForm.payment_terms_days) : null,
         note: cForm.note || null,
       };
       if (cForm.id) await api.patch(`/api/partners/${contractsFor.id}/contracts/${cForm.id}`, body);
@@ -783,6 +795,9 @@ export default function PartnerekPage() {
                       </div>
                       <div className="mt-1 text-xs text-slate-600">
                         {[
+                          t("cons.dueEveryWeeks", { weeks: c.settlement_weeks || 4 }),
+                          c.payment_method ? t(`cons.payments.${c.payment_method}`) : null,
+                          c.payment_terms_days != null ? t("contracts.sumTerms", { days: c.payment_terms_days }) : null,
                           c.min_portions != null ? t("contracts.sumMinPortions", { n: c.min_portions, price: c.below_min_price ?? "—" }) : null,
                           c.min_kg != null ? t("contracts.sumMinKg", { n: c.min_kg, price: c.below_min_price_kg ?? "—" }) : null,
                           c.rent_if_below_min ? t("contracts.sumRent") : null,
@@ -840,6 +855,34 @@ export default function PartnerekPage() {
                     <span className="block text-xs text-slate-400">{t("partners.contractRentIfBelowMinHint")}</span>
                   </span>
                 </label>
+                <fieldset className="rounded-xl border border-slate-200 p-3">
+                  <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("contracts.scheduleSection")}</legend>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <label className="block text-sm">
+                      {t("contracts.settlementWeeks")}
+                      <select value={cForm.settlement_weeks} onChange={(e) => setCForm({ ...cForm, settlement_weeks: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                        <option value="1">{t("contracts.weekly")}</option>
+                        <option value="2">{t("contracts.biweekly")}</option>
+                        <option value="4">{t("contracts.fourWeekly")}</option>
+                      </select>
+                    </label>
+                    <label className="block text-sm">
+                      {t("contracts.paymentMethod")}
+                      <select value={cForm.payment_method} onChange={(e) => setCForm({ ...cForm, payment_method: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                        <option value="">—</option>
+                        <option value="cash">{t("cons.payments.cash")}</option>
+                        <option value="card">{t("cons.payments.card")}</option>
+                        <option value="transfer">{t("cons.payments.transfer")}</option>
+                        <option value="cod">{t("cons.payments.cod")}</option>
+                      </select>
+                    </label>
+                    <label className="block text-sm">
+                      {t("contracts.paymentTerms")}
+                      <input type="number" min={0} max={365} value={cForm.payment_terms_days} onChange={(e) => setCForm({ ...cForm, payment_terms_days: e.target.value })} placeholder="8" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                    </label>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">{t("contracts.scheduleHint")}</p>
+                </fieldset>
                 <label className="block text-sm">
                   {t("partners.notes")}
                   <input value={cForm.note} onChange={(e) => setCForm({ ...cForm, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

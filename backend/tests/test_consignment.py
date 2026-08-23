@@ -4,7 +4,8 @@ from tests.test_inventory import make_partner
 
 
 async def make_product(client, headers, **kw) -> dict:
-    body = {"name": "Házi keverék kávé", "grams_per_portion": 7, "price_per_portion": 50.0}
+    body = {"name": "Házi keverék kávé", "grams_per_portion": 7, "price_per_portion": 50.0,
+            "is_consignment": True}  # kávé = bizományos (a többi termék eladás)
     body.update(kw)
     res = await client.post("/api/products", json=body, headers=headers)
     assert res.status_code == 201, res.text

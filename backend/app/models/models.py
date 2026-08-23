@@ -486,6 +486,11 @@ class Partner(Base):
     contract_below_min_price_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Minimum-mentes (türelmi) időszak vége — pl. új partner első 3 hónapja.
     contract_no_min_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Elszámolás-gyakoriság tükre (1/2/4 hét) az aktív szerződésből.
+    contract_settlement_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Az aktív szerződés fizetési módja/határideje (elszámolás-alapértelmezés).
+    contract_payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    contract_payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Ha igaz: a minimum el nem érésekor NEM különbözetet számlázunk, hanem a
     # gép(ek) fix havi bérleti díja lép életbe; minimum felett bérleti díj sincs.
     contract_rent_if_below_min: Mapped[bool] = mapped_column(
@@ -680,6 +685,9 @@ class Product(Base):
     grams_per_portion: Mapped[int] = mapped_column(Integer, nullable=False, default=7)  # 1 adag = X g
     price_per_portion: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)  # Ft/adag (nettó)
     vat_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=27)  # ÁFA %
+    # Bizományos termék (kávé): fogyás alapján számoljuk el. Minden más
+    # termék ELADÁS — átadáskor/kiszállításkor azonnal fizetendő.
+    is_consignment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Riasztási küszöb (kg): ha egy partnernél ennyi vagy kevesebb van, jelzünk.
     low_stock_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Utolsó beszerzési ár (Ft/kg, nettó) — bevételezéskor frissül, az űrlapot előtölti.
@@ -1234,6 +1242,15 @@ class PartnerContract(Base):
     min_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     below_min_price_kg: Mapped[float | None] = mapped_column(Float, nullable=True)  # Ft/kg
     rent_if_below_min: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Elszámolás gyakorisága hetekben (1/2/4) — alapértelmezés 4 hetente,
+    # azonos napokon; az esedékesség-lista ebből ütemez.
+    settlement_weeks: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=4, server_default="4"
+    )
+    # Szerződéses fizetési mód (cash/card/transfer/cod) és határidő — az
+    # elszámolásnál ez az alapértelmezés, ott csak felülírni lehet.
+    payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_partner_contracts_user"),

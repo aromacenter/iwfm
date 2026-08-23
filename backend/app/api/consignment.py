@@ -58,6 +58,9 @@ class ProductBody(BaseModel):
     grams_per_portion: int = Field(default=7, ge=1, le=100000)
     price_per_portion: float = Field(default=0.0, ge=0)
     vat_percent: int = Field(default=27, ge=0, le=100)
+    # Bizományos (kávé): fogyás alapján számoljuk el; minden más termék
+    # átadáskor/kiszállításkor azonnal fizetendő ELADÁS.
+    is_consignment: bool = False
     low_stock_threshold: float | None = Field(default=None, ge=0)
     purchase_price: float | None = Field(default=None, ge=0)  # Ft/kg (nettó)
     is_active: bool = True
@@ -72,6 +75,7 @@ class ProductOut(BaseModel):
     grams_per_portion: int
     price_per_portion: float
     vat_percent: int
+    is_consignment: bool
     low_stock_threshold: float | None
     purchase_price: float | None
     is_active: bool
@@ -87,6 +91,7 @@ def _product_out(p: Product) -> ProductOut:
         grams_per_portion=p.grams_per_portion,
         price_per_portion=p.price_per_portion,
         vat_percent=p.vat_percent,
+        is_consignment=p.is_consignment,
         low_stock_threshold=p.low_stock_threshold,
         purchase_price=p.purchase_price,
         is_active=p.is_active,
@@ -614,6 +619,11 @@ class SettlementContextOut(BaseModel):
     # kiszámlázódnak.
     open_deliveries: int = 0
     open_deliveries_net: float = 0.0
+    # Szerződéses alapértelmezések: az elszámoló-űrlap előtölti, ott csak
+    # felülírni lehet.
+    default_payment_method: str | None = None
+    payment_terms_days: int | None = None
+    settlement_weeks: int | None = None
 
 
 @stock_router.get("/{partner_id}/settlement-context", response_model=SettlementContextOut)
@@ -734,6 +744,13 @@ async def settlement_context(
         single_product_id=single_pid,
         open_deliveries=len(open_notes),
         open_deliveries_net=_money(open_net),
+        default_payment_method=partner.contract_payment_method,
+        payment_terms_days=(
+            partner.contract_payment_terms_days
+            if partner.contract_payment_terms_days is not None
+            else partner.payment_terms_days
+        ),
+        settlement_weeks=partner.contract_settlement_weeks,
     )
 
 
@@ -878,8 +895,11 @@ class HandoverIn(BaseModel):
     """Elszámoláskor átadott áru (a leltár UTÁN növeli a készletet)."""
 
     product_id: str
-    quantity: float = Field(gt=0)  # kg
+    quantity: float = Field(gt=0)  # kg / db
     unit_cost: float | None = Field(default=None, ge=0)  # beszerzési ár (Ft/kg)
+    # Eladási egységár nem-bizományos terméknél (felülírás; None = partner-ár
+    # vagy alapár). Az átírás auditálódik.
+    price: float | None = Field(default=None, ge=0)
 
 
 class SettlementCreate(BaseModel):
@@ -1367,8 +1387,10 @@ async def create_settlement(
                 price_per_portion=unit_price,
                 amount_net=amount,
             ))
-            # Kg-keresztellenőrzés: számlálónkénti normával (g/adag) súlyozva —
-            # a 0 normájú számláló (pl. forró csoki) nem fogyaszt kávét.
+            # Kg-keresztellenőrzés: számlálónkénti normával súlyozva. A norma
+            # jelentése ADAG/KG (hány adag készül 1 kg kávéból — az Xpresso-
+            # konvenció); 0 = az adott számláló (pl. forró csoki) nem
+            # fogyaszt kávét.
             cross_brewed = float(brewed)
             norms = asset.norms if isinstance(asset.norms, list) else None
             if (
@@ -1376,14 +1398,16 @@ async def create_settlement(
                 and norms
                 and product.grams_per_portion
             ):
-                grams = sum(
-                    diff * (
-                        norms[i]
-                        if i < len(norms) and norms[i] is not None
-                        else product.grams_per_portion
-                    )
-                    for i, diff in enumerate(per_counter_diffs)
-                )
+                grams = 0.0
+                for i, diff in enumerate(per_counter_diffs):
+                    n = norms[i] if i < len(norms) and norms[i] is not None else None
+                    if n is None:
+                        g_per_portion = product.grams_per_portion  # nincs norma → termék-alap
+                    elif n > 0:
+                        g_per_portion = 1000.0 / n  # adag/kg → g/adag
+                    else:
+                        g_per_portion = 0.0  # nem használ kávét
+                    grams += diff * g_per_portion
                 cross_brewed = grams / product.grams_per_portion
             machine_billed[product.id] = machine_billed.get(product.id, 0.0) + billed
             machine_brewed[product.id] = machine_brewed.get(product.id, 0.0) + cross_brewed
@@ -1533,27 +1557,62 @@ async def create_settlement(
         total_gross += _money(amount_net * (1 + line_vat / 100))
         total_portions += billed
 
-    # Átadott áru (a leltár UTÁN növeli a készletet — a következő időszaké).
+    # Átadott áru. Bizományos (kávé): a leltár UTÁN növeli a készletet — a
+    # következő időszakban számolódik el. Minden más termék ELADÁS: azonnal
+    # fizetendő tételként kerül az elszámolásra, készletbe nem megy.
     for h in body.handovers:
         product = await _get_product_or_404(db, h.product_id)
-        h_stock = (
-            await db.execute(
-                select(PartnerStock).where(
-                    PartnerStock.partner_id == partner.id,
-                    PartnerStock.product_id == product.id,
+        if product.is_consignment:
+            h_stock = (
+                await db.execute(
+                    select(PartnerStock).where(
+                        PartnerStock.partner_id == partner.id,
+                        PartnerStock.product_id == product.id,
+                    )
                 )
-            )
-        ).scalar_one_or_none()
-        if h_stock is None:
-            h_stock = PartnerStock(partner_id=partner.id, product_id=product.id, quantity=0.0)
-            db.add(h_stock)
-        h_stock.quantity += h.quantity
-        db.add(StockMovement(
-            partner_id=partner.id, product_id=product.id, action="replenish",
-            quantity_delta=h.quantity, unit_cost=h.unit_cost,
-            settlement_id=settlement.id, note="Elszámoláskor átadva",
-            actor_user_id=actor.id,
-        ))
+            ).scalar_one_or_none()
+            if h_stock is None:
+                h_stock = PartnerStock(partner_id=partner.id, product_id=product.id, quantity=0.0)
+                db.add(h_stock)
+            h_stock.quantity += h.quantity
+            db.add(StockMovement(
+                partner_id=partner.id, product_id=product.id, action="replenish",
+                quantity_delta=h.quantity, unit_cost=h.unit_cost,
+                settlement_id=settlement.id, note="Elszámoláskor átadva",
+                actor_user_id=actor.id,
+            ))
+        else:
+            unit_price = _effective_price(product, price_overrides)
+            if h.price is not None:
+                if abs(h.price - unit_price) > 1e-9:
+                    manual_overrides.append({
+                        "field": "unit_price", "target": "átadás",
+                        "product": product.name,
+                        "from": unit_price, "to": h.price,
+                    })
+                unit_price = h.price
+            line_vat = 0 if body.no_vat else product.vat_percent
+            amount_net = _money(h.quantity * unit_price)
+            db.add(SettlementLine(
+                settlement_id=settlement.id,
+                product_id=product.id,
+                product_name=f"{product.name} — átadva ({h.quantity:g} {product.unit})",
+                previous_qty=0.0, physical_qty=0.0, consumed_qty=h.quantity,
+                portions=h.quantity,
+                counter_portions=None,
+                price_per_portion=unit_price,
+                vat_percent=line_vat,
+                amount_net=amount_net,
+            ))
+            total_net += amount_net
+            total_gross += _money(amount_net * (1 + line_vat / 100))
+            db.add(StockMovement(
+                partner_id=partner.id, product_id=product.id, action="sale",
+                quantity_delta=0.0, unit_cost=h.unit_cost,
+                settlement_id=settlement.id,
+                note=f"Elszámoláskor eladva: {h.quantity:g} {product.unit}",
+                actor_user_id=actor.id,
+            ))
         if h.unit_cost is not None:
             product.purchase_price = h.unit_cost
 
@@ -1928,6 +1987,10 @@ class DuePartnerOut(BaseModel):
     last_settlement_at: datetime | None  # None = még sosem volt elszámolva
     days_since: int | None
     stock_products: int  # hány termékből van kint készlete
+    # Ütemezés a szerződésből: 1/2/4 hetente (alapértelmezés 4), azonos
+    # napokon; a következő időpont kedd–csütörtökre igazítva.
+    interval_weeks: int = 4
+    next_due: date | None = None
     # Fogyás-előrejelzés az elszámolás-előzményekből (utolsó 180 nap):
     avg_daily_kg: float | None = None  # átlagos napi fogyás (kg)
     days_left: int | None = None  # várhatóan ennyi nap múlva fogy ki
@@ -1936,14 +1999,15 @@ class DuePartnerOut(BaseModel):
 
 @settlements_router.get("/due", response_model=list[DuePartnerOut])
 async def due_settlements(
-    days: int = Query(default=30, ge=1, le=365),
+    days: int = Query(default=30, ge=1, le=365),  # kompatibilitás — nem használt
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("settlements")),
 ):
     """Esedékes elszámolások (látogatási terv): azok az aktív partnerek, akiknél
-    van kint készlet vagy volt már elszámolás, és az utolsó elszámolásuk N+
-    napja történt (vagy még sosem) VAGY a fogyás-előrejelzés szerint 7 napon
-    belül kifogynak. A legrégebben elszámoltak elöl."""
+    van kint készlet vagy volt már elszámolás, és az utolsó elszámolásuk a
+    szerződéses gyakoriságnál (1/2/4 hét, alapértelmezés 4) régebben történt
+    (vagy még sosem) VAGY a fogyás-előrejelzés szerint 7 napon belül kifogynak.
+    A legrégebben elszámoltak elöl."""
     last_at = {
         pid: at
         for pid, at in (
@@ -2007,10 +2071,23 @@ async def due_settlements(
         )
     ).scalars().all()
 
+    def _tue_thu(d: date) -> date:
+        """A javasolt napot a kedd–csütörtök ablakba igazítja (hétfő→kedd,
+        péntek→csütörtök, szombat→csütörtök, vasárnap→kedd)."""
+        shift = {0: 1, 4: -1, 5: -2, 6: 2}.get(d.weekday(), 0)
+        return d + timedelta(days=shift)
+
     out: list[DuePartnerOut] = []
     for p in partners:
         last = _aware(last_at.get(p.id))
         since = (now - last).days if last is not None else None
+        interval_weeks = p.contract_settlement_weeks or 4
+        interval_days = interval_weeks * 7
+        next_due = (
+            _tue_thu((last + timedelta(days=interval_days)).date())
+            if last is not None
+            else None
+        )
 
         avg_daily = days_left = suggested = None
         cons = consumption.get(p.id)
@@ -2024,7 +2101,8 @@ async def due_settlements(
                 suggested = round(max(avg_daily * 30 - remaining, 0), 1)
 
         runs_out_soon = days_left is not None and days_left <= 7
-        if since is not None and since < days and not runs_out_soon:
+        due_by_schedule = next_due is None or next_due <= now.date()
+        if not due_by_schedule and not runs_out_soon:
             continue
         out.append(
             DuePartnerOut(
@@ -2037,6 +2115,8 @@ async def due_settlements(
                 last_settlement_at=last,
                 days_since=since,
                 stock_products=stock_counts.get(p.id, 0),
+                interval_weeks=interval_weeks,
+                next_due=next_due,
                 avg_daily_kg=avg_daily,
                 days_left=days_left,
                 suggested_kg=suggested,

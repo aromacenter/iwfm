@@ -35,6 +35,9 @@ interface ContractRow {
   min_kg: number | null;
   below_min_price_kg: number | null;
   rent_if_below_min: boolean;
+  settlement_weeks: number;
+  payment_method: string | null;
+  payment_terms_days: number | null;
   note: string | null;
   machines: MachineRow[];
 }
@@ -114,6 +117,10 @@ export default function SzerzodesekPage() {
 
   const terms = (c: ContractRow) => {
     const parts: string[] = [];
+    parts.push(t("cons.dueEveryWeeks", { weeks: c.settlement_weeks || 4 }));
+    if (c.payment_method) parts.push(t(`cons.payments.${c.payment_method}`));
+    if (c.payment_terms_days != null)
+      parts.push(t("contracts.sumTerms", { days: c.payment_terms_days }));
     if (c.min_portions != null)
       parts.push(
         t("contracts.sumMinPortions", {

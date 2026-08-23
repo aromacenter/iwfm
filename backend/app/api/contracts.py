@@ -10,7 +10,7 @@ import uuid
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,7 +63,27 @@ class ContractBody(BaseModel):
     min_kg: float | None = Field(default=None, ge=0, le=100_000)
     below_min_price_kg: float | None = Field(default=None, ge=0)  # Ft/kg
     rent_if_below_min: bool = False
+    # Elszámolás gyakorisága: 1, 2 vagy 4 hetente (alapértelmezés 4).
+    settlement_weeks: int = 4
+    # Szerződéses fizetési mód + határidő — az elszámolás/számlázás
+    # alapértelmezése, ott csak felülírható.
+    payment_method: str | None = None
+    payment_terms_days: int | None = Field(default=None, ge=0, le=365)
     note: str | None = None
+
+    @field_validator("settlement_weeks")
+    @classmethod
+    def _check_weeks(cls, v: int) -> int:
+        if v not in (1, 2, 4):
+            raise ValueError("contract.bad_settlement_weeks")
+        return v
+
+    @field_validator("payment_method")
+    @classmethod
+    def _check_method(cls, v: str | None) -> str | None:
+        if v is not None and v not in ("cash", "card", "transfer", "cod"):
+            raise ValueError("contract.bad_payment_method")
+        return v
 
 
 class ContractOut(BaseModel):
@@ -75,6 +95,9 @@ class ContractOut(BaseModel):
     min_kg: float | None
     below_min_price_kg: float | None
     rent_if_below_min: bool
+    settlement_weeks: int
+    payment_method: str | None
+    payment_terms_days: int | None
     note: str | None
     status: str  # active | future | expired
     created_at: datetime
@@ -93,7 +116,10 @@ def _out(c: PartnerContract) -> ContractOut:
         id=str(c.id), valid_from=c.valid_from, valid_to=c.valid_to,
         min_portions=c.min_portions, below_min_price=c.below_min_price,
         min_kg=c.min_kg, below_min_price_kg=c.below_min_price_kg,
-        rent_if_below_min=c.rent_if_below_min, note=c.note,
+        rent_if_below_min=c.rent_if_below_min,
+        settlement_weeks=c.settlement_weeks,
+        payment_method=c.payment_method,
+        payment_terms_days=c.payment_terms_days, note=c.note,
         status=_status(c, date.today()), created_at=c.created_at,
     )
 
@@ -204,6 +230,9 @@ class ContractRowOut(BaseModel):
     min_kg: float | None
     below_min_price_kg: float | None
     rent_if_below_min: bool
+    settlement_weeks: int
+    payment_method: str | None
+    payment_terms_days: int | None
     note: str | None
     machines: list[dict]
 
@@ -295,7 +324,10 @@ async def contracts_overview(
             valid_from=c.valid_from, valid_to=c.valid_to,
             min_portions=c.min_portions, below_min_price=c.below_min_price,
             min_kg=c.min_kg, below_min_price_kg=c.below_min_price_kg,
-            rent_if_below_min=c.rent_if_below_min, note=c.note,
+            rent_if_below_min=c.rent_if_below_min,
+            settlement_weeks=c.settlement_weeks,
+            payment_method=c.payment_method,
+            payment_terms_days=c.payment_terms_days, note=c.note,
             machines=machines_by_partner.get(p.id, []),
         )
         for c, p in contracts

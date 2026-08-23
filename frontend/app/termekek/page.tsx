@@ -19,6 +19,7 @@ interface Product {
   grams_per_portion: number;
   price_per_portion: number;
   vat_percent: number;
+  is_consignment: boolean;
   low_stock_threshold: number | null;
   purchase_price: number | null;
   is_active: boolean;
@@ -41,6 +42,7 @@ const EMPTY = {
   grams_per_portion: "7",
   price_per_portion: "",
   vat_percent: "27",
+  is_consignment: false,
   low_stock_threshold: "",
   purchase_price: "",
   is_active: true,
@@ -88,6 +90,7 @@ export default function TermekekPage() {
       grams_per_portion: String(p.grams_per_portion),
       price_per_portion: String(p.price_per_portion),
       vat_percent: String(p.vat_percent),
+      is_consignment: p.is_consignment,
       low_stock_threshold: p.low_stock_threshold?.toString() ?? "",
       purchase_price: p.purchase_price?.toString() ?? "",
       is_active: p.is_active,
@@ -139,6 +142,7 @@ export default function TermekekPage() {
         grams_per_portion: Number(form.grams_per_portion) || 7,
         price_per_portion: Number(form.price_per_portion) || 0,
         vat_percent: Number(form.vat_percent) || 27,
+        is_consignment: form.is_consignment,
         low_stock_threshold:
           form.low_stock_threshold === "" ? null : Number(form.low_stock_threshold),
         purchase_price: form.purchase_price === "" ? null : Number(form.purchase_price),
@@ -256,6 +260,9 @@ export default function TermekekPage() {
                     {p.category && (
                       <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">{p.category}</span>
                     )}
+                    {p.is_consignment && (
+                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title={t("cons.consignmentFlagHint")}>☕ {t("cons.consignmentBadge")}</span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3">{p.grams_per_portion} g</td>
@@ -349,6 +356,13 @@ export default function TermekekPage() {
             <label className="block text-sm">
               {t("cons.notes")}
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+              <input type="checkbox" checked={form.is_consignment} onChange={(e) => setForm({ ...form, is_consignment: e.target.checked })} className="mt-0.5 h-4 w-4" />
+              <span>
+                ☕ {t("cons.consignmentFlag")}
+                <span className="block text-xs text-amber-700">{t("cons.consignmentFlagHint")}</span>
+              </span>
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="h-4 w-4" />

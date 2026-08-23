@@ -113,9 +113,9 @@ async def create_invoice_for_settlement(
     """Billingó bizonylat létrehozása az elszámoláshoz.
 
     Visszatérés: (document_id, mode, due_date) — mode: 'proforma' (teszt) |
-    'invoice'. A fizetési határidő a partner payment_terms_days értéke
-    (alapértelmezés: 8 nap). ValueError('billingo_not_configured'), ha nincs
-    kulcs/blokk-azonosító.
+    'invoice'. A fizetési határidő az aktív szerződésből, annak híján a
+    partner payment_terms_days értékéből jön (alapértelmezés: 8 nap).
+    ValueError('billingo_not_configured'), ha nincs kulcs/blokk-azonosító.
     """
     settings = await get_or_create_settings(db)
     company = settlement.invoicing_company or partner.invoicing_company
@@ -150,7 +150,12 @@ async def create_invoice_for_settlement(
     billingo_partner_id = await _find_or_create_billingo_partner(api_key, partner)
 
     today = date.today()
-    terms_days = partner.payment_terms_days if (partner.payment_terms_days or 0) > 0 else 8
+    # Erősorrend: aktív szerződés határideje → partner-beállítás → 8 nap.
+    terms_days = (
+        partner.contract_payment_terms_days
+        if (partner.contract_payment_terms_days or 0) > 0
+        else partner.payment_terms_days if (partner.payment_terms_days or 0) > 0 else 8
+    )
     due = today + timedelta(days=terms_days)
     doc_type = "proforma" if test_mode else "invoice"
     body = {

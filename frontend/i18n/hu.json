@@ -404,7 +404,14 @@
     "returnDo": "↩ Visszavét",
     "returnAllConfirm": "Biztosan visszaveszed a partner TELJES készletét ide: {warehouse}?",
     "returnDone": "↩ Visszavéve: {items} → {warehouse}",
-    "returnRowHint": "Ennek a terméknek a visszavétele raktárba/autóba"
+    "returnRowHint": "Ennek a terméknek a visszavétele raktárba/autóba",
+    "dueEveryWeeks": "{weeks} hetente",
+    "handoverPayable": "fizetendő most",
+    "handoverPriceHint": "Eladási egységár (nettó) — üresen a partner-ár/alapár érvényes; az átírás auditálódik",
+    "handoverSaleTitle": "Átadott áruk (azonnal fizetendő)",
+    "consignmentFlag": "Bizományos termék (kávé)",
+    "consignmentFlagHint": "Fogyás alapján számoljuk el a partnernél. Ha NINCS bepipálva, a termék eladás: átadáskor / kiszállításkor azonnal fizetendő.",
+    "consignmentBadge": "bizomány"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1625,7 +1632,16 @@
     "noProduct": "nincs termék hozzárendelve",
     "rentFee": "bérleti díj",
     "deployedAt": "kihelyezve",
-    "listEmpty": "Nincs találat."
+    "listEmpty": "Nincs találat.",
+    "scheduleSection": "Elszámolás-ütemezés és fizetés",
+    "settlementWeeks": "Elszámolás gyakorisága",
+    "weekly": "Hetente",
+    "biweekly": "2 hetente",
+    "fourWeekly": "4 hetente (alapértelmezett)",
+    "paymentMethod": "Fizetési mód (alapértelmezés)",
+    "paymentTerms": "Fizetési határidő (nap)",
+    "scheduleHint": "Az esedékesség-lista e gyakoriság szerint ütemez (azonos napokon, jellemzően kedd–csütörtök); a fizetési mód és határidő az elszámolásnál/számlázásnál alapértelmezés — ott felülírható.",
+    "sumTerms": "{days} nap határidő"
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",

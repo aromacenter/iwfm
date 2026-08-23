@@ -404,7 +404,14 @@
     "returnDo": "↩ Take back",
     "returnAllConfirm": "Take back the partner's ENTIRE stock to {warehouse}?",
     "returnDone": "↩ Returned: {items} → {warehouse}",
-    "returnRowHint": "Return this product to a warehouse/van"
+    "returnRowHint": "Return this product to a warehouse/van",
+    "dueEveryWeeks": "every {weeks} weeks",
+    "handoverPayable": "payable now",
+    "handoverPriceHint": "Net selling unit price — leave empty for partner/base price; overrides are audited",
+    "handoverSaleTitle": "Handed-over goods (payable now)",
+    "consignmentFlag": "Consignment product (coffee)",
+    "consignmentFlagHint": "Settled by consumption at the partner. If UNCHECKED, the product is a sale: payable immediately on handover / delivery.",
+    "consignmentBadge": "consignment"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1625,7 +1632,16 @@
     "noProduct": "no product assigned",
     "rentFee": "rent",
     "deployedAt": "deployed",
-    "listEmpty": "No results."
+    "listEmpty": "No results.",
+    "scheduleSection": "Settlement schedule & payment",
+    "settlementWeeks": "Settlement frequency",
+    "weekly": "Weekly",
+    "biweekly": "Every 2 weeks",
+    "fourWeekly": "Every 4 weeks (default)",
+    "paymentMethod": "Payment method (default)",
+    "paymentTerms": "Payment terms (days)",
+    "scheduleHint": "The due list schedules by this frequency (same weekday, typically Tue–Thu); the payment method and terms are defaults at settlement/invoicing — they can be overridden there.",
+    "sumTerms": "{days}-day terms"
   },
   "delivery": {
     "title": "Delivery (delivery note)",
