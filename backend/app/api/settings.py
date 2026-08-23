@@ -640,6 +640,18 @@ class NotificationBody(BaseModel):
     tg_enabled: bool = False
     tg_chat_ids: str | None = Field(default=None, max_length=2000)
     tg_token: str | None = Field(default=None, max_length=512)  # ugyanaz a szemantika
+    # Beépített Telegram-értesítések: mely eseményekről menjen üzenet.
+    tg_events: list[str] = Field(default_factory=list, max_length=32)
+
+    @field_validator("tg_events")
+    @classmethod
+    def _check_tg_events(cls, v: list[str]) -> list[str]:
+        from app.services.wfm.automation import TRIGGERS
+
+        bad = [x for x in v if x not in TRIGGERS]
+        if bad:
+            raise ValueError("notifications.bad_tg_event")
+        return v
 
 
 @router.get("/notifications")
@@ -664,6 +676,9 @@ async def get_notification_settings(
         "tg_enabled": row.tg_enabled,
         "tg_chat_ids": row.tg_chat_ids,
         "tg_token_set": row.tg_token_encrypted is not None,
+        "tg_events": [
+            x.strip() for x in (row.tg_events or "").split(",") if x.strip()
+        ],
         "last_daily_sent": row.last_daily_sent,
         "last_backup_sent": row.last_backup_sent,
     }
@@ -689,6 +704,7 @@ async def update_notification_settings(
     row.wa_recipients = (body.wa_recipients or "").strip() or None
     row.tg_enabled = body.tg_enabled
     row.tg_chat_ids = (body.tg_chat_ids or "").strip() or None
+    row.tg_events = ",".join(body.tg_events) or None
     if body.wa_token or body.tg_token:
         from app.core.crypto import encrypt_pii
 

@@ -25,7 +25,9 @@
     "tgTestBtn": "Telegram-teszt",
     "tgTestSent": "Próba-üzenet elküldve: {to}",
     "tokenSet": "beállítva",
-    "tokenHint": "Üresen hagyva a meglévő marad; „-” beírásával törölhető."
+    "tokenHint": "Üresen hagyva a meglévő marad; „-” beírásával törölhető.",
+    "tgEventsTitle": "Mely eseményekről küldjön értesítést?",
+    "tgEventsHint": "A bepipált eseményekről automatizálás-szabály nélkül is megy üzenet a fenti chat(ek)be. Egyedi szöveghez vagy szűréshez használd az Automatizálásokat."
   },
   "report": {
     "monthly": "Havi zárás PDF:",

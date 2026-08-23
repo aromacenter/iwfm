@@ -25,7 +25,9 @@
     "tgTestBtn": "Telegram test",
     "tgTestSent": "Test message sent: {to}",
     "tokenSet": "set",
-    "tokenHint": "Leave empty to keep the current one; enter \"-\" to clear."
+    "tokenHint": "Leave empty to keep the current one; enter \"-\" to clear.",
+    "tgEventsTitle": "Which events should send a notification?",
+    "tgEventsHint": "Checked events send a message to the chat(s) above without any automation rule. For custom text or filtering, use Automations."
   },
   "report": {
     "monthly": "Monthly closing PDF:",

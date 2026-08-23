@@ -319,6 +319,16 @@ async def run_event(db: AsyncSession, event: str, ctx: dict) -> int:
                 logger.warning("Automation action failed (%s / %s): %s", rule.name, action.get("type"), exc)
                 rule.last_error = f"{action.get('type')}: {str(exc)[:200]}"
         await db.commit()
+
+    # Beépített Telegram-értesítések: a Beállításokban pipált eseményekről
+    # szabály nélkül is megy üzenet (best-effort).
+    try:
+        from app.services.wfm.telegram import notify_event
+
+        await notify_event(db, event, ctx)
+        await db.commit()
+    except Exception:
+        logger.warning("Built-in telegram notify failed (%s)", event, exc_info=True)
     return fired
 
 

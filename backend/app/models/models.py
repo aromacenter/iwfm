@@ -1119,6 +1119,9 @@ class NotificationSettings(Base):
     tg_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     tg_token_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     tg_chat_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # chat_id-k vesszővel
+    # Mely eseményekről menjen beépített Telegram-értesítés (esemény-kulcsok
+    # vesszővel, pl. "order.created,stock.low"); None/üres = egyikről sem.
+    tg_events: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Utolsó sikeres küldések (duplikátum-védelem újraindításkor)
     last_daily_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)  # ÉÉÉÉ-HH-NN
     last_backup_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)

@@ -37,6 +37,46 @@ async def load_telegram_config(db: AsyncSession) -> dict | None:
     }
 
 
+# Beépített értesítés-sablonok eseményenként ({{változók}} az esemény
+# kontextusából) — a Beállításokban pipált eseményekről automatikusan megy.
+EVENT_TEMPLATES: dict[str, str] = {
+    "settlement.created": "🧾 Elszámolás készült: {{partner_nev}} — {{vegosszeg_brutto}} Ft ({{elszamolo}})",
+    "settlement.signed": "✍️ Elszámolás aláírva: {{partner_nev}} — {{vegosszeg_brutto}} Ft",
+    "ticket.created": "🔧 Új szervizjegy: {{cim}} — {{partner_nev}} ({{gep_nev}})",
+    "ticket.done": "✅ Szervizjegy lezárva: {{cim}} — {{partner_nev}}, költség: {{koltseg_osszesen}} Ft",
+    "order.created": "📦 Új rendelés (QR): {{rendeles_szam}} — {{partner_nev}}: {{tetel_lista}}",
+    "partner.created": "🤝 Új partner: {{partner_nev}} ({{varos}})",
+    "counter.reported": "🔢 Számláló bejelentve: {{gep_nev}} — {{partner_nev}}: {{szamlalo}}",
+    "stock.low": "⚠️ Alacsony készlet: {{partner_nev}} — {{termek_nev}}: {{keszlet_kg}} kg (küszöb: {{kuszob_kg}} kg)",
+}
+
+
+async def notify_event(db: AsyncSession, event: str, ctx: dict) -> bool:
+    """Beépített Telegram-értesítés: ha az esemény be van pipálva a
+    Beállításokban, a sablon-üzenet kimegy az összes beállított chatre.
+    Best-effort — hibája sosem akasztja meg a fő műveletet."""
+    from app.services.wfm.automation import render
+    from app.services.wfm.notifier import get_or_create_settings
+
+    template = EVENT_TEMPLATES.get(event)
+    if template is None:
+        return False
+    row = await get_or_create_settings(db)
+    enabled_events = {
+        x.strip() for x in (row.tg_events or "").replace(";", ",").split(",") if x.strip()
+    }
+    if event not in enabled_events:
+        return False
+    config = await load_telegram_config(db)
+    if config is None or not config["chat_ids"]:
+        return False
+    text = render(template, ctx)
+    ok = False
+    for chat in config["chat_ids"]:
+        ok = await send_telegram(config, chat, text) or ok
+    return ok
+
+
 async def send_telegram(config: dict, chat_id: str, text: str) -> bool:
     """Egy üzenet küldése a megadott csevegésbe. True = a Telegram befogadta."""
     try:

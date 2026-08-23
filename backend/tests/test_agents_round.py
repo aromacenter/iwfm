@@ -208,3 +208,57 @@ async def test_whatsapp_telegram_settings_roundtrip(client, admin):
         "/api/settings/notifications/telegram-test", json={}, headers=adm
     )
     assert res.status_code == 422
+
+
+async def test_telegram_event_selection(client, admin, monkeypatch):
+    """Beépített Telegram-értesítés: csak a bepipált eseményről megy üzenet,
+    a sablonba a kontextus behelyettesítődik."""
+    _, adm = admin
+    res = await client.put(
+        "/api/settings/notifications",
+        json={"daily_enabled": False, "send_hour": 6, "weekly_backup": False,
+              "auto_receipt": False, "wa_enabled": False,
+              "tg_enabled": True, "tg_token": "123:abc", "tg_chat_ids": "-100555",
+              "tg_events": ["order.created"]},
+        headers=adm,
+    )
+    assert res.status_code == 200, res.text
+    got = (await client.get("/api/settings/notifications", headers=adm)).json()
+    assert got["tg_events"] == ["order.created"]
+
+    # ismeretlen esemény-kulcs: 422
+    res = await client.put(
+        "/api/settings/notifications",
+        json={"daily_enabled": False, "send_hour": 6, "weekly_backup": False,
+              "auto_receipt": False, "tg_enabled": True,
+              "tg_events": ["nem.letezik"]},
+        headers=adm,
+    )
+    assert res.status_code == 422
+
+    sent: list[tuple[str, str]] = []
+
+    async def fake_send(config, chat_id, text):
+        sent.append((chat_id, text))
+        return True
+
+    import app.services.wfm.telegram as tg_mod
+
+    monkeypatch.setattr(tg_mod, "send_telegram", fake_send)
+
+    from app import db as app_db
+    from app.services.wfm.automation import run_event
+
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        # bepipált esemény → megy az üzenet a behelyettesített sablonnal
+        await run_event(session, "order.created", {
+            "rendeles_szam": "R-2026-0042", "partner_nev": "Teszt Bolt",
+            "tetel_lista": "2× Házi keverék",
+        })
+        # nem pipált esemény → nem megy semmi
+        await run_event(session, "partner.created", {"partner_nev": "Másik"})
+
+    assert len(sent) == 1, sent
+    assert sent[0][0] == "-100555"
+    assert "R-2026-0042" in sent[0][1] and "Teszt Bolt" in sent[0][1]

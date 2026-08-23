@@ -499,6 +499,7 @@ export default function BeallitasokPage() {
     weekly_backup: false, auto_receipt: false,
     wa_enabled: false, wa_phone_id: "", wa_recipients: "", wa_token: "", wa_token_set: false,
     tg_enabled: false, tg_chat_ids: "", tg_token: "", tg_token_set: false,
+    tg_events: [] as string[],
   });
   const [notifMsg, setNotifMsg] = useState<string | null>(null);
   const [notifBusy, setNotifBusy] = useState(false);
@@ -510,6 +511,7 @@ export default function BeallitasokPage() {
         weekly_backup: boolean; auto_receipt: boolean;
         wa_enabled: boolean; wa_phone_id: string | null; wa_recipients: string | null; wa_token_set: boolean;
         tg_enabled: boolean; tg_chat_ids: string | null; tg_token_set: boolean;
+        tg_events: string[];
       }>("/api/settings/notifications")
       .then((s) => setNotif({
         daily_enabled: s.daily_enabled,
@@ -521,6 +523,7 @@ export default function BeallitasokPage() {
         wa_recipients: s.wa_recipients ?? "", wa_token: "", wa_token_set: s.wa_token_set,
         tg_enabled: s.tg_enabled, tg_chat_ids: s.tg_chat_ids ?? "",
         tg_token: "", tg_token_set: s.tg_token_set,
+        tg_events: s.tg_events ?? [],
       }))
       .catch(() => {});
   }, []);
@@ -543,6 +546,7 @@ export default function BeallitasokPage() {
         tg_enabled: notif.tg_enabled,
         tg_chat_ids: notif.tg_chat_ids || null,
         tg_token: notif.tg_token || null,
+        tg_events: notif.tg_events,
       });
       setNotif((n) => ({
         ...n,
@@ -1459,6 +1463,32 @@ export default function BeallitasokPage() {
                 {t("notif.tgChats")}
                 <input value={notif.tg_chat_ids} onChange={(e) => setNotif({ ...notif, tg_chat_ids: e.target.value })} placeholder="-1001234567890, 123456789" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" />
               </label>
+            </div>
+            {/* Mely eseményekről küldjön beépített értesítést a csoportba */}
+            <div className="mt-3 rounded-lg border border-sky-200 bg-white p-2.5">
+              <div className="mb-1.5 text-xs font-semibold text-sky-800">{t("notif.tgEventsTitle")}</div>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {["settlement.created", "settlement.signed", "ticket.created", "ticket.done",
+                  "order.created", "partner.created", "counter.reported", "stock.low"].map((ev) => (
+                  <label key={ev} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={notif.tg_events.includes(ev)}
+                      onChange={(e) =>
+                        setNotif({
+                          ...notif,
+                          tg_events: e.target.checked
+                            ? [...notif.tg_events, ev]
+                            : notif.tg_events.filter((x) => x !== ev),
+                        })
+                      }
+                      className="h-4 w-4"
+                    />
+                    {t(`auto.triggers.${ev.replace(".", "_")}`)}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-slate-400">{t("notif.tgEventsHint")}</p>
             </div>
             <p className="mt-1 text-xs text-sky-700">{t("notif.tgHint")}</p>
           </fieldset>
