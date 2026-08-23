@@ -147,6 +147,13 @@ body {
 .dark .text-red-500, .dark .text-red-600 { color: #f87171 !important; }
 .dark .text-red-700, .dark .text-red-800 { color: #fca5a5 !important; }
 
+/* narancs (korosítás-csempék, KSZ belső munkalap gomb) */
+.dark .bg-orange-50, .dark .hover\:bg-orange-50:hover { background-color: #3a2410 !important; }
+.dark .bg-orange-100, .dark .hover\:bg-orange-100:hover { background-color: #4a2e12 !important; }
+.dark .border-orange-200, .dark .border-orange-300 { border-color: #6b4415 !important; }
+.dark .text-orange-700, .dark .text-orange-800 { color: #fdba74 !important; }
+.dark .text-orange-900 { color: #fed7aa !important; }
+
 /* rózsa (alacsony készlet) */
 .dark .bg-rose-50 { background-color: #371420 !important; }
 .dark .bg-rose-100, .dark .hover\:bg-rose-100:hover { background-color: #471a2b !important; }
