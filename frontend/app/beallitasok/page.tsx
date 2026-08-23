@@ -497,6 +497,8 @@ export default function BeallitasokPage() {
   const [notif, setNotif] = useState({
     daily_enabled: false, recipients: "", send_hour: "6",
     weekly_backup: false, auto_receipt: false,
+    wa_enabled: false, wa_phone_id: "", wa_recipients: "", wa_token: "", wa_token_set: false,
+    tg_enabled: false, tg_chat_ids: "", tg_token: "", tg_token_set: false,
   });
   const [notifMsg, setNotifMsg] = useState<string | null>(null);
   const [notifBusy, setNotifBusy] = useState(false);
@@ -506,6 +508,8 @@ export default function BeallitasokPage() {
       .get<{
         daily_enabled: boolean; recipients: string | null; send_hour: number;
         weekly_backup: boolean; auto_receipt: boolean;
+        wa_enabled: boolean; wa_phone_id: string | null; wa_recipients: string | null; wa_token_set: boolean;
+        tg_enabled: boolean; tg_chat_ids: string | null; tg_token_set: boolean;
       }>("/api/settings/notifications")
       .then((s) => setNotif({
         daily_enabled: s.daily_enabled,
@@ -513,6 +517,10 @@ export default function BeallitasokPage() {
         send_hour: String(s.send_hour),
         weekly_backup: s.weekly_backup,
         auto_receipt: s.auto_receipt,
+        wa_enabled: s.wa_enabled, wa_phone_id: s.wa_phone_id ?? "",
+        wa_recipients: s.wa_recipients ?? "", wa_token: "", wa_token_set: s.wa_token_set,
+        tg_enabled: s.tg_enabled, tg_chat_ids: s.tg_chat_ids ?? "",
+        tg_token: "", tg_token_set: s.tg_token_set,
       }))
       .catch(() => {});
   }, []);
@@ -528,8 +536,46 @@ export default function BeallitasokPage() {
         send_hour: Number(notif.send_hour) || 6,
         weekly_backup: notif.weekly_backup,
         auto_receipt: notif.auto_receipt,
+        wa_enabled: notif.wa_enabled,
+        wa_phone_id: notif.wa_phone_id || null,
+        wa_recipients: notif.wa_recipients || null,
+        wa_token: notif.wa_token || null,
+        tg_enabled: notif.tg_enabled,
+        tg_chat_ids: notif.tg_chat_ids || null,
+        tg_token: notif.tg_token || null,
       });
+      setNotif((n) => ({
+        ...n,
+        wa_token: "", wa_token_set: n.wa_token_set || !!(n.wa_token && n.wa_token !== "-"),
+        tg_token: "", tg_token_set: n.tg_token_set || !!(n.tg_token && n.tg_token !== "-"),
+      }));
       setNotifMsg(t("common.saved"));
+    } catch (err) {
+      setNotifMsg(errorMessage(err));
+    } finally {
+      setNotifBusy(false);
+    }
+  }
+
+  async function testWhatsApp() {
+    setNotifBusy(true);
+    setNotifMsg(null);
+    try {
+      const res = await api.post<{ to: string }>("/api/settings/notifications/whatsapp-test", {});
+      setNotifMsg(t("notif.waTestSent", { to: res.to }));
+    } catch (err) {
+      setNotifMsg(errorMessage(err));
+    } finally {
+      setNotifBusy(false);
+    }
+  }
+
+  async function testTelegram() {
+    setNotifBusy(true);
+    setNotifMsg(null);
+    try {
+      const res = await api.post<{ chat_id: string }>("/api/settings/notifications/telegram-test", {});
+      setNotifMsg(t("notif.tgTestSent", { to: res.chat_id }));
     } catch (err) {
       setNotifMsg(errorMessage(err));
     } finally {
@@ -1371,12 +1417,64 @@ export default function BeallitasokPage() {
             </label>
           </div>
           {notifMsg && <p className="text-sm text-slate-600">{notifMsg}</p>}
-          <div className="flex gap-2">
+          {/* WhatsApp bekötés (Meta Cloud API) — belső kommunikáció + dolgozói push */}
+          <fieldset className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+            <legend className="px-1 text-xs font-semibold uppercase text-emerald-700">💬 {t("notif.waTitle")}</legend>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={notif.wa_enabled} onChange={(e) => setNotif({ ...notif, wa_enabled: e.target.checked })} className="h-4 w-4" />
+              {t("notif.waEnabled")}
+            </label>
+            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                {t("notif.waToken")} {notif.wa_token_set && <span className="text-xs text-emerald-600">({t("notif.tokenSet")})</span>}
+                <input type="password" value={notif.wa_token} onChange={(e) => setNotif({ ...notif, wa_token: e.target.value })} placeholder={notif.wa_token_set ? "••••••••" : "EAAG…"} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" />
+                <span className="mt-0.5 block text-xs text-slate-400">{t("notif.tokenHint")}</span>
+              </label>
+              <label className="block text-sm">
+                {t("notif.waPhoneId")}
+                <input value={notif.wa_phone_id} onChange={(e) => setNotif({ ...notif, wa_phone_id: e.target.value })} placeholder="1234567890" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" />
+              </label>
+              <label className="block text-sm sm:col-span-2">
+                {t("notif.waRecipients")}
+                <input value={notif.wa_recipients} onChange={(e) => setNotif({ ...notif, wa_recipients: e.target.value })} placeholder="36301234567, 36209876543" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+            </div>
+            <p className="mt-1 text-xs text-emerald-700">{t("notif.waHint")}</p>
+          </fieldset>
+
+          {/* Telegram bekötés (Bot API) */}
+          <fieldset className="rounded-xl border border-sky-200 bg-sky-50/50 p-3">
+            <legend className="px-1 text-xs font-semibold uppercase text-sky-700">✈️ {t("notif.tgTitle")}</legend>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={notif.tg_enabled} onChange={(e) => setNotif({ ...notif, tg_enabled: e.target.checked })} className="h-4 w-4" />
+              {t("notif.tgEnabled")}
+            </label>
+            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                {t("notif.tgToken")} {notif.tg_token_set && <span className="text-xs text-sky-600">({t("notif.tokenSet")})</span>}
+                <input type="password" value={notif.tg_token} onChange={(e) => setNotif({ ...notif, tg_token: e.target.value })} placeholder={notif.tg_token_set ? "••••••••" : "123456:ABC…"} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" />
+                <span className="mt-0.5 block text-xs text-slate-400">{t("notif.tokenHint")}</span>
+              </label>
+              <label className="block text-sm">
+                {t("notif.tgChats")}
+                <input value={notif.tg_chat_ids} onChange={(e) => setNotif({ ...notif, tg_chat_ids: e.target.value })} placeholder="-1001234567890, 123456789" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" />
+              </label>
+            </div>
+            <p className="mt-1 text-xs text-sky-700">{t("notif.tgHint")}</p>
+          </fieldset>
+
+          <div className="flex flex-wrap gap-2">
             <button disabled={notifBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
               {notifBusy ? t("common.saving") : t("common.save")}
             </button>
             <button type="button" onClick={testDigest} disabled={notifBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
               {t("notif.testBtn")}
+            </button>
+            <button type="button" onClick={testWhatsApp} disabled={notifBusy} className="rounded-lg border border-emerald-300 px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
+              💬 {t("notif.waTestBtn")}
+            </button>
+            <button type="button" onClick={testTelegram} disabled={notifBusy} className="rounded-lg border border-sky-300 px-4 py-2 text-sm text-sky-700 hover:bg-sky-50 disabled:opacity-50">
+              ✈️ {t("notif.tgTestBtn")}
             </button>
           </div>
         </form>

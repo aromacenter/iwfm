@@ -78,6 +78,9 @@ class PartnerBody(BaseModel):
     billing_number: str | None = Field(default=None, max_length=32)
     bank_account: str | None = Field(default=None, max_length=64)
     payment_terms_days: int | None = Field(default=None, ge=0, le=365)
+    # Felelős képviselő (üzletkötő) — az ő dolga a partner igényeinek
+    # kezelése; az automatizálások "képviselő" címzettje hozzá irányít.
+    agent_user_id: str | None = None
     # A szerződéses feltételek KÜLÖN entitásban élnek (/contracts) — a
     # partner-űrlap nem írja őket; a partneren lévő contract_* mezők a
     # mindenkor aktív szerződés tükrei.
@@ -114,6 +117,13 @@ class PartnerBody(BaseModel):
         )
         if composed_billing:
             data["billing_address"] = composed_billing
+        if self.agent_user_id:
+            try:
+                data["agent_user_id"] = uuid.UUID(self.agent_user_id)
+            except ValueError:
+                raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+        else:
+            data["agent_user_id"] = None
         return data
 
 
@@ -149,6 +159,7 @@ class PartnerOut(BaseModel):
     contract_below_min_price_kg: float | None
     contract_no_min_until: date | None
     contract_rent_if_below_min: bool
+    agent_user_id: str | None = None
     notes: str | None
     is_active: bool
     asset_count: int = 0
@@ -187,6 +198,7 @@ def _partner_out(p: Partner, asset_count: int = 0) -> PartnerOut:
         contract_below_min_price_kg=p.contract_below_min_price_kg,
         contract_no_min_until=p.contract_no_min_until,
         contract_rent_if_below_min=p.contract_rent_if_below_min,
+        agent_user_id=str(p.agent_user_id) if p.agent_user_id else None,
         notes=p.notes,
         is_active=p.is_active,
         asset_count=asset_count,

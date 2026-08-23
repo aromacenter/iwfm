@@ -41,6 +41,7 @@ interface Partner {
   billing_number: string | null;
   bank_account: string | null;
   payment_terms_days: number | null;
+  agent_user_id: string | null;
   contract_min_portions: number | null;
   contract_below_min_price: number | null;
   contract_min_kg: number | null;
@@ -78,6 +79,7 @@ const EMPTY = {
   billing_number: "",
   bank_account: "",
   payment_terms_days: "",
+  agent_user_id: "",
   notes: "",
   is_active: true,
 };
@@ -101,9 +103,12 @@ export default function PartnerekPage() {
   const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Felelős képviselő választóhoz (üzletkötők/vezetők)
+  const [agents, setAgents] = useState<{ id: string; display_name: string }[]>([]);
 
   const load = useCallback(() => {
     api.get<Partner[]>("/api/partners").then(setPartners).catch(() => {});
+    api.get<{ id: string; display_name: string }[]>("/api/quotes/agents").then(setAgents).catch(() => {});
   }, []);
 
   useEffect(load, [load]);
@@ -169,6 +174,7 @@ export default function PartnerekPage() {
       billing_number: p.billing_number ?? "",
       bank_account: p.bank_account ?? "",
       payment_terms_days: p.payment_terms_days != null ? String(p.payment_terms_days) : "",
+      agent_user_id: p.agent_user_id ?? "",
       notes: p.notes ?? "",
       is_active: p.is_active,
     });
@@ -235,6 +241,7 @@ export default function PartnerekPage() {
         billing_number: form.billing_number || null,
         bank_account: form.bank_account || null,
         payment_terms_days: form.payment_terms_days ? Number(form.payment_terms_days) : null,
+        agent_user_id: form.agent_user_id || null,
         notes: form.notes || null,
         is_active: form.is_active,
       };
@@ -262,6 +269,7 @@ export default function PartnerekPage() {
     settlement_weeks: number;
     payment_method: string | null;
     payment_terms_days: number | null;
+    no_minimum: boolean;
     note: string | null;
     status: "active" | "future" | "expired";
   }
@@ -271,7 +279,8 @@ export default function PartnerekPage() {
     id: string; valid_from: string; valid_to: string; min_portions: string;
     below_min_price: string; min_kg: string; below_min_price_kg: string;
     rent_if_below_min: boolean; settlement_weeks: string;
-    payment_method: string; payment_terms_days: string; note: string;
+    payment_method: string; payment_terms_days: string;
+    no_minimum: boolean; note: string;
   } | null>(null);
   const [cError, setCError] = useState<string | null>(null);
   const [cBusy, setCBusy] = useState(false);
@@ -293,7 +302,8 @@ export default function PartnerekPage() {
       id: "", valid_from: new Date().toISOString().slice(0, 10), valid_to: "",
       min_portions: "", below_min_price: "", min_kg: "", below_min_price_kg: "",
       rent_if_below_min: false, settlement_weeks: "4",
-      payment_method: "", payment_terms_days: "", note: "",
+      payment_method: "", payment_terms_days: "",
+      no_minimum: false, note: "",
     });
   }
 
@@ -309,6 +319,7 @@ export default function PartnerekPage() {
       settlement_weeks: String(c.settlement_weeks || 4),
       payment_method: c.payment_method ?? "",
       payment_terms_days: c.payment_terms_days != null ? String(c.payment_terms_days) : "",
+      no_minimum: c.no_minimum,
       note: c.note ?? "",
     });
   }
@@ -330,6 +341,7 @@ export default function PartnerekPage() {
         settlement_weeks: Number(cForm.settlement_weeks) || 4,
         payment_method: cForm.payment_method || null,
         payment_terms_days: cForm.payment_terms_days ? Number(cForm.payment_terms_days) : null,
+        no_minimum: cForm.no_minimum,
         note: cForm.note || null,
       };
       if (cForm.id) await api.patch(`/api/partners/${contractsFor.id}/contracts/${cForm.id}`, body);
@@ -672,6 +684,20 @@ export default function PartnerekPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {field(t("partners.bankAccount"), "bank_account", { mono: true })}
                 {field(t("partners.paymentTerms"), "payment_terms_days", { type: "number" })}
+                <label className="block text-sm">
+                  {t("partners.agent")}
+                  <select
+                    value={form.agent_user_id}
+                    onChange={(e) => setForm({ ...form, agent_user_id: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                  >
+                    <option value="">—</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>{a.display_name}</option>
+                    ))}
+                  </select>
+                  <span className="mt-0.5 block text-xs text-slate-400">{t("partners.agentHint")}</span>
+                </label>
               </div>
             </fieldset>
 
@@ -798,8 +824,9 @@ export default function PartnerekPage() {
                           t("cons.dueEveryWeeks", { weeks: c.settlement_weeks || 4 }),
                           c.payment_method ? t(`cons.payments.${c.payment_method}`) : null,
                           c.payment_terms_days != null ? t("contracts.sumTerms", { days: c.payment_terms_days }) : null,
-                          c.min_portions != null ? t("contracts.sumMinPortions", { n: c.min_portions, price: c.below_min_price ?? "—" }) : null,
-                          c.min_kg != null ? t("contracts.sumMinKg", { n: c.min_kg, price: c.below_min_price_kg ?? "—" }) : null,
+                          c.no_minimum ? t("contracts.sumNoMinimum") : null,
+                          !c.no_minimum && c.min_portions != null ? t("contracts.sumMinPortions", { n: c.min_portions, price: c.below_min_price ?? "—" }) : null,
+                          !c.no_minimum && c.min_kg != null ? t("contracts.sumMinKg", { n: c.min_kg, price: c.below_min_price_kg ?? "—" }) : null,
                           c.rent_if_below_min ? t("contracts.sumRent") : null,
                           c.note,
                         ].filter(Boolean).join(" · ") || t("contracts.noTerms")}
@@ -853,6 +880,13 @@ export default function PartnerekPage() {
                   <span>
                     {t("partners.contractRentIfBelowMin")}
                     <span className="block text-xs text-slate-400">{t("partners.contractRentIfBelowMinHint")}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                  <input type="checkbox" checked={cForm.no_minimum} onChange={(e) => setCForm({ ...cForm, no_minimum: e.target.checked })} className="mt-0.5 h-4 w-4" />
+                  <span>
+                    {t("contracts.noMinimum")}
+                    <span className="block text-xs text-emerald-700">{t("contracts.noMinimumHint")}</span>
                   </span>
                 </label>
                 <fieldset className="rounded-xl border border-slate-200 p-3">

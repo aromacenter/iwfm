@@ -318,10 +318,56 @@ export default function AutomatizalasokPage() {
                         <input
                           value={a.to ?? ""}
                           onChange={(e) => setAction(i, { to: e.target.value })}
-                          placeholder="partner | recipients | cim@ceg.hu"
+                          placeholder="partner | agent | recipients | cim@ceg.hu"
                           className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                         />
                         <span className="mt-0.5 block text-slate-400">{t("auto.emailToHint")}</span>
+                      </label>
+                    </div>
+                  )}
+                  {a.type === "send_whatsapp" && (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <label className="block text-xs sm:col-span-2">
+                        {t("auto.waText")}
+                        <input
+                          value={a.text ?? ""}
+                          onChange={(e) => setAction(i, { text: e.target.value })}
+                          placeholder={t("auto.waTextPh")}
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                      </label>
+                      <label className="block text-xs">
+                        {t("auto.waTo")}
+                        <input
+                          value={a.to ?? ""}
+                          onChange={(e) => setAction(i, { to: e.target.value })}
+                          placeholder="recipients | agent | 36301234567"
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                        <span className="mt-0.5 block text-slate-400">{t("auto.waToHint")}</span>
+                      </label>
+                    </div>
+                  )}
+                  {a.type === "send_telegram" && (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <label className="block text-xs sm:col-span-2">
+                        {t("auto.waText")}
+                        <input
+                          value={a.text ?? ""}
+                          onChange={(e) => setAction(i, { text: e.target.value })}
+                          placeholder={t("auto.waTextPh")}
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                      </label>
+                      <label className="block text-xs">
+                        {t("auto.tgTo")}
+                        <input
+                          value={a.to ?? ""}
+                          onChange={(e) => setAction(i, { to: e.target.value })}
+                          placeholder="recipients | -100123456789"
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                        <span className="mt-0.5 block text-slate-400">{t("auto.tgToHint")}</span>
                       </label>
                     </div>
                   )}

@@ -63,6 +63,12 @@ class User(Base):
     # A kiadott JWT-k érvényességi pecsétje: növelésekor minden korábbi token
     # érvénytelenné válik (jelszóváltás / kényszerített kijelentkeztetés).
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Helyettes a távollét (jóváhagyott szabadság/betegség) idejére — a
+    # felelős-képviselői értesítések ilyenkor hozzá futnak be.
+    substitute_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_users_substitute"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -491,6 +497,16 @@ class Partner(Base):
     # Az aktív szerződés fizetési módja/határideje (elszámolás-alapértelmezés).
     contract_payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
     contract_payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Az aktív szerződés "nincs minimum" kapcsolójának tükre: igaz esetén a
+    # partner pontosan a lefőzöttet fizeti (a gép-szintű minimumok sem élnek).
+    contract_no_minimum: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Felelős képviselő (üzletkötő) — az ő dolga a partner igényeinek kezelése;
+    # az automatizálások "képviselő" címzettje hozzá (távollétekor a
+    # helyetteséhez) irányít.
+    agent_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_partners_agent"),
+        nullable=True,
+    )
     # Ha igaz: a minimum el nem érésekor NEM különbözetet számlázunk, hanem a
     # gép(ek) fix havi bérleti díja lép életbe; minimum felett bérleti díj sincs.
     contract_rent_if_below_min: Mapped[bool] = mapped_column(
@@ -1094,6 +1110,15 @@ class NotificationSettings(Base):
     send_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
     weekly_backup: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     auto_receipt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # WhatsApp (Meta Cloud API) — belső kommunikációra és dolgozói push-ra.
+    wa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    wa_token_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    wa_phone_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    wa_recipients: Mapped[str | None] = mapped_column(Text, nullable=True)  # telefonszámok vesszővel
+    # Telegram (Bot API) — csoport/csevegés-azonosítókra küldött push.
+    tg_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    tg_token_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    tg_chat_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # chat_id-k vesszővel
     # Utolsó sikeres küldések (duplikátum-védelem újraindításkor)
     last_daily_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)  # ÉÉÉÉ-HH-NN
     last_backup_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -1251,6 +1276,9 @@ class PartnerContract(Base):
     # elszámolásnál ez az alapértelmezés, ott csak felülírni lehet.
     payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
     payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Nincs minimum-elvárás: a partner mindig pontosan a lefőzöttet fizeti
+    # (korlátlan türelmi időszak — a gép-szintű minimumokat is kikapcsolja).
+    no_minimum: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_partner_contracts_user"),
@@ -1516,4 +1544,31 @@ class QuoteSettings(Base):
     contract_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class AgentExpense(Base):
+    """Képviselői költség — a helyszíni munkával járó kiadás (üzemanyag,
+    parkolás, kellék), amely az üzletkötő-elszámolásban a kasszájából
+    (készpénzes bevételéből) levonódik."""
+
+    __tablename__ = "agent_expenses"
+    __table_args__ = (
+        Index("ix_agent_expenses_user", "user_id", "expense_date"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE", name="fk_agent_expenses_user"),
+        nullable=False,
+    )
+    expense_date: Mapped[date] = mapped_column(Date, nullable=False)
+    amount_gross: Mapped[float] = mapped_column(Float, nullable=False)  # Ft, bruttó
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_agent_expenses_creator"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )

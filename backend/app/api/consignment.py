@@ -1108,11 +1108,12 @@ async def apply_contract_lines(
     # Kg-alapú minimum (csak partner-szinten) — ha él, az adag-alapút kiváltja
     kg_mode = bool(partner.contract_min_kg)
 
-    # Türelmi időszak: minden minimum-elvárás szünetel
+    # Türelmi időszak / "nincs minimum" szerződés: minden minimum-elvárás
+    # szünetel — a partner pontosan a lefőzöttet fizeti.
     grace = (
         partner.contract_no_min_until is not None
         and date.today() <= partner.contract_no_min_until
-    )
+    ) or bool(partner.contract_no_minimum)
     if grace:
         min_portions = 0
         kg_mode = False
@@ -1968,13 +1969,161 @@ async def settlement_summary(
         bucket["net"] = _money(bucket["net"])
         bucket["gross"] = _money(bucket["gross"])
 
+    # Képviselői költségek az időszakban — a kasszából (készpénz) levonódnak.
+    from app.models import AgentExpense
+
+    exp_q = select(sa_func.coalesce(sa_func.sum(AgentExpense.amount_gross), 0.0))
+    if settled_by:
+        try:
+            exp_q = exp_q.where(AgentExpense.user_id == uuid.UUID(settled_by))
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"code": "settlement.bad_user"})
+    if date_from:
+        exp_q = exp_q.where(AgentExpense.expense_date >= date_from)
+    if date_to:
+        exp_q = exp_q.where(AgentExpense.expense_date <= date_to)
+    expenses_total = float((await db.execute(exp_q)).scalar_one() or 0.0)
+
     return {
         "by_payment": by_payment,
         "by_company": by_company,
         "total_net": _money(sum(s.total_net for s in settlements)),
         "total_gross": _money(sum(s.total_gross for s in settlements)),
         "count": len(settlements),
+        "expenses_total": _money(expenses_total),
+        # Kassza: készpénzes bruttó bevétel − rögzített költségek
+        "cash_balance": _money(by_payment["cash"]["gross"] - expenses_total),
     }
+
+
+# ─── Képviselői költségek (a kasszából levonódnak) ──────────────────────────
+
+
+class ExpenseBody(BaseModel):
+    amount_gross: float = Field(gt=0, le=10_000_000)
+    note: str | None = Field(default=None, max_length=512)
+    expense_date: date | None = None  # None = ma
+    user_id: str | None = None  # csak invoicing joggal írható más nevére
+
+
+class ExpenseOut(BaseModel):
+    id: str
+    user_id: str
+    user_name: str | None
+    expense_date: date
+    amount_gross: float
+    note: str | None
+    created_at: datetime
+
+
+@settlements_router.get("/expenses", response_model=list[ExpenseOut])
+async def list_expenses(
+    settled_by: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("agent_report")),
+):
+    from app.models import AgentExpense
+
+    q = select(AgentExpense)
+    if settled_by:
+        try:
+            q = q.where(AgentExpense.user_id == uuid.UUID(settled_by))
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"code": "settlement.bad_user"})
+    if date_from:
+        q = q.where(AgentExpense.expense_date >= date_from)
+    if date_to:
+        q = q.where(AgentExpense.expense_date <= date_to)
+    rows = (
+        await db.execute(q.order_by(AgentExpense.expense_date.desc()).limit(500))
+    ).scalars().all()
+    user_ids = {r.user_id for r in rows}
+    names: dict = {}
+    if user_ids:
+        for u in (
+            await db.execute(select(User).where(User.id.in_(user_ids)))
+        ).scalars():
+            names[u.id] = u.display_name
+    return [
+        ExpenseOut(
+            id=str(r.id), user_id=str(r.user_id), user_name=names.get(r.user_id),
+            expense_date=r.expense_date, amount_gross=r.amount_gross,
+            note=r.note, created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@settlements_router.post("/expenses", response_model=ExpenseOut, status_code=201)
+async def create_expense(
+    body: ExpenseBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("agent_report")),
+):
+    """Költség rögzítése — alapból a bejelentkezett képviselő kasszájára; más
+    nevére csak invoicing joggal írható."""
+    from app.api.deps import get_permission_matrix, permissions_for
+    from app.models import AgentExpense
+
+    target_id = actor.id
+    if body.user_id and body.user_id != str(actor.id):
+        matrix = await get_permission_matrix(db)
+        if "invoicing" not in permissions_for(actor.role, matrix):
+            raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+        try:
+            target_id = uuid.UUID(body.user_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+    exp = AgentExpense(
+        user_id=target_id,
+        expense_date=body.expense_date or date.today(),
+        amount_gross=body.amount_gross,
+        note=body.note,
+        created_by=actor.id,
+    )
+    db.add(exp)
+    await db.flush()
+    await record_audit(
+        db, actor=actor, action="expense.create", entity_type="agent_expense",
+        entity_id=str(exp.id),
+        detail={"amount": body.amount_gross, "note": body.note}, request=request,
+    )
+    await db.commit()
+    return ExpenseOut(
+        id=str(exp.id), user_id=str(exp.user_id), user_name=actor.display_name,
+        expense_date=exp.expense_date, amount_gross=exp.amount_gross,
+        note=exp.note, created_at=exp.created_at,
+    )
+
+
+@settlements_router.delete("/expenses/{expense_id}")
+async def delete_expense(
+    expense_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    from app.models import AgentExpense
+
+    try:
+        eid = uuid.UUID(expense_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "expense.not_found"})
+    exp = (
+        await db.execute(select(AgentExpense).where(AgentExpense.id == eid))
+    ).scalar_one_or_none()
+    if exp is None:
+        raise HTTPException(status_code=404, detail={"code": "expense.not_found"})
+    await record_audit(
+        db, actor=actor, action="expense.delete", entity_type="agent_expense",
+        entity_id=str(exp.id), detail={"amount": exp.amount_gross}, request=request,
+    )
+    await db.delete(exp)
+    await db.commit()
+    return {"ok": True}
 
 
 class DuePartnerOut(BaseModel):

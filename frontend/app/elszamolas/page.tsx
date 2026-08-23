@@ -1072,6 +1072,14 @@ export default function ElszamolasPage() {
             {t("cons.replenish")}
           </button>
         )}
+        {partnerId && (
+          <button
+            onClick={openDelivery}
+            className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100"
+          >
+            🚚 {t("delivery.new")}
+          </button>
+        )}
         {partnerId && stock.length > 0 && (
           <button
             onClick={() => openStockReturn("")}

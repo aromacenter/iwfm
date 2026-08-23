@@ -630,6 +630,16 @@ class NotificationBody(BaseModel):
     send_hour: int = Field(default=6, ge=0, le=23)
     weekly_backup: bool = False
     auto_receipt: bool = False
+    # WhatsApp (Meta Cloud API)
+    wa_enabled: bool = False
+    wa_phone_id: str | None = Field(default=None, max_length=64)
+    wa_recipients: str | None = Field(default=None, max_length=2000)
+    # Token: None/üres = meglévő megtartása; "-" = törlés; egyéb = beállítás.
+    wa_token: str | None = Field(default=None, max_length=512)
+    # Telegram (Bot API)
+    tg_enabled: bool = False
+    tg_chat_ids: str | None = Field(default=None, max_length=2000)
+    tg_token: str | None = Field(default=None, max_length=512)  # ugyanaz a szemantika
 
 
 @router.get("/notifications")
@@ -647,6 +657,13 @@ async def get_notification_settings(
         "send_hour": row.send_hour,
         "weekly_backup": row.weekly_backup,
         "auto_receipt": row.auto_receipt,
+        "wa_enabled": row.wa_enabled,
+        "wa_phone_id": row.wa_phone_id,
+        "wa_recipients": row.wa_recipients,
+        "wa_token_set": row.wa_token_encrypted is not None,
+        "tg_enabled": row.tg_enabled,
+        "tg_chat_ids": row.tg_chat_ids,
+        "tg_token_set": row.tg_token_encrypted is not None,
         "last_daily_sent": row.last_daily_sent,
         "last_backup_sent": row.last_backup_sent,
     }
@@ -667,12 +684,80 @@ async def update_notification_settings(
     row.send_hour = body.send_hour
     row.weekly_backup = body.weekly_backup
     row.auto_receipt = body.auto_receipt
+    row.wa_enabled = body.wa_enabled
+    row.wa_phone_id = (body.wa_phone_id or "").strip() or None
+    row.wa_recipients = (body.wa_recipients or "").strip() or None
+    row.tg_enabled = body.tg_enabled
+    row.tg_chat_ids = (body.tg_chat_ids or "").strip() or None
+    if body.wa_token or body.tg_token:
+        from app.core.crypto import encrypt_pii
+
+        if body.wa_token:
+            row.wa_token_encrypted = (
+                None if body.wa_token.strip() == "-" else encrypt_pii(body.wa_token.strip())
+            )
+        if body.tg_token:
+            row.tg_token_encrypted = (
+                None if body.tg_token.strip() == "-" else encrypt_pii(body.tg_token.strip())
+            )
     await record_audit(
         db, actor=actor, action="settings.notifications_update", entity_type="settings",
         entity_id="notifications", request=request,
     )
     await db.commit()
     return {"ok": True}
+
+
+class WhatsAppTestBody(BaseModel):
+    to: str | None = None  # None = az első beállított WhatsApp-címzett
+
+
+@router.post("/notifications/whatsapp-test")
+async def send_whatsapp_test(
+    body: WhatsAppTestBody,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Próba-üzenet a WhatsApp-bekötés ellenőrzésére."""
+    from app.services.wfm.whatsapp import load_whatsapp_config, send_whatsapp
+
+    config = await load_whatsapp_config(db)
+    await db.commit()
+    if config is None:
+        raise HTTPException(status_code=422, detail={"code": "whatsapp.not_configured"})
+    to = body.to or (config["recipients"][0] if config["recipients"] else None)
+    if not to:
+        raise HTTPException(status_code=422, detail={"code": "whatsapp.no_recipient"})
+    ok = await send_whatsapp(config, to, "Iwfm próba-üzenet — a WhatsApp-bekötés működik. ✅")
+    if not ok:
+        raise HTTPException(status_code=422, detail={"code": "whatsapp.send_failed"})
+    return {"ok": True, "to": to}
+
+
+class TelegramTestBody(BaseModel):
+    chat_id: str | None = None  # None = az első beállított chat
+
+
+@router.post("/notifications/telegram-test")
+async def send_telegram_test(
+    body: TelegramTestBody,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Próba-üzenet a Telegram-bekötés ellenőrzésére."""
+    from app.services.wfm.telegram import load_telegram_config, send_telegram
+
+    config = await load_telegram_config(db)
+    await db.commit()
+    if config is None:
+        raise HTTPException(status_code=422, detail={"code": "telegram.not_configured"})
+    chat = body.chat_id or (config["chat_ids"][0] if config["chat_ids"] else None)
+    if not chat:
+        raise HTTPException(status_code=422, detail={"code": "telegram.no_recipient"})
+    ok = await send_telegram(config, chat, "Iwfm próba-üzenet — a Telegram-bekötés működik. ✅")
+    if not ok:
+        raise HTTPException(status_code=422, detail={"code": "telegram.send_failed"})
+    return {"ok": True, "chat_id": chat}
 
 
 @router.post("/notifications/test")

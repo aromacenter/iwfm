@@ -8,7 +8,24 @@
     "weeklyBackup": "Heti mentés e-mailben (hétfőnként)",
     "autoReceipt": "Bizonylat automatikus küldése aláírás után",
     "testBtn": "Próba-összefoglaló küldése most",
-    "testSent": "Elküldve {count} címzettnek."
+    "testSent": "Elküldve {count} címzettnek.",
+    "waTitle": "WhatsApp bekötés (Meta Cloud API)",
+    "waEnabled": "WhatsApp-küldés engedélyezése",
+    "waToken": "Hozzáférési token",
+    "waPhoneId": "Telefonszám-azonosító (Phone number ID)",
+    "waRecipients": "Alapértelmezett címzettek (telefonszámok vesszővel)",
+    "waHint": "A Meta for Developers oldalon létrehozott WhatsApp Business appból: tartós hozzáférési token + a küldő szám Phone number ID-ja. Belső kommunikációra és dolgozói push-üzenetekre; az Automatizálásoknál a „WhatsApp küldése” akcióval használható.",
+    "waTestBtn": "WhatsApp-teszt",
+    "waTestSent": "Próba-üzenet elküldve: {to}",
+    "tgTitle": "Telegram bekötés (Bot API)",
+    "tgEnabled": "Telegram-küldés engedélyezése",
+    "tgToken": "Bot token",
+    "tgChats": "Chat-azonosítók (vesszővel)",
+    "tgHint": "A @BotFather-től kapott bot token; a botot add hozzá a csoporthoz, a chat_id-t pl. a getUpdates hívásból tudod meg. Az Automatizálásoknál a „Telegram küldése” akcióval használható.",
+    "tgTestBtn": "Telegram-teszt",
+    "tgTestSent": "Próba-üzenet elküldve: {to}",
+    "tokenSet": "beállítva",
+    "tokenHint": "Üresen hagyva a meglévő marad; „-” beírásával törölhető."
   },
   "report": {
     "monthly": "Havi zárás PDF:",
@@ -540,7 +557,7 @@
     "varsHint": "Használható változók",
     "emailTemplate": "E-mail sablon",
     "emailTo": "Címzett",
-    "emailToHint": "partner = a partner e-mail címe · recipients = az Értesítések címzettjei · vagy konkrét címek vesszővel",
+    "emailToHint": "partner = a partner e-mail címe · agent = a felelős képviselő (távollétekor helyettese) · recipients = az Értesítések címzettjei · vagy konkrét címek vesszővel",
     "noTemplates": "Előbb hozz létre e-mail sablont a Beállításokban!",
     "noteText": "Jegyzet szövege",
     "noteTextPh": "pl. Elszámolás készült: {{vegosszeg_brutto}} Ft",
@@ -568,8 +585,16 @@
     "actionTypes": {
       "send_email": "E-mail küldése",
       "add_partner_note": "Partner-jegyzet",
-      "create_task": "Feladat kiosztása"
-    }
+      "create_task": "Feladat kiosztása",
+      "send_whatsapp": "WhatsApp küldése",
+      "send_telegram": "Telegram küldése"
+    },
+    "waText": "Üzenet szövege ({{változók}} használhatók)",
+    "waTextPh": "pl. Új rendelés érkezett: {{partner_nev}}",
+    "waTo": "Címzett(ek)",
+    "waToHint": "recipients = a beállított WhatsApp-számok · agent = a partner felelős képviselője (távollétekor helyettese) · vagy konkrét számok vesszővel",
+    "tgTo": "Chat-azonosító(k)",
+    "tgToHint": "recipients = a beállított Telegram-chatek · vagy konkrét chat_id-k vesszővel"
   },
   "audit": {
     "title": "Audit napló",
@@ -748,7 +773,9 @@
       "customer": "Vevő",
       "supplier": "Szállító",
       "both": "Vevő és szállító"
-    }
+    },
+    "agent": "Felelős képviselő",
+    "agentHint": "Az ő dolga a partner igényeinek kezelése; az automatizálások „képviselő” címzettje hozzá — távollétekor a helyetteséhez — irányít."
   },
   "account": {
     "password": "Jelszó módosítása",
@@ -1641,7 +1668,10 @@
     "paymentMethod": "Fizetési mód (alapértelmezés)",
     "paymentTerms": "Fizetési határidő (nap)",
     "scheduleHint": "Az esedékesség-lista e gyakoriság szerint ütemez (azonos napokon, jellemzően kedd–csütörtök); a fizetési mód és határidő az elszámolásnál/számlázásnál alapértelmezés — ott felülírható.",
-    "sumTerms": "{days} nap határidő"
+    "sumTerms": "{days} nap határidő",
+    "noMinimum": "Nincs minimum-elvárás",
+    "noMinimumHint": "A partner mindig pontosan a lefőzöttet fizeti — a szerződéses ÉS a gép-szintű minimumok sem élnek (korlátlan türelmi időszak).",
+    "sumNoMinimum": "nincs minimum"
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",
@@ -1753,5 +1783,24 @@
     "chooseThis": "Ezt választom",
     "chosen": "Kiválasztva",
     "agent": "Üzletkötő"
+  },
+  "agent": {
+    "expensesTitle": "Költségek",
+    "expensesHint": "üzemanyag, parkolás, kellék — a kasszából levonódik",
+    "expenseNew": "Költség rögzítése",
+    "expenseDate": "Dátum",
+    "expenseAmount": "Összeg (Ft)",
+    "expenseNote": "Megjegyzés",
+    "expenseNotePh": "pl. tankolás, parkolás…",
+    "expenseSaved": "Költség rögzítve.",
+    "expenseDeleted": "Költség törölve.",
+    "expenseDeleteConfirm": "Törlöd a(z) {amount} összegű költséget?",
+    "noExpenses": "Nincs rögzített költség az időszakban.",
+    "expensesRow": "Költségek (levonás)",
+    "cashBalance": "Kassza (készpénz − költségek)",
+    "substituteTitle": "Helyettesem távollét idején",
+    "noSubstitute": "— nincs helyettes —",
+    "substituteSaved": "Helyettes elmentve.",
+    "substituteHint": "Jóváhagyott szabadságod/betegséged idején a felelős-képviselői értesítések automatikusan hozzá futnak be."
   }
 }

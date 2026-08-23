@@ -36,6 +36,18 @@ interface Summary {
   total_net: number;
   total_gross: number;
   count: number;
+  expenses_total: number;
+  cash_balance: number;
+}
+
+interface Expense {
+  id: string;
+  user_id: string;
+  user_name: string | null;
+  expense_date: string;
+  amount_gross: number;
+  note: string | null;
+  created_at: string;
 }
 
 interface Receivable {
@@ -66,6 +78,11 @@ export default function UzletkotoPage() {
   const [rows, setRows] = useState<Settlement[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [receivables, setReceivables] = useState<Receivable[]>([]);
+  // Képviselői költségek (a kasszából levonódnak) + helyettes-kijelölés
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expForm, setExpForm] = useState<{ amount: string; note: string; date: string } | null>(null);
+  const [expBusy, setExpBusy] = useState(false);
+  const [me, setMe] = useState<{ id: string; substitute_user_id: string | null } | null>(null);
 
   const fmt = (dt: string) =>
     new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "short" });
@@ -73,6 +90,7 @@ export default function UzletkotoPage() {
 
   useEffect(() => {
     api.get<Agent[]>("/api/settlements/agents").then(setAgents).catch(() => {});
+    api.get<{ id: string; substitute_user_id: string | null }>("/api/auth/me").then(setMe).catch(() => {});
   }, []);
 
   const load = useCallback(() => {
@@ -83,8 +101,56 @@ export default function UzletkotoPage() {
     if (dateTo) params.set("date_to", dateTo);
     api.get<Settlement[]>(`/api/settlements?${params}`).then(setRows).catch(() => {});
     api.get<Summary>(`/api/settlements/summary?${params}`).then(setSummary).catch(() => {});
+    const expParams = new URLSearchParams();
+    if (agentId) expParams.set("settled_by", agentId);
+    if (dateFrom) expParams.set("date_from", dateFrom);
+    if (dateTo) expParams.set("date_to", dateTo);
+    api.get<Expense[]>(`/api/settlements/expenses?${expParams}`).then(setExpenses).catch(() => {});
   }, [agentId, company, dateFrom, dateTo]);
   useEffect(load, [load]);
+
+  async function saveExpense(e: React.FormEvent) {
+    e.preventDefault();
+    if (!expForm) return;
+    setExpBusy(true);
+    try {
+      await api.post("/api/settlements/expenses", {
+        amount_gross: Number(expForm.amount),
+        note: expForm.note || null,
+        expense_date: expForm.date || null,
+      });
+      toast(t("agent.expenseSaved"), "success");
+      setExpForm(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setExpBusy(false);
+    }
+  }
+
+  async function deleteExpense(x: Expense) {
+    if (!(await confirm(t("agent.expenseDeleteConfirm", { amount: ft(x.amount_gross) })))) return;
+    try {
+      await api.delete(`/api/settlements/expenses/${x.id}`);
+      toast(t("agent.expenseDeleted"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function setSubstitute(userId: string) {
+    try {
+      const res = await api.put<{ substitute_user_id: string | null }>("/api/auth/me/substitute", {
+        user_id: userId || null,
+      });
+      setMe((m) => (m ? { ...m, substitute_user_id: res.substitute_user_id } : m));
+      toast(t("agent.substituteSaved"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   // Havi zárás PDF a könyvelőnek (cégenként vagy összesítve)
   const [reportMonth, setReportMonth] = useState(() => {
@@ -411,10 +477,103 @@ export default function UzletkotoPage() {
                   <td className="px-4 py-3">{ft(summary.total_net)}</td>
                   <td className="px-4 py-3">{ft(summary.total_gross)}</td>
                 </tr>
+                <tr className="text-rose-700">
+                  <td className="px-4 py-3">💸 {t("agent.expensesRow")}</td>
+                  <td className="px-4 py-3">{expenses.length}</td>
+                  <td className="px-4 py-3"></td>
+                  <td className="px-4 py-3">− {ft(summary.expenses_total ?? 0)}</td>
+                </tr>
+                <tr className="bg-emerald-50 font-semibold text-emerald-800">
+                  <td className="px-4 py-3" colSpan={3}>💰 {t("agent.cashBalance")}</td>
+                  <td className="px-4 py-3">{ft(summary.cash_balance ?? 0)}</td>
+                </tr>
               </tbody>
             </table>
           </div>
         </>
+      )}
+
+      {/* Képviselői költségek: a kasszából levonódnak */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3">
+          <span className="text-sm font-semibold">💸 {t("agent.expensesTitle")}</span>
+          <span className="text-xs text-slate-400">{t("agent.expensesHint")}</span>
+          <button
+            onClick={() => setExpForm({ amount: "", note: "", date: new Date().toISOString().slice(0, 10) })}
+            className="ml-auto rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+          >
+            + {t("agent.expenseNew")}
+          </button>
+        </div>
+        {expForm && (
+          <form onSubmit={saveExpense} className="flex flex-wrap items-end gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+            <label className="block text-xs">
+              {t("agent.expenseDate")}
+              <input type="date" required value={expForm.date} onChange={(e) => setExpForm({ ...expForm, date: e.target.value })} className="mt-1 block rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+            </label>
+            <label className="block text-xs">
+              {t("agent.expenseAmount")}
+              <input type="number" required min={1} step="1" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} className="mt-1 block w-32 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+            </label>
+            <label className="block flex-1 text-xs">
+              {t("agent.expenseNote")}
+              <input value={expForm.note} onChange={(e) => setExpForm({ ...expForm, note: e.target.value })} placeholder={t("agent.expenseNotePh")} className="mt-1 block w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+            </label>
+            <button disabled={expBusy} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {expBusy ? t("common.saving") : t("common.save")}
+            </button>
+            <button type="button" onClick={() => setExpForm(null)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
+              {t("common.cancel")}
+            </button>
+          </form>
+        )}
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase text-slate-500">
+              <th className="px-4 py-2">{t("agent.expenseDate")}</th>
+              <th className="px-4 py-2">{t("audit.who")}</th>
+              <th className="px-4 py-2 text-right">{t("agent.expenseAmount")}</th>
+              <th className="px-4 py-2">{t("agent.expenseNote")}</th>
+              <th className="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {expenses.map((x) => (
+              <tr key={x.id} className="border-t border-slate-100">
+                <td className="px-4 py-2">{x.expense_date}</td>
+                <td className="px-4 py-2">{x.user_name ?? "—"}</td>
+                <td className="px-4 py-2 text-right font-medium text-rose-700">− {ft(x.amount_gross)}</td>
+                <td className="px-4 py-2 text-slate-500">{x.note ?? "—"}</td>
+                <td className="px-4 py-2 text-right">
+                  {canInvoice && (
+                    <button onClick={() => deleteExpense(x)} title={t("common.delete")} className="rounded border border-slate-300 px-2 py-1 text-xs leading-none hover:bg-red-50">🗑️</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {expenses.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400">{t("agent.noExpenses")}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Helyettes távollét idejére: a felelős-képviselői értesítések ilyenkor hozzá futnak be */}
+      {me && (
+        <div className="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm">
+          <span className="font-semibold text-indigo-900">🧑‍🤝‍🧑 {t("agent.substituteTitle")}</span>
+          <select
+            value={me.substitute_user_id ?? ""}
+            onChange={(e) => setSubstitute(e.target.value)}
+            className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5"
+          >
+            <option value="">{t("agent.noSubstitute")}</option>
+            {agents.filter((a) => a.user_id && a.user_id !== me.id).map((a) => (
+              <option key={a.user_id} value={a.user_id!}>{a.name}</option>
+            ))}
+          </select>
+          <span className="text-xs text-indigo-700">{t("agent.substituteHint")}</span>
+        </div>
       )}
     </AppShell>
   );

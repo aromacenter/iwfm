@@ -50,7 +50,9 @@ TRIGGERS: dict[str, list[str]] = {
 }
 
 OPS = ("eq", "ne", "gte", "lte", "contains")
-ACTION_TYPES = ("send_email", "add_partner_note", "create_task")
+ACTION_TYPES = (
+    "send_email", "add_partner_note", "create_task", "send_whatsapp", "send_telegram",
+)
 
 
 def render(template: str, ctx: dict) -> str:
@@ -112,6 +114,20 @@ async def _act_send_email(db: AsyncSession, action: dict, ctx: dict) -> None:
     if to_spec == "partner":
         if ctx.get("partner_email"):
             recipients = [str(ctx["partner_email"])]
+    elif to_spec == "agent":
+        # A partner felelős képviselője — távollétekor a kijelölt helyettese.
+        from app.models import Partner as _Partner
+        from app.services.wfm.agents import resolve_agent_user
+
+        pid = ctx.get("_partner_id")
+        partner = (
+            await db.execute(select(_Partner).where(_Partner.id == pid))
+        ).scalar_one_or_none() if pid else None
+        agent = await resolve_agent_user(
+            db, partner.agent_user_id if partner else None
+        )
+        if agent is not None:
+            recipients = [agent.email]
     elif to_spec == "recipients":
         row = (
             await db.execute(
@@ -129,6 +145,76 @@ async def _act_send_email(db: AsyncSession, action: dict, ctx: dict) -> None:
     body = render(template.body, ctx)
     for to in recipients:
         await send_email(config, to, subject, body)
+
+
+async def _act_send_whatsapp(db: AsyncSession, action: dict, ctx: dict) -> None:
+    """WhatsApp-üzenet: action.text a {{változós}} szöveg; action.to =
+    'recipients' (a beállított WhatsApp-címzettek), 'agent' (a partner felelős
+    képviselőjének — távollétekor helyettesének — telefonszáma) vagy konkrét
+    számok vesszővel."""
+    from app.services.wfm.whatsapp import load_whatsapp_config, normalize_phone, send_whatsapp
+
+    config = await load_whatsapp_config(db)
+    if config is None:
+        raise RuntimeError("WhatsApp nincs beállítva")
+    text = render(str(action.get("text") or ""), ctx).strip()
+    if not text:
+        raise RuntimeError("üres üzenet")
+
+    to_spec = str(action.get("to") or "recipients").strip()
+    numbers: list[str] = []
+    if to_spec == "recipients":
+        numbers = config["recipients"]
+    elif to_spec == "agent":
+        from app.models import Employee, Partner as _Partner
+        from app.services.wfm.agents import resolve_agent_user
+
+        pid = ctx.get("_partner_id")
+        partner = (
+            await db.execute(select(_Partner).where(_Partner.id == pid))
+        ).scalar_one_or_none() if pid else None
+        agent = await resolve_agent_user(db, partner.agent_user_id if partner else None)
+        if agent is not None:
+            emp = (
+                await db.execute(select(Employee).where(Employee.user_id == agent.id))
+            ).scalar_one_or_none()
+            phone = normalize_phone(emp.phone or "") if emp and emp.phone else None
+            if phone:
+                numbers = [phone]
+    else:
+        numbers = [
+            p for p in (normalize_phone(x) for x in to_spec.replace(";", ",").split(","))
+            if p
+        ]
+    if not numbers:
+        raise RuntimeError("nincs WhatsApp-címzett")
+    for num in numbers:
+        if not await send_whatsapp(config, num, text):
+            raise RuntimeError(f"küldés sikertelen: {num}")
+
+
+async def _act_send_telegram(db: AsyncSession, action: dict, ctx: dict) -> None:
+    """Telegram-üzenet: action.text a {{változós}} szöveg; action.to =
+    'recipients' (a beállított chat-ek) vagy konkrét chat_id-k vesszővel."""
+    from app.services.wfm.telegram import load_telegram_config, send_telegram
+
+    config = await load_telegram_config(db)
+    if config is None:
+        raise RuntimeError("Telegram nincs beállítva")
+    text = render(str(action.get("text") or ""), ctx).strip()
+    if not text:
+        raise RuntimeError("üres üzenet")
+    to_spec = str(action.get("to") or "recipients").strip()
+    chats = (
+        config["chat_ids"]
+        if to_spec == "recipients"
+        else [x.strip() for x in to_spec.replace(";", ",").split(",") if x.strip()]
+    )
+    if not chats:
+        raise RuntimeError("nincs Telegram-címzett")
+    for chat in chats:
+        if not await send_telegram(config, chat, text):
+            raise RuntimeError(f"küldés sikertelen: {chat}")
 
 
 async def _act_add_partner_note(db: AsyncSession, action: dict, ctx: dict) -> None:
@@ -193,6 +279,8 @@ _ACTIONS = {
     "send_email": _act_send_email,
     "add_partner_note": _act_add_partner_note,
     "create_task": _act_create_task,
+    "send_whatsapp": _act_send_whatsapp,
+    "send_telegram": _act_send_telegram,
 }
 
 

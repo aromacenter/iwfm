@@ -62,6 +62,7 @@ class UserOut(BaseModel):
     display_name: str
     role: str
     permissions: list[str] = []
+    substitute_user_id: str | None = None  # helyettes távollét idejére
 
 
 def _user_out(user: User, permissions: list[str] | None = None) -> UserOut:
@@ -71,6 +72,9 @@ def _user_out(user: User, permissions: list[str] | None = None) -> UserOut:
         display_name=user.display_name,
         role=user.role,
         permissions=permissions or [],
+        substitute_user_id=(
+            str(user.substitute_user_id) if user.substitute_user_id else None
+        ),
     )
 
 
@@ -170,5 +174,48 @@ async def me(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    matrix = await get_permission_matrix(db)
+    return _user_out(user, permissions_for(user.role, matrix))
+
+
+class SubstituteBody(BaseModel):
+    user_id: str | None = None  # None = helyettes törlése
+
+
+@router.put("/me/substitute", response_model=UserOut)
+async def set_my_substitute(
+    body: SubstituteBody,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """A saját helyettes kijelölése távollét idejére: amíg a felhasználónak
+    jóváhagyott távolléte fedi a napot, a felelős-képviselői értesítések a
+    helyetteshez futnak be."""
+    import uuid as _uuid
+
+    from sqlalchemy import select as sa_select
+
+    if body.user_id:
+        try:
+            sub_id = _uuid.UUID(body.user_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+        if sub_id == user.id:
+            raise HTTPException(status_code=422, detail={"code": "user.substitute_self"})
+        sub = (
+            await db.execute(sa_select(User).where(User.id == sub_id))
+        ).scalar_one_or_none()
+        if sub is None or not sub.is_active:
+            raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+        user.substitute_user_id = sub.id
+    else:
+        user.substitute_user_id = None
+    await record_audit(
+        db, actor=user, action="user.substitute", entity_type="user",
+        entity_id=str(user.id),
+        detail={"substitute": body.user_id}, request=request,
+    )
+    await db.commit()
     matrix = await get_permission_matrix(db)
     return _user_out(user, permissions_for(user.role, matrix))

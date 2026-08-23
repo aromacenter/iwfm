@@ -69,6 +69,9 @@ class ContractBody(BaseModel):
     # alapértelmezése, ott csak felülírható.
     payment_method: str | None = None
     payment_terms_days: int | None = Field(default=None, ge=0, le=365)
+    # Nincs minimum: a partner mindig pontosan a lefőzöttet fizeti (a
+    # gép-szintű minimumokat is kikapcsolja — korlátlan türelmi időszak).
+    no_minimum: bool = False
     note: str | None = None
 
     @field_validator("settlement_weeks")
@@ -98,6 +101,7 @@ class ContractOut(BaseModel):
     settlement_weeks: int
     payment_method: str | None
     payment_terms_days: int | None
+    no_minimum: bool
     note: str | None
     status: str  # active | future | expired
     created_at: datetime
@@ -119,7 +123,8 @@ def _out(c: PartnerContract) -> ContractOut:
         rent_if_below_min=c.rent_if_below_min,
         settlement_weeks=c.settlement_weeks,
         payment_method=c.payment_method,
-        payment_terms_days=c.payment_terms_days, note=c.note,
+        payment_terms_days=c.payment_terms_days,
+        no_minimum=c.no_minimum, note=c.note,
         status=_status(c, date.today()), created_at=c.created_at,
     )
 
@@ -233,6 +238,7 @@ class ContractRowOut(BaseModel):
     settlement_weeks: int
     payment_method: str | None
     payment_terms_days: int | None
+    no_minimum: bool
     note: str | None
     machines: list[dict]
 
@@ -327,7 +333,8 @@ async def contracts_overview(
             rent_if_below_min=c.rent_if_below_min,
             settlement_weeks=c.settlement_weeks,
             payment_method=c.payment_method,
-            payment_terms_days=c.payment_terms_days, note=c.note,
+            payment_terms_days=c.payment_terms_days,
+            no_minimum=c.no_minimum, note=c.note,
             machines=machines_by_partner.get(p.id, []),
         )
         for c, p in contracts

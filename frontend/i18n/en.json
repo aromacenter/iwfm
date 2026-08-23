@@ -8,7 +8,24 @@
     "weeklyBackup": "Weekly backup by e-mail (Mondays)",
     "autoReceipt": "Send receipt automatically after signing",
     "testBtn": "Send test digest now",
-    "testSent": "Sent to {count} recipients."
+    "testSent": "Sent to {count} recipients.",
+    "waTitle": "WhatsApp integration (Meta Cloud API)",
+    "waEnabled": "Enable WhatsApp sending",
+    "waToken": "Access token",
+    "waPhoneId": "Phone number ID",
+    "waRecipients": "Default recipients (phone numbers, comma-separated)",
+    "waHint": "From your WhatsApp Business app on Meta for Developers: a permanent access token + the sender's Phone number ID. For internal communication and worker push messages; use the \"Send WhatsApp\" action in Automations.",
+    "waTestBtn": "WhatsApp test",
+    "waTestSent": "Test message sent: {to}",
+    "tgTitle": "Telegram integration (Bot API)",
+    "tgEnabled": "Enable Telegram sending",
+    "tgToken": "Bot token",
+    "tgChats": "Chat IDs (comma-separated)",
+    "tgHint": "Bot token from @BotFather; add the bot to your group and find the chat_id e.g. via getUpdates. Use the \"Send Telegram\" action in Automations.",
+    "tgTestBtn": "Telegram test",
+    "tgTestSent": "Test message sent: {to}",
+    "tokenSet": "set",
+    "tokenHint": "Leave empty to keep the current one; enter \"-\" to clear."
   },
   "report": {
     "monthly": "Monthly closing PDF:",
@@ -540,7 +557,7 @@
     "varsHint": "Available variables",
     "emailTemplate": "Email template",
     "emailTo": "Recipient",
-    "emailToHint": "partner = the partner's email · recipients = Notification recipients · or explicit addresses separated by commas",
+    "emailToHint": "partner = the partner's email · agent = responsible agent (or substitute) · recipients = the Notifications recipients · or concrete addresses, comma-separated",
     "noTemplates": "Create an email template in Settings first!",
     "noteText": "Note text",
     "noteTextPh": "e.g. Settlement created: {{vegosszeg_brutto}} Ft",
@@ -568,8 +585,16 @@
     "actionTypes": {
       "send_email": "Send email",
       "add_partner_note": "Partner note",
-      "create_task": "Assign task"
-    }
+      "create_task": "Assign task",
+      "send_whatsapp": "Send WhatsApp",
+      "send_telegram": "Send Telegram"
+    },
+    "waText": "Message text ({{variables}} allowed)",
+    "waTextPh": "e.g. New order from {{partner_nev}}",
+    "waTo": "Recipient(s)",
+    "waToHint": "recipients = configured WhatsApp numbers · agent = the partner's responsible agent (or substitute while absent) · or concrete numbers, comma-separated",
+    "tgTo": "Chat ID(s)",
+    "tgToHint": "recipients = configured Telegram chats · or concrete chat_ids, comma-separated"
   },
   "audit": {
     "title": "Audit log",
@@ -748,7 +773,9 @@
       "customer": "Customer",
       "supplier": "Supplier",
       "both": "Customer & supplier"
-    }
+    },
+    "agent": "Responsible agent",
+    "agentHint": "They handle this partner's needs; the automations' \"agent\" recipient routes to them — or their substitute while absent."
   },
   "account": {
     "password": "Change password",
@@ -1641,7 +1668,10 @@
     "paymentMethod": "Payment method (default)",
     "paymentTerms": "Payment terms (days)",
     "scheduleHint": "The due list schedules by this frequency (same weekday, typically Tue–Thu); the payment method and terms are defaults at settlement/invoicing — they can be overridden there.",
-    "sumTerms": "{days}-day terms"
+    "sumTerms": "{days}-day terms",
+    "noMinimum": "No minimum requirement",
+    "noMinimumHint": "The partner always pays exactly what was brewed — contract AND machine-level minimums are disabled (unlimited grace period).",
+    "sumNoMinimum": "no minimum"
   },
   "delivery": {
     "title": "Delivery (delivery note)",
@@ -1753,5 +1783,24 @@
     "chooseThis": "Choose this",
     "chosen": "Selected",
     "agent": "Sales rep"
+  },
+  "agent": {
+    "expensesTitle": "Expenses",
+    "expensesHint": "fuel, parking, supplies — deducted from the cash register",
+    "expenseNew": "Record expense",
+    "expenseDate": "Date",
+    "expenseAmount": "Amount (Ft)",
+    "expenseNote": "Note",
+    "expenseNotePh": "e.g. fuel, parking…",
+    "expenseSaved": "Expense recorded.",
+    "expenseDeleted": "Expense deleted.",
+    "expenseDeleteConfirm": "Delete the expense of {amount}?",
+    "noExpenses": "No expenses recorded in this period.",
+    "expensesRow": "Expenses (deduction)",
+    "cashBalance": "Cash register (cash − expenses)",
+    "substituteTitle": "My substitute while absent",
+    "noSubstitute": "— no substitute —",
+    "substituteSaved": "Substitute saved.",
+    "substituteHint": "During your approved leave/sickness, responsible-agent notifications are routed to them automatically."
   }
 }
