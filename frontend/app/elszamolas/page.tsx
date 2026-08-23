@@ -238,7 +238,18 @@ export default function ElszamolasPage() {
   // Készlet-visszavét a partnertől raktárba/autóba: null = zárva;
   // product_id "" = TELJES készlet (szerződés-lezárás).
   const [stockReturn, setStockReturn] = useState<{ product_id: string; quantity: string; warehouse_id: string } | null>(null);
-  const [srcWarehouses, setSrcWarehouses] = useState<{ id: string; name: string; kind: string; is_active: boolean }[]>([]);
+  const [srcWarehouses, setSrcWarehouses] = useState<{ id: string; name: string; kind: string; user_id: string | null; is_active: boolean }[]>([]);
+  const [meId, setMeId] = useState<string | null>(null);
+  // Alapértelmezett forrás: a bejelentkezett képviselő SAJÁT autója, ha van;
+  // különben az első autó, végül bármelyik raktár.
+  const defaultVanId = useCallback(
+    () =>
+      srcWarehouses.find((w) => w.kind === "van" && w.user_id === meId)?.id ??
+      srcWarehouses.find((w) => w.kind === "van")?.id ??
+      srcWarehouses[0]?.id ??
+      "",
+    [srcWarehouses, meId],
+  );
   const [due, setDue] = useState<DuePartner[]>([]);
   const [showDue, setShowDue] = useState(true);
   const [lowStock, setLowStock] = useState<LowStock[]>([]);
@@ -438,9 +449,10 @@ export default function ElszamolasPage() {
     api.get<LowStock[]>("/api/products/low-stock").then(setLowStock).catch(() => {});
     api.get<Order[]>("/api/orders?status=open").then(setOrders).catch(() => {});
     api
-      .get<{ id: string; name: string; kind: string; is_active: boolean }[]>("/api/warehouses")
+      .get<{ id: string; name: string; kind: string; user_id: string | null; is_active: boolean }[]>("/api/warehouses")
       .then((rows) => setSrcWarehouses(rows.filter((w) => w.is_active)))
       .catch(() => {});
+    api.get<{ id: string }>("/api/auth/me").then((u) => setMeId(u.id)).catch(() => {});
   }, []);
 
   async function setOrderStatus(o: Order, status: "done" | "cancelled") {
@@ -648,7 +660,7 @@ export default function ElszamolasPage() {
   function openDelivery() {
     setDeliveryError(null);
     setDelivery({
-      source_warehouse_id: srcWarehouses.find((w) => w.kind === "van")?.id ?? "",
+      source_warehouse_id: defaultVanId(),
       note: "",
       lines: [{ product_id: "", quantity: "", unit_price: "" }],
     });
@@ -994,7 +1006,7 @@ export default function ElszamolasPage() {
     setStockReturn({
       product_id: productId,
       quantity: qty != null ? String(qty) : "",
-      warehouse_id: srcWarehouses.find((w) => w.kind === "van")?.id ?? srcWarehouses[0]?.id ?? "",
+      warehouse_id: defaultVanId(),
     });
   }
 
@@ -1025,7 +1037,7 @@ export default function ElszamolasPage() {
         />
         {partnerId && (
           <button
-            onClick={() => { setError(null); setReplenish({ product_id: activeProducts[0]?.id ?? "", quantity: "", unit_cost: activeProducts[0]?.purchase_price?.toString() ?? "", source_warehouse_id: srcWarehouses.find((w) => w.kind === "van")?.id ?? "" }); }}
+            onClick={() => { setError(null); setReplenish({ product_id: activeProducts[0]?.id ?? "", quantity: "", unit_cost: activeProducts[0]?.purchase_price?.toString() ?? "", source_warehouse_id: defaultVanId() }); }}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
           >
             {t("cons.replenish")}
