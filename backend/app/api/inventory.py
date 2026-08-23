@@ -596,6 +596,13 @@ class AssetPatch(BaseModel):
 class DeployBody(BaseModel):
     partner_id: str
     note: str | None = Field(default=None, max_length=512)
+    # Telepítési cím — a gépek gyakran NEM a cég székhelyén üzemelnek.
+    # Ha meg van adva, beüzemeléskor FELÜLÍRJA a partner címét (a számlázási
+    # cím érintetlen), és a partner újra-geokódolódik az útvonaltervezéshez.
+    site_zip: str | None = Field(default=None, max_length=16)
+    site_city: str | None = Field(default=None, max_length=128)
+    site_street: str | None = Field(default=None, max_length=256)
+    site_number: str | None = Field(default=None, max_length=32)
 
 
 class ReturnBody(BaseModel):
@@ -718,14 +725,19 @@ async def _get_asset_or_404(db: AsyncSession, asset_id: str) -> Asset:
 
 
 async def _next_barcode(db: AsyncSession) -> str:
-    """Generált eszközcímke: ESZ-NNNNNN (a meglévő ESZ- kódok max + 1)."""
-    rows = (
-        (await db.execute(select(Asset.barcode).where(Asset.barcode.like("ESZ-%"))))
-        .scalars()
-        .all()
-    )
-    nums = [int(b.split("-")[1]) for b in rows if b.split("-")[1].isdigit()]
-    return f"ESZ-{(max(nums) + 1) if nums else 1:06d}"
+    """Generált vonalkód: 11 jegyű számsor, előtag NÉLKÜL — a meglévő gépek
+    is így vannak tárolva (Xpresso-örökség), a régi ESZ- kódok érvényesek
+    maradnak, de újat nem generálunk belőlük."""
+    import secrets as _secrets
+
+    for _ in range(20):
+        candidate = str(_secrets.randbelow(9 * 10**10) + 10**10)  # 11 jegy, nem 0-val kezdődik
+        clash = (
+            await db.execute(select(Asset.id).where(Asset.barcode == candidate))
+        ).first()
+        if clash is None:
+            return candidate
+    raise HTTPException(status_code=500, detail={"code": "asset.barcode_gen_failed"})
 
 
 @assets_router.get("/generate-barcode")
@@ -999,6 +1011,9 @@ async def create_asset(
     ).first()
     if existing is not None:
         raise HTTPException(status_code=409, detail={"code": "asset.barcode_taken"})
+    # Vagy tárgyi eszköz, vagy az ügyfél saját gépe — a kettő együtt hibás.
+    if body.tangible and body.customer_owned:
+        raise HTTPException(status_code=422, detail={"code": "asset.tangible_xor_customer"})
 
     a = Asset(
         barcode=barcode,
@@ -1085,6 +1100,9 @@ async def update_asset(
 
     for key, value in data.items():
         setattr(a, key, value.strip() if isinstance(value, str) and key != "notes" else value)
+    # Vagy tárgyi eszköz, vagy az ügyfél saját gépe — együtt nem állhat.
+    if a.tangible and a.customer_owned:
+        raise HTTPException(status_code=422, detail={"code": "asset.tangible_xor_customer"})
     # Több számlálós gép: az egyes állásokból a `counter` mindig az összeg
     if data.get("counters"):
         a.counter = sum(data["counters"])
@@ -1113,17 +1131,43 @@ async def deploy_asset(
     a.status = "deployed"
     a.partner_id = partner.id
     a.deployed_at = datetime.now(UTC)
+
+    # Telepítési cím: a helyszín címe felülírja a partner címét (a gépek
+    # gyakran nem a székhelyen üzemelnek) — a körút-tervezés ezt használja.
+    site_updated = False
+    if body.site_zip and body.site_city and body.site_street:
+        partner.address_zip = body.site_zip.strip()
+        partner.address_city = body.site_city.strip()
+        partner.address_street = body.site_street.strip()
+        partner.address_number = (body.site_number or "").strip() or None
+        street_part = " ".join(
+            x for x in (partner.address_street, partner.address_number) if x
+        )
+        partner.address = f"{partner.address_zip} {partner.address_city}, {street_part}"
+        site_updated = True
+
     db.add(
         AssetMovement(
             asset_id=a.id, action="deploy", partner_id=partner.id,
-            detail=body.note, actor_user_id=actor.id,
+            detail=(
+                f"{body.note or ''}"
+                + (f" · Telepítési cím: {partner.address}" if site_updated else "")
+            ).strip(" ·") or None,
+            actor_user_id=actor.id,
         )
     )
     await record_audit(
         db, actor=actor, action="asset.deploy", entity_type="asset",
-        entity_id=a.barcode, detail={"partner": partner.name}, request=request,
+        entity_id=a.barcode,
+        detail={"partner": partner.name,
+                **({"site_address": partner.address} if site_updated else {})},
+        request=request,
     )
     await db.commit()
+    if site_updated:
+        from app.services.wfm.geocode import schedule_geocode
+
+        schedule_geocode(partner.id)
     return _asset_out(a, partner.name)
 
 

@@ -106,7 +106,8 @@ export default function GepekPage() {
   const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const [assetForm, setAssetForm] = useState<typeof EMPTY_ASSET | null>(null);
   const [deployFor, setDeployFor] = useState<Asset | null>(null);
-  const [deploy, setDeploy] = useState({ partner_id: "", note: "" });
+  const EMPTY_DEPLOY = { partner_id: "", note: "", site_zip: "", site_city: "", site_street: "", site_number: "" };
+  const [deploy, setDeploy] = useState({ ...EMPTY_DEPLOY });
   const [historyFor, setHistoryFor] = useState<Asset | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -309,9 +310,15 @@ export default function GepekPage() {
       await api.post(`/api/assets/${deployFor.id}/deploy`, {
         partner_id: deploy.partner_id,
         note: deploy.note || null,
+        // Telepítési cím: ha meg van adva, felülírja a partner címét
+        // (a gépek gyakran nem a székhelyen üzemelnek)
+        site_zip: deploy.site_zip || null,
+        site_city: deploy.site_city || null,
+        site_street: deploy.site_street || null,
+        site_number: deploy.site_number || null,
       });
       setDeployFor(null);
-      setDeploy({ partner_id: "", note: "" });
+      setDeploy({ ...EMPTY_DEPLOY });
       loadAssets();
       loadPartners();
     } catch (err) {
@@ -624,7 +631,7 @@ export default function GepekPage() {
                       </button>
                       </>
                     ) : a.status !== "retired" ? (
-                      <button onClick={() => { setError(null); setDeploy({ partner_id: "", note: "" }); setDeployFor(a); }} title={t("inv.deploy")} className="rounded bg-emerald-600 px-2 py-1 text-sm leading-none hover:bg-emerald-700">
+                      <button onClick={() => { setError(null); setDeploy({ ...EMPTY_DEPLOY }); setDeployFor(a); }} title={t("inv.deploy")} className="rounded bg-emerald-600 px-2 py-1 text-sm leading-none hover:bg-emerald-700">
                         📤
                       </button>
                     ) : null}
@@ -748,24 +755,24 @@ export default function GepekPage() {
             {Number(assetForm.counter_count) > 1 && (
               <p className="text-xs text-slate-400">{t("inv.normPerCounterHint")}</p>
             )}
-            <label className="block text-sm">
-              {t("inv.defaultProduct")}
-              <SearchSelect
-                items={products.map((p) => ({ id: p.id, label: p.name }))}
-                value={assetForm.default_product_id}
-                onChange={(id) => setAssetForm({ ...assetForm, default_product_id: id })}
-                allowEmpty
-                emptyLabel={t("inv.defaultProductNone")}
-                className="mt-1"
-              />
-              <span className="mt-1 block text-xs text-slate-400">{t("inv.defaultProductHint")}</span>
-            </label>
+            {/* „Ebből főz" NEM itt: az elszámoláskor / szerződéskor dől el */}
+            {/* Vagy tárgyi eszköz, vagy az ügyfél gépe — a kettő kizárja egymást */}
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={assetForm.tangible} onChange={(e) => setAssetForm({ ...assetForm, tangible: e.target.checked })} className="h-4 w-4" />
+              <input
+                type="checkbox"
+                checked={assetForm.tangible}
+                onChange={(e) => setAssetForm({ ...assetForm, tangible: e.target.checked, customer_owned: e.target.checked ? false : assetForm.customer_owned })}
+                className="h-4 w-4"
+              />
               {t("inv.tangible")}
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={assetForm.customer_owned} onChange={(e) => setAssetForm({ ...assetForm, customer_owned: e.target.checked })} className="h-4 w-4" />
+              <input
+                type="checkbox"
+                checked={assetForm.customer_owned}
+                onChange={(e) => setAssetForm({ ...assetForm, customer_owned: e.target.checked, tangible: e.target.checked ? false : assetForm.tangible })}
+                className="h-4 w-4"
+              />
               {t("inv.customerOwned")}
             </label>
             {/* Szerződéses feltételek NEM itt: a partner Szerződések moduljában */}
@@ -803,6 +810,32 @@ export default function GepekPage() {
               {t("inv.deployNote")}
               <input value={deploy.note} onChange={(e) => setDeploy({ ...deploy, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
+            <fieldset className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+              <legend className="px-1 text-xs font-semibold uppercase text-sky-600">
+                📍 {t("inv.siteAddress")}
+              </legend>
+              <p className="mb-2 text-xs text-sky-700">{t("inv.siteAddressHint")}</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+                <input
+                  value={deploy.site_zip}
+                  onChange={async (e) => {
+                    const zip = e.target.value;
+                    setDeploy((d) => ({ ...d, site_zip: zip }));
+                    if (zip.length === 4) {
+                      try {
+                        const res = await api.get<{ city: string | null }>(`/api/geo/zip/${zip}`);
+                        if (res.city) setDeploy((d) => (d.site_city ? d : { ...d, site_city: res.city! }));
+                      } catch { /* nincs találat */ }
+                    }
+                  }}
+                  placeholder={t("partners.zip")}
+                  className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm sm:col-span-1"
+                />
+                <input value={deploy.site_city} onChange={(e) => setDeploy({ ...deploy, site_city: e.target.value })} placeholder={t("partners.city")} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm sm:col-span-2" />
+                <input value={deploy.site_street} onChange={(e) => setDeploy({ ...deploy, site_street: e.target.value })} placeholder={t("partners.street")} className="col-span-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm sm:col-span-2" />
+                <input value={deploy.site_number} onChange={(e) => setDeploy({ ...deploy, site_number: e.target.value })} placeholder={t("partners.houseNo")} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm sm:col-span-1" />
+              </div>
+            </fieldset>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setDeployFor(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>

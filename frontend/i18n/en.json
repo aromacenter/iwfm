@@ -1401,7 +1401,8 @@
     "quote.bad_image": "Invalid image (PNG/JPEG/WebP, max 2 MB).",
     "quote.bad_agent": "The selected sales rep was not found.",
     "stock.return_empty": "Nothing to take back — the partner's stock is empty.",
-    "stock.return_too_much": "The returned quantity exceeds the partner's stock."
+    "stock.return_too_much": "The returned quantity exceeds the partner's stock.",
+    "asset.tangible_xor_customer": "A machine cannot be both a fixed asset AND customer-owned — pick one."
   },
   "inv": {
     "title": "Machines",
@@ -1490,13 +1491,15 @@
     "qrLabelsEzpx": "GoLabel (EZPX)",
     "qrLabelsEzpxHint": "GoLabel project file (.ezpx) using your own VOID label template: serial barcode + owner text, preconfigured for the G300 printer. Multiple machines download as a ZIP.",
     "customerOwnedShort": "customer-owned",
-    "normN": "Norm {n} (g/portion)",
-    "normPerCounterHint": "Per-counter norm: grams of coffee one portion uses on that counter. 0 = uses no coffee (e.g. hot chocolate) — keeps the kg check accurate.",
+    "normN": "Norm {n} (portions/kg)",
+    "normPerCounterHint": "Per-counter norm: how many portions 1 kg of coffee yields on that counter. 0 = uses no coffee (e.g. hot chocolate) — keeps the kg check accurate.",
     "loc_partner": "At partner",
     "loc_customer": "At customer",
     "loc_service": "In service",
     "loc_warehouse": "Internal warehouse",
-    "loc_retired": "Retired"
+    "loc_retired": "Retired",
+    "siteAddress": "Installation address (shop/office)",
+    "siteAddressHint": "If the machine operates somewhere other than the partner's recorded address, enter the site — it OVERWRITES the partner's address on save (billing address stays), and route planning uses it from then on. Leave empty to change nothing."
   },
   "wh": {
     "title": "Warehouse",
@@ -1629,8 +1632,8 @@
   "quote": {
     "publicTitle": "A coffee machine for your business — request a quote!",
     "publicSubtitle": "Fill in your details, pick a machine, and we'll prepare a tailored offer. You can then sign the contract online, even from your phone.",
-    "chooseMachine": "Which machine are you interested in?",
-    "chooseMachineHint": "Pick from our range — each one lists what it does and who it suits best. Not sure? Leave it empty and we'll help you choose.",
+    "chooseMachine": "Which package are you interested in?",
+    "chooseMachineHint": "Choose the machine kind and terms — the exact model is picked together with our rep at handover, based on current stock.",
     "idealFor": "Best for",
     "companyData": "Company details",
     "companyDataHint": "The contract will be prepared from these details — please fill them in accurately.",
@@ -1710,10 +1713,10 @@
     "typePhoto": "Upload photo",
     "removePhoto": "Remove photo",
     "imageTooBig": "Image too large (max 2 MB).",
-    "machineSelectLabel": "Which machine would you like?",
+    "machineSelectLabel": "Which package would you like?",
     "machineSelectEmpty": "Not sure yet — I'd like help choosing",
-    "guideTitle": "Not sure which machine to pick?",
-    "guideSubtitle": "Click here — we describe what each machine does and who it suits best.",
+    "guideTitle": "Not sure which package to pick?",
+    "guideSubtitle": "Click here — we describe what each option includes and who it suits best.",
     "chooseThis": "Choose this",
     "chosen": "Selected",
     "agent": "Sales rep"

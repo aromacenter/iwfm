@@ -1401,7 +1401,8 @@
     "quote.bad_image": "A kép formátuma nem megfelelő (PNG/JPEG/WebP, max 2 MB).",
     "quote.bad_agent": "A megadott üzletkötő nem található.",
     "stock.return_empty": "Nincs mit visszavenni — a partner készlete üres.",
-    "stock.return_too_much": "A visszavett mennyiség több, mint a partner készlete."
+    "stock.return_too_much": "A visszavett mennyiség több, mint a partner készlete.",
+    "asset.tangible_xor_customer": "Egy gép nem lehet egyszerre tárgyi eszköz ÉS az ügyfél saját gépe — válaszd az egyiket."
   },
   "inv": {
     "title": "Gépek",
@@ -1490,13 +1491,15 @@
     "qrLabelsEzpx": "GoLabel (EZPX)",
     "qrLabelsEzpxHint": "GoLabel projektfájl (.ezpx) a saját VOID-címke sablonotokkal: gyári szám vonalkód + X-Presso Coffee Kft. TULAJDONA — a G300 nyomtatóra beállítva. Több gépnél ZIP-ben, gépenként egy fájl.",
     "customerOwnedShort": "ügyfél gépe",
-    "normN": "Norma {n} (g/adag)",
-    "normPerCounterHint": "Norma számlálónként: hány gramm kávét használ egy adag az adott számlálón. 0 = nem használ kávét (pl. forró csoki) — a kg-ellenőrzés így pontos marad.",
+    "normN": "Norma {n} (adag/kg)",
+    "normPerCounterHint": "Norma számlálónként: hány adag készíthető 1 kg kávéból az adott számlálón. 0 = nem használ kávét (pl. forró csoki) — a kg-ellenőrzés így pontos marad.",
     "loc_partner": "Partnernél",
     "loc_customer": "Ügyfélnél",
     "loc_service": "Szervizben",
     "loc_warehouse": "Belső raktár",
-    "loc_retired": "Selejtezve"
+    "loc_retired": "Selejtezve",
+    "siteAddress": "Telepítési cím (üzlet/iroda)",
+    "siteAddressHint": "Ha a gép nem a partner rögzített címén üzemel, add meg a helyszínt — mentéskor FELÜLÍRJA a partner címét (a számlázási cím marad), és az útvonaltervezés innentől ezt használja. Üresen hagyva nem változik semmi."
   },
   "wh": {
     "title": "Raktár",
@@ -1629,8 +1632,8 @@
   "quote": {
     "publicTitle": "Kávégép az üzletébe — kérjen ajánlatot!",
     "publicSubtitle": "Töltse ki az adatokat, válassza ki a gépet, és elkészítjük személyre szabott ajánlatunkat. A szerződést utána online, akár telefonról is aláírhatja.",
-    "chooseMachine": "Melyik gép érdekli?",
-    "chooseMachineHint": "Válasszon a kínálatunkból — mindegyiknél leírtuk, mit tud és kiknek a legmegfelelőbb. Ha bizonytalan, hagyja üresen, segítünk választani.",
+    "chooseMachine": "Milyen konstrukció érdekli?",
+    "chooseMachineHint": "Válassza ki, milyen gépet és milyen feltételekkel szeretne — a konkrét géptípust az átadáskor képviselőnkkel közösen választják ki az aktuális készletből.",
     "idealFor": "Kinek ajánljuk",
     "companyData": "Cégadatok",
     "companyDataHint": "Ezekből az adatokból készül a szerződés — kérjük, pontosan töltse ki.",
@@ -1710,10 +1713,10 @@
     "typePhoto": "Fotó feltöltése",
     "removePhoto": "Fotó törlése",
     "imageTooBig": "A kép túl nagy (max 2 MB).",
-    "machineSelectLabel": "Melyik gépet szeretné?",
+    "machineSelectLabel": "Melyik konstrukciót szeretné?",
     "machineSelectEmpty": "Még nem tudom — kérek segítséget a választásban",
-    "guideTitle": "Nem tudja, melyik gépet válassza?",
-    "guideSubtitle": "Kattintson ide — minden gépről leírtuk, mit tud és kiknek a legmegfelelőbb.",
+    "guideTitle": "Nem tudja, melyik konstrukciót válassza?",
+    "guideSubtitle": "Kattintson ide — minden lehetőségről leírtuk, mit tartalmaz és kinek a legmegfelelőbb.",
     "chooseThis": "Ezt választom",
     "chosen": "Kiválasztva",
     "agent": "Üzletkötő"
