@@ -174,6 +174,58 @@ async def create_invoice_for_settlement(
     return str(created.get("id", "")), doc_type, due
 
 
+async def create_maintenance_invoice(
+    db: AsyncSession,
+    partner: Partner,
+    *,
+    serial: str,
+    asset_label: str,
+    amount_net: float,
+    vat_percent: int = 27,
+) -> tuple[str, str, date]:
+    """Karbantartási díj számlázása (KSZ-munkalap aláírása után, automatikus).
+
+    Visszatérés: (document_id, mode, due_date). A cég a partner szerződött
+    cége; a határidő a szerződés → partner → 8 nap erősorrend.
+    ValueError('billingo_not_configured'), ha nincs kulcs/blokk.
+    """
+    settings = await get_or_create_settings(db)
+    api_key, block_id, test_mode = _account(settings, partner.invoicing_company)
+    if not settings.enabled or not api_key or not block_id:
+        raise ValueError("billingo_not_configured")
+
+    billingo_partner_id = await _find_or_create_billingo_partner(api_key, partner)
+    today = date.today()
+    terms_days = (
+        partner.contract_payment_terms_days
+        if (partner.contract_payment_terms_days or 0) > 0
+        else partner.payment_terms_days if (partner.payment_terms_days or 0) > 0 else 8
+    )
+    due = today + timedelta(days=terms_days)
+    doc_type = "proforma" if test_mode else "invoice"
+    body = {
+        "partner_id": billingo_partner_id,
+        "block_id": block_id,
+        "type": doc_type,
+        "fulfillment_date": today.isoformat(),
+        "due_date": due.isoformat(),
+        "payment_method": "wire_transfer",
+        "language": "hu",
+        "currency": "HUF",
+        "electronic": False,
+        "items": [{
+            "name": f"Karbantartási díj — {asset_label} ({serial})",
+            "unit_price": amount_net,
+            "unit_price_type": "net",
+            "quantity": 1,
+            "unit": "alkalom",
+            "vat": _vat_label(vat_percent),
+        }],
+    }
+    created = await _api(api_key, "POST", "/documents", body)
+    return str(created.get("id", "")), doc_type, due
+
+
 async def fetch_payment_status(
     db: AsyncSession, document_id: str, company: str | None = None
 ) -> str | None:

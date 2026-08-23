@@ -441,7 +441,38 @@ async def create_ticket(
         "partner_nev": partner_label or "",
         "bejelento": actor.display_name,
     })
+    await _notify_ticket_assignee(db, tk)
     return _out(tk)
+
+
+async def _notify_ticket_assignee(db: AsyncSession, tk: ServiceTicket) -> None:
+    """Privát Telegram a kijelölt szervizesnek az új/átosztott jegyről — ha
+    összekapcsolta magát a bottal. Best-effort."""
+    if tk.assigned_to_user_id is None:
+        return
+    try:
+        from app.models import Employee
+        from app.services.wfm.telegram import send_personal
+
+        emp = (
+            await db.execute(
+                select(Employee).where(Employee.user_id == tk.assigned_to_user_id)
+            )
+        ).scalar_one_or_none()
+        if emp is None:
+            return
+        parts = [f"🔧 Szervizjegy neked: {tk.ticket_no} — {tk.title}"]
+        if tk.asset_label:
+            parts.append(tk.asset_label)
+        if tk.partner_label:
+            parts.append(tk.partner_label)
+        if tk.priority == "high":
+            parts.append("⚠️ SÜRGŐS")
+        await send_personal(db, emp, " · ".join(parts))
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("ticket assign notify failed", exc_info=True)
 
 
 @router.patch("/{ticket_id}", response_model=TicketOut)
@@ -469,8 +500,11 @@ async def update_ticket(
         tk.resolution = body.resolution
     if body.assigned_to_user_id is not None:
         assignee_id, assignee_name = await _resolve_assignee(db, body.assigned_to_user_id or None)
+        reassigned = assignee_id is not None and assignee_id != tk.assigned_to_user_id
         tk.assigned_to_user_id = assignee_id
         tk.assigned_to_name = assignee_name
+    else:
+        reassigned = False
     if body.parts is not None:
         tk.parts = [p.model_dump() for p in body.parts]
     if body.labor_fee is not None:
@@ -512,6 +546,8 @@ async def update_ticket(
             "partner_nev": tk.partner_label or "",
             "koltseg_osszesen": round(parts_cost + (tk.labor_fee or 0)),
         })
+    if reassigned:
+        await _notify_ticket_assignee(db, tk)
     return _out(tk)
 
 

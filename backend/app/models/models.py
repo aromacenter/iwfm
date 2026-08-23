@@ -351,6 +351,19 @@ class Worksheet(Base):
     # Külső szerviznek átadott gép munkalapja — külön sorszám-tartomány (KSZ-)
     # és külön nézet a sima munkalapoktól.
     external_service: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # A munkalap tárgy-gépe (KSZ-nél kötelező jellegű): ebből jön a
+    # karbantartási díj alapértéke ÉS az auto-számlázás partnere.
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("assets.id", ondelete="SET NULL", name="fk_worksheets_asset"),
+        nullable=True,
+    )
+    # Karbantartási díj (nettó): a gép díjából előtöltve, szabadon átírható.
+    maintenance_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Kedvezmény: a díj elengedve — ilyenkor NEM készül automatikus számla.
+    fee_discount: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Auto-számlázás nyoma (mindkét aláírás után): Billingó-bizonylat + e-mail.
+    billingo_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    invoice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     work_description: Mapped[str] = mapped_column(Text, nullable=False)
     # [{"name": "...", "qty": "...", "unit": "db"}, ...]
     materials: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
@@ -608,6 +621,9 @@ class Asset(Base):
     contract_min_portions: Mapped[int | None] = mapped_column(Integer, nullable=True)  # min. adag/hó
     contract_below_min_price: Mapped[float | None] = mapped_column(Float, nullable=True)  # Ft/adag a különbözetre
     rent_fee: Mapped[float | None] = mapped_column(Float, nullable=True)  # bérleti díj Ft/hó (nettó)
+    # Karbantartási díj (nettó Ft/alkalom) — a külsős karbantartási munkalapot
+    # ez tölti elő; ott átírható, kedvezmény-pipával elengedhető.
+    maintenance_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
     # QR-címke: kitalálhatatlan token a nyilvános támogatási oldalhoz.
     qr_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="in_stock")

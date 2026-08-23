@@ -716,7 +716,8 @@
       "low": "Alacsony",
       "normal": "Normál",
       "high": "Sürgős"
-    }
+    },
+    "machineSearchPh": "Keresés: vonalkód, típus, partner…"
   },
   "partners": {
     "title": "Partnerek",
@@ -1117,7 +1118,13 @@
     "priceEditHint": "Ezek az árak kerülnek az ügyfél −1-es munkalap-példányára — a képviselő állítja be, nem a szervizes.",
     "priceEditEmpty": "A munkalapon még nincsenek tételek — előbb a szervizes rögzíti őket.",
     "priceEditNotFilled": "A munkalap még nincs kitöltve — az árak mentése a kitöltés után lehetséges.",
-    "internalCopyHint": "Belső példány a külső szerviz nettó költségeivel — nem kerülhet az ügyfélhez."
+    "internalCopyHint": "Belső példány a külső szerviz nettó költségeivel — nem kerülhet az ügyfélhez.",
+    "wsMachine": "Gép (karbantartás tárgya)",
+    "wsMachineHint": "A karbantartási díj a gépből előtöltődik, és a számla a gép partneréhez készül.",
+    "maintFee": "Karbantartási díj (nettó)",
+    "maintFeeDiscount": "Kedvezmény — díj elengedve (nem készül számla)",
+    "maintFeeInvoiced": "kiszámlázva",
+    "maintFeeHint": "A gépből előtöltve, szabadon átírható. Ha nincs kedvezmény pipálva, a munkalap MINDKÉT aláírása után a díjról automatikusan számla készül és e-mailben kimegy az ügyfélnek a munkalappal együtt."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1161,7 +1168,10 @@
     "wsCostNet": "Szerviz nettó ktg. (Ft)",
     "wsPriceNet": "Ügyfél-ár (Ft, nettó)",
     "wsExternalHint": "Narancs mező: a külső szerviz nettó költsége (belső adat). Zöld mező: a mi ügyfél-árunk — ez kerül az ügyfél −1-es példányára.",
-    "wsExternalHint2": "Narancs mező: a külső szerviz visszaigazolt nettó költsége (belső adat). Az ügyfél-árakat a képviselő állítja be a Feladatok oldalon."
+    "wsExternalHint2": "Narancs mező: a külső szerviz visszaigazolt nettó költsége (belső adat). Az ügyfél-árakat a képviselő állítja be a Feladatok oldalon.",
+    "myTickets": "Szervizjegyeim",
+    "openInService": "Megnyitás a Szervizben",
+    "ticketStarted": "Szervizjegy folyamatban."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1557,7 +1567,9 @@
     "loc_warehouse": "Belső raktár",
     "loc_retired": "Selejtezve",
     "siteAddress": "Telepítési cím (üzlet/iroda)",
-    "siteAddressHint": "Ha a gép nem a partner rögzített címén üzemel, add meg a helyszínt — mentéskor FELÜLÍRJA a partner címét (a számlázási cím marad), és az útvonaltervezés innentől ezt használja. Üresen hagyva nem változik semmi."
+    "siteAddressHint": "Ha a gép nem a partner rögzített címén üzemel, add meg a helyszínt — mentéskor FELÜLÍRJA a partner címét (a számlázási cím marad), és az útvonaltervezés innentől ezt használja. Üresen hagyva nem változik semmi.",
+    "maintenanceFee": "Karbantartási díj (nettó Ft/alkalom)",
+    "maintenanceFeeHint": "Külsős karbantartási munkalapon ez az előtöltött díj — ott átírható; kedvezmény-pipa nélkül a két aláírás után automatikusan kiszámlázódik."
   },
   "wh": {
     "title": "Raktár",

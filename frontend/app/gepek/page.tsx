@@ -57,6 +57,7 @@ interface Asset {
   contract_min_portions: number | null;
   contract_below_min_price: number | null;
   rent_fee: number | null;
+  maintenance_fee: number | null;
   status: "in_stock" | "deployed" | "maintenance" | "retired";
   partner_id: string | null;
   partner_name: string | null;
@@ -79,6 +80,7 @@ const EMPTY_ASSET = {
   manufacturer: "",
   article_number: "",
   serial_number: "",
+  maintenance_fee: "",
   counter: "",
   counter_count: "1",
   counters: [] as string[],
@@ -271,6 +273,7 @@ export default function GepekPage() {
         manufacturer: assetForm.manufacturer || null,
         article_number: assetForm.article_number || null,
         serial_number: assetForm.serial_number || null,
+        maintenance_fee: assetForm.maintenance_fee ? Number(assetForm.maintenance_fee) : null,
         counter: assetForm.counter !== "" ? Number(assetForm.counter) : null,
         counter_count: Number(assetForm.counter_count) || 1,
         counters:
@@ -641,7 +644,7 @@ export default function GepekPage() {
                     <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       🕘
                     </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), norm: a.norm != null ? String(a.norm) : "", norms: (a.norms ?? []).map(String), default_product_id: a.default_product_id ?? "", tangible: a.tangible, customer_owned: a.customer_owned, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", maintenance_fee: a.maintenance_fee != null ? String(a.maintenance_fee) : "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), norm: a.norm != null ? String(a.norm) : "", norms: (a.norms ?? []).map(String), default_product_id: a.default_product_id ?? "", tangible: a.tangible, customer_owned: a.customer_owned, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       ✏️
                     </button>
                   </div>
@@ -695,6 +698,11 @@ export default function GepekPage() {
               <label className="block text-sm">
                 {t("inv.serial")}
                 <input value={assetForm.serial_number} onChange={(e) => setAssetForm({ ...assetForm, serial_number: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono" />
+              </label>
+              <label className="block text-sm sm:col-span-2">
+                {t("inv.maintenanceFee")}
+                <input type="number" min={0} step="1" value={assetForm.maintenance_fee} onChange={(e) => setAssetForm({ ...assetForm, maintenance_fee: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                <span className="mt-0.5 block text-xs text-slate-400">{t("inv.maintenanceFeeHint")}</span>
               </label>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

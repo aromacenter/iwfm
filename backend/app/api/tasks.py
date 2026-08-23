@@ -27,6 +27,7 @@ from app.api.deps import (
 from app.db import get_db
 from app.models import (
     Employee,
+    Partner,
     Skill,
     Task,
     TaskComment,
@@ -63,6 +64,9 @@ class TaskCreateBody(BaseModel):
     # a visszaigazolt nettó költségek belsők, az ügyfél a -1-es példányt
     # kapja a mi szerviz-árainkkal).
     external_service: bool = False
+    # A munkalap tárgy-gépe: ebből jön a karbantartási díj alapértéke és az
+    # aláírás utáni auto-számlázás partnere.
+    asset_id: str | None = None
 
 
 class TaskPatchBody(BaseModel):
@@ -129,6 +133,10 @@ class WorksheetBody(BaseModel):
     client_location: str | None = Field(default=None, max_length=512)
     employee_signature: str | None = None
     client_signature: str | None = None
+    # Karbantartási díj (nettó, a gép díjából előtöltve — átírható) és a
+    # kedvezmény-pipa (elengedve → nem készül automatikus számla).
+    maintenance_fee: float | None = Field(default=None, ge=0)
+    fee_discount: bool | None = None  # None = nem nyúlunk hozzá
 
 
 class WorksheetOut(BaseModel):
@@ -145,6 +153,9 @@ class WorksheetOut(BaseModel):
     # őket, hogy ne tűnjenek "elveszettnek".
     employee_signature: str | None
     client_signature: str | None
+    maintenance_fee: float | None = None
+    fee_discount: bool = False
+    invoiced: bool = False  # az auto-számla már kiment
     updated_at: datetime
 
 
@@ -169,6 +180,9 @@ def _worksheet_out(ws: Worksheet) -> WorksheetOut:
         has_client_signature=ws.client_signature is not None,
         employee_signature=ws.employee_signature,
         client_signature=ws.client_signature,
+        maintenance_fee=ws.maintenance_fee,
+        fee_discount=ws.fee_discount,
+        invoiced=ws.billingo_document_id is not None,
         updated_at=ws.updated_at,
     )
 
@@ -220,6 +234,12 @@ async def _upsert_worksheet(
     ws.hours_spent = body.hours_spent
     ws.client_name = (body.client_name or "").strip() or None
     ws.client_location = (body.client_location or "").strip() or None
+    # Karbantartási díj: a végző szabadon átírhatja; a kedvezmény-pipa csak
+    # kitöltve (True/False) változtat — None nem nyúl hozzá.
+    if body.maintenance_fee is not None:
+        ws.maintenance_fee = body.maintenance_fee
+    if body.fee_discount is not None:
+        ws.fee_discount = body.fee_discount
     # Csak KITÖLTÖTT aláírás ír felül — üres/None sosem törli a mentettet,
     # így az újranyitott munkalap mentése nem "tünteti el" az aláírásokat.
     if body.employee_signature:
@@ -233,7 +253,97 @@ async def _upsert_worksheet(
     )
     await db.commit()
     await db.refresh(ws)  # az onupdate-es updated_at lejárt attribútum lenne
+
+    # KSZ-karbantartás: mindkét aláírás megvan és nincs kedvezmény → a díjról
+    # automatikusan számla készül és e-mailben kimegy az ügyfélnek a
+    # munkalap-példánnyal együtt (best-effort, egyszer).
+    await _maybe_autoinvoice_maintenance(db, task, ws, actor, request)
     return ws
+
+
+async def _maybe_autoinvoice_maintenance(
+    db: AsyncSession, task: Task, ws: Worksheet, actor: User, request: Request
+) -> None:
+    """A karbantartási díj automatikus kiszámlázása a KSZ-munkalap mindkét
+    aláírása UTÁN — ha van díj, nincs kedvezmény, és még nem történt meg.
+    Hibája sosem akasztja meg a munkalap mentését."""
+    if not (
+        ws.external_service
+        and (ws.maintenance_fee or 0) > 0
+        and not ws.fee_discount
+        and ws.employee_signature
+        and ws.client_signature
+        and ws.billingo_document_id is None
+        and ws.asset_id is not None
+    ):
+        return
+    try:
+        from app.models import Asset
+
+        asset = (
+            await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+        ).scalar_one_or_none()
+        if asset is None or asset.partner_id is None:
+            return
+        partner = (
+            await db.execute(select(Partner).where(Partner.id == asset.partner_id))
+        ).scalar_one_or_none()
+        if partner is None:
+            return
+
+        from app.services.wfm.billingo_service import create_maintenance_invoice
+
+        try:
+            doc_id, mode, due = await create_maintenance_invoice(
+                db, partner,
+                serial=ws.serial,
+                asset_label=f"{asset.name} ({asset.barcode})",
+                amount_net=float(ws.maintenance_fee),
+            )
+        except ValueError:
+            return  # Billingó nincs beállítva — kihagyjuk, nincs jelölés
+        ws.billingo_document_id = doc_id
+
+        # E-mail az ügyfélnek: munkalap (ügyfél-példány) + számla-értesítés.
+        if partner.contact_email:
+            try:
+                pdf, serial = await _build_worksheet_pdf(db, task, "customer")
+                smtp = await load_smtp_config(db)
+                if smtp is not None:
+                    sent = await send_email(
+                        smtp, partner.contact_email,
+                        f"Karbantartás elvégezve — {serial}",
+                        (
+                            "Tisztelt Partnerünk!\n\n"
+                            f"A(z) {asset.name} ({asset.barcode}) gép karbantartása "
+                            "elkészült; a munkalapot mellékeljük. A karbantartási "
+                            f"díjról ({ws.maintenance_fee:.0f} Ft + ÁFA) "
+                            f"{'díjbekérőt' if mode == 'proforma' else 'számlát'} "
+                            f"állítottunk ki, fizetési határidő: {due.isoformat()}.\n\n"
+                            "Üdvözlettel"
+                        ),
+                        attachments=[(f"{serial}.pdf", pdf, "application", "pdf")],
+                    )
+                    if sent:
+                        ws.invoice_sent_at = datetime.now(UTC)
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "maintenance invoice email failed", exc_info=True
+                )
+        await record_audit(
+            db, actor=actor, action="worksheet.autoinvoice", entity_type="worksheet",
+            entity_id=ws.serial,
+            detail={"document_id": doc_id, "amount_net": ws.maintenance_fee,
+                    "partner": partner.name},
+            request=request,
+        )
+        await db.commit()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("maintenance autoinvoice failed", exc_info=True)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -406,12 +516,30 @@ async def create_task(
     db.add(task)
     await db.flush()
 
+    # A munkalap tárgy-gépe (opcionális): a karbantartási díj alapértéke és
+    # az auto-számlázás partnere ebből jön.
+    ws_asset = None
+    if body.asset_id:
+        from app.models import Asset
+
+        try:
+            aid = uuid.UUID(body.asset_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail={"code": "asset.not_found"})
+        ws_asset = (
+            await db.execute(select(Asset).where(Asset.id == aid))
+        ).scalar_one_or_none()
+        if ws_asset is None:
+            raise HTTPException(status_code=404, detail={"code": "asset.not_found"})
+
     # A feladattal együtt azonnal kiáll az online munkalap (ML-sorszámmal);
     # az elvégzett munkát/anyagokat/aláírást a dolgozó tölti ki később.
     ws = Worksheet(
         task_id=task.id,
         serial=await _next_worksheet_serial(db, body.external_service),
         external_service=body.external_service,
+        asset_id=ws_asset.id if ws_asset else None,
+        maintenance_fee=ws_asset.maintenance_fee if ws_asset else None,
         work_description="",
         materials=[],
         client_name=(body.client_name or "").strip() or None,
@@ -581,6 +709,17 @@ async def _build_worksheet_pdf(
         else:
             title = "KÜLSŐ SZERVIZ MUNKALAP (belső példány)"
             price_column = {"field": "cost_net", "label": "Nettó költség (Ft)"}
+        # Karbantartási díj sora (mindkét példányon): kedvezménynél elengedve.
+        if ws.fee_discount:
+            materials.append({"name": "Karbantartási díj — KEDVEZMÉNY (elengedve)",
+                              "qty": "1", "unit": "alkalom"})
+        elif (ws.maintenance_fee or 0) > 0:
+            fee_row = {"name": "Karbantartási díj", "qty": "1", "unit": "alkalom"}
+            if variant == "customer":
+                fee_row["price_net"] = ws.maintenance_fee
+            else:
+                fee_row["name"] = f"Karbantartási díj — {ws.maintenance_fee:.0f} Ft (nettó)"
+            materials.append(fee_row)
 
     pdf = build_worksheet_pdf(
         {

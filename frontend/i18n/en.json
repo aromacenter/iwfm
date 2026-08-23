@@ -716,7 +716,8 @@
       "low": "Low",
       "normal": "Normal",
       "high": "Urgent"
-    }
+    },
+    "machineSearchPh": "Search: barcode, type, partner…"
   },
   "partners": {
     "title": "Partners",
@@ -1117,7 +1118,13 @@
     "priceEditHint": "These prices appear on the customer's −1 worksheet copy — set by the rep, not the technician.",
     "priceEditEmpty": "No items on the worksheet yet — the technician records them first.",
     "priceEditNotFilled": "The worksheet is not filled in yet — prices can be saved once it is.",
-    "internalCopyHint": "Internal copy with the external shop's net costs — must not reach the customer."
+    "internalCopyHint": "Internal copy with the external shop's net costs — must not reach the customer.",
+    "wsMachine": "Machine (maintenance subject)",
+    "wsMachineHint": "The maintenance fee prefills from the machine, and the invoice goes to the machine's partner.",
+    "maintFee": "Maintenance fee (net)",
+    "maintFeeDiscount": "Discount — fee waived (no invoice)",
+    "maintFeeInvoiced": "invoiced",
+    "maintFeeHint": "Prefilled from the machine, freely editable. Without the discount checkbox, once BOTH signatures are on the worksheet the fee is invoiced automatically and emailed to the client with the worksheet."
   },
   "myTasks": {
     "title": "My tasks",
@@ -1161,7 +1168,10 @@
     "wsCostNet": "Service net cost (Ft)",
     "wsPriceNet": "Customer price (Ft, net)",
     "wsExternalHint": "Orange field: the external shop's net cost (internal). Green field: our customer price — appears on the customer's −1 copy.",
-    "wsExternalHint2": "Orange field: the external shop's confirmed net cost (internal). Customer prices are set by the rep on the Tasks page."
+    "wsExternalHint2": "Orange field: the external shop's confirmed net cost (internal). Customer prices are set by the rep on the Tasks page.",
+    "myTickets": "My service tickets",
+    "openInService": "Open in Service",
+    "ticketStarted": "Service ticket in progress."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1557,7 +1567,9 @@
     "loc_warehouse": "Internal warehouse",
     "loc_retired": "Retired",
     "siteAddress": "Installation address (shop/office)",
-    "siteAddressHint": "If the machine operates somewhere other than the partner's recorded address, enter the site — it OVERWRITES the partner's address on save (billing address stays), and route planning uses it from then on. Leave empty to change nothing."
+    "siteAddressHint": "If the machine operates somewhere other than the partner's recorded address, enter the site — it OVERWRITES the partner's address on save (billing address stays), and route planning uses it from then on. Leave empty to change nothing.",
+    "maintenanceFee": "Maintenance fee (net Ft/visit)",
+    "maintenanceFeeHint": "Prefills the external maintenance worksheet — editable there; without the discount checkbox it is invoiced automatically after both signatures."
   },
   "wh": {
     "title": "Warehouse",

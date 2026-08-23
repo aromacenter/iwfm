@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
+import SearchSelect from "@/components/SearchSelect";
 import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -58,6 +59,13 @@ export default function FeladatokPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [kindFilter, setKindFilter] = useState<"all" | "normal" | "external">("all");
   const [externalService, setExternalService] = useState(false);
+  // KSZ-munkalap tárgy-gépe: ebből jön a karbantartási díj és a számlázási partner
+  const [taskAssetId, setTaskAssetId] = useState("");
+  const [assetOptions, setAssetOptions] = useState<{ id: string; name: string; barcode: string; partner_name: string | null }[]>([]);
+  useEffect(() => {
+    api.get<{ id: string; name: string; barcode: string; partner_name: string | null }[]>("/api/assets")
+      .then(setAssetOptions).catch(() => {});
+  }, []);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -152,9 +160,11 @@ export default function FeladatokPage() {
         client_name: form.client_name || null,
         client_location: form.client_location || null,
         external_service: externalService,
+        asset_id: externalService && taskAssetId ? taskAssetId : null,
       });
       setShowForm(false);
       setExternalService(false);
+      setTaskAssetId("");
       setForm({
         title: "", description: "", employee_id: "", due_date: todayIso(),
         required_skill_id: 0, client_name: "", client_location: "",
@@ -219,8 +229,11 @@ export default function FeladatokPage() {
     hours_spent: number | null;
     client_name: string | null;
     client_location: string | null;
+    maintenance_fee: number | null;
+    fee_discount: boolean;
+    invoiced: boolean;
   }
-  const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[] } | null>(null);
+  const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[]; fee: string; discount: boolean } | null>(null);
 
   async function openPriceEdit(task: TaskOut) {
     try {
@@ -229,6 +242,8 @@ export default function FeladatokPage() {
         task,
         ws,
         prices: (ws.materials ?? []).map((m) => (m.price_net != null ? String(m.price_net) : "")),
+        fee: ws.maintenance_fee != null ? String(ws.maintenance_fee) : "",
+        discount: ws.fee_discount,
       });
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -248,6 +263,8 @@ export default function FeladatokPage() {
           cost_net: m.cost_net,
           price_net: priceEdit.prices[i] ? Number(priceEdit.prices[i]) : null,
         })),
+        maintenance_fee: priceEdit.fee ? Number(priceEdit.fee) : null,
+        fee_discount: priceEdit.discount,
       });
       setPriceEdit(null);
       toast(t("common.saved"), "success");
@@ -558,6 +575,19 @@ export default function FeladatokPage() {
                 <span className="mt-0.5 block text-xs text-orange-700">{t("tasks.externalCheckboxHint")}</span>
               </span>
             </label>
+            {externalService && (
+              <label className="block text-sm">
+                {t("tasks.wsMachine")}
+                <SearchSelect
+                  items={assetOptions.map((a) => ({ id: a.id, label: a.name, sublabel: a.partner_name, badge: a.barcode }))}
+                  value={taskAssetId}
+                  onChange={setTaskAssetId}
+                  placeholder={t("service.machineSearchPh")}
+                  className="mt-1 w-full"
+                />
+                <span className="mt-0.5 block text-xs text-slate-400">{t("tasks.wsMachineHint")}</span>
+              </label>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
@@ -618,6 +648,37 @@ export default function FeladatokPage() {
                 </tbody>
               </table>
             )}
+            {/* Karbantartási díj: a gépből előtöltve, átírható; kedvezmény = elengedve */}
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="text-sm font-medium text-indigo-900">
+                  {t("tasks.maintFee")}
+                  <input
+                    type="number" min={0} step="1"
+                    value={priceEdit.fee}
+                    onChange={(e) => setPriceEdit({ ...priceEdit, fee: e.target.value })}
+                    disabled={priceEdit.ws.invoiced}
+                    className="ml-2 w-32 rounded-lg border border-indigo-300 bg-white px-2 py-1 text-right text-sm"
+                  /> Ft
+                </label>
+                <label className="flex items-center gap-2 text-sm text-indigo-900">
+                  <input
+                    type="checkbox"
+                    checked={priceEdit.discount}
+                    onChange={(e) => setPriceEdit({ ...priceEdit, discount: e.target.checked })}
+                    disabled={priceEdit.ws.invoiced}
+                    className="h-4 w-4"
+                  />
+                  {t("tasks.maintFeeDiscount")}
+                </label>
+                {priceEdit.ws.invoiced && (
+                  <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                    ✓ {t("tasks.maintFeeInvoiced")}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-indigo-700">{t("tasks.maintFeeHint")}</p>
+            </div>
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setPriceEdit(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
               <button

@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import SearchSelect from "@/components/SearchSelect";
 import PartnerInfo from "@/components/PartnerInfo";
 import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
@@ -46,6 +47,7 @@ interface AssetOption {
   id: string;
   barcode: string;
   name: string;
+  partner_name: string | null;
 }
 
 interface MaintenanceDue {
@@ -560,16 +562,15 @@ export default function SzervizPage() {
             {!form.id && (
               <label className="block text-sm">
                 {t("service.machine")}
-                <select
+                <SearchSelect
+                  items={assets.map((a) => ({
+                    id: a.id, label: a.name, sublabel: a.partner_name, badge: a.barcode,
+                  }))}
                   value={form.asset_id}
-                  onChange={(e) => setForm({ ...form, asset_id: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-                >
-                  <option value="">{t("service.noMachine")}</option>
-                  {assets.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name} ({a.barcode})</option>
-                  ))}
-                </select>
+                  onChange={(id) => setForm({ ...form, asset_id: id })}
+                  placeholder={t("service.machineSearchPh")}
+                  className="mt-1 w-full"
+                />
               </label>
             )}
             <label className="block text-sm">

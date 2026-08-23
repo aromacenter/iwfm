@@ -6,9 +6,22 @@
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import SignatureCanvas from "@/components/SignatureCanvas";
+import Link from "next/link";
 import { api, errorMessage, shareOrDownloadFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
+
+interface MyTicket {
+  id: string;
+  ticket_no: string;
+  kind: string;
+  status: string;
+  priority: string;
+  title: string;
+  asset_label: string | null;
+  partner_label: string | null;
+}
 
 interface CommentOut {
   id: string;
@@ -48,6 +61,8 @@ interface WorksheetForm {
   client_location: string;
   employee_signature: string | null;
   client_signature: string | null;
+  maintenance_fee: string;
+  fee_discount: boolean;
 }
 
 const EMPTY_WS: WorksheetForm = {
@@ -58,6 +73,8 @@ const EMPTY_WS: WorksheetForm = {
   client_location: "",
   employee_signature: null,
   client_signature: null,
+  maintenance_fee: "",
+  fee_discount: false,
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -79,6 +96,11 @@ export default function FeladataimPage() {
   const { t } = useT();
   const { toast, prompt } = useUI();
 
+  // Szervizjegyeim: a bejelentkezett szervizesre kiosztott nyitott jegyek —
+  // hogy a kiosztás a "feladatai közt" is látsszon, ne csak a Szerviz oldalon.
+  const canService = usePerms().can("service");
+  const [myTickets, setMyTickets] = useState<MyTicket[]>([]);
+
   const load = useCallback(() => {
     api
       .get<TaskOut[]>("/api/me/tasks")
@@ -86,8 +108,28 @@ export default function FeladataimPage() {
       .catch((err) => {
         if (err?.code === "employee.none_for_user") setNoEmployee(true);
       });
-  }, []);
+    if (canService) {
+      api
+        .get<{ id: string }>("/api/auth/me")
+        .then((me) =>
+          api.get<MyTicket[]>(`/api/service?assigned_to=${me.id}`).then((rows) =>
+            setMyTickets(rows.filter((tk) => tk.status === "open" || tk.status === "in_progress")),
+          ),
+        )
+        .catch(() => {});
+    }
+  }, [canService]);
   useEffect(load, [load]);
+
+  async function startTicket(tk: MyTicket) {
+    try {
+      await api.patch(`/api/service/${tk.id}`, { status: "in_progress" });
+      toast(t("myTasks.ticketStarted"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   async function sendComment(task: TaskOut) {
     const text = (comments[task.id] ?? "").trim();
@@ -144,6 +186,8 @@ export default function FeladataimPage() {
           client_location: string | null;
           employee_signature: string | null;
           client_signature: string | null;
+          maintenance_fee: number | null;
+          fee_discount: boolean;
         }>(`/api/me/tasks/${task.id}/worksheet`);
         setWs({
           work_description: existing.work_description,
@@ -157,6 +201,8 @@ export default function FeladataimPage() {
           client_location: existing.client_location ?? "",
           employee_signature: null,
           client_signature: null,
+          maintenance_fee: existing.maintenance_fee != null ? String(existing.maintenance_fee) : "",
+          fee_discount: existing.fee_discount,
         });
         setWsSaved({
           emp: existing.employee_signature ?? null,
@@ -260,6 +306,8 @@ export default function FeladataimPage() {
         client_location: ws.client_location || null,
         employee_signature: ws.employee_signature,
         client_signature: ws.client_signature,
+        maintenance_fee: ws.maintenance_fee ? Number(ws.maintenance_fee) : null,
+        fee_discount: ws.fee_discount,
       });
       setWsTask(null);
       load();
@@ -284,6 +332,57 @@ export default function FeladataimPage() {
     <AppShell>
       <div className="mx-auto max-w-lg space-y-4">
         <h1 className="text-xl font-bold">{t("myTasks.title")}</h1>
+
+        {/* Rám osztott nyitott szervizjegyek */}
+        {myTickets.length > 0 && (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <h2 className="mb-2 font-semibold text-amber-900">
+              🔧 {t("myTasks.myTickets")}{" "}
+              <span className="ml-1 rounded-full bg-amber-200 px-2 py-0.5 text-sm font-bold text-amber-900">
+                {myTickets.length}
+              </span>
+            </h2>
+            <ul className="space-y-2">
+              {myTickets.map((tk) => (
+                <li key={tk.id} className="rounded-xl bg-white p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs text-slate-400">{tk.ticket_no}</span>
+                    <span className="font-medium">{tk.title}</span>
+                    {tk.priority === "high" && (
+                      <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-semibold text-rose-700">
+                        {t("service.priorities.high")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {[tk.asset_label, tk.partner_label].filter(Boolean).join(" · ") || "—"}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {tk.status === "open" ? (
+                      <button
+                        onClick={() => startTicket(tk)}
+                        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                      >
+                        ▶️ {t("service.start")}
+                      </button>
+                    ) : (
+                      <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
+                        {t("service.statuses.in_progress")}
+                      </span>
+                    )}
+                    <Link
+                      href="/szerviz"
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-100"
+                    >
+                      {t("myTasks.openInService")}
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {tasks.length === 0 && (
           <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
             {t("myTasks.empty")}
@@ -488,6 +587,29 @@ export default function FeladataimPage() {
               ))}
               {wsTask?.worksheet_external && ws.materials.length > 0 && (
                 <p className="text-xs text-slate-400">{t("myTasks.wsExternalHint2")}</p>
+              )}
+              {wsTask?.worksheet_external && (
+                <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+                  <label className="text-sm font-medium text-indigo-900">
+                    {t("tasks.maintFee")}
+                    <input
+                      type="number" min={0} step="1"
+                      value={ws.maintenance_fee}
+                      onChange={(e) => setWs({ ...ws, maintenance_fee: e.target.value })}
+                      className="ml-2 w-32 rounded-lg border border-indigo-300 bg-white px-2 py-1 text-right text-sm"
+                    /> Ft
+                  </label>
+                  <label className="mt-1.5 flex items-center gap-2 text-sm text-indigo-900">
+                    <input
+                      type="checkbox"
+                      checked={ws.fee_discount}
+                      onChange={(e) => setWs({ ...ws, fee_discount: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    {t("tasks.maintFeeDiscount")}
+                  </label>
+                  <p className="mt-1 text-xs text-indigo-700">{t("tasks.maintFeeHint")}</p>
+                </div>
               )}
             </div>
 

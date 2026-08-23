@@ -577,6 +577,7 @@ class AssetBody(BaseModel):
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
     contract_below_min_price: float | None = Field(default=None, ge=0)
     rent_fee: float | None = Field(default=None, ge=0)
+    maintenance_fee: float | None = Field(default=None, ge=0)
     notes: str | None = None
 
 
@@ -601,6 +602,7 @@ class AssetPatch(BaseModel):
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
     contract_below_min_price: float | None = Field(default=None, ge=0)
     rent_fee: float | None = Field(default=None, ge=0)
+    maintenance_fee: float | None = Field(default=None, ge=0)
     notes: str | None = None
     status: str | None = None  # csak in_stock|maintenance|retired (deploy külön)
 
@@ -651,6 +653,7 @@ class AssetOut(BaseModel):
     contract_min_portions: int | None
     contract_below_min_price: float | None
     rent_fee: float | None
+    maintenance_fee: float | None
     status: str
     partner_id: str | None
     partner_name: str | None
@@ -694,6 +697,7 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         contract_min_portions=a.contract_min_portions,
         contract_below_min_price=a.contract_below_min_price,
         rent_fee=a.rent_fee,
+        maintenance_fee=a.maintenance_fee,
         status=a.status,
         partner_id=str(a.partner_id) if a.partner_id else None,
         partner_name=partner_name,
@@ -1048,6 +1052,7 @@ async def create_asset(
         contract_min_portions=body.contract_min_portions,
         contract_below_min_price=body.contract_below_min_price,
         rent_fee=body.rent_fee,
+        maintenance_fee=body.maintenance_fee,
         notes=body.notes,
         created_by=actor.id,
     )
@@ -1217,6 +1222,7 @@ async def swap_asset(
     new.contract_min_portions = old.contract_min_portions
     new.contract_below_min_price = old.contract_below_min_price
     new.rent_fee = old.rent_fee
+    new.maintenance_fee = old.maintenance_fee
     # régi gép: szervizre, kihelyezés lezárva
     prev_partner = old.partner_id
     old.status = "maintenance"
