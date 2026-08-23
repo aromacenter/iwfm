@@ -290,6 +290,17 @@ export default function DolgozokPage() {
     }
   }
 
+  async function telegramUnlink(empId: string) {
+    if (!(await confirm(t("emp.telegramUnlinkConfirm")))) return;
+    try {
+      await api.post(`/api/employees/${empId}/telegram-unlink`, {});
+      toast(t("emp.telegramUnlinked"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function resetPassword(empId: string) {
     if (!(await confirm(t("account.resetConfirm")))) return;
     try {
@@ -376,6 +387,30 @@ export default function DolgozokPage() {
                     <div className="text-xs text-slate-400">
                       <span className="font-mono font-semibold text-indigo-700">{emp.employee_code ?? "—"}</span>
                       {emp.job_title && <> · {emp.job_title}</>}
+                      {emp.telegram_linked ? (
+                        <span
+                          className="ml-2 cursor-default rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700"
+                          title={t("emp.telegramLinkedHint")}
+                        >
+                          ✈️ Telegram
+                          {isAdmin && (
+                            <button
+                              onClick={() => telegramUnlink(emp.id)}
+                              title={t("emp.telegramUnlink")}
+                              className="ml-1 hover:text-rose-600"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </span>
+                      ) : (
+                        <span
+                          className="ml-2 cursor-default rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400"
+                          title={t("emp.telegramNotLinkedHint")}
+                        >
+                          ✈️ —
+                        </span>
+                      )}
                     </div>
                     {(emp.skills ?? []).length > 0 && (
                       <div className="group relative mt-0.5 inline-flex w-fit cursor-default items-center gap-1 text-xs text-slate-400">

@@ -108,6 +108,9 @@ class Employee(Base):
     # 6 jegyű törzsszám — a blokkoló-terminál (kiosk) azonosítója.
     # Nullable a meglévő sorok migrációja miatt; induláskor backfill tölti.
     employee_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
+    # A dolgozó privát Telegram-csevegése (a botnak küldött törzsszámmal
+    # kapcsolódik) — a személyre szóló értesítések (pl. kiosztott feladat) ide.
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # --- személyes adatok ---
     last_name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -1122,6 +1125,8 @@ class NotificationSettings(Base):
     # Mely eseményekről menjen beépített Telegram-értesítés (esemény-kulcsok
     # vesszővel, pl. "order.created,stock.low"); None/üres = egyikről sem.
     tg_events: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A getUpdates folytatási pontja (a dolgozói összekapcsoló-figyelőhöz).
+    tg_update_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Utolsó sikeres küldések (duplikátum-védelem újraindításkor)
     last_daily_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)  # ÉÉÉÉ-HH-NN
     last_backup_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)

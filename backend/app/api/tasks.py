@@ -428,9 +428,31 @@ async def create_task(
         request=request,
     )
     await db.commit()
+
+    # Személyes Telegram-értesítés a kiosztott dolgozónak (best-effort).
+    await _notify_assignee(db, task, emp, ws.serial)
+
     out = (await _tasks_out(db, [task]))[0]
     out.ai_reason = ai_reason
     return out
+
+
+async def _notify_assignee(db: AsyncSession, task: Task, emp: Employee, serial: str | None) -> None:
+    """Privát Telegram a dolgozónak az új/átosztott feladatáról — ha
+    összekapcsolta magát a bottal. Hibája sosem akasztja meg a mentést."""
+    try:
+        from app.services.wfm.telegram import send_personal
+
+        parts = [f"📋 Új feladat: {task.title}"]
+        if serial:
+            parts.append(f"munkalap: {serial}")
+        if task.due_date:
+            parts.append(f"határidő: {task.due_date.isoformat()}")
+        await send_personal(db, emp, " · ".join(parts))
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("task assign notify failed", exc_info=True)
 
 
 @router.patch("/{task_id}", response_model=TaskOut)
@@ -450,6 +472,11 @@ async def update_task(
             data["employee_id"] = uuid.UUID(data["employee_id"])
         except ValueError:
             raise HTTPException(status_code=422, detail={"code": "tasks.bad_employee"})
+    reassigned_to = (
+        data["employee_id"]
+        if "employee_id" in data and data["employee_id"] != task.employee_id
+        else None
+    )
     for key, value in data.items():
         setattr(task, key, value)
     await record_audit(
@@ -457,6 +484,16 @@ async def update_task(
         entity_id=str(task.id), detail={"fields": sorted(data)}, request=request,
     )
     await db.commit()
+
+    if reassigned_to is not None:
+        new_emp = (
+            await db.execute(select(Employee).where(Employee.id == reassigned_to))
+        ).scalar_one_or_none()
+        if new_emp is not None:
+            ws = (
+                await db.execute(select(Worksheet).where(Worksheet.task_id == task.id))
+            ).scalar_one_or_none()
+            await _notify_assignee(db, task, new_emp, ws.serial if ws else None)
     return (await _tasks_out(db, [task]))[0]
 
 

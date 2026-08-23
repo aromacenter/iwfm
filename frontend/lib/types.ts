@@ -46,6 +46,7 @@ export interface EmployeeOut {
   bank_account_masked: string | null;
   has_wage: boolean;
   employee_code: string | null;
+  telegram_linked: boolean;
   skills: { id: number; name: string }[];
 }
 

@@ -160,8 +160,20 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
     if closed:
         await db.commit()
 
+    # Telegram: dolgozói összekapcsolások feldolgozása (best-effort).
+    from app.services.wfm.telegram import process_updates
+
+    try:
+        tg_linked = await process_updates(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("telegram link poll failed", exc_info=True)
+        tg_linked = 0
+
     row = await get_or_create_settings(db)
-    result = {"daily": False, "backup": False, "auto_clockout": closed}
+    result = {"daily": False, "backup": False, "auto_clockout": closed,
+              "telegram_link": tg_linked}
     recipients = _recipients(row)
     if not recipients:
         return result

@@ -944,7 +944,12 @@
     "payrollSource": "Payroll basis",
     "payrollAttendance": "By clock-in (attendance)",
     "payrollSchedule": "By schedule",
-    "payrollSourceHint": "Payable hours in the export come from this. With attendance: auto clock-in on the day's first app login, auto clock-out at end of working time (shift end → availability end → 20:00) if they forgot."
+    "payrollSourceHint": "Payable hours in the export come from this. With attendance: auto clock-in on the day's first app login, auto clock-out at end of working time (shift end → availability end → 20:00) if they forgot.",
+    "telegramLinkedHint": "Linked to the Telegram bot — they get a private message about tasks assigned to them.",
+    "telegramNotLinkedHint": "Not linked to the Telegram bot. To link: the employee sends their 6-digit staff code to the bot in a private chat.",
+    "telegramUnlink": "Remove Telegram link",
+    "telegramUnlinkConfirm": "Remove this employee's Telegram link? (They can re-link anytime by sending their staff code again.)",
+    "telegramUnlinked": "Telegram link removed."
   },
   "sched": {
     "title": "Schedule",

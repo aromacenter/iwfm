@@ -944,7 +944,12 @@
     "payrollSource": "Bérszámfejtés alapja",
     "payrollAttendance": "Blokkolás (jelenlét) szerint",
     "payrollSchedule": "Beosztás szerint",
-    "payrollSourceHint": "A bérexportban a Fizetendő óra ebből számolódik. Blokkolásnál: aznapi első app-belépéskor automatikus beléptetés, a munkaidő végén (műszak vége → elérhetőség vége → 20:00) automatikus kiléptetés, ha elfelejtett kilépni."
+    "payrollSourceHint": "A bérexportban a Fizetendő óra ebből számolódik. Blokkolásnál: aznapi első app-belépéskor automatikus beléptetés, a munkaidő végén (műszak vége → elérhetőség vége → 20:00) automatikus kiléptetés, ha elfelejtett kilépni.",
+    "telegramLinkedHint": "Összekapcsolva a Telegram-bottal — a neki kiosztott feladatokról privát üzenetet kap.",
+    "telegramNotLinkedHint": "Nincs összekapcsolva a Telegram-bottal. Összekapcsolás: a dolgozó a botnak privátban küldje el a 6 jegyű törzsszámát.",
+    "telegramUnlink": "Telegram-kapcsolat törlése",
+    "telegramUnlinkConfirm": "Törlöd a dolgozó Telegram-összekapcsolását? (A törzsszáma újraküldésével bármikor újra összekapcsolhat.)",
+    "telegramUnlinked": "Telegram-kapcsolat törölve."
   },
   "sched": {
     "title": "Beosztás",

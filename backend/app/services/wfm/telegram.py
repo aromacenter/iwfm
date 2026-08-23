@@ -17,6 +17,7 @@ from app.core.crypto import decrypt_pii
 logger = logging.getLogger(__name__)
 
 API_URL = "https://api.telegram.org/bot{token}/sendMessage"
+UPDATES_URL = "https://api.telegram.org/bot{token}/getUpdates"
 
 
 async def load_telegram_config(db: AsyncSession) -> dict | None:
@@ -92,3 +93,95 @@ async def send_telegram(config: dict, chat_id: str, text: str) -> bool:
     except httpx.HTTPError:
         logger.warning("telegram send failed", exc_info=True)
         return False
+
+
+async def fetch_updates(config: dict, offset: int | None) -> list[dict]:
+    """A bot új bejövő üzenetei (getUpdates) — hiba esetén üres lista."""
+    params: dict = {"timeout": 0, "allowed_updates": '["message"]'}
+    if offset is not None:
+        params["offset"] = offset
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            res = await client.get(
+                UPDATES_URL.format(token=config["token"]), params=params
+            )
+        data = res.json()
+        if not data.get("ok"):
+            return []
+        return data.get("result") or []
+    except (httpx.HTTPError, ValueError):
+        logger.warning("telegram getUpdates failed", exc_info=True)
+        return []
+
+
+async def process_updates(db: AsyncSession) -> int:
+    """Dolgozói összekapcsolás: a botnak PRIVÁTBAN elküldött 6 jegyű törzsszám
+    (vagy "/start <törzsszám>") a dolgozó telegram_chat_id-ját menti, és a bot
+    visszaigazol. A notifier 5 perces köre hívja. Vissza: hány összekapcsolás
+    történt."""
+    import re as _re
+
+    from sqlalchemy import select as _select
+
+    from app.models import Employee
+    from app.services.wfm.notifier import get_or_create_settings
+
+    config = await load_telegram_config(db)
+    if config is None:
+        return 0
+    row = await get_or_create_settings(db)
+    updates = await fetch_updates(config, row.tg_update_offset)
+    if not updates:
+        return 0
+
+    linked = 0
+    for u in updates:
+        row.tg_update_offset = max(row.tg_update_offset or 0, int(u.get("update_id", 0)) + 1)
+        msg = u.get("message") or {}
+        chat = msg.get("chat") or {}
+        if chat.get("type") != "private":
+            continue  # csoport-üzenetekre nem reagálunk
+        text = (msg.get("text") or "").strip()
+        m = _re.fullmatch(r"(?:/start\s+)?(\d{6})", text)
+        if not m:
+            if text.startswith("/start"):
+                await send_telegram(
+                    config, str(chat["id"]),
+                    "Szia! 👋 Az összekapcsoláshoz küldd el a 6 jegyű törzsszámodat "
+                    "(ugyanaz, amivel a blokkoló-terminálon jelentkezel).",
+                )
+            continue
+        emp = (
+            await db.execute(
+                _select(Employee).where(
+                    Employee.employee_code == m.group(1),
+                    Employee.status == "active",
+                )
+            )
+        ).scalar_one_or_none()
+        if emp is None:
+            await send_telegram(
+                config, str(chat["id"]),
+                "❌ Ismeretlen törzsszám. Ellenőrizd, és küldd el újra a 6 számjegyet.",
+            )
+            continue
+        emp.telegram_chat_id = str(chat["id"])
+        linked += 1
+        await send_telegram(
+            config, str(chat["id"]),
+            f"✅ Összekapcsolva, {emp.first_name}! Mostantól itt kapod a neked "
+            "kiosztott feladatokról az értesítést.",
+        )
+    await db.commit()
+    return linked
+
+
+async def send_personal(db: AsyncSession, employee, text: str) -> bool:
+    """Személyre szóló üzenet a dolgozó privát csevegésébe (ha összekapcsolta
+    magát). Best-effort."""
+    if not getattr(employee, "telegram_chat_id", None):
+        return False
+    config = await load_telegram_config(db)
+    if config is None:
+        return False
+    return await send_telegram(config, employee.telegram_chat_id, text)

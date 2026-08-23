@@ -262,3 +262,86 @@ async def test_telegram_event_selection(client, admin, monkeypatch):
     assert len(sent) == 1, sent
     assert sent[0][0] == "-100555"
     assert "R-2026-0042" in sent[0][1] and "Teszt Bolt" in sent[0][1]
+
+
+async def test_telegram_personal_link_and_task_notify(client, admin, manager, monkeypatch):
+    """Dolgozói összekapcsolás törzsszámmal (process_updates) + személyes
+    üzenet a kiosztott feladatról; admin leválaszthat."""
+    _, adm = admin
+    _, mgr = manager
+
+    # Telegram bekapcsolva
+    res = await client.put(
+        "/api/settings/notifications",
+        json={"daily_enabled": False, "send_hour": 6, "weekly_backup": False,
+              "auto_receipt": False, "tg_enabled": True, "tg_token": "123:abc",
+              "tg_chat_ids": "-100555"},
+        headers=adm,
+    )
+    assert res.status_code == 200, res.text
+
+    # dolgozó a rendszerben (törzsszámmal)
+    res = await client.post(
+        "/api/employees",
+        json={"last_name": "Bot", "first_name": "Béla", "email": "botbela@example.com",
+              "hire_date": "2024-01-01", "weekly_hours": 40},
+        headers=adm,
+    )
+    assert res.status_code == 201, res.text
+    emp = res.json()
+    code = emp["employee_code"]
+    assert code and len(code) == 6
+
+    sent: list[tuple[str, str]] = []
+
+    async def fake_send(config, chat_id, text):
+        sent.append((str(chat_id), text))
+        return True
+
+    import app.services.wfm.telegram as tg_mod
+
+    monkeypatch.setattr(tg_mod, "send_telegram", fake_send)
+
+    # bejövő üzenetek szimulálva: rossz kód, jó kód (privát), csoport-üzenet
+    async def fake_fetch(config, offset):
+        return [
+            {"update_id": 10, "message": {"chat": {"id": 777, "type": "private"}, "text": "000000"}},
+            {"update_id": 11, "message": {"chat": {"id": 777, "type": "private"}, "text": f"/start {code}"}},
+            {"update_id": 12, "message": {"chat": {"id": -100555, "type": "supergroup"}, "text": code}},
+        ]
+
+    monkeypatch.setattr(tg_mod, "fetch_updates", fake_fetch)
+
+    from app import db as app_db
+
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        linked = await tg_mod.process_updates(session)
+    assert linked == 1
+    # visszaigazolás + hibaüzenet ment ki a privát chatre
+    assert any("Összekapcsolva" in t for _c, t in sent)
+    assert any("Ismeretlen" in t for _c, t in sent)
+
+    # a listában látszik az összekapcsolás
+    rows = (await client.get("/api/employees", headers=adm)).json()
+    me = next(e for e in rows if e["id"] == emp["id"])
+    assert me["telegram_linked"] is True
+
+    # feladat-kiosztás → személyes üzenet a 777-es chatre
+    sent.clear()
+    res = await client.post(
+        "/api/tasks",
+        json={"title": "Gép tisztítás", "employee_id": emp["id"], "due_date": "2026-08-30"},
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    personal = [x for x in sent if x[0] == "777"]
+    assert len(personal) == 1, sent
+    assert "Gép tisztítás" in personal[0][1]
+
+    # admin leválaszt → jelző eltűnik, több üzenet nem megy
+    res = await client.post(f"/api/employees/{emp['id']}/telegram-unlink", json={}, headers=adm)
+    assert res.status_code == 200
+    rows = (await client.get("/api/employees", headers=adm)).json()
+    me = next(e for e in rows if e["id"] == emp["id"])
+    assert me["telegram_linked"] is False

@@ -205,6 +205,7 @@ class EmployeeOut(EmployeeBase):
     bank_account_masked: str | None = None
     has_wage: bool = False
     employee_code: str | None = None  # 6 jegyű törzsszám (blokkoló-terminál)
+    telegram_linked: bool = False  # összekapcsolta-e magát a Telegram-bottal
     skills: list[dict] = Field(default_factory=list)  # [{id, name}]
     # Csak létrehozáskor, és csak ha a jelszót a rendszer generálta — az admin
     # ekkor látja egyetlen egyszer, hogy átadhassa a dolgozónak.
@@ -325,6 +326,7 @@ def _employee_out(emp: Employee, email: str | None = None, role: str | None = No
         tax_id_masked=emp.tax_id_masked,
         taj_masked=emp.taj_masked,
         bank_account_masked=emp.bank_account_masked,
+        telegram_linked=emp.telegram_chat_id is not None,
         has_wage=emp.wage_encrypted is not None,
         employee_code=emp.employee_code,
     )
@@ -513,6 +515,25 @@ async def reveal_sensitive(
 
 class PasswordResetOut(BaseModel):
     generated_password: str
+
+
+@router.post("/{employee_id}/telegram-unlink")
+async def telegram_unlink(
+    employee_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """A dolgozó Telegram-összekapcsolásának törlése (pl. telefoncsere) —
+    a dolgozó a törzsszáma újraküldésével bármikor újra összekapcsolhat."""
+    emp = await _get_or_404(db, employee_id)
+    emp.telegram_chat_id = None
+    await record_audit(
+        db, actor=actor, action="employee.telegram_unlink", entity_type="employee",
+        entity_id=str(emp.id), request=request,
+    )
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/{employee_id}/reset-password", response_model=PasswordResetOut)
