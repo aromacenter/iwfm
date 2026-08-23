@@ -312,7 +312,7 @@ export default function VezerlopultPage() {
 
           {/* Kintlévőség-statisztika: ki, mennyivel, mióta tartozik (korosítva) */}
           {receivables && receivables.total > 0 && (
-            <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
+            <section className="mb-4 rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <h3 className="font-semibold text-rose-800">💸 {t("dash.recvTitle")}</h3>
                 <span className="text-sm text-slate-500">
