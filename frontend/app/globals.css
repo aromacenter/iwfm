@@ -109,7 +109,7 @@ body {
 /* borostyán (figyelmeztetések, esedékes panel) */
 .dark .bg-amber-50, .dark .bg-amber-100 { background-color: #33260f !important; }
 .dark .bg-amber-200, .dark .hover\:bg-amber-200:hover { background-color: #43320f !important; }
-.dark .border-amber-100, .dark .border-amber-200 { border-color: #5b430f !important; }
+.dark .border-amber-100, .dark .border-amber-200, .dark .border-amber-300 { border-color: #5b430f !important; }
 .dark .text-amber-600, .dark .text-amber-700 { color: #fbbf24 !important; }
 .dark .text-amber-800, .dark .text-amber-900, .dark .text-amber-950 { color: #fcd34d !important; }
 
@@ -154,11 +154,13 @@ body {
 .dark .text-rose-600 { color: #fb7185 !important; }
 .dark .text-rose-800, .dark .text-rose-900 { color: #fda4af !important; }
 
-/* ég (ügyfélgép, vevő-jelvény) */
-.dark .bg-sky-100 { background-color: #123249 !important; }
-.dark .border-sky-200 { border-color: #1e5b83 !important; }
+/* ég (ügyfélgép, vevő-jelvény, kiszállítás, Telegram-blokk) */
+.dark .bg-sky-50, .dark .hover\:bg-sky-50:hover { background-color: #0d2436 !important; }
+.dark .bg-sky-100, .dark .hover\:bg-sky-100:hover { background-color: #123249 !important; }
+.dark .border-sky-200, .dark .border-sky-300 { border-color: #1e5b83 !important; }
 .dark .border-sky-400 { border-color: #2b7cb3 !important; }
-.dark .text-sky-700, .dark .text-sky-800 { color: #7dd3fc !important; }
+.dark .text-sky-600, .dark .text-sky-700, .dark .text-sky-800 { color: #7dd3fc !important; }
+.dark .text-sky-900 { color: #bae6fd !important; }
 
 /* ibolya (szállító-jelvény) */
 .dark .bg-violet-50 { background-color: #241b40 !important; }

@@ -1418,7 +1418,7 @@ export default function BeallitasokPage() {
           </div>
           {notifMsg && <p className="text-sm text-slate-600">{notifMsg}</p>}
           {/* WhatsApp bekötés (Meta Cloud API) — belső kommunikáció + dolgozói push */}
-          <fieldset className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+          <fieldset className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
             <legend className="px-1 text-xs font-semibold uppercase text-emerald-700">💬 {t("notif.waTitle")}</legend>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={notif.wa_enabled} onChange={(e) => setNotif({ ...notif, wa_enabled: e.target.checked })} className="h-4 w-4" />
@@ -1443,7 +1443,7 @@ export default function BeallitasokPage() {
           </fieldset>
 
           {/* Telegram bekötés (Bot API) */}
-          <fieldset className="rounded-xl border border-sky-200 bg-sky-50/50 p-3">
+          <fieldset className="rounded-xl border border-sky-200 bg-sky-50 p-3">
             <legend className="px-1 text-xs font-semibold uppercase text-sky-700">✈️ {t("notif.tgTitle")}</legend>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={notif.tg_enabled} onChange={(e) => setNotif({ ...notif, tg_enabled: e.target.checked })} className="h-4 w-4" />
