@@ -1143,6 +1143,11 @@ class NotificationSettings(Base):
     tg_events: Mapped[str | None] = mapped_column(Text, nullable=True)
     # A getUpdates folytatási pontja (a dolgozói összekapcsoló-figyelőhöz).
     tg_update_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Naptár-frissítés (következő évi munkarend) utolsó AI-próbája (ÉÉÉÉ-HH).
+    cal_last_check: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    # Havi Mt.-változás-ellenőrzés: utolsó futás hónapja + utolsó eredmény.
+    mt_last_check: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    mt_last_result: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Utolsó sikeres küldések (duplikátum-védelem újraindításkor)
     last_daily_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)  # ÉÉÉÉ-HH-NN
     last_backup_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -1595,4 +1600,24 @@ class AgentExpense(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CalendarOverride(Base):
+    """Évenkénti munkarend-átcsoportosítás (áthelyezett pihenőnapok +
+    ledolgozó szombatok) — a holidays.py beégetett tábláját egészíti ki.
+    Évente az AI tölti fel automatikusan (source='ai'), az admin a
+    Beállításokban ellenőrzi/javítja (source='manual')."""
+
+    __tablename__ = "calendar_overrides"
+    __table_args__ = (UniqueConstraint("year", name="uq_calendar_overrides_year"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    rest_days: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # ["ÉÉÉÉ-HH-NN"]
+    worked_saturdays: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")  # ai | manual
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

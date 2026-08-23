@@ -579,7 +579,15 @@ async def generate_week(
     - meglévő műszakot és jóváhagyott/függő távollétet nem ír felül;
     - minden generált műszak VÁZLAT — a közzététel (Mt.-ellenőrzéssel) külön lépés.
     """
-    from app.services.wfm.holidays import is_non_working_day, is_worked_saturday
+    from app.services.wfm.holidays import (
+        is_non_working_day,
+        is_worked_saturday,
+        load_overrides,
+    )
+
+    # A DB-ben tárolt (AI-frissített / kézzel javított) munkarend-évek is
+    # érvényesüljenek a generálásban.
+    await load_overrides(db)
 
     week_start = body.week_start - timedelta(days=body.week_start.weekday())
     days = [week_start + timedelta(days=i) for i in range(7)]

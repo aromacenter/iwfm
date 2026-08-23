@@ -1839,5 +1839,19 @@
     "noSubstitute": "— no substitute —",
     "substituteSaved": "Substitute saved.",
     "substituteHint": "During your approved leave/sickness, responsible-agent notifications are routed to them automatically."
+  },
+  "cal": {
+    "title": "Work calendar & labor-law watch",
+    "hint": "The yearly decree's moved rest days and make-up working Saturdays. The system fetches next year automatically via AI and notifies you — verify/correct here. A monthly labor-code change check also runs.",
+    "builtin": "Built-in (decree-recorded) days",
+    "restDays": "Moved rest days (dates, comma-separated)",
+    "workedSaturdays": "Make-up Saturdays (dates, comma-separated)",
+    "sourceAi": "AI-filled — verify!",
+    "sourceManual": "manually set",
+    "refreshAi": "AI refresh now",
+    "runMt": "Labor-law check now",
+    "aiAdded": "New year's calendar loaded — verify the dates!",
+    "aiNothing": "Nothing new to load (already present, or the AI doesn't know the decree yet).",
+    "mtLast": "Last labor-law check ({month})"
   }
 }

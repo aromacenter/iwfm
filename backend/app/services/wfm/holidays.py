@@ -65,14 +65,47 @@ def is_public_holiday(d: date) -> bool:
 
 def is_bridge_rest_day(d: date) -> bool:
     """Rendeletben áthelyezett pihenőnap (hosszú hétvége 'hídnapja')."""
-    return d in REST_DAY_OVERRIDES.get(d.year, set())
+    return d in REST_DAY_OVERRIDES.get(d.year, set()) or d in _db_rest.get(d.year, set())
 
 
 def is_worked_saturday(d: date) -> bool:
     """Ledolgozó szombati munkanap (állami munkanap)."""
-    return d in WORKED_SATURDAYS.get(d.year, set())
+    return d in WORKED_SATURDAYS.get(d.year, set()) or d in _db_worked.get(d.year, set())
 
 
 def is_non_working_day(d: date) -> bool:
     """Ünnep vagy áthelyezett pihenőnap — ezekre nem tervezünk műszakot."""
     return is_public_holiday(d) or is_bridge_rest_day(d)
+
+
+# ─── Adatbázis-kiegészítés ───────────────────────────────────────────────────
+# A calendar_overrides tábla évei (AI-frissítés / admin-szerkesztés) a
+# beégetett táblákat EGÉSZÍTIK KI. A load_overrides tölti a modul-cache-t —
+# a beosztás-generálás és a notifier hívja.
+
+_db_rest: dict[int, set[date]] = {}
+_db_worked: dict[int, set[date]] = {}
+
+
+async def load_overrides(db) -> None:
+    """A DB-beli munkarend-évek betöltése a modul-cache-be."""
+    from sqlalchemy import select
+
+    from app.models import CalendarOverride
+
+    rows = (await db.execute(select(CalendarOverride))).scalars().all()
+    _db_rest.clear()
+    _db_worked.clear()
+    for row in rows:
+        try:
+            _db_rest[row.year] = {date.fromisoformat(x) for x in (row.rest_days or [])}
+            _db_worked[row.year] = {
+                date.fromisoformat(x) for x in (row.worked_saturdays or [])
+            }
+        except ValueError:
+            continue  # hibás sor nem boríthatja a naptárt
+
+
+def known_years() -> set[int]:
+    """Mely évekre van munkarend-adat (beégetett VAGY DB)."""
+    return set(REST_DAY_OVERRIDES) | set(_db_rest)

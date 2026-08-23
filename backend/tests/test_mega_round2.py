@@ -177,7 +177,7 @@ async def test_notification_settings_and_digest(client, admin, manager, monkeypa
 
     async with app_db.get_session_factory()() as session:
         result = await run_pending_notifications(session)
-    assert result == {"daily": False, "backup": False, "auto_clockout": 0, "telegram_link": 0}
+    assert result == {"daily": False, "backup": False, "auto_clockout": 0, "telegram_link": 0, "calendar": False, "mt_check": False}
 
 
 async def test_coverage_endpoint(client, manager):

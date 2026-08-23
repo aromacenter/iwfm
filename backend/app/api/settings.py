@@ -724,6 +724,148 @@ async def update_notification_settings(
     return {"ok": True}
 
 
+# ─── Munkarend (ünnep-áthelyezések) és Mt.-figyelés ─────────────────────────
+
+
+class CalendarBody(BaseModel):
+    rest_days: list[str] = Field(default_factory=list, max_length=31)
+    worked_saturdays: list[str] = Field(default_factory=list, max_length=31)
+    note: str | None = Field(default=None, max_length=512)
+
+
+@router.get("/calendar/{year}")
+async def get_calendar_year(
+    year: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Az adott év munkarendje: beégetett + DB-beli adatok, forrással."""
+    from sqlalchemy import select as sa_select
+
+    from app.models import CalendarOverride
+    from app.services.wfm.holidays import (
+        REST_DAY_OVERRIDES, WORKED_SATURDAYS, public_holidays,
+    )
+
+    row = (
+        await db.execute(
+            sa_select(CalendarOverride).where(CalendarOverride.year == year)
+        )
+    ).scalar_one_or_none()
+    builtin_rest = sorted(str(d) for d in REST_DAY_OVERRIDES.get(year, set()))
+    builtin_sat = sorted(str(d) for d in WORKED_SATURDAYS.get(year, set()))
+    from app.services.wfm.notifier import get_or_create_settings as _get
+
+    notif = await _get(db)
+    await db.commit()
+    return {
+        "year": year,
+        "holidays": sorted(str(d) for d in public_holidays(year)),
+        "builtin_rest_days": builtin_rest,
+        "builtin_worked_saturdays": builtin_sat,
+        "rest_days": row.rest_days if row else [],
+        "worked_saturdays": row.worked_saturdays if row else [],
+        "source": row.source if row else None,
+        "note": row.note if row else None,
+        "updated_at": row.updated_at.isoformat() if row else None,
+        "cal_last_check": notif.cal_last_check,
+        "mt_last_check": notif.mt_last_check,
+        "mt_last_result": notif.mt_last_result,
+    }
+
+
+@router.put("/calendar/{year}")
+async def put_calendar_year(
+    year: int,
+    body: CalendarBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """Az év munkarendjének kézi rögzítése/javítása (source='manual')."""
+    from datetime import date as date_cls
+
+    from sqlalchemy import select as sa_select
+
+    from app.models import CalendarOverride
+    from app.services.wfm.holidays import load_overrides
+
+    try:
+        rest = [str(date_cls.fromisoformat(x)) for x in body.rest_days]
+        sat = [str(date_cls.fromisoformat(x)) for x in body.worked_saturdays]
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "calendar.bad_date"})
+    if any(not x.startswith(str(year)) for x in rest + sat):
+        raise HTTPException(status_code=422, detail={"code": "calendar.wrong_year"})
+    if any(date_cls.fromisoformat(x).weekday() != 5 for x in sat):
+        raise HTTPException(status_code=422, detail={"code": "calendar.not_saturday"})
+
+    row = (
+        await db.execute(
+            sa_select(CalendarOverride).where(CalendarOverride.year == year)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = CalendarOverride(year=year)
+        db.add(row)
+    row.rest_days = rest
+    row.worked_saturdays = sat
+    row.source = "manual"
+    row.note = body.note
+    await record_audit(
+        db, actor=actor, action="settings.calendar_update", entity_type="settings",
+        entity_id=f"calendar-{year}",
+        detail={"rest_days": rest, "worked_saturdays": sat}, request=request,
+    )
+    await db.commit()
+    await load_overrides(db)
+    return {"ok": True}
+
+
+@router.post("/calendar/refresh")
+async def refresh_calendar_now(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """A hiányzó évek munkarendjének azonnali AI-lekérése (a havi őr
+    átugrásával)."""
+    from app.services.wfm.calendar_watch import ensure_next_year_calendar
+    from app.services.wfm.notifier import get_or_create_settings as _get
+
+    row = await _get(db)
+    row.cal_last_check = None  # az őr átugrása kézi futtatásnál
+    await db.commit()
+    try:
+        added = await ensure_next_year_calendar(db)
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "calendar.ai_failed"})
+    return {"ok": True, "added": added}
+
+
+@router.post("/mt-check")
+async def run_mt_check_now(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Azonnali Mt.-változás-ellenőrzés (a havi őr átugrásával)."""
+    from app.services.wfm.calendar_watch import monthly_mt_check
+    from app.services.wfm.notifier import get_or_create_settings as _get
+
+    row = await _get(db)
+    row.mt_last_check = None
+    await db.commit()
+    try:
+        ran = await monthly_mt_check(db)
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "calendar.ai_failed"})
+    row = await _get(db)
+    result = row.mt_last_result
+    await db.commit()
+    if not ran:
+        raise HTTPException(status_code=422, detail={"code": "settings.ai_not_configured"})
+    return {"ok": True, "result": result}
+
+
 class WhatsAppTestBody(BaseModel):
     to: str | None = None  # None = az első beállított WhatsApp-címzett
 

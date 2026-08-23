@@ -600,6 +600,73 @@ export default function BeallitasokPage() {
     }
   }
 
+  // Munkarend (ünnep-áthelyezések) + Mt.-figyelés
+  const thisYear = new Date().getFullYear();
+  const [calYear, setCalYear] = useState(thisYear + 1);
+  const [cal, setCal] = useState<{
+    holidays: string[]; builtin_rest_days: string[]; builtin_worked_saturdays: string[];
+    rest_days: string[]; worked_saturdays: string[]; source: string | null;
+    mt_last_check: string | null; mt_last_result: string | null;
+  } | null>(null);
+  const [calRest, setCalRest] = useState("");
+  const [calSat, setCalSat] = useState("");
+  const [calBusy, setCalBusy] = useState(false);
+  const [calMsg, setCalMsg] = useState<string | null>(null);
+
+  const loadCal = useCallback(() => {
+    api.get<typeof cal & object>(`/api/settings/calendar/${calYear}`).then((c) => {
+      setCal(c as never);
+      setCalRest(((c as never as { rest_days: string[] }).rest_days ?? []).join(", "));
+      setCalSat(((c as never as { worked_saturdays: string[] }).worked_saturdays ?? []).join(", "));
+    }).catch(() => {});
+  }, [calYear]);
+  useEffect(loadCal, [loadCal]);
+
+  async function saveCal() {
+    setCalBusy(true);
+    setCalMsg(null);
+    try {
+      await api.put(`/api/settings/calendar/${calYear}`, {
+        rest_days: calRest.split(",").map((x) => x.trim()).filter(Boolean),
+        worked_saturdays: calSat.split(",").map((x) => x.trim()).filter(Boolean),
+      });
+      setCalMsg(t("common.saved"));
+      loadCal();
+    } catch (err) {
+      setCalMsg(errorMessage(err));
+    } finally {
+      setCalBusy(false);
+    }
+  }
+
+  async function refreshCalAi() {
+    setCalBusy(true);
+    setCalMsg(null);
+    try {
+      const res = await api.post<{ added: boolean }>("/api/settings/calendar/refresh", {});
+      setCalMsg(res.added ? t("cal.aiAdded") : t("cal.aiNothing"));
+      loadCal();
+    } catch (err) {
+      setCalMsg(errorMessage(err));
+    } finally {
+      setCalBusy(false);
+    }
+  }
+
+  async function runMtCheck() {
+    setCalBusy(true);
+    setCalMsg(null);
+    try {
+      const res = await api.post<{ result: string | null }>("/api/settings/mt-check", {});
+      setCalMsg(res.result ?? t("common.saved"));
+      loadCal();
+    } catch (err) {
+      setCalMsg(errorMessage(err));
+    } finally {
+      setCalBusy(false);
+    }
+  }
+
   const [backupBusy, setBackupBusy] = useState(false);
 
   async function downloadBackup() {
@@ -1508,6 +1575,59 @@ export default function BeallitasokPage() {
             </button>
           </div>
         </form>
+
+        {/* Munkarend (ünnep-áthelyezések) + Mt.-figyelés */}
+        <div className={cardCls("notifications", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
+          <h2 className="font-semibold">📅 {t("cal.title")}</h2>
+          <p className="text-xs text-slate-500">{t("cal.hint")}</p>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {[thisYear, thisYear + 1].map((y) => (
+              <button
+                key={y}
+                type="button"
+                onClick={() => setCalYear(y)}
+                className={`rounded-full px-3 py-1 ${calYear === y ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+              >
+                {y}
+              </button>
+            ))}
+            {cal?.source && (
+              <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                {cal.source === "ai" ? t("cal.sourceAi") : t("cal.sourceManual")}
+              </span>
+            )}
+          </div>
+          {cal && (cal.builtin_rest_days.length > 0 || cal.builtin_worked_saturdays.length > 0) && (
+            <p className="text-xs text-slate-400">
+              {t("cal.builtin")}: {[...cal.builtin_rest_days, ...cal.builtin_worked_saturdays].join(", ") || "—"}
+            </p>
+          )}
+          <label className="block text-sm">
+            {t("cal.restDays")}
+            <input value={calRest} onChange={(e) => setCalRest(e.target.value)} placeholder={`${calYear}-01-02, ${calYear}-12-24`} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" />
+          </label>
+          <label className="block text-sm">
+            {t("cal.workedSaturdays")}
+            <input value={calSat} onChange={(e) => setCalSat(e.target.value)} placeholder={`${calYear}-01-10, ${calYear}-12-12`} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" />
+          </label>
+          {cal?.mt_last_result && (
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              ⚖️ {t("cal.mtLast", { month: cal.mt_last_check ?? "—" })}: {cal.mt_last_result}
+            </p>
+          )}
+          {calMsg && <p className="text-sm text-slate-600">{calMsg}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={saveCal} disabled={calBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {calBusy ? t("common.saving") : t("common.save")}
+            </button>
+            <button type="button" onClick={refreshCalAi} disabled={calBusy} className="rounded-lg border border-violet-300 px-4 py-2 text-sm text-violet-700 hover:bg-violet-50 disabled:opacity-50">
+              ✨ {t("cal.refreshAi")}
+            </button>
+            <button type="button" onClick={runMtCheck} disabled={calBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
+              ⚖️ {t("cal.runMt")}
+            </button>
+          </div>
+        </div>
 
         {/* Adatbázis-mentés (csak admin) */}
         <div className={cardCls("data", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>

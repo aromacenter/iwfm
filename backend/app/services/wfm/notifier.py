@@ -171,9 +171,27 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
         logging.getLogger(__name__).warning("telegram link poll failed", exc_info=True)
         tg_linked = 0
 
+    # Naptár- és Mt.-figyelés (AI, havi őrökkel, best-effort).
+    from app.services.wfm.calendar_watch import ensure_next_year_calendar, monthly_mt_check
+
+    try:
+        cal_added = await ensure_next_year_calendar(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("calendar watch failed", exc_info=True)
+        cal_added = False
+    try:
+        mt_ran = await monthly_mt_check(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("mt watch failed", exc_info=True)
+        mt_ran = False
+
     row = await get_or_create_settings(db)
     result = {"daily": False, "backup": False, "auto_clockout": closed,
-              "telegram_link": tg_linked}
+              "telegram_link": tg_linked, "calendar": cal_added, "mt_check": mt_ran}
     recipients = _recipients(row)
     if not recipients:
         return result

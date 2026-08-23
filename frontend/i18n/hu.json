@@ -1839,5 +1839,19 @@
     "noSubstitute": "— nincs helyettes —",
     "substituteSaved": "Helyettes elmentve.",
     "substituteHint": "Jóváhagyott szabadságod/betegséged idején a felelős-képviselői értesítések automatikusan hozzá futnak be."
+  },
+  "cal": {
+    "title": "Munkarend és Mt.-figyelés",
+    "hint": "Az évente rendeletben kihirdetett áthelyezett pihenőnapok és ledolgozó szombatok. A rendszer évente automatikusan lekéri AI-val a következő évet és értesít — itt ellenőrizheted/javíthatod. Havonta automatikus Mt.-változás-ellenőrzés is fut.",
+    "builtin": "Beépített (rendeletből rögzített) napok",
+    "restDays": "Áthelyezett pihenőnapok (dátumok vesszővel)",
+    "workedSaturdays": "Ledolgozó szombatok (dátumok vesszővel)",
+    "sourceAi": "AI töltötte — ellenőrizd!",
+    "sourceManual": "kézzel rögzítve",
+    "refreshAi": "AI-frissítés most",
+    "runMt": "Mt.-ellenőrzés most",
+    "aiAdded": "Új év munkarendje betöltve — ellenőrizd a dátumokat!",
+    "aiNothing": "Nincs betölthető új év (már megvan, vagy az AI nem ismeri még a rendeletet).",
+    "mtLast": "Utolsó Mt.-ellenőrzés ({month})"
   }
 }

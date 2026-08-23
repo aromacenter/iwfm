@@ -8,6 +8,7 @@ from app.models.models import (  # noqa: F401
     AutomationRule,
     Base,
     BillingoSettings,
+    CalendarOverride,
     DeliveryNote,
     DeliveryNoteLine,
     EmailSettings,
