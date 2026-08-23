@@ -184,3 +184,56 @@ body {
 .dark canvas {
   background-color: #e2e8f0;
 }
+
+/* ─── Betöltő-képernyő (preloader) ─────────────────────────────────────────
+   A layout szerver-renderelt overlay-e: azonnal látszik, az app
+   betöltésekor a PRELOADER_HIDE script elhalványítja. */
+#app-preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.dark #app-preloader {
+  background: #0b1220;
+}
+.preloader-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: preloader-pulse 1.6s ease-in-out infinite;
+}
+.preloader-line1 {
+  display: flex;
+  align-items: center;
+  line-height: 1;
+  color: #e31e24;
+}
+.preloader-x {
+  font-weight: 900;
+  font-size: 64px;
+  line-height: 0.85;
+}
+.preloader-rest {
+  font-size: 46px;
+}
+.preloader-sub {
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #2b2a29;
+}
+.dark .preloader-sub {
+  color: #cbd5e1;
+}
+@keyframes preloader-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}

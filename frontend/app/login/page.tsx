@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import BrandLogo from "@/components/BrandLogo";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
@@ -45,12 +46,9 @@ export default function LoginPage() {
         <div className="mb-2 flex justify-end">
           <LanguageSwitcher />
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/logo.svg"
-          alt="iwfm — Intelligence Workforce Management"
-          className="mx-auto mb-6 h-24 w-auto"
-        />
+        <div className="mb-6 flex justify-center">
+          <BrandLogo size="lg" />
+        </div>
         <form onSubmit={submit} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold">
             {mode === "login" ? t("login.title") : t("login.bootstrapTitle")}

@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import AssistantChat from "@/components/AssistantChat";
+import BrandLogo from "@/components/BrandLogo";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
@@ -203,8 +204,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const sidebar = (
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center px-5">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="iwfm — Intelligence Workforce Management" className="h-11 w-auto" />
+        <BrandLogo size="md" />
       </div>
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
         {groups.map((group, gi) => (
@@ -305,8 +305,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="iwfm" className="h-9 w-auto" />
+        <BrandLogo size="sm" />
       </header>
 
       {/* Mobil oldalsáv (slide-over) */}
