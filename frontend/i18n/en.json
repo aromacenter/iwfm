@@ -596,7 +596,11 @@
     "waTo": "Recipient(s)",
     "waToHint": "recipients = configured WhatsApp numbers · agent = the partner's responsible agent (or substitute while absent) · or concrete numbers, comma-separated",
     "tgTo": "Chat ID(s)",
-    "tgToHint": "recipients = configured Telegram chats · or concrete chat_ids, comma-separated"
+    "tgToHint": "recipients = configured Telegram chats · or concrete chat_ids, comma-separated",
+    "varsInsert": "Insert variables",
+    "tgToGroup": "👥 Main group (configured chats)",
+    "tgToCustom": "✏️ Custom chat ID…",
+    "tgToHint2": "Main group = the chat(s) set in Settings; or pick a linked employee — only they receive it privately."
   },
   "audit": {
     "title": "Audit log",
@@ -1055,7 +1059,21 @@
     "viewTimecard": "Weekly timecard",
     "weekTotal": "Week total",
     "dayTotal": "{hours} h",
-    "noEntries": "—"
+    "noEntries": "—",
+    "viewPunches": "Punch log",
+    "punchTime": "Time",
+    "punchEvent": "Event",
+    "punchSource": "Source",
+    "punchIn": "CLOCK IN",
+    "punchOut": "CLOCK OUT",
+    "punchStillIn": "still in",
+    "punchEmpty": "No punches on this day.",
+    "sources": {
+      "kiosk": "Terminal",
+      "self": "App",
+      "manual": "Manual",
+      "auto": "Automatic"
+    }
   },
   "tasks": {
     "title": "Tasks",

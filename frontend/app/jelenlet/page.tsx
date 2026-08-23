@@ -35,7 +35,9 @@ function addDays(d: Date, n: number): Date {
 }
 
 export default function JelenletPage() {
-  const [view, setView] = useState<"list" | "timecard">("list");
+  const [view, setView] = useState<"list" | "timecard" | "punches">("list");
+  // Blokkolás-napló: melyik nap eseményeit mutatjuk (alapból ma)
+  const [punchDay, setPunchDay] = useState<string>(() => isoDate(new Date()));
   const [{ from, to }, setRange] = useState(monthBounds());
   const [weekStart, setWeekStart] = useState<Date>(() => mondayOf(new Date()));
   const [entries, setEntries] = useState<EntryOut[]>([]);
@@ -58,9 +60,10 @@ export default function JelenletPage() {
       minute: "2-digit",
     });
 
-  // Az aktív nézet időszaka: lista = választott tartomány; timecard = a hét.
-  const effFrom = view === "list" ? from : isoDate(weekStart);
-  const effTo = view === "list" ? to : isoDate(addDays(weekStart, 6));
+  // Az aktív nézet időszaka: lista = választott tartomány; timecard = a hét;
+  // blokkolás-napló = egyetlen nap.
+  const effFrom = view === "list" ? from : view === "punches" ? punchDay : isoDate(weekStart);
+  const effTo = view === "list" ? to : view === "punches" ? punchDay : isoDate(addDays(weekStart, 6));
 
   const load = useCallback(() => {
     api
@@ -128,7 +131,7 @@ export default function JelenletPage() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">{t("att.title")}</h1>
         <div className="flex overflow-hidden rounded-lg border border-slate-300 text-sm">
-          {(["list", "timecard"] as const).map((mode) => (
+          {(["list", "timecard", "punches"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setView(mode)}
@@ -136,7 +139,7 @@ export default function JelenletPage() {
                 view === mode ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {mode === "list" ? t("att.viewList") : t("att.viewTimecard")}
+              {mode === "list" ? t("att.viewList") : mode === "timecard" ? t("att.viewTimecard") : t("att.viewPunches")}
             </button>
           ))}
         </div>
@@ -146,6 +149,12 @@ export default function JelenletPage() {
             <span className="text-slate-400">→</span>
             <input type="date" value={to} onChange={(e) => setRange({ from, to: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
           </>
+        ) : view === "punches" ? (
+          <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white">
+            <button onClick={() => setPunchDay(isoDate(addDays(new Date(punchDay), -1)))} className="px-3 py-1.5 hover:bg-slate-100">←</button>
+            <input type="date" value={punchDay} onChange={(e) => setPunchDay(e.target.value)} className="border-0 bg-transparent px-1 py-1.5 text-sm font-medium" />
+            <button onClick={() => setPunchDay(isoDate(addDays(new Date(punchDay), 1)))} className="px-3 py-1.5 hover:bg-slate-100">→</button>
+          </div>
         ) : (
           <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white">
             <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="px-3 py-1.5 hover:bg-slate-100">←</button>
@@ -172,6 +181,58 @@ export default function JelenletPage() {
         {t("att.totalWorked")}{" "}
         <span className="font-semibold">{t("att.totalHours", { hours: totalHours.toFixed(1) })}</span>
       </p>
+
+      {view === "punches" && (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                <th className="px-4 py-2">{t("att.punchTime")}</th>
+                <th className="px-4 py-2">{t("att.employee")}</th>
+                <th className="px-4 py-2">{t("att.punchEvent")}</th>
+                <th className="px-4 py-2">{t("att.punchSource")}</th>
+                <th className="px-4 py-2">{t("att.note")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries
+                .flatMap((e) => {
+                  const events: { time: string; type: "in" | "out"; entry: EntryOut }[] = [
+                    { time: e.clock_in, type: "in", entry: e },
+                  ];
+                  if (e.clock_out) events.push({ time: e.clock_out, type: "out", entry: e });
+                  return events;
+                })
+                .sort((a, b) => (a.time < b.time ? 1 : -1))
+                .map((ev, i) => (
+                  <tr key={`${ev.entry.id}-${ev.type}-${i}`} className="border-b border-slate-100 last:border-0">
+                    <td className="px-4 py-2 font-mono font-semibold tabular-nums">{fmtTime(ev.time)}</td>
+                    <td className="px-4 py-2 font-medium">{ev.entry.employee_name ?? "—"}</td>
+                    <td className="px-4 py-2">
+                      {ev.type === "in" ? (
+                        <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">▶ {t("att.punchIn")}</span>
+                      ) : (
+                        <span className="rounded bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">■ {t("att.punchOut")}</span>
+                      )}
+                      {ev.type === "in" && !ev.entry.clock_out && (
+                        <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">🟢 {t("att.punchStillIn")}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                        {t(`att.sources.${ev.entry.source}`) !== `att.sources.${ev.entry.source}` ? t(`att.sources.${ev.entry.source}`) : ev.entry.source}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-xs text-slate-500">{ev.entry.note ?? "—"}</td>
+                  </tr>
+                ))}
+              {entries.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400">{t("att.punchEmpty")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {view === "timecard" && (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">

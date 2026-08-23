@@ -596,7 +596,11 @@
     "waTo": "Címzett(ek)",
     "waToHint": "recipients = a beállított WhatsApp-számok · agent = a partner felelős képviselője (távollétekor helyettese) · vagy konkrét számok vesszővel",
     "tgTo": "Chat-azonosító(k)",
-    "tgToHint": "recipients = a beállított Telegram-chatek · vagy konkrét chat_id-k vesszővel"
+    "tgToHint": "recipients = a beállított Telegram-chatek · vagy konkrét chat_id-k vesszővel",
+    "varsInsert": "Beszúrható változók",
+    "tgToGroup": "👥 Fő csoport (beállított chatek)",
+    "tgToCustom": "✏️ Egyéni chat-azonosító…",
+    "tgToHint2": "Fő csoport = a Beállításokban megadott chat(ek); vagy válassz egy összekapcsolt dolgozót — csak ő kapja meg privátban."
   },
   "audit": {
     "title": "Audit napló",
@@ -1055,7 +1059,21 @@
     "viewTimecard": "Heti timecard",
     "weekTotal": "Heti összes",
     "dayTotal": "{hours} h",
-    "noEntries": "—"
+    "noEntries": "—",
+    "viewPunches": "Blokkolások",
+    "punchTime": "Idő",
+    "punchEvent": "Esemény",
+    "punchSource": "Forrás",
+    "punchIn": "BLOKKOLÁS BE",
+    "punchOut": "BLOKKOLÁS KI",
+    "punchStillIn": "még bent van",
+    "punchEmpty": "Ezen a napon nem volt blokkolás.",
+    "sources": {
+      "kiosk": "Terminál",
+      "self": "App",
+      "manual": "Kézi",
+      "auto": "Automatikus"
+    }
   },
   "tasks": {
     "title": "Feladatok",

@@ -308,6 +308,28 @@ async def list_triggers(_: User = Depends(require_role("admin"))):
     return {"triggers": TRIGGERS, "ops": list(OPS), "actions": list(ACTION_TYPES)}
 
 
+@router.get("/telegram-targets")
+async def telegram_targets(
+    db: AsyncSession = Depends(get_db), _: User = Depends(require_role("admin"))
+):
+    """A Telegram-bottal összekapcsolt aktív dolgozók — a "Telegram küldése"
+    akció címzett-választójához (fő csoport VAGY konkrét dolgozó)."""
+    from app.models import Employee
+
+    rows = (
+        await db.execute(
+            select(Employee).where(
+                Employee.telegram_chat_id.is_not(None),
+                Employee.status == "active",
+            ).order_by(Employee.last_name, Employee.first_name)
+        )
+    ).scalars().all()
+    return [
+        {"chat_id": e.telegram_chat_id, "name": f"{e.last_name} {e.first_name}"}
+        for e in rows
+    ]
+
+
 @router.get("/rules", response_model=list[RuleOut])
 async def list_rules(
     db: AsyncSession = Depends(get_db), _: User = Depends(require_role("admin"))

@@ -63,6 +63,8 @@ export default function AutomatizalasokPage() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
+  // Telegram-összekapcsolt dolgozók a címzett-választóhoz
+  const [tgTargets, setTgTargets] = useState<{ chat_id: string; name: string }[]>([]);
   const [form, setForm] = useState<(typeof EMPTY_RULE & { id?: string }) | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,6 +73,7 @@ export default function AutomatizalasokPage() {
     api.get<Rule[]>("/api/automation/rules").then(setRules).catch(() => {});
     api.get<Template[]>("/api/automation/templates").then(setTemplates).catch(() => {});
     api.get<Catalog>("/api/automation/triggers").then(setCatalog).catch(() => {});
+    api.get<{ chat_id: string; name: string }[]>("/api/automation/telegram-targets").then(setTgTargets).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
@@ -335,6 +338,21 @@ export default function AutomatizalasokPage() {
                           placeholder={t("auto.waTextPh")}
                           className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                         />
+                        {vars.length > 0 && (
+                          <span className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-slate-400">{t("auto.varsInsert")}:</span>
+                            {vars.map((v) => (
+                              <button
+                                key={v}
+                                type="button"
+                                onClick={() => setAction(i, { text: `${a.text ?? ""}{{${v}}}` })}
+                                className="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-[11px] text-indigo-700 hover:bg-indigo-100"
+                              >
+                                {"{{"}{v}{"}}"}
+                              </button>
+                            ))}
+                          </span>
+                        )}
                       </label>
                       <label className="block text-xs">
                         {t("auto.waTo")}
@@ -358,16 +376,52 @@ export default function AutomatizalasokPage() {
                           placeholder={t("auto.waTextPh")}
                           className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                         />
+                        {vars.length > 0 && (
+                          <span className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-slate-400">{t("auto.varsInsert")}:</span>
+                            {vars.map((v) => (
+                              <button
+                                key={v}
+                                type="button"
+                                onClick={() => setAction(i, { text: `${a.text ?? ""}{{${v}}}` })}
+                                className="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-[11px] text-indigo-700 hover:bg-indigo-100"
+                              >
+                                {"{{"}{v}{"}}"}
+                              </button>
+                            ))}
+                          </span>
+                        )}
                       </label>
                       <label className="block text-xs">
                         {t("auto.tgTo")}
-                        <input
-                          value={a.to ?? ""}
-                          onChange={(e) => setAction(i, { to: e.target.value })}
-                          placeholder="recipients | -100123456789"
-                          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-                        />
-                        <span className="mt-0.5 block text-slate-400">{t("auto.tgToHint")}</span>
+                        <select
+                          value={
+                            !a.to || a.to === "recipients"
+                              ? "recipients"
+                              : tgTargets.some((x) => x.chat_id === a.to)
+                                ? a.to
+                                : "__custom__"
+                          }
+                          onChange={(e) =>
+                            setAction(i, { to: e.target.value === "__custom__" ? " " : e.target.value })
+                          }
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm"
+                        >
+                          <option value="recipients">{t("auto.tgToGroup")}</option>
+                          {tgTargets.map((x) => (
+                            <option key={x.chat_id} value={x.chat_id}>👤 {x.name}</option>
+                          ))}
+                          <option value="__custom__">{t("auto.tgToCustom")}</option>
+                        </select>
+                        {!!a.to && a.to !== "recipients" && !tgTargets.some((x) => x.chat_id === a.to) && (
+                          <input
+                            value={(a.to ?? "").trim()}
+                            onChange={(e) => setAction(i, { to: e.target.value || " " })}
+                            placeholder="-100123456789, 123456789"
+                            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 font-mono text-sm"
+                          />
+                        )}
+                        <span className="mt-0.5 block text-slate-400">{t("auto.tgToHint2")}</span>
                       </label>
                     </div>
                   )}
