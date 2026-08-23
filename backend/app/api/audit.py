@@ -85,6 +85,92 @@ async def list_audit_events(
     }
 
 
+@router.get("/oversight")
+async def oversight_report(
+    days: int = Query(default=31, ge=1, le=366),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Felügyeleti riport: leltár-eltérések (raktári adjust-mozgások) és a
+    képviselők által elszámoláskor kézzel átírt értékek egy helyen."""
+    from datetime import UTC, timedelta
+
+    from app.models import Product, Warehouse, WarehouseMovement
+
+    since = datetime.now(UTC) - timedelta(days=days)
+
+    move_rows = (
+        await db.execute(
+            select(WarehouseMovement, Warehouse, Product)
+            .join(Warehouse, Warehouse.id == WarehouseMovement.warehouse_id)
+            .join(Product, Product.id == WarehouseMovement.product_id)
+            .where(
+                WarehouseMovement.action == "adjust",
+                WarehouseMovement.created_at >= since,
+            )
+            .order_by(WarehouseMovement.created_at.desc())
+            .limit(500)
+        )
+    ).all()
+
+    override_events = (
+        await db.execute(
+            select(AuditEvent)
+            .where(
+                AuditEvent.action == "settlement.override",
+                AuditEvent.created_at >= since,
+            )
+            .order_by(AuditEvent.created_at.desc())
+            .limit(500)
+        )
+    ).scalars().all()
+
+    actor_ids = {m.actor_user_id for m, _w, _p in move_rows if m.actor_user_id}
+    actor_ids |= {e.actor_user_id for e in override_events if e.actor_user_id}
+    names: dict[uuid.UUID, str] = {}
+    if actor_ids:
+        names = {
+            uid: name
+            for uid, name in (
+                await db.execute(
+                    select(User.id, User.display_name).where(User.id.in_(actor_ids))
+                )
+            ).all()
+        }
+
+    adjustments = [
+        {
+            "created_at": m.created_at.isoformat(),
+            "warehouse_name": w.name,
+            "warehouse_kind": w.kind,
+            "product_name": p.name,
+            "unit": p.unit,
+            "delta": round(m.quantity_delta, 3),
+            "actor_name": names.get(m.actor_user_id) if m.actor_user_id else None,
+            "note": m.note,
+        }
+        for m, w, p in move_rows
+    ]
+
+    overrides = []
+    for e in override_events:
+        detail = e.detail or {}
+        for ov in detail.get("overrides") or []:
+            overrides.append({
+                "created_at": e.created_at.isoformat(),
+                "actor_name": names.get(e.actor_user_id) if e.actor_user_id else None,
+                "partner": detail.get("partner"),
+                "settlement_id": e.entity_id,
+                "field": ov.get("field"),
+                "target": ov.get("target"),
+                "product": ov.get("product"),
+                "from": ov.get("from"),
+                "to": ov.get("to"),
+            })
+
+    return {"adjustments": adjustments, "overrides": overrides}
+
+
 @router.get("/actions")
 async def list_audit_actions(
     db: AsyncSession = Depends(get_db),

@@ -241,7 +241,7 @@ async def cancel_delivery(
             stock.quantity += ln.quantity
             db.add(WarehouseMovement(
                 warehouse_id=dn.source_warehouse_id, product_id=ln.product_id,
-                action="adjust", quantity_delta=ln.quantity,
+                action="receive", quantity_delta=ln.quantity,
                 note=f"{dn.serial} visszavonva", actor_user_id=actor.id,
             ))
 
