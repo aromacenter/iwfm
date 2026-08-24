@@ -1972,7 +1972,7 @@
     "back": "back to list",
     "totalNet": "Total (net)",
     "totalGross": "Payable (gross, 27% VAT)",
-    "discount": "Discount — no invoice",
+    "discount": "Discount",
     "discountHint": "When checked, the handover happens without an invoice (0 Ft).",
     "cash": "Cash",
     "card": "Card",
