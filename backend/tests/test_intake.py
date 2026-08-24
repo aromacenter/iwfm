@@ -23,6 +23,8 @@ async def test_intake_flow_and_clause(client, admin, manager):
     res = await client.post(
         "/api/intakes",
         json={"asset_id": asset["id"], "client_name": "Kovács Ügyfél",
+              "client_company": "Kovács Kft.", "client_email": "kovacs@example.com",
+              "client_address": "1111 Budapest, Fő u. 1.",
               "accessories": "víztartály, tápkábel", "faults": "nem melegít"},
         headers=sz,
     )
@@ -31,6 +33,9 @@ async def test_intake_flow_and_clause(client, admin, manager):
     assert intake["serial"].startswith("AT-")
     assert intake["asset_manufacturer"] == "Jura"
     assert intake["client_name"] == "Kovács Ügyfél"
+    assert intake["client_company"] == "Kovács Kft."
+    assert intake["client_email"] == "kovacs@example.com"
+    assert intake["client_address"] == "1111 Budapest, Fő u. 1."
     assert intake["received_at"]
 
     rows = (await client.get("/api/intakes", headers=sz)).json()
@@ -59,6 +64,21 @@ async def test_intake_flow_and_clause(client, admin, manager):
     assert res.status_code == 403
     res = await client.delete(f"/api/intakes/{intake['id']}", headers=adm)
     assert res.status_code == 204
+
+
+async def test_new_automation_triggers_registered(client, admin):
+    """Az új triggerek (feladat kiosztva, munkalap aláírva, gép átvéve) a
+    trigger-listában és a Telegram-sablonok közt is szerepelnek."""
+    from app.services.wfm.automation import TRIGGERS
+    from app.services.wfm.telegram import EVENT_TEMPLATES
+
+    for ev in ("task.assigned", "worksheet.signed", "intake.created"):
+        assert ev in TRIGGERS, ev
+        assert ev in EVENT_TEMPLATES, ev
+    _, adm = admin
+    res = await client.get("/api/automation/triggers", headers=adm)
+    assert res.status_code == 200
+    assert "intake.created" in res.json()["triggers"]
 
 
 async def test_customer_worksheet_pdf_still_builds_with_warranty(client, admin, manager):

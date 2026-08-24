@@ -576,7 +576,10 @@
       "order_created": "Rendelés érkezett (QR)",
       "partner_created": "Új partner",
       "counter_reported": "Számláló bejelentve",
-      "stock_low": "Alacsony készlet"
+      "stock_low": "Alacsony készlet",
+      "task_assigned": "Feladat kiosztva",
+      "worksheet_signed": "Munkalap aláírva",
+      "intake_created": "Gép átvéve (Átvétel)"
     },
     "ops": {
       "eq": "=",
@@ -1913,6 +1916,24 @@
     "newAssetNameRequired": "Add meg az új gép nevét.",
     "deleteConfirm": "Biztosan törlöd: {serial}?",
     "deletedOk": "Átvétel törölve.",
-    "clauseInfo": "Az elismervény alján automatikusan megjelenik a 60 napos tárolási záradék — a szövege a Beállítások → Munkalap kártyán szerkeszthető."
+    "clauseInfo": "Az elismervény alján automatikusan megjelenik a 60 napos tárolási záradék — a szövege a Beállítások → Munkalap kártyán szerkeszthető.",
+    "customer": "Ügyfél adatai",
+    "partnerPh": "meglévő partner keresése…",
+    "noPartner": "— nincs összekötve partnerrel —",
+    "newPartnerToggle": "➕ Ügyfél felvétele a rendszerbe (minden adatával)",
+    "newPartnerBack": "← vissza (meglévő partner / szabad szöveg)",
+    "newPartnerHint": "Rendes ügyfélként (partnerként) mentjük — később szerződés, elszámolás és számlázás is köthető hozzá.",
+    "pName": "név / üzlet neve *",
+    "pCompany": "cégnév",
+    "pTax": "adószám",
+    "pZip": "irsz.",
+    "pCity": "város",
+    "pStreet": "utca, házszám",
+    "clientEmail": "e-mail",
+    "clientAddress": "cím",
+    "partnerNameRequired": "Add meg az ügyfél nevét.",
+    "partnerCreated": "Ügyfél felvéve: {name}",
+    "worksheetConfirm": "Minden adat megvan — készítsünk belőle munkalapot is?",
+    "worksheet": "Munkalap"
   }
 }

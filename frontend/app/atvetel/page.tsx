@@ -6,9 +6,10 @@
  *  felvehető, opcionális kávérendelős QR-címkével. */
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import SearchSelect from "@/components/SearchSelect";
-import { api, downloadFile, errorMessage } from "@/lib/api";
+import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -33,7 +34,10 @@ interface Intake {
   asset_barcode: string | null;
   partner_name: string | null;
   client_name: string | null;
+  client_company: string | null;
   client_phone: string | null;
+  client_email: string | null;
+  client_address: string | null;
   accessories: string | null;
   faults: string | null;
   note: string | null;
@@ -43,20 +47,40 @@ interface Intake {
 
 const EMPTY_FORM = {
   asset_id: "",
+  partner_id: "",
   client_name: "",
+  client_company: "",
   client_phone: "",
+  client_email: "",
+  client_address: "",
   accessories: "",
   faults: "",
   note: "",
 };
 
+const EMPTY_PARTNER = {
+  name: "",
+  company_name: "",
+  tax_number: "",
+  contact_phone: "",
+  contact_email: "",
+  address_zip: "",
+  address_city: "",
+  address_street: "",
+};
+
 export default function AtvetelPage() {
   const { t } = useT();
   const { toast, confirm } = useUI();
-  const canDelete = usePerms().can("delete");
+  const router = useRouter();
+  const perms = usePerms();
+  const canDelete = perms.can("delete");
+  const canPartners = perms.can("partners");
+  const canTasks = perms.can("tasks");
 
   const [intakes, setIntakes] = useState<Intake[]>([]);
   const [assets, setAssets] = useState<AssetOption[]>([]);
+  const [partners, setPartners] = useState<{ id: string; name: string; city?: string | null }[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
@@ -65,10 +89,15 @@ export default function AtvetelPage() {
   // Új (ügyfél-tulajdonú) gép felvétele helyben
   const [newAssetMode, setNewAssetMode] = useState(false);
   const [newAsset, setNewAsset] = useState({ name: "", manufacturer: "", serial_number: "" });
+  // Új ügyfél (partner) felvétele minden adatával
+  const [newPartnerMode, setNewPartnerMode] = useState(false);
+  const [newPartner, setNewPartner] = useState(EMPTY_PARTNER);
 
   const load = useCallback(() => {
     api.get<Intake[]>("/api/intakes").then(setIntakes).catch(() => {});
     api.get<AssetOption[]>("/api/assets").then(setAssets).catch(() => {});
+    api.get<{ id: string; name: string; city?: string | null }[]>("/api/partners")
+      .then(setPartners).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
@@ -100,10 +129,48 @@ export default function AtvetelPage() {
         setBusy(false);
         return;
       }
+      // Ügyfél: meglévő partner, teljes adatú új partner, vagy szabad szöveg
+      let partnerId = form.partner_id || null;
+      let client = {
+        client_name: form.client_name || null,
+        client_company: form.client_company || null,
+        client_phone: form.client_phone || null,
+        client_email: form.client_email || null,
+        client_address: form.client_address || null,
+      };
+      if (newPartnerMode) {
+        if (!newPartner.name.trim()) {
+          setError(t("intake.partnerNameRequired"));
+          setBusy(false);
+          return;
+        }
+        const p = await api.post<{ id: string; name: string }>("/api/partners", {
+          name: newPartner.name.trim(),
+          company_name: newPartner.company_name.trim() || null,
+          tax_number: newPartner.tax_number.trim() || null,
+          contact_phone: newPartner.contact_phone.trim() || null,
+          contact_email: newPartner.contact_email.trim() || null,
+          address_zip: newPartner.address_zip.trim() || null,
+          address_city: newPartner.address_city.trim() || null,
+          address_street: newPartner.address_street.trim() || null,
+        });
+        partnerId = p.id;
+        client = {
+          client_name: newPartner.name.trim(),
+          client_company: newPartner.company_name.trim() || null,
+          client_phone: newPartner.contact_phone.trim() || null,
+          client_email: newPartner.contact_email.trim() || null,
+          client_address: [newPartner.address_zip, newPartner.address_city, newPartner.address_street]
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .join(" ") || null,
+        };
+        toast(t("intake.partnerCreated", { name: p.name }), "success");
+      }
       const created = await api.post<Intake>("/api/intakes", {
         asset_id: assetId,
-        client_name: form.client_name || null,
-        client_phone: form.client_phone || null,
+        partner_id: partnerId,
+        ...client,
         accessories: form.accessories || null,
         faults: form.faults || null,
         note: form.note || null,
@@ -112,12 +179,14 @@ export default function AtvetelPage() {
       setForm(EMPTY_FORM);
       setNewAssetMode(false);
       setNewAsset({ name: "", manufacturer: "", serial_number: "" });
+      setNewPartnerMode(false);
+      setNewPartner(EMPTY_PARTNER);
       toast(t("intake.created", { serial: created.serial }), "success");
       load();
-      // elismervény azonnali nyomtatása
+      // elismervény azonnali nyomtatása (nyomtatási ablakban, nem letöltés)
       if (await confirm(t("intake.printConfirm", { serial: created.serial }))) {
         try {
-          await downloadFile(`/api/intakes/${created.id}/pdf`, `${created.serial}.pdf`);
+          await printFile(`/api/intakes/${created.id}/pdf`);
         } catch (err) {
           toast(errorMessage(err), "error");
         }
@@ -129,6 +198,10 @@ export default function AtvetelPage() {
         } catch (err) {
           toast(errorMessage(err), "error");
         }
+      }
+      // minden adat megvan → egyből munkalap is készíthető belőle
+      if (canTasks && (await confirm(t("intake.worksheetConfirm")))) {
+        router.push(`/feladatok?intake=${created.id}`);
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -197,7 +270,7 @@ export default function AtvetelPage() {
                 <button
                   onClick={async () => {
                     try {
-                      await downloadFile(`/api/intakes/${row.id}/pdf`, `${row.serial}.pdf`);
+                      await printFile(`/api/intakes/${row.id}/pdf`);
                     } catch (err) {
                       toast(errorMessage(err), "error");
                     }
@@ -206,6 +279,14 @@ export default function AtvetelPage() {
                 >
                   🖨 {t("intake.print")}
                 </button>
+                {canTasks && (
+                  <button
+                    onClick={() => router.push(`/feladatok?intake=${row.id}`)}
+                    className="rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50"
+                  >
+                    📝 {t("intake.worksheet")}
+                  </button>
+                )}
                 {canDelete && (
                   <button
                     onClick={() => removeIntake(row)}
@@ -277,23 +358,124 @@ export default function AtvetelPage() {
               )}
             </div>
 
-            <div className="flex gap-2">
-              <label className="block flex-1 text-sm">
-                {t("intake.clientName")}
-                <input
-                  value={form.client_name}
-                  onChange={(e) => setForm({ ...form, client_name: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            <div className="block text-sm">
+              {t("intake.customer")}
+              {canPartners && !newPartnerMode && (
+                <SearchSelect
+                  items={partners.map((p) => ({ id: p.id, label: p.name, sublabel: p.city ?? null }))}
+                  value={form.partner_id}
+                  onChange={(id) => setForm({ ...form, partner_id: id })}
+                  placeholder={t("intake.partnerPh")}
+                  className="mt-1 w-full"
+                  allowEmpty
+                  emptyLabel={t("intake.noPartner")}
                 />
-              </label>
-              <label className="block w-40 text-sm">
-                {t("intake.clientPhone")}
-                <input
-                  value={form.client_phone}
-                  onChange={(e) => setForm({ ...form, client_phone: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-              </label>
+              )}
+              {canPartners && (
+                <button
+                  type="button"
+                  onClick={() => { setNewPartnerMode(!newPartnerMode); setForm({ ...form, partner_id: "" }); }}
+                  className="mt-1 block text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                >
+                  {newPartnerMode ? t("intake.newPartnerBack") : t("intake.newPartnerToggle")}
+                </button>
+              )}
+              {newPartnerMode ? (
+                <div className="mt-2 space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-xs text-emerald-800">{t("intake.newPartnerHint")}</p>
+                  <input
+                    value={newPartner.name}
+                    onChange={(e) => setNewPartner({ ...newPartner, name: e.target.value })}
+                    placeholder={t("intake.pName")}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                  <input
+                    value={newPartner.company_name}
+                    onChange={(e) => setNewPartner({ ...newPartner, company_name: e.target.value })}
+                    placeholder={t("intake.pCompany")}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={newPartner.tax_number}
+                      onChange={(e) => setNewPartner({ ...newPartner, tax_number: e.target.value })}
+                      placeholder={t("intake.pTax")}
+                      className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                    <input
+                      value={newPartner.contact_phone}
+                      onChange={(e) => setNewPartner({ ...newPartner, contact_phone: e.target.value })}
+                      placeholder={t("intake.clientPhone")}
+                      className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                  </div>
+                  <input
+                    type="email"
+                    value={newPartner.contact_email}
+                    onChange={(e) => setNewPartner({ ...newPartner, contact_email: e.target.value })}
+                    placeholder={t("intake.clientEmail")}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={newPartner.address_zip}
+                      onChange={(e) => setNewPartner({ ...newPartner, address_zip: e.target.value })}
+                      placeholder={t("intake.pZip")}
+                      className="w-20 rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                    <input
+                      value={newPartner.address_city}
+                      onChange={(e) => setNewPartner({ ...newPartner, address_city: e.target.value })}
+                      placeholder={t("intake.pCity")}
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                  </div>
+                  <input
+                    value={newPartner.address_street}
+                    onChange={(e) => setNewPartner({ ...newPartner, address_street: e.target.value })}
+                    placeholder={t("intake.pStreet")}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </div>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      value={form.client_name}
+                      onChange={(e) => setForm({ ...form, client_name: e.target.value })}
+                      placeholder={t("intake.clientName")}
+                      className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                    <input
+                      value={form.client_company}
+                      onChange={(e) => setForm({ ...form, client_company: e.target.value })}
+                      placeholder={t("intake.pCompany")}
+                      className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={form.client_phone}
+                      onChange={(e) => setForm({ ...form, client_phone: e.target.value })}
+                      placeholder={t("intake.clientPhone")}
+                      className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                    <input
+                      type="email"
+                      value={form.client_email}
+                      onChange={(e) => setForm({ ...form, client_email: e.target.value })}
+                      placeholder={t("intake.clientEmail")}
+                      className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                  </div>
+                  <input
+                    value={form.client_address}
+                    onChange={(e) => setForm({ ...form, client_address: e.target.value })}
+                    placeholder={t("intake.clientAddress")}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </div>
+              )}
             </div>
 
             <label className="block text-sm">

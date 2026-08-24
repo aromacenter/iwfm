@@ -73,6 +73,37 @@ export async function downloadFilePost(path: string, body: unknown, filename: st
   triggerDownload(blob, filename);
 }
 
+/** PDF megnyitása közvetlenül a böngésző nyomtatási ablakában (rejtett
+ *  iframe-ben töltjük be, majd print() — nem indul letöltés). */
+export async function printFile(path: string) {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(res.status, `http.${res.status}`, null);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.src = url;
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch {
+      window.open(url, "_blank");
+    }
+  };
+  document.body.appendChild(iframe);
+  // az iframe-et nyitva hagyjuk, amíg a nyomtatási ablak él; később takarítjuk
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    iframe.remove();
+  }, 120_000);
+}
+
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

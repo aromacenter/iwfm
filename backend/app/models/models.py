@@ -512,7 +512,10 @@ class MachineIntake(Base):
         nullable=True,
     )
     client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    client_company: Mapped[str | None] = mapped_column(String(256), nullable=True)
     client_phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    client_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    client_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
     accessories: Mapped[str | None] = mapped_column(Text, nullable=True)  # tartozékok
     faults: Mapped[str | None] = mapped_column(Text, nullable=True)  # hibaleírás
     note: Mapped[str | None] = mapped_column(Text, nullable=True)

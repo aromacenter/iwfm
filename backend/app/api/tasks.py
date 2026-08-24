@@ -237,6 +237,9 @@ async def _upsert_worksheet(
 ) -> Worksheet:
     ws = await _get_worksheet(db, task.id)
     created = ws is None
+    had_both_signatures = (
+        ws is not None and ws.employee_signature is not None and ws.client_signature is not None
+    )
     if ws is None:
         ws = Worksheet(task_id=task.id, serial=await _next_worksheet_serial(db), created_by=actor.id)
         db.add(ws)
@@ -297,6 +300,37 @@ async def _upsert_worksheet(
     )
     await db.commit()
     await db.refresh(ws)  # az onupdate-es updated_at lejárt attribútum lenne
+
+    # Automatizálás-trigger: "Munkalap aláírva" — amikor MINDKÉT aláírás
+    # először kerül fel (tűz-és-felejt).
+    if (
+        not had_both_signatures
+        and ws.employee_signature is not None
+        and ws.client_signature is not None
+    ):
+        try:
+            from app.services.wfm.automation import fire_event
+
+            emp = (
+                await db.execute(select(Employee).where(Employee.id == task.employee_id))
+            ).scalar_one_or_none()
+            gep_nev = ""
+            if ws.asset_id is not None:
+                a = (
+                    await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+                ).scalar_one_or_none()
+                gep_nev = a.name if a else ""
+            fire_event("worksheet.signed", {
+                "sorszam": ws.serial,
+                "cim": task.title,
+                "dolgozo": f"{emp.last_name} {emp.first_name}" if emp else "",
+                "ugyfel": ws.client_name or "",
+                "gep_nev": gep_nev,
+            })
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("worksheet.signed event failed", exc_info=True)
 
     # KSZ-karbantartás: mindkét aláírás megvan és nincs kedvezmény → a díjról
     # automatikusan számla készül és e-mailben kimegy az ügyfélnek a
@@ -651,6 +685,31 @@ async def _notify_assignee(db: AsyncSession, task: Task, emp: Employee, serial: 
         import logging
 
         logging.getLogger(__name__).warning("task assign notify failed", exc_info=True)
+    # Automatizálás-trigger: "Feladat kiosztva" (tűz-és-felejt).
+    try:
+        from app.services.wfm.automation import fire_event
+
+        gep_nev = gep_vonalkod = ""
+        ws = await _get_worksheet(db, task.id)
+        if ws is not None and ws.asset_id is not None:
+            a = (
+                await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+            ).scalar_one_or_none()
+            if a is not None:
+                gep_nev, gep_vonalkod = a.name, a.barcode or ""
+        fire_event("task.assigned", {
+            "cim": task.title,
+            "dolgozo": f"{emp.last_name} {emp.first_name}",
+            "hatarido": task.due_date.isoformat() if task.due_date else "",
+            "sorszam": serial or "",
+            "ugyfel": (ws.client_name if ws else None) or "",
+            "gep_nev": gep_nev,
+            "gep_vonalkod": gep_vonalkod,
+        })
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("task.assigned event failed", exc_info=True)
 
 
 @router.patch("/{task_id}", response_model=TaskOut)

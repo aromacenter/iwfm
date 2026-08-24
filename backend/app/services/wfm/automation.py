@@ -47,6 +47,15 @@ TRIGGERS: dict[str, list[str]] = {
     "stock.low": [
         "partner_nev", "termek_nev", "keszlet_kg", "kuszob_kg",
     ],
+    "task.assigned": [
+        "cim", "dolgozo", "hatarido", "gep_nev", "gep_vonalkod", "ugyfel", "sorszam",
+    ],
+    "worksheet.signed": [
+        "sorszam", "cim", "dolgozo", "ugyfel", "gep_nev",
+    ],
+    "intake.created": [
+        "sorszam", "ugyfel", "gep_nev", "gep_vonalkod", "hibak", "atvette",
+    ],
 }
 
 OPS = ("eq", "ne", "gte", "lte", "contains")

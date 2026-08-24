@@ -445,8 +445,14 @@ def build_intake_pdf(data: dict, settings: dict | None = None) -> bytes:
 
     section("Ügyfél")
     line("Név:", data.get("client_name") or "—")
+    if data.get("client_company"):
+        line("Cégnév:", data["client_company"])
     if data.get("client_phone"):
         line("Telefon:", data["client_phone"])
+    if data.get("client_email"):
+        line("E-mail:", data["client_email"])
+    if data.get("client_address"):
+        line("Cím:", data["client_address"])
 
     section("Átvett gép")
     line("Megnevezés:", data.get("asset_name") or "—")

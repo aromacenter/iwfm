@@ -28,7 +28,10 @@ class IntakeBody(BaseModel):
     asset_id: str
     partner_id: str | None = None
     client_name: str | None = Field(default=None, max_length=256)
+    client_company: str | None = Field(default=None, max_length=256)
     client_phone: str | None = Field(default=None, max_length=64)
+    client_email: str | None = Field(default=None, max_length=320)
+    client_address: str | None = Field(default=None, max_length=512)
     accessories: str | None = Field(default=None, max_length=4000)
     faults: str | None = Field(default=None, max_length=8000)
     note: str | None = Field(default=None, max_length=4000)
@@ -44,7 +47,10 @@ class IntakeOut(BaseModel):
     asset_barcode: str | None
     partner_name: str | None
     client_name: str | None
+    client_company: str | None
     client_phone: str | None
+    client_email: str | None
+    client_address: str | None
     accessories: str | None
     faults: str | None
     note: str | None
@@ -98,7 +104,10 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
             asset_barcode=a.barcode if a else None,
             partner_name=partners.get(r.partner_id) if r.partner_id else None,
             client_name=r.client_name,
+            client_company=r.client_company,
             client_phone=r.client_phone,
+            client_email=r.client_email,
+            client_address=r.client_address,
             accessories=r.accessories,
             faults=r.faults,
             note=r.note,
@@ -149,7 +158,10 @@ async def create_intake(
         asset_id=asset.id,
         partner_id=partner_id or asset.partner_id,
         client_name=(body.client_name or "").strip() or None,
+        client_company=(body.client_company or "").strip() or None,
         client_phone=(body.client_phone or "").strip() or None,
+        client_email=(body.client_email or "").strip() or None,
+        client_address=(body.client_address or "").strip() or None,
         accessories=(body.accessories or "").strip() or None,
         faults=(body.faults or "").strip() or None,
         note=(body.note or "").strip() or None,
@@ -164,7 +176,22 @@ async def create_intake(
         entity_id=row.serial, request=request,
     )
     await db.commit()
-    return (await _out_rows(db, [row]))[0]
+    out = (await _out_rows(db, [row]))[0]
+    # Automatizálás-trigger: "Gép átvéve" (tűz-és-felejt).
+    try:
+        from app.services.wfm.automation import fire_event
+
+        fire_event("intake.created", {
+            "sorszam": out.serial,
+            "ugyfel": out.client_name or out.partner_name or "",
+            "gep_nev": out.asset_name or "",
+            "gep_vonalkod": out.asset_barcode or "",
+            "hibak": out.faults or "",
+            "atvette": out.received_by_name or "",
+        })
+    except Exception:
+        pass
+    return out
 
 
 @router.get("/{intake_id}/pdf")
@@ -193,7 +220,10 @@ async def intake_pdf(
             "serial": row.serial,
             "received_at": f"{row.received_at:%Y-%m-%d %H:%M}",
             "client_name": out.client_name or out.partner_name,
+            "client_company": out.client_company,
             "client_phone": out.client_phone,
+            "client_email": out.client_email,
+            "client_address": out.client_address,
             "asset_name": out.asset_name,
             "asset_manufacturer": out.asset_manufacturer,
             "asset_serial": out.asset_serial,

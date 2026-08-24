@@ -576,7 +576,10 @@
       "order_created": "Order received (QR)",
       "partner_created": "New partner",
       "counter_reported": "Counter reported",
-      "stock_low": "Low stock"
+      "stock_low": "Low stock",
+      "task_assigned": "Task assigned",
+      "worksheet_signed": "Worksheet signed",
+      "intake_created": "Machine intake"
     },
     "ops": {
       "eq": "=",
@@ -1913,6 +1916,24 @@
     "newAssetNameRequired": "Enter the new machine's name.",
     "deleteConfirm": "Delete {serial}?",
     "deletedOk": "Intake deleted.",
-    "clauseInfo": "The 60-day storage clause is printed automatically at the bottom — its text is editable under Settings → Worksheet."
+    "clauseInfo": "The 60-day storage clause is printed automatically at the bottom — its text is editable under Settings → Worksheet.",
+    "customer": "Customer details",
+    "partnerPh": "search existing partner…",
+    "noPartner": "— not linked to a partner —",
+    "newPartnerToggle": "➕ Register the customer (with all details)",
+    "newPartnerBack": "← back (existing partner / free text)",
+    "newPartnerHint": "Saved as a regular customer (partner) — contracts, settlements and invoicing can be attached later.",
+    "pName": "name / shop name *",
+    "pCompany": "company name",
+    "pTax": "tax number",
+    "pZip": "ZIP",
+    "pCity": "city",
+    "pStreet": "street, number",
+    "clientEmail": "email",
+    "clientAddress": "address",
+    "partnerNameRequired": "Enter the customer's name.",
+    "partnerCreated": "Customer registered: {name}",
+    "worksheetConfirm": "All data is here — create a worksheet from it as well?",
+    "worksheet": "Worksheet"
   }
 }

@@ -110,6 +110,43 @@ export default function FeladatokPage() {
   }, []);
   useEffect(load, [load]);
 
+  // Átvételből érkező előtöltés (?intake=<id>): minden adat megvan az
+  // elismervényből — cím, gép, hibaleírás — csak dolgozót és határidőt kell
+  // választani.
+  useEffect(() => {
+    const intakeId = new URLSearchParams(window.location.search).get("intake");
+    if (!intakeId) return;
+    api
+      .get<{
+        id: string; asset_id: string | null; asset_name: string | null;
+        asset_manufacturer: string | null; partner_name: string | null;
+        client_name: string | null; client_address: string | null;
+        accessories: string | null; faults: string | null; serial: string;
+      }[]>("/api/intakes")
+      .then((rows) => {
+        const r = rows.find((x) => x.id === intakeId);
+        if (!r) return;
+        const machine = [r.asset_name, r.asset_manufacturer].filter(Boolean).join(" — ");
+        setForm((f) => ({
+          ...f,
+          title: machine ? `Javítás — ${machine}` : "Javítás",
+          description: [
+            `Átvétel: ${r.serial}`,
+            r.faults && `Hiba: ${r.faults}`,
+            r.accessories && `Tartozékok: ${r.accessories}`,
+          ].filter(Boolean).join("\n"),
+          client_name: r.client_name ?? r.partner_name ?? "",
+          client_location: r.client_address ?? "",
+        }));
+        setExternalService(true);
+        if (r.asset_id) setTaskAssetId(r.asset_id);
+        setShowForm(true);
+      })
+      .catch(() => {});
+    // csak első betöltéskor fusson
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const assignableEmployees = useMemo(() => {
     const active = employees.filter((e) => e.status === "active");
     if (!form.required_skill_id) return active.map((e) => ({ emp: e, hasSkill: true }));
