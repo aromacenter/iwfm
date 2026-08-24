@@ -1168,7 +1168,8 @@
     "quoteSent": "Árajánlat elküldve: {to}",
     "quoteSentInfo": "Árajánlat kiküldve ({date}) — {to}. Várjuk az ügyfél jóváhagyását.",
     "quoteAccepted": "Az ügyfél jóváhagyta: {option} — a szerviz értesítést kapott, a munka kezdhető.",
-    "quoteHint": "Az ügyfél egy linken választ a konstrukciók közül; jóváhagyás után a munkalapon már csak a kiválasztott opció marad, a szervizes pedig (ár nélkül) értesítést kap, hogy kezdheti a munkát."
+    "quoteHint": "Az ügyfél egy linken választ a konstrukciók közül; jóváhagyás után a munkalapon már csak a kiválasztott opció marad, a szervizes pedig (ár nélkül) értesítést kap, hogy kezdheti a munkát.",
+    "quoteDeclined": "Az ügyfél NEM kérte a javítást — a felmérési díj számlázandó, a gép összeszerelve visszaadandó."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1229,7 +1230,8 @@
     "wsRepairName": "konstrukció megnevezése (pl. felújított alkatrésszel)",
     "wsRepairsHint": "Alternatív javítási ajánlatok árral — nem összegződnek, az ügyfél választ közülük.",
     "quoteAccepted": "Árajánlat elfogadva — kezdhető a munka! Konstrukció: {option}",
-    "quotePending": "Árajánlat kiküldve az ügyfélnek — a jóváhagyásig ne kezdd meg a javítást."
+    "quotePending": "Árajánlat kiküldve az ügyfélnek — a jóváhagyásig ne kezdd meg a javítást.",
+    "quoteDeclined": "Az ügyfél nem kérte a javítást — NE javítsd, a gépet összeszerelve add vissza."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1370,7 +1372,9 @@
     "wsCustomerFooter": "Garanciális feltételek (ügyfél-munkalap alja)",
     "wsCustomerFooterHint": "Üresen hagyva a beépített alapszöveg kerül az ügyfél-példány (−1) aljára.",
     "wsIntakeFooter": "Átvételi elismervény záradéka",
-    "wsIntakeFooterHint": "Üresen hagyva a beépített 60 napos tárolási záradék kerül az elismervény aljára."
+    "wsIntakeFooterHint": "Üresen hagyva a beépített 60 napos tárolási záradék kerül az elismervény aljára.",
+    "wsSurveyFee": "Felmérési díj (nettó)",
+    "wsSurveyFeeHint": "Az árajánlat „Nem kérem a javítást” opciójának díja — üresen az alapérték érvényes."
   },
   "kiosk": {
     "title": "Munkaidő-terminál",

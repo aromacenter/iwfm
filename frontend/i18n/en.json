@@ -1168,7 +1168,8 @@
     "quoteSent": "Quote sent: {to}",
     "quoteSentInfo": "Quote sent ({date}) — {to}. Waiting for the customer's approval.",
     "quoteAccepted": "Customer approved: {option} — the technician was notified and can start.",
-    "quoteHint": "The customer picks an option via a link; after approval only the selected option remains on the worksheet and the technician is notified (without prices)."
+    "quoteHint": "The customer picks an option via a link; after approval only the selected option remains on the worksheet and the technician is notified (without prices).",
+    "quoteDeclined": "The customer DECLINED the repair — invoice the survey fee, reassemble and return the machine."
   },
   "myTasks": {
     "title": "My tasks",
@@ -1229,7 +1230,8 @@
     "wsRepairName": "option name (e.g. with refurbished part)",
     "wsRepairsHint": "Alternative repair offers with prices — not summed; the customer picks one.",
     "quoteAccepted": "Quote approved — work can start! Option: {option}",
-    "quotePending": "Quote sent to the customer — please wait for approval before starting."
+    "quotePending": "Quote sent to the customer — please wait for approval before starting.",
+    "quoteDeclined": "The customer declined the repair — do NOT repair, reassemble and return the machine."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1370,7 +1372,9 @@
     "wsCustomerFooter": "Warranty terms (customer worksheet footer)",
     "wsCustomerFooterHint": "If left empty, the built-in default text is printed on the customer (−1) copy.",
     "wsIntakeFooter": "Intake receipt clause",
-    "wsIntakeFooterHint": "If left empty, the built-in 60-day storage clause is printed."
+    "wsIntakeFooterHint": "If left empty, the built-in 60-day storage clause is printed.",
+    "wsSurveyFee": "Survey fee (net)",
+    "wsSurveyFeeHint": "Fee for the quote's “I decline the repair” option — empty uses the default."
   },
   "kiosk": {
     "title": "Time clock terminal",

@@ -32,6 +32,9 @@ DEFAULT_CUSTOMER_FOOTER = (
     "valamint a helytelen használatból, tisztítási hiányosságokból és a "
     "vízkövesedésből adódó meghibásodásokra."
 )
+# Felmérési díj (nettó Ft): ha az ügyfél az árajánlatból a javítást NEM kéri.
+DEFAULT_SURVEY_FEE = 5000.0
+
 DEFAULT_INTAKE_FOOTER = (
     "A javításra átvett gépet maximum 60 napig tároljuk, amennyiben a javításra "
     "nem kerül sor és a gép nem kerül átvételre úgy a gép tulajdonjoga az "

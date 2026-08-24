@@ -557,6 +557,11 @@ export default function FeladataimPage() {
                 ⏳ {t("myTasks.quotePending")}
               </p>
             )}
+            {wsQuote.status === "declined" && (
+              <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800">
+                🔴 {t("myTasks.quoteDeclined")}
+              </p>
+            )}
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
               📷 {wsPhotoBusy ? t("myTasks.wsPhotoBusy") : t("myTasks.wsPhotoFill")}
               <input

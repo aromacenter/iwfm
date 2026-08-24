@@ -23,8 +23,12 @@ interface QuoteInfo {
   company_name: string | null;
   selected_name: string | null;
   accepted_at: string | null;
+  survey_fee_net: number;
+  survey_fee_gross: number;
   options: QuoteOption[];
 }
+
+const DECLINE = "__decline__";
 
 const ft = (n: number) => `${Math.round(n).toLocaleString("hu-HU")} Ft`;
 
@@ -54,7 +58,8 @@ export default function MunkalapAjanlatPage() {
     setError(null);
     try {
       await api.post(`/api/public/worksheet-quote/${token}/accept`, {
-        option_name: selected,
+        option_name: selected === DECLINE ? null : selected,
+        decline: selected === DECLINE,
         accepted_by: name.trim(),
       });
       setDone(true);
@@ -79,7 +84,8 @@ export default function MunkalapAjanlatPage() {
     return <main className="mx-auto max-w-lg p-8 text-center text-slate-500">Betöltés…</main>;
   }
 
-  const accepted = done || info.status === "accepted";
+  const accepted = done || info.status === "accepted" || info.status === "declined";
+  const declinedResult = (done && selected === DECLINE) || info.status === "declined";
 
   return (
     <main className="mx-auto max-w-lg space-y-4 p-4 sm:p-8">
@@ -93,17 +99,27 @@ export default function MunkalapAjanlatPage() {
       </header>
 
       {accepted ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-          <h2 className="text-lg font-semibold text-emerald-800">✔ Köszönjük, a jóváhagyás megtörtént!</h2>
-          <p className="mt-2 text-sm text-emerald-900">
-            Kiválasztott konstrukció:{" "}
-            <strong>{done ? selected : info.selected_name}</strong>
-          </p>
-          <p className="mt-1 text-sm text-emerald-900">
-            Szervizünk megkapta a jóváhagyást, és megkezdi a javítást. Amint elkészült,
-            értesítjük.
-          </p>
-        </div>
+        declinedResult ? (
+          <div className="rounded-2xl border border-slate-300 bg-slate-50 p-5">
+            <h2 className="text-lg font-semibold text-slate-800">✔ Köszönjük, a válaszát rögzítettük.</h2>
+            <p className="mt-2 text-sm text-slate-700">
+              A javítást nem kérte — a felmérési díj ({ft(info.survey_fee_net)} + ÁFA)
+              kerül kiszámlázásra, a készüléket összeszerelve visszaadjuk.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+            <h2 className="text-lg font-semibold text-emerald-800">✔ Köszönjük, a jóváhagyás megtörtént!</h2>
+            <p className="mt-2 text-sm text-emerald-900">
+              Kiválasztott konstrukció:{" "}
+              <strong>{done ? selected : info.selected_name}</strong>
+            </p>
+            <p className="mt-1 text-sm text-emerald-900">
+              Szervizünk megkapta a jóváhagyást, és megkezdi a javítást. Amint elkészült,
+              értesítjük.
+            </p>
+          </div>
+        )
       ) : (
         <>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -138,6 +154,33 @@ export default function MunkalapAjanlatPage() {
                   </span>
                 </label>
               ))}
+              {/* Mindig felkínált opció: a javítás elutasítása felmérési díjjal */}
+              <label
+                className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 transition ${
+                  selected === DECLINE
+                    ? "border-rose-500 bg-rose-50 ring-1 ring-rose-500"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <input
+                    type="radio"
+                    name="option"
+                    checked={selected === DECLINE}
+                    onChange={() => setSelected(DECLINE)}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm font-medium">
+                    Nem kérem a javítást — vállalom a felmérési díj megfizetését
+                  </span>
+                </span>
+                <span className="text-right text-sm">
+                  <span className="font-semibold">{ft(info.survey_fee_net)}</span>
+                  <span className="block text-xs text-slate-400">
+                    + ÁFA (bruttó {ft(info.survey_fee_gross)})
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 
@@ -157,7 +200,9 @@ export default function MunkalapAjanlatPage() {
               disabled={busy}
               className="mt-3 w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
             >
-              ✔ A kiválasztott konstrukciót jóváhagyom
+              {selected === DECLINE
+                ? "✔ Megerősítem: a javítást nem kérem (felmérési díj fizetendő)"
+                : "✔ A kiválasztott konstrukciót jóváhagyom"}
             </button>
             <p className="mt-2 text-center text-xs text-slate-400">
               A jóváhagyás után szervizünk megkezdi a javítást a kiválasztott

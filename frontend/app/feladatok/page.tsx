@@ -316,7 +316,7 @@ export default function FeladatokPage() {
     fee_discount: boolean;
     invoiced: boolean;
     customer_note: string | null;
-    quote_status: "none" | "sent" | "accepted";
+    quote_status: "none" | "sent" | "accepted" | "declined";
     quote_email: string | null;
     quote_sent_at: string | null;
     quote_accepted_at: string | null;
@@ -946,6 +946,10 @@ export default function FeladatokPage() {
                 {priceEdit.ws.quote_status === "accepted" ? (
                   <p className="font-medium text-emerald-700">
                     🟢 {t("tasks.quoteAccepted", { option: priceEdit.ws.quote_selected_name ?? "" })}
+                  </p>
+                ) : priceEdit.ws.quote_status === "declined" ? (
+                  <p className="font-medium text-rose-700">
+                    🔴 {t("tasks.quoteDeclined")}
                   </p>
                 ) : (
                   <>

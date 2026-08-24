@@ -1369,7 +1369,7 @@ async def send_worksheet_quote(
     ]
     if not options:
         raise HTTPException(status_code=422, detail={"code": "worksheet.quote_no_options"})
-    if ws.quote_status == "accepted":
+    if ws.quote_status in ("accepted", "declined"):
         raise HTTPException(status_code=422, detail={"code": "worksheet.quote_already_accepted"})
 
     if not ws.quote_token:
@@ -1434,6 +1434,9 @@ async def public_worksheet_quote(token: str, db: AsyncSession = Depends(get_db))
     row = (
         await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
     ).scalar_one_or_none()
+    from app.services.wfm.worksheet_pdf import DEFAULT_SURVEY_FEE
+
+    survey_fee = (row.survey_fee if row and row.survey_fee is not None else DEFAULT_SURVEY_FEE)
     return {
         "serial": ws.serial,
         "status": ws.quote_status,
@@ -1442,6 +1445,9 @@ async def public_worksheet_quote(token: str, db: AsyncSession = Depends(get_db))
         "company_name": row.company_name if row else None,
         "selected_name": ws.quote_selected_name,
         "accepted_at": ws.quote_accepted_at,
+        # Mindig felkínált opció: "nem kérem a javítást" — felmérési díjjal.
+        "survey_fee_net": survey_fee,
+        "survey_fee_gross": round(survey_fee * 1.27, 0),
         "options": [
             {
                 "name": w.get("name"),
@@ -1455,8 +1461,10 @@ async def public_worksheet_quote(token: str, db: AsyncSession = Depends(get_db))
 
 
 class QuoteAcceptBody(BaseModel):
-    option_name: str = Field(min_length=1, max_length=256)
+    # decline=True: az ügyfél NEM kéri a javítást — a felmérési díjat vállalja.
+    option_name: str | None = Field(default=None, max_length=256)
     accepted_by: str = Field(min_length=2, max_length=256)
+    decline: bool = False
 
 
 @quote_public_router.post("/{token}/accept")
@@ -1465,37 +1473,60 @@ async def public_worksheet_quote_accept(
     body: QuoteAcceptBody,
     db: AsyncSession = Depends(get_db),
 ):
-    """Az ügyfél kiválasztja és jóváhagyja az egyik konstrukciót. Utána a
-    munkalapon már CSAK a kiválasztott opció szerepel; a szervizes értesítést
-    kap (ár nélkül!), hogy kezdheti a munkát."""
+    """Az ügyfél kiválasztja és jóváhagyja az egyik konstrukciót — VAGY a
+    javítást nem kéri (decline), és a felmérési díjat vállalja. Elfogadásnál
+    a munkalapon már csak a kiválasztott opció szerepel; a szervizes
+    értesítést kap (ár nélkül!)."""
     ws = await _ws_by_quote_token(db, token)
-    if ws.quote_status == "accepted":
+    if ws.quote_status in ("accepted", "declined"):
         raise HTTPException(status_code=422, detail={"code": "quote.already_accepted"})
-    chosen = next(
-        (
-            w for w in (ws.repair_options or [])
-            if (w.get("name") or "").strip() == body.option_name.strip()
-            and w.get("price_net") is not None
-        ),
-        None,
-    )
-    if chosen is None:
-        raise HTTPException(status_code=422, detail={"code": "quote.bad_option"})
     all_options = list(ws.repair_options or [])
-    ws.repair_options = [chosen]  # a rendszerben már csak a kiválasztott él
-    ws.quote_status = "accepted"
-    ws.quote_selected_name = chosen.get("name")
+
+    if body.decline:
+        # "Nem kérem a javítást" — a felmérési díj fizetendő.
+        from app.services.wfm.worksheet_pdf import DEFAULT_SURVEY_FEE
+
+        row = (
+            await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+        ).scalar_one_or_none()
+        survey_fee = row.survey_fee if row and row.survey_fee is not None else DEFAULT_SURVEY_FEE
+        selected_label = "Nem kéri a javítást — felmérési díj"
+        ws.repair_options = []
+        ws.works = list(ws.works or []) + [
+            {"name": "Felmérési díj (a javítást az ügyfél nem kérte)",
+             "cost_net": None, "price_net": survey_fee}
+        ]
+        ws.quote_status = "declined"
+        ws.quote_selected_name = selected_label
+    else:
+        if not (body.option_name or "").strip():
+            raise HTTPException(status_code=422, detail={"code": "quote.bad_option"})
+        chosen = next(
+            (
+                w for w in all_options
+                if (w.get("name") or "").strip() == body.option_name.strip()
+                and w.get("price_net") is not None
+            ),
+            None,
+        )
+        if chosen is None:
+            raise HTTPException(status_code=422, detail={"code": "quote.bad_option"})
+        ws.repair_options = [chosen]  # a rendszerben már csak a kiválasztott él
+        ws.quote_status = "accepted"
+        ws.quote_selected_name = chosen.get("name")
+        selected_label = chosen.get("name") or ""
+
     ws.quote_accepted_by = body.accepted_by.strip()
     ws.quote_accepted_at = datetime.now(UTC)
     task = (
         await db.execute(select(Task).where(Task.id == ws.task_id))
     ).scalar_one_or_none()
     db.add(AuditEvent(
-        action="worksheet.quote_accepted",
+        action="worksheet.quote_declined" if body.decline else "worksheet.quote_accepted",
         entity_type="worksheet",
         entity_id=ws.serial,
         detail={
-            "selected": chosen.get("name"),
+            "selected": selected_label,
             "accepted_by": ws.quote_accepted_by,
             "all_options": [
                 {"name": w.get("name"), "price_net": w.get("price_net")} for w in all_options
@@ -1504,7 +1535,7 @@ async def public_worksheet_quote_accept(
     ))
     await db.commit()
 
-    # Szervizes értesítése (ár NÉLKÜL) — kezdheti a munkát.
+    # Szervizes értesítése (ár NÉLKÜL).
     if task is not None:
         try:
             from app.services.wfm.telegram import send_personal
@@ -1513,11 +1544,17 @@ async def public_worksheet_quote_accept(
                 await db.execute(select(Employee).where(Employee.id == task.employee_id))
             ).scalar_one_or_none()
             if emp is not None:
-                await send_personal(
-                    db, emp,
-                    f"🟢 Árajánlat elfogadva: {ws.serial} — a munka kezdhető!\n"
-                    f"Kiválasztott konstrukció: {chosen.get('name')}",
-                )
+                if body.decline:
+                    msg = (
+                        f"🔴 Az ügyfél NEM kéri a javítást: {ws.serial}.\n"
+                        "A gépet ne javítsd — összeszerelés után visszaadandó."
+                    )
+                else:
+                    msg = (
+                        f"🟢 Árajánlat elfogadva: {ws.serial} — a munka kezdhető!\n"
+                        f"Kiválasztott konstrukció: {selected_label}"
+                    )
+                await send_personal(db, emp, msg)
         except Exception:
             import logging
 
@@ -1529,9 +1566,9 @@ async def public_worksheet_quote_accept(
                 "sorszam": ws.serial,
                 "cim": task.title,
                 "ugyfel": ws.client_name or "",
-                "opcio": chosen.get("name") or "",
+                "opcio": selected_label,
                 "elfogado": ws.quote_accepted_by or "",
             })
         except Exception:
             pass
-    return {"ok": True, "selected": chosen.get("name")}
+    return {"ok": True, "selected": selected_label, "declined": body.decline}

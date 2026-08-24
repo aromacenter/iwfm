@@ -42,6 +42,8 @@ interface WorksheetSettings {
   intake_footer_text: string | null;
   customer_footer_default: string;
   intake_footer_default: string;
+  survey_fee: number | null;
+  survey_fee_default: number;
   accent_color: string;
   show_materials: boolean;
   show_hours: boolean;
@@ -234,6 +236,7 @@ export default function BeallitasokPage() {
     footer_text: "",
     customer_footer_text: "",
     intake_footer_text: "",
+    survey_fee: "",
     accent_color: "#1e40af",
     show_materials: true,
     show_hours: true,
@@ -241,6 +244,7 @@ export default function BeallitasokPage() {
     show_comments: true,
   });
   const [wsDefaults, setWsDefaults] = useState({ customer: "", intake: "" });
+  const [wsSurveyDefault, setWsSurveyDefault] = useState(5000);
   const [wsHasLogo, setWsHasLogo] = useState(false);
   const [wsLogo, setWsLogo] = useState<string | null>(null); // újonnan feltöltött data URL
   const [wsRemoveLogo, setWsRemoveLogo] = useState(false);
@@ -330,6 +334,7 @@ export default function BeallitasokPage() {
           footer_text: s.footer_text ?? "",
           customer_footer_text: s.customer_footer_text ?? "",
           intake_footer_text: s.intake_footer_text ?? "",
+          survey_fee: s.survey_fee != null ? String(s.survey_fee) : "",
           accent_color: s.accent_color,
           show_materials: s.show_materials,
           show_hours: s.show_hours,
@@ -337,6 +342,7 @@ export default function BeallitasokPage() {
           show_comments: s.show_comments,
         });
         setWsDefaults({ customer: s.customer_footer_default, intake: s.intake_footer_default });
+        setWsSurveyDefault(s.survey_fee_default);
         setWsHasLogo(s.has_logo);
         setWsLogo(null);
         setWsRemoveLogo(false);
@@ -813,6 +819,7 @@ export default function BeallitasokPage() {
         footer_text: ws.footer_text || null,
         customer_footer_text: ws.customer_footer_text || null,
         intake_footer_text: ws.intake_footer_text || null,
+        survey_fee: ws.survey_fee ? Number(ws.survey_fee) : null,
         accent_color: ws.accent_color,
         show_materials: ws.show_materials,
         show_hours: ws.show_hours,
@@ -959,6 +966,17 @@ export default function BeallitasokPage() {
               className={inputCls}
             />
             <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsIntakeFooterHint")}</span>
+          </label>
+          <label className="block text-sm">
+            {t("settings.wsSurveyFee")}
+            <input
+              type="number" min={0} step="1"
+              value={ws.survey_fee}
+              onChange={(e) => setWs({ ...ws, survey_fee: e.target.value })}
+              placeholder={String(wsSurveyDefault)}
+              className="ml-2 w-32 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
+            /> Ft
+            <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsSurveyFeeHint")}</span>
           </label>
           <div className="flex items-center gap-3">
             <span className="text-sm">{t("settings.wsAccent")}</span>

@@ -315,6 +315,8 @@ class WorksheetSettingsBody(BaseModel):
     # záradéka — üresen a beépített alapszöveg érvényesül.
     customer_footer_text: str | None = Field(default=None, max_length=2000)
     intake_footer_text: str | None = Field(default=None, max_length=2000)
+    # Felmérési díj (nettó Ft) — az árajánlat "nem kérem a javítást" opciója.
+    survey_fee: float | None = Field(default=None, ge=0, le=10_000_000)
     accent_color: str = Field(default="#1e40af")
     show_materials: bool = True
     show_hours: bool = True
@@ -341,6 +343,8 @@ class WorksheetSettingsOut(BaseModel):
     # A beépített alapszövegek — a felület placeholderként mutatja őket.
     customer_footer_default: str
     intake_footer_default: str
+    survey_fee: float | None
+    survey_fee_default: float
     accent_color: str
     show_materials: bool
     show_hours: bool
@@ -364,6 +368,7 @@ def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
     from app.services.wfm.worksheet_pdf import (
         DEFAULT_CUSTOMER_FOOTER,
         DEFAULT_INTAKE_FOOTER,
+        DEFAULT_SURVEY_FEE,
     )
 
     return WorksheetSettingsOut(
@@ -374,6 +379,8 @@ def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
         intake_footer_text=row.intake_footer_text,
         customer_footer_default=DEFAULT_CUSTOMER_FOOTER,
         intake_footer_default=DEFAULT_INTAKE_FOOTER,
+        survey_fee=row.survey_fee,
+        survey_fee_default=DEFAULT_SURVEY_FEE,
         accent_color=row.accent_color,
         show_materials=row.show_materials,
         show_hours=row.show_hours,
@@ -417,6 +424,7 @@ async def update_worksheet_settings(
     row.footer_text = body.footer_text
     row.customer_footer_text = (body.customer_footer_text or "").strip() or None
     row.intake_footer_text = (body.intake_footer_text or "").strip() or None
+    row.survey_fee = body.survey_fee
     row.accent_color = body.accent_color
     row.show_materials = body.show_materials
     row.show_hours = body.show_hours
