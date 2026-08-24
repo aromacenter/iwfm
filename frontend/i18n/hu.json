@@ -1161,7 +1161,14 @@
     "customerNote": "Megjegyzés az ügyfél-példányra (−1)",
     "customerNotePh": "pl. garanciális információ, következő karbantartás…",
     "customerNoteHint": "A szervizes belső leírása nem kerül az ügyfél elé — ide írhatsz helyette megjegyzést, ha kell.",
-    "repairCol": "Javítási konstrukció"
+    "repairCol": "Javítási konstrukció",
+    "quoteSend": "Árajánlat küldése az ügyfélnek",
+    "quoteResend": "Árajánlat újraküldése",
+    "quoteEmailPrompt": "Az ügyfél e-mail címe (ide megy az ajánlat-link):",
+    "quoteSent": "Árajánlat elküldve: {to}",
+    "quoteSentInfo": "Árajánlat kiküldve ({date}) — {to}. Várjuk az ügyfél jóváhagyását.",
+    "quoteAccepted": "Az ügyfél jóváhagyta: {option} — a szerviz értesítést kapott, a munka kezdhető.",
+    "quoteHint": "Az ügyfél egy linken választ a konstrukciók közül; jóváhagyás után a munkalapon már csak a kiválasztott opció marad, a szervizes pedig (ár nélkül) értesítést kap, hogy kezdheti a munkát."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1220,7 +1227,9 @@
     "wsRepairs": "Javítási konstrukció (ajánlat)",
     "wsAddRepair": "+ konstrukció",
     "wsRepairName": "konstrukció megnevezése (pl. felújított alkatrésszel)",
-    "wsRepairsHint": "Alternatív javítási ajánlatok árral — nem összegződnek, az ügyfél választ közülük."
+    "wsRepairsHint": "Alternatív javítási ajánlatok árral — nem összegződnek, az ügyfél választ közülük.",
+    "quoteAccepted": "Árajánlat elfogadva — kezdhető a munka! Konstrukció: {option}",
+    "quotePending": "Árajánlat kiküldve az ügyfélnek — a jóváhagyásig ne kezdd meg a javítást."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1890,7 +1899,9 @@
     "mtLast": "Utolsó Mt.-ellenőrzés ({month})"
   },
   "worksheet": {
-    "empty": "Adj meg leírást vagy legalább egy munkatételt."
+    "empty": "Adj meg leírást vagy legalább egy munkatételt.",
+    "quote_no_options": "Előbb vigyél fel javítási konstrukciókat ügyfél-árral.",
+    "quote_already_accepted": "Az ajánlatot az ügyfél már elfogadta."
   },
   "intake": {
     "title": "Átvétel",

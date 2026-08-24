@@ -27,6 +27,7 @@ from app.api.deps import (
 from app.db import get_db
 from app.models import (
     Asset,
+    AuditEvent,
     Employee,
     Partner,
     Skill,
@@ -43,6 +44,7 @@ from app.services.wfm.worksheet_pdf import DEFAULT_CUSTOMER_FOOTER, build_worksh
 
 router = APIRouter()
 me_router = APIRouter()  # /api/me/tasks alá kerül
+quote_public_router = APIRouter()  # /api/public/worksheet-quote — auth nélkül
 
 EMPLOYEE_STATUSES = ("done", "needs_more_work")
 ALL_STATUSES = ("open", "done", "needs_more_work")
@@ -176,6 +178,12 @@ class WorksheetOut(BaseModel):
     fee_discount: bool = False
     invoiced: bool = False  # az auto-számla már kiment
     customer_note: str | None = None
+    # Ügyfél-árajánlat állapota (none → sent → accepted)
+    quote_status: str = "none"
+    quote_email: str | None = None
+    quote_sent_at: datetime | None = None
+    quote_accepted_at: datetime | None = None
+    quote_selected_name: str | None = None
     updated_at: datetime
 
 
@@ -187,14 +195,29 @@ def _validate_signature(value: str | None) -> str | None:
     return value
 
 
-def _worksheet_out(ws: Worksheet) -> WorksheetOut:
+def _strip_price(rows: list[dict]) -> list[dict]:
+    return [{**r, "price_net": None} for r in rows]
+
+
+def _worksheet_out(ws: Worksheet, *, for_worker: bool = False) -> WorksheetOut:
+    """A munkalap API-képe. ``for_worker=True`` (dolgozói/me-végpontok) esetén
+    KSZ-munkalapon az ÜGYFÉLNEK szánt áraink (price_net) és az ügyfél-
+    megjegyzés SOSEM kerülnek a válaszba — a külsős szerviz nem láthatja őket."""
+    hide = for_worker and ws.external_service
+    works = list(ws.works or [])
+    repair_options = list(ws.repair_options or [])
+    materials = list(ws.materials or [])
+    if hide:
+        works = _strip_price(works)
+        repair_options = _strip_price(repair_options)
+        materials = _strip_price(materials)
     return WorksheetOut(
         serial=ws.serial,
         external_service=ws.external_service,
         work_description=ws.work_description,
-        works=[WorkItem(**w) for w in (ws.works or [])],
-        repair_options=[WorkItem(**w) for w in (ws.repair_options or [])],
-        materials=[MaterialItem(**m) for m in (ws.materials or [])],
+        works=[WorkItem(**w) for w in works],
+        repair_options=[WorkItem(**w) for w in repair_options],
+        materials=[MaterialItem(**m) for m in materials],
         hours_spent=ws.hours_spent,
         client_name=ws.client_name,
         client_location=ws.client_location,
@@ -205,7 +228,12 @@ def _worksheet_out(ws: Worksheet) -> WorksheetOut:
         maintenance_fee=ws.maintenance_fee,
         fee_discount=ws.fee_discount,
         invoiced=ws.billingo_document_id is not None,
-        customer_note=ws.customer_note,
+        customer_note=None if hide else ws.customer_note,
+        quote_status=ws.quote_status or "none",
+        quote_email=None if hide else ws.quote_email,
+        quote_sent_at=ws.quote_sent_at,
+        quote_accepted_at=ws.quote_accepted_at,
+        quote_selected_name=ws.quote_selected_name,
         updated_at=ws.updated_at,
     )
 
@@ -1201,7 +1229,7 @@ async def my_worksheet(
     ws = await _get_worksheet(db, task.id)
     if ws is None:
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
-    return _worksheet_out(ws)
+    return _worksheet_out(ws, for_worker=True)
 
 
 @me_router.put("/{task_id}/worksheet", response_model=WorksheetOut)
@@ -1218,7 +1246,8 @@ async def my_upsert_worksheet(
     nem írja felül őket (preserve_prices)."""
     task = await _own_task_or_404(db, emp, task_id)
     return _worksheet_out(
-        await _upsert_worksheet(db, task, body, user, request, preserve_prices=True)
+        await _upsert_worksheet(db, task, body, user, request, preserve_prices=True),
+        for_worker=True,
     )
 
 
@@ -1254,10 +1283,11 @@ async def my_worksheet_pdf(
     user: User = Depends(get_current_user),
 ):
     """A dolgozó letöltheti/megoszthatja a saját munkalapja PDF-jét (telefonon).
-    KSZ-munkalapnál mindig az ügyfél-példányt (-1) kapja — a megosztás az
-    ügyfél felé megy, a belső költségek nem kerülhetnek ki."""
+    KSZ-munkalapnál a BELSŐ példányt kapja (a saját költségeivel) — az ügyfél
+    −1-es példányát (a mi árainkkal) a képviselő küldi, a külsős szerviz a mi
+    árainkat sosem láthatja."""
     task = await _own_task_or_404(db, emp, task_id)
-    pdf, serial = await _build_worksheet_pdf(db, task, "customer")
+    pdf, serial = await _build_worksheet_pdf(db, task, "internal")
     await record_audit(
         db, actor=user, action="worksheet.pdf_self", entity_type="worksheet",
         entity_id=serial, request=request,
@@ -1306,3 +1336,202 @@ async def my_worksheet_from_photo(
     )
     await db.commit()
     return result
+
+
+# ─── Ügyfél-árajánlat a javítási konstrukciókból (publikus link) ─────────────
+
+
+class QuoteSendBody(BaseModel):
+    to: EmailStr
+
+
+@router.post("/{task_id}/worksheet/send-quote", response_model=WorksheetOut)
+async def send_worksheet_quote(
+    task_id: str,
+    body: QuoteSendBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """A felülvizsgált (ügyfél-árakkal ellátott) javítási konstrukciók
+    kiküldése árajánlatként: az ügyfél a linken választ és hagy jóvá."""
+    import secrets
+
+    from app.core.config import get_settings
+
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    options = [
+        w for w in (ws.repair_options or [])
+        if w.get("name") and w.get("price_net") is not None
+    ]
+    if not options:
+        raise HTTPException(status_code=422, detail={"code": "worksheet.quote_no_options"})
+    if ws.quote_status == "accepted":
+        raise HTTPException(status_code=422, detail={"code": "worksheet.quote_already_accepted"})
+
+    if not ws.quote_token:
+        ws.quote_token = secrets.token_urlsafe(32)
+    ws.quote_status = "sent"
+    ws.quote_email = str(body.to)
+    ws.quote_sent_at = datetime.now(UTC)
+    link = f"{get_settings().frontend_origin.rstrip('/')}/munkalap-ajanlat/{ws.quote_token}"
+
+    smtp = await load_smtp_config(db)
+    if smtp is None:
+        raise HTTPException(status_code=422, detail={"code": "settings.email_not_configured"})
+    lines = [
+        "Tisztelt Ügyfelünk!",
+        "",
+        f"A(z) {ws.serial} munkalaphoz javítási árajánlatot készítettünk.",
+        "Az alábbi linken megtekintheti a választható javítási konstrukciókat,",
+        "és kiválaszthatja az Önnek megfelelőt:",
+        "",
+        link,
+        "",
+        "A kiválasztás után szervizünk azonnal megkezdi a javítást.",
+        "",
+        "Üdvözlettel,",
+        "X-Presso szerviz",
+    ]
+    ok = await send_email(smtp, str(body.to), f"Javítási árajánlat — {ws.serial}", "\n".join(lines))
+    if not ok:
+        raise HTTPException(status_code=502, detail={"code": "settings.email_send_failed"})
+    await record_audit(
+        db, actor=actor, action="worksheet.quote_sent", entity_type="worksheet",
+        entity_id=ws.serial, detail={"to": str(body.to), "options": len(options)},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(ws)
+    return _worksheet_out(ws)
+
+
+async def _ws_by_quote_token(db: AsyncSession, token: str) -> Worksheet:
+    if not token or len(token) < 16:
+        raise HTTPException(status_code=404, detail={"code": "quote.not_found"})
+    ws = (
+        await db.execute(select(Worksheet).where(Worksheet.quote_token == token))
+    ).scalar_one_or_none()
+    if ws is None or ws.quote_status == "none":
+        raise HTTPException(status_code=404, detail={"code": "quote.not_found"})
+    return ws
+
+
+@quote_public_router.get("/{token}")
+async def public_worksheet_quote(token: str, db: AsyncSession = Depends(get_db)):
+    """Publikus árajánlat-nézet — KIZÁRÓLAG az ügyfél-árakkal (cost_net soha)."""
+    ws = await _ws_by_quote_token(db, token)
+    asset_name = None
+    if ws.asset_id is not None:
+        a = (
+            await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+        ).scalar_one_or_none()
+        if a is not None:
+            asset_name = f"{a.name} — {a.manufacturer}" if a.manufacturer else a.name
+    row = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    return {
+        "serial": ws.serial,
+        "status": ws.quote_status,
+        "machine": asset_name,
+        "client_name": ws.client_name,
+        "company_name": row.company_name if row else None,
+        "selected_name": ws.quote_selected_name,
+        "accepted_at": ws.quote_accepted_at,
+        "options": [
+            {
+                "name": w.get("name"),
+                "price_net": w.get("price_net"),
+                "price_gross": round(float(w["price_net"]) * 1.27, 0) if w.get("price_net") is not None else None,
+            }
+            for w in (ws.repair_options or [])
+            if w.get("name") and w.get("price_net") is not None
+        ],
+    }
+
+
+class QuoteAcceptBody(BaseModel):
+    option_name: str = Field(min_length=1, max_length=256)
+    accepted_by: str = Field(min_length=2, max_length=256)
+
+
+@quote_public_router.post("/{token}/accept")
+async def public_worksheet_quote_accept(
+    token: str,
+    body: QuoteAcceptBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """Az ügyfél kiválasztja és jóváhagyja az egyik konstrukciót. Utána a
+    munkalapon már CSAK a kiválasztott opció szerepel; a szervizes értesítést
+    kap (ár nélkül!), hogy kezdheti a munkát."""
+    ws = await _ws_by_quote_token(db, token)
+    if ws.quote_status == "accepted":
+        raise HTTPException(status_code=422, detail={"code": "quote.already_accepted"})
+    chosen = next(
+        (
+            w for w in (ws.repair_options or [])
+            if (w.get("name") or "").strip() == body.option_name.strip()
+            and w.get("price_net") is not None
+        ),
+        None,
+    )
+    if chosen is None:
+        raise HTTPException(status_code=422, detail={"code": "quote.bad_option"})
+    all_options = list(ws.repair_options or [])
+    ws.repair_options = [chosen]  # a rendszerben már csak a kiválasztott él
+    ws.quote_status = "accepted"
+    ws.quote_selected_name = chosen.get("name")
+    ws.quote_accepted_by = body.accepted_by.strip()
+    ws.quote_accepted_at = datetime.now(UTC)
+    task = (
+        await db.execute(select(Task).where(Task.id == ws.task_id))
+    ).scalar_one_or_none()
+    db.add(AuditEvent(
+        action="worksheet.quote_accepted",
+        entity_type="worksheet",
+        entity_id=ws.serial,
+        detail={
+            "selected": chosen.get("name"),
+            "accepted_by": ws.quote_accepted_by,
+            "all_options": [
+                {"name": w.get("name"), "price_net": w.get("price_net")} for w in all_options
+            ],
+        },
+    ))
+    await db.commit()
+
+    # Szervizes értesítése (ár NÉLKÜL) — kezdheti a munkát.
+    if task is not None:
+        try:
+            from app.services.wfm.telegram import send_personal
+
+            emp = (
+                await db.execute(select(Employee).where(Employee.id == task.employee_id))
+            ).scalar_one_or_none()
+            if emp is not None:
+                await send_personal(
+                    db, emp,
+                    f"🟢 Árajánlat elfogadva: {ws.serial} — a munka kezdhető!\n"
+                    f"Kiválasztott konstrukció: {chosen.get('name')}",
+                )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("quote accept notify failed", exc_info=True)
+        try:
+            from app.services.wfm.automation import fire_event
+
+            fire_event("worksheet.quote_accepted", {
+                "sorszam": ws.serial,
+                "cim": task.title,
+                "ugyfel": ws.client_name or "",
+                "opcio": chosen.get("name") or "",
+                "elfogado": ws.quote_accepted_by or "",
+            })
+        except Exception:
+            pass
+    return {"ok": True, "selected": chosen.get("name")}

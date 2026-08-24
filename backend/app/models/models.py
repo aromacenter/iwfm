@@ -376,6 +376,15 @@ class Worksheet(Base):
     # price_net}] — a szervizes a saját díjával viszi fel, az ügyfél-példányra
     # a képviselő által beállított ár kerül.
     repair_options: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Ügyfél-árajánlat a konstrukciókból: publikus link (token), állapot
+    # (none → sent → accepted), és az ügyfél által kiválasztott opció neve.
+    quote_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    quote_status: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    quote_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    quote_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    quote_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    quote_selected_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    quote_accepted_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
     hours_spent: Mapped[float | None] = mapped_column(Float, nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     client_location: Mapped[str | None] = mapped_column(String(512), nullable=True)

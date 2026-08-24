@@ -111,6 +111,8 @@ export default function FeladataimPage() {
   const [wsError, setWsError] = useState<string | null>(null);
   const [wsBusy, setWsBusy] = useState(false);
   const [wsPhotoBusy, setWsPhotoBusy] = useState(false);
+  // Ügyfél-árajánlat állapota (a szervizes árakat nem lát, csak státuszt)
+  const [wsQuote, setWsQuote] = useState<{ status: string; selected: string | null }>({ status: "none", selected: null });
   const { t } = useT();
   const { toast, prompt } = useUI();
 
@@ -188,6 +190,7 @@ export default function FeladataimPage() {
   async function openWorksheet(task: TaskOut) {
     setWsError(null);
     setWs(EMPTY_WS);
+    setWsQuote({ status: "none", selected: null });
     setWsSaved({ emp: null, client: null });
     setRedoSig({ emp: false, client: false });
     setWsTask(task);
@@ -208,7 +211,10 @@ export default function FeladataimPage() {
           client_signature: string | null;
           maintenance_fee: number | null;
           fee_discount: boolean;
+          quote_status: string;
+          quote_selected_name: string | null;
         }>(`/api/me/tasks/${task.id}/worksheet`);
+        setWsQuote({ status: existing.quote_status, selected: existing.quote_selected_name });
         setWs({
           work_description: existing.work_description,
           works: (existing.works ?? []).map((w) => {
@@ -540,6 +546,16 @@ export default function FeladataimPage() {
             <h2 className="text-lg font-semibold">{t("myTasks.wsTitle", { title: wsTask.title })}</h2>
             {wsTask.worksheet_serial && (
               <p className="text-xs text-slate-500">{t("myTasks.wsSerial", { serial: wsTask.worksheet_serial })}</p>
+            )}
+            {wsQuote.status === "accepted" && (
+              <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                🟢 {t("myTasks.quoteAccepted", { option: wsQuote.selected ?? "" })}
+              </p>
+            )}
+            {wsQuote.status === "sent" && (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                ⏳ {t("myTasks.quotePending")}
+              </p>
             )}
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
               📷 {wsPhotoBusy ? t("myTasks.wsPhotoBusy") : t("myTasks.wsPhotoFill")}

@@ -95,7 +95,13 @@ async def test_works_roundtrip_price_preserve_and_asset_info(client, admin, mana
         headers=emp_headers,
     )
     assert res.status_code == 200, res.text
-    ws = res.json()
+    # a dolgozói válaszban az ügyfél-ár rejtve, a költség látszik
+    ws_self = res.json()
+    by_name_self = {w["name"]: w for w in ws_self["works"]}
+    assert by_name_self["Szivattyú csere"]["price_net"] is None
+    assert by_name_self["Szivattyú csere"]["cost_net"] == 8500
+    # a rendszerben (képviselői nézet) az árak megmaradtak
+    ws = (await client.get(f"/api/tasks/{task_id}/worksheet", headers=mgr)).json()
     by_name = {w["name"]: w for w in ws["works"]}
     assert by_name["Szivattyú csere"]["price_net"] == 14000
     assert by_name["Szivattyú csere"]["cost_net"] == 8500
@@ -152,7 +158,9 @@ async def test_works_roundtrip_price_preserve_and_asset_info(client, admin, mana
         },
         headers=emp_headers,
     )
-    ropts = {w["name"]: w for w in res.json()["repair_options"]}
+    # az árak a rendszerben megmaradnak (képviselői nézetből ellenőrizve)
+    ws_check = (await client.get(f"/api/tasks/{task_id}/worksheet", headers=mgr)).json()
+    ropts = {w["name"]: w for w in ws_check["repair_options"]}
     assert ropts["Javítás felújított alkatrésszel"]["price_net"] == 19000
     assert ropts["Javítás felújított alkatrésszel"]["cost_net"] == 12500
     assert ropts["Javítás új alkatrésszel"]["price_net"] == 32000

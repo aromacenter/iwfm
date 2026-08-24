@@ -316,6 +316,11 @@ export default function FeladatokPage() {
     fee_discount: boolean;
     invoiced: boolean;
     customer_note: string | null;
+    quote_status: "none" | "sent" | "accepted";
+    quote_email: string | null;
+    quote_sent_at: string | null;
+    quote_accepted_at: string | null;
+    quote_selected_name: string | null;
   }
   const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[]; workPrices: string[]; repairPrices: string[]; fee: string; discount: boolean; customerNote: string } | null>(null);
 
@@ -337,10 +342,9 @@ export default function FeladatokPage() {
     }
   }
 
-  async function savePrices() {
+  async function savePricesInner() {
     if (!priceEdit) return;
-    try {
-      await api.put(`/api/tasks/${priceEdit.task.id}/worksheet`, {
+    await api.put(`/api/tasks/${priceEdit.task.id}/worksheet`, {
         work_description: priceEdit.ws.work_description,
         works: (priceEdit.ws.works ?? []).map((w, i) => ({
           name: w.name,
@@ -360,12 +364,40 @@ export default function FeladatokPage() {
           cost_net: m.cost_net,
           price_net: priceEdit.prices[i] ? Number(priceEdit.prices[i]) : null,
         })),
-        maintenance_fee: priceEdit.fee ? Number(priceEdit.fee) : null,
-        fee_discount: priceEdit.discount,
-        customer_note: priceEdit.customerNote,
-      });
+      maintenance_fee: priceEdit.fee ? Number(priceEdit.fee) : null,
+      fee_discount: priceEdit.discount,
+      customer_note: priceEdit.customerNote,
+    });
+  }
+
+  async function savePrices() {
+    if (!priceEdit) return;
+    try {
+      await savePricesInner();
       setPriceEdit(null);
       toast(t("common.saved"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  // Árajánlat kiküldése az ügyfélnek (linkkel) a javítási konstrukciókból
+  async function sendQuote() {
+    if (!priceEdit) return;
+    const to = await prompt(t("tasks.quoteEmailPrompt"), {
+      type: "email",
+      placeholder: "ugyfel@example.com",
+    });
+    if (!to) return;
+    try {
+      // előbb elmentjük az aktuális árakat, hogy a link már azokat mutassa
+      await savePricesInner();
+      const ws = await api.post<WsData>(
+        `/api/tasks/${priceEdit.task.id}/worksheet/send-quote`,
+        { to }
+      );
+      setPriceEdit({ ...priceEdit, ws });
+      toast(t("tasks.quoteSent", { to }), "success");
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -908,6 +940,35 @@ export default function FeladatokPage() {
               />
               <span className="mt-0.5 block text-xs text-slate-400">{t("tasks.customerNoteHint")}</span>
             </label>
+            {/* Árajánlat az ügyfélnek: linkes kiválasztás + jóváhagyás */}
+            {(priceEdit.ws.repair_options ?? []).length > 0 && (
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+                {priceEdit.ws.quote_status === "accepted" ? (
+                  <p className="font-medium text-emerald-700">
+                    🟢 {t("tasks.quoteAccepted", { option: priceEdit.ws.quote_selected_name ?? "" })}
+                  </p>
+                ) : (
+                  <>
+                    {priceEdit.ws.quote_status === "sent" && (
+                      <p className="mb-2 text-sky-800">
+                        ⏳ {t("tasks.quoteSentInfo", {
+                          to: priceEdit.ws.quote_email ?? "",
+                          date: (priceEdit.ws.quote_sent_at ?? "").slice(0, 10),
+                        })}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={sendQuote}
+                      className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700"
+                    >
+                      📤 {priceEdit.ws.quote_status === "sent" ? t("tasks.quoteResend") : t("tasks.quoteSend")}
+                    </button>
+                    <p className="mt-1 text-xs text-sky-700">{t("tasks.quoteHint")}</p>
+                  </>
+                )}
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setPriceEdit(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
               <button

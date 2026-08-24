@@ -166,7 +166,8 @@ async def test_ksz_price_preserved_on_worker_save(client, admin, manager):
     assert res.status_code == 200
     assert res.json()["materials"][0]["price_net"] == 15000
 
-    # a dolgozó újra ment (ár nélkül) → az ár MEGMARAD
+    # a dolgozó újra ment (ár nélkül) → az ár MEGMARAD, de a dolgozói válasz
+    # az ügyfél-árat SOSEM mutatja (csak a saját költségét)
     res = await client.put(
         f"/api/me/tasks/{task['id']}/worksheet",
         json={"work_description": "Csere + tisztítás",
@@ -175,8 +176,10 @@ async def test_ksz_price_preserved_on_worker_save(client, admin, manager):
         headers=emp_headers,
     )
     assert res.status_code == 200, res.text
-    assert res.json()["materials"][0]["price_net"] == 15000
+    assert res.json()["materials"][0]["price_net"] is None  # rejtve a szervizes elől
     assert res.json()["materials"][0]["cost_net"] == 8500
+    ws_mgr = (await client.get(f"/api/tasks/{task['id']}/worksheet", headers=mgr)).json()
+    assert ws_mgr["materials"][0]["price_net"] == 15000  # de a rendszerben megvan
 
 
 async def test_contractor_flag(client, admin):

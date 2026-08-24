@@ -1161,7 +1161,14 @@
     "customerNote": "Note for the customer copy (−1)",
     "customerNotePh": "e.g. warranty info, next maintenance…",
     "customerNoteHint": "The technician's internal description never reaches the customer — write an optional note here instead.",
-    "repairCol": "Repair option"
+    "repairCol": "Repair option",
+    "quoteSend": "Send quote to customer",
+    "quoteResend": "Resend quote",
+    "quoteEmailPrompt": "Customer email (the quote link is sent here):",
+    "quoteSent": "Quote sent: {to}",
+    "quoteSentInfo": "Quote sent ({date}) — {to}. Waiting for the customer's approval.",
+    "quoteAccepted": "Customer approved: {option} — the technician was notified and can start.",
+    "quoteHint": "The customer picks an option via a link; after approval only the selected option remains on the worksheet and the technician is notified (without prices)."
   },
   "myTasks": {
     "title": "My tasks",
@@ -1220,7 +1227,9 @@
     "wsRepairs": "Repair options (quote)",
     "wsAddRepair": "+ option",
     "wsRepairName": "option name (e.g. with refurbished part)",
-    "wsRepairsHint": "Alternative repair offers with prices — not summed; the customer picks one."
+    "wsRepairsHint": "Alternative repair offers with prices — not summed; the customer picks one.",
+    "quoteAccepted": "Quote approved — work can start! Option: {option}",
+    "quotePending": "Quote sent to the customer — please wait for approval before starting."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1890,7 +1899,9 @@
     "mtLast": "Last labor-law check ({month})"
   },
   "worksheet": {
-    "empty": "Provide a description or at least one work item."
+    "empty": "Provide a description or at least one work item.",
+    "quote_no_options": "Add repair options with customer prices first.",
+    "quote_already_accepted": "The customer has already accepted this quote."
   },
   "intake": {
     "title": "Intake",
