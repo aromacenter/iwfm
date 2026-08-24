@@ -133,7 +133,7 @@ export default function TavolletPage() {
 
       {showForm && (
         <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowForm(false); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={submit} className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={submit} className="max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold">{t("leave.newTitle")}</h2>
             <label className="block text-sm">
               {t("leave.employee")}

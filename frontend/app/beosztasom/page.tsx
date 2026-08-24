@@ -178,7 +178,7 @@ export default function BeosztasomPage() {
 
       {showRequest && (
         <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowRequest(false); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={requestTimeOff} className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={requestTimeOff} className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold">{t("mySched.requestTitle")}</h2>
             <label className="block text-sm">
               {t("leave.type")}

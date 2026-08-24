@@ -2101,7 +2101,7 @@ export default function ElszamolasPage() {
           onMouseDown={(e) => { if (e.target === e.currentTarget) { setSigning(null); setSignature(null); } }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
         >
-          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <div className="max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold">{t("cons.signTitle")}</h2>
             <p className="text-sm text-slate-600">
               {signing.partner_name} · {ft(signing.total_gross)} · {fmt(signing.created_at)}
@@ -2240,7 +2240,7 @@ export default function ElszamolasPage() {
           onMouseDown={(e) => { if (e.target === e.currentTarget) setReplenish(null); }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
         >
-          <form onSubmit={doReplenish} className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={doReplenish} className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold">{t("cons.replenishTitle")}</h2>
             <label className="block text-sm">
               {t("cons.name")}
@@ -2315,7 +2315,7 @@ export default function ElszamolasPage() {
       {/* Készlet-visszavét modal: partnertől a képviselő raktárába/autójába */}
       {stockReturn && (
         <div onMouseDown={(e) => { if (e.target === e.currentTarget) setStockReturn(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <div className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold">↩ {t("cons.returnTitle")}</h2>
             <p className="text-xs text-slate-500">{t("cons.returnHint")}</p>
             <label className="block text-sm">

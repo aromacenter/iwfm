@@ -800,7 +800,7 @@ export default function GepekPage() {
       {/* Kihelyezés */}
       {deployFor && (
         <div onMouseDown={(e) => { if (e.target === e.currentTarget) setDeployFor(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={doDeploy} className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={doDeploy} className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold">{t("inv.deployTitle")}</h2>
             <p className="text-sm text-slate-500">{deployFor.name} · <span className="font-mono">{deployFor.barcode}</span></p>
             <label className="block text-sm">
@@ -916,7 +916,7 @@ export default function GepekPage() {
       {/* Gépcsere */}
       {swapFor && (
         <div onMouseDown={(e) => { if (e.target === e.currentTarget) setSwapFor(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={doSwap} className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={doSwap} className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold">{t("inv.swapTitle")}</h2>
             <p className="text-sm text-slate-500">
               {swapFor.name} · <span className="font-mono">{swapFor.barcode}</span> → {swapFor.partner_name}
