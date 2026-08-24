@@ -16,6 +16,7 @@ from app.models.models import (  # noqa: F401
     Employee,
     EmployeeSkill,
     KnowledgeEntry,
+    MachineIntake,
     NotificationSettings,
     Partner,
     PartnerContract,

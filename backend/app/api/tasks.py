@@ -39,7 +39,7 @@ from app.models import (
 from app.services.wfm.ai_assign import suggest_assignee
 from app.services.wfm.ai_service import generate_from_image
 from app.services.wfm.email_service import load_smtp_config, send_email
-from app.services.wfm.worksheet_pdf import build_worksheet_pdf
+from app.services.wfm.worksheet_pdf import DEFAULT_CUSTOMER_FOOTER, build_worksheet_pdf
 
 router = APIRouter()
 me_router = APIRouter()  # /api/me/tasks alá kerül
@@ -140,6 +140,8 @@ class WorkItem(BaseModel):
 class WorksheetBody(BaseModel):
     work_description: str = Field(default="", max_length=8000)
     works: list[WorkItem] = Field(default_factory=list, max_length=25)
+    # Javítási konstrukciók: alternatív ajánlatok árral (nem összegződnek).
+    repair_options: list[WorkItem] = Field(default_factory=list, max_length=25)
     materials: list[MaterialItem] = Field(default_factory=list, max_length=25)
     hours_spent: float | None = Field(default=None, ge=0, le=1000)
     client_name: str | None = Field(default=None, max_length=256)
@@ -150,6 +152,8 @@ class WorksheetBody(BaseModel):
     # kedvezmény-pipa (elengedve → nem készül automatikus számla).
     maintenance_fee: float | None = Field(default=None, ge=0)
     fee_discount: bool | None = None  # None = nem nyúlunk hozzá
+    # Az ügyfél-példány (−1) megjegyzése — None = nem nyúlunk hozzá.
+    customer_note: str | None = Field(default=None, max_length=8000)
 
 
 class WorksheetOut(BaseModel):
@@ -157,6 +161,7 @@ class WorksheetOut(BaseModel):
     external_service: bool = False
     work_description: str
     works: list[WorkItem] = []
+    repair_options: list[WorkItem] = []
     materials: list[MaterialItem]
     hours_spent: float | None
     client_name: str | None
@@ -170,6 +175,7 @@ class WorksheetOut(BaseModel):
     maintenance_fee: float | None = None
     fee_discount: bool = False
     invoiced: bool = False  # az auto-számla már kiment
+    customer_note: str | None = None
     updated_at: datetime
 
 
@@ -187,6 +193,7 @@ def _worksheet_out(ws: Worksheet) -> WorksheetOut:
         external_service=ws.external_service,
         work_description=ws.work_description,
         works=[WorkItem(**w) for w in (ws.works or [])],
+        repair_options=[WorkItem(**w) for w in (ws.repair_options or [])],
         materials=[MaterialItem(**m) for m in (ws.materials or [])],
         hours_spent=ws.hours_spent,
         client_name=ws.client_name,
@@ -198,6 +205,7 @@ def _worksheet_out(ws: Worksheet) -> WorksheetOut:
         maintenance_fee=ws.maintenance_fee,
         fee_discount=ws.fee_discount,
         invoiced=ws.billingo_document_id is not None,
+        customer_note=ws.customer_note,
         updated_at=ws.updated_at,
     )
 
@@ -237,19 +245,22 @@ async def _upsert_worksheet(
         raise HTTPException(status_code=422, detail={"code": "worksheet.empty"})
     ws.work_description = body.work_description.strip()
     works = [w.model_dump() for w in body.works]
+    repair_options = [w.model_dump() for w in body.repair_options]
     materials = [m.model_dump() for m in body.materials]
     if preserve_prices and ws.external_service:
-        # A munkadíjak ügyfél-árát is a képviselő állítja — a szervizes mentés
-        # nem írhatja felül/törölheti (név szerint átörökítjük).
-        old_wprices = {
-            str(w.get("name", "")).strip().lower(): w.get("price_net")
-            for w in (ws.works or [])
-            if w.get("price_net") is not None
-        }
-        for w in works:
-            if w.get("price_net") is None:
-                w["price_net"] = old_wprices.get(str(w.get("name", "")).strip().lower())
+        # A munkadíjak/konstrukciók ügyfél-árát a képviselő állítja — a
+        # szervizes mentés nem írhatja felül/törölheti (név szerint örökítjük).
+        for new_rows, old_rows in ((works, ws.works), (repair_options, ws.repair_options)):
+            old_prices_by_name = {
+                str(w.get("name", "")).strip().lower(): w.get("price_net")
+                for w in (old_rows or [])
+                if w.get("price_net") is not None
+            }
+            for w in new_rows:
+                if w.get("price_net") is None:
+                    w["price_net"] = old_prices_by_name.get(str(w.get("name", "")).strip().lower())
     ws.works = works
+    ws.repair_options = repair_options
     if preserve_prices and ws.external_service:
         # Az ügyfél-árakat a KÉPVISELŐ állítja be — a dolgozói (szervizes)
         # mentés nem írhatja felül/törölheti: név szerint átörökítjük.
@@ -271,6 +282,8 @@ async def _upsert_worksheet(
         ws.maintenance_fee = body.maintenance_fee
     if body.fee_discount is not None:
         ws.fee_discount = body.fee_discount
+    if body.customer_note is not None:
+        ws.customer_note = body.customer_note.strip() or None
     # Csak KITÖLTÖTT aláírás ír felül — üres/None sosem törli a mentettet,
     # így az újranyitott munkalap mentése nem "tünteti el" az aláírásokat.
     if body.employee_signature:
@@ -758,12 +771,16 @@ async def _build_worksheet_pdf(
     # ügyfél-példányon KIZÁRÓLAG a mi áraink (price_net) — a cost_net-et
     # lehúzzuk, hogy véletlenül se kerülhessen az ügyfél elé.
     works = list(ws.works or [])
+    repair_options = list(ws.repair_options or [])
     works_price_field = "price_net"
     works_price_label = "Munkadíj (Ft, nettó)"
     if ws.external_service:
         if variant == "customer":
             works = [
                 {k: v for k, v in w.items() if k != "cost_net"} for w in works
+            ]
+            repair_options = [
+                {k: v for k, v in w.items() if k != "cost_net"} for w in repair_options
             ]
         else:
             works_price_field = "cost_net"
@@ -792,8 +809,22 @@ async def _build_worksheet_pdf(
                 fee_row["name"] = f"Karbantartási díj — {ws.maintenance_fee:.0f} Ft (nettó)"
             materials.append(fee_row)
 
+    # Az ügyfél-példányra a szervizes BELSŐ leírása és a belső kommentek nem
+    # kerülnek rá — helyettük a képviselő ügyfél-megjegyzése (ha van).
+    work_description = ws.work_description
+    pdf_comments = [{"author": c.author_name, "text": c.text} for c in comments]
+    pdf_settings = await _worksheet_pdf_settings(db)
+    extra_footer = None
+    if ws.external_service and variant == "customer":
+        work_description = ws.customer_note or ""
+        pdf_comments = []
+        # Garanciális feltételek — MINDIG rákerül az ügyfél-példány aljára
+        # (a Beállításokban átírható, üresen a beépített alapszöveg).
+        extra_footer = (pdf_settings or {}).get("customer_footer_text") or DEFAULT_CUSTOMER_FOOTER
+
     pdf = build_worksheet_pdf(
         {
+            "extra_footer": extra_footer,
             "serial": serial,
             "title": title,
             "price_column": price_column,
@@ -804,8 +835,9 @@ async def _build_worksheet_pdf(
             "employee_name": f"{emp.last_name} {emp.first_name}" if emp else "—",
             "employee_code": emp.employee_code if emp else None,
             "job_title": emp.job_title if emp else None,
-            "work_description": ws.work_description,
+            "work_description": work_description,
             "works": works,
+            "repair_options": repair_options,
             "works_price_field": works_price_field,
             "works_price_label": works_price_label,
             "materials": materials,
@@ -814,10 +846,10 @@ async def _build_worksheet_pdf(
             "client_location": ws.client_location,
             "employee_signature": ws.employee_signature,
             "client_signature": ws.client_signature,
-            "comments": [{"author": c.author_name, "text": c.text} for c in comments],
+            "comments": pdf_comments,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
         },
-        await _worksheet_pdf_settings(db),
+        pdf_settings,
     )
     return pdf, serial
 
@@ -835,6 +867,8 @@ async def _worksheet_pdf_settings(db: AsyncSession) -> dict | None:
         "footer_text": row.footer_text,
         "accent_color": row.accent_color,
         "logo_bytes": bytes(row.logo_data) if row.logo_data else None,
+        "customer_footer_text": row.customer_footer_text,
+        "intake_footer_text": row.intake_footer_text,
         "show_materials": row.show_materials,
         "show_hours": row.show_hours,
         "show_client_signature": row.show_client_signature,

@@ -369,6 +369,13 @@ class Worksheet(Base):
     materials: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     # Elvégzett munkák tételesen: [{name, price_net}] — soronként ár (nettó Ft).
     works: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # A KSZ ügyfél-példányára (−1) szánt megjegyzés — a képviselő írja; a
+    # szervizes belső leírása SOSEM kerül az ügyfél elé.
+    customer_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Javítási konstrukciók (alternatív ajánlatok árral): [{name, cost_net,
+    # price_net}] — a szervizes a saját díjával viszi fel, az ügyfél-példányra
+    # a képviselő által beállított ár kerül.
+    repair_options: Mapped[list | None] = mapped_column(JSON, nullable=True)
     hours_spent: Mapped[float | None] = mapped_column(Float, nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     client_location: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -476,8 +483,49 @@ class WorksheetSettings(Base):
     show_hours: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_client_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_comments: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Az ügyfél-munkalap (−1) aljára kerülő garanciális feltételek — üresen a
+    # beépített alapszöveg megy ki; adminból szerkeszthető.
+    customer_footer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Az átvételi elismervény aljára kerülő záradék (60 napos tárolás) —
+    # üresen a beépített alapszöveg; adminból szerkeszthető.
+    intake_footer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class MachineIntake(Base):
+    """Gép-átvétel: az ügyfél behozott gépének rögzítése (tartozékok, hibák)
+    + nyomtatható átvételi elismervény (AT-ÉÉÉÉ-NNNN)."""
+
+    __tablename__ = "machine_intakes"
+    __table_args__ = (UniqueConstraint("serial", name="uq_machine_intakes_serial"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    serial: Mapped[str] = mapped_column(String(20), nullable=False)
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("assets.id", ondelete="SET NULL", name="fk_intakes_asset"),
+        nullable=True,
+    )
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="SET NULL", name="fk_intakes_partner"),
+        nullable=True,
+    )
+    client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    client_phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    accessories: Mapped[str | None] = mapped_column(Text, nullable=True)  # tartozékok
+    faults: Mapped[str | None] = mapped_column(Text, nullable=True)  # hibaleírás
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    received_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_intakes_user"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

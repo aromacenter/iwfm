@@ -156,7 +156,8 @@
     },
     "warehouse": "Warehouse",
     "contracts": "Contracts",
-    "quotes": "Quote requests"
+    "quotes": "Quote requests",
+    "intake": "Intake"
   },
   "roles": {
     "admin": "Admin",
@@ -1140,10 +1141,24 @@
     "wsMachine": "Machine (maintenance subject)",
     "wsMachineHint": "The maintenance fee prefills from the machine, and the invoice goes to the machine's partner.",
     "maintFee": "Maintenance fee (net)",
-    "maintFeeDiscount": "Discount — fee waived (no invoice)",
+    "maintFeeDiscount": "Discount",
     "maintFeeInvoiced": "invoiced",
     "maintFeeHint": "Prefilled from the machine, freely editable. Without the discount checkbox, once BOTH signatures are on the worksheet the fee is invoiced automatically and emailed to the client with the worksheet.",
-    "workItemsCol": "Work item"
+    "workItemsCol": "Work item",
+    "newAssetToggle": "➕ Register a new machine (customer's machine not in the system yet)",
+    "newAssetBack": "← choose an existing machine",
+    "newAssetName": "machine name *",
+    "newAssetManufacturer": "manufacturer / brand",
+    "newAssetSerial": "serial number",
+    "newAssetPartner": "Customer (partner) — for the coffee-order QR",
+    "newAssetPartnerPh": "search partner…",
+    "newAssetHint": "The machine is saved as customer-owned with an auto barcode. After saving you can print a QR label the customer can use to order coffee.",
+    "newAssetNameRequired": "Enter the new machine's name.",
+    "newAssetQrConfirm": "Machine registered ({{barcode}}). Download the coffee-order QR label?",
+    "customerNote": "Note for the customer copy (−1)",
+    "customerNotePh": "e.g. warranty info, next maintenance…",
+    "customerNoteHint": "The technician's internal description never reaches the customer — write an optional note here instead.",
+    "repairCol": "Repair option"
   },
   "myTasks": {
     "title": "My tasks",
@@ -1198,7 +1213,11 @@
     "wsWorksInternalHint": "Fees entered here are internal — the customer −1 copy shows the prices set by the representative.",
     "assetSerial": "serial no.",
     "assetBarcode": "barcode",
-    "assetCounter": "counter"
+    "assetCounter": "counter",
+    "wsRepairs": "Repair options (quote)",
+    "wsAddRepair": "+ option",
+    "wsRepairName": "option name (e.g. with refurbished part)",
+    "wsRepairsHint": "Alternative repair offers with prices — not summed; the customer picks one."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1335,7 +1354,11 @@
     "promptHint": "The AI uses this instruction when choosing an employee. Available placeholders: {title}, {description}, {due_date}, {required_skill}, {candidates}. The machine-readable response-format instruction is always appended automatically.",
     "promptCustom": "custom",
     "promptDefault": "default",
-    "promptReset": "Restore default"
+    "promptReset": "Restore default",
+    "wsCustomerFooter": "Warranty terms (customer worksheet footer)",
+    "wsCustomerFooterHint": "If left empty, the built-in default text is printed on the customer (−1) copy.",
+    "wsIntakeFooter": "Intake receipt clause",
+    "wsIntakeFooterHint": "If left empty, the built-in 60-day storage clause is printed."
   },
   "kiosk": {
     "title": "Time clock terminal",
@@ -1865,5 +1888,31 @@
   },
   "worksheet": {
     "empty": "Provide a description or at least one work item."
+  },
+  "intake": {
+    "title": "Intake",
+    "subtitle": "Register machines brought in by customers and print intake receipts",
+    "new": "+ New intake",
+    "newTitle": "Machine intake",
+    "newHint": "The intake date is set automatically. The receipt can be printed right after saving.",
+    "machine": "Machine",
+    "clientName": "Customer name",
+    "clientPhone": "Phone",
+    "accessories": "Accessories",
+    "accessoriesPh": "e.g. water tank, milk frother, grinder, power cord…",
+    "faults": "Reported faults / condition",
+    "faultsPh": "e.g. not heating, leaking water, worn casing…",
+    "note": "Note (optional)",
+    "save": "Save intake",
+    "created": "Intake saved: {serial}",
+    "printConfirm": "{serial} saved. Print the intake receipt?",
+    "print": "Receipt",
+    "receivedBy": "received by",
+    "empty": "No intakes yet. Use “+ New intake” to register the first machine.",
+    "assetRequired": "Choose a machine or register a new one.",
+    "newAssetNameRequired": "Enter the new machine's name.",
+    "deleteConfirm": "Delete {serial}?",
+    "deletedOk": "Intake deleted.",
+    "clauseInfo": "The 60-day storage clause is printed automatically at the bottom — its text is editable under Settings → Worksheet."
   }
 }

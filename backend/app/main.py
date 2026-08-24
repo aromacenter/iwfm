@@ -21,6 +21,7 @@ from app.api import (
     employees,
     geo,
     import_export,
+    intake as intake_api,
     inventory,
     kiosk,
     knowledge,
@@ -172,6 +173,7 @@ def create_app() -> FastAPI:
     app.include_router(consignment.stock_router, prefix="/api/partners", tags=["partner-stock"])
     app.include_router(consignment.settlements_router, prefix="/api/settlements", tags=["settlements"])
     app.include_router(service.router, prefix="/api/service", tags=["service"])
+    app.include_router(intake_api.router, prefix="/api/intakes", tags=["intakes"])
     app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
     app.include_router(portal.router, prefix="/api/portal", tags=["portal"])
     app.include_router(portal.manage_router, prefix="/api/partners", tags=["portal"])

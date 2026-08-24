@@ -311,6 +311,10 @@ class WorksheetSettingsBody(BaseModel):
     company_name: str | None = Field(default=None, max_length=256)
     company_address: str | None = Field(default=None, max_length=512)
     footer_text: str | None = Field(default=None, max_length=512)
+    # Ügyfél-munkalap garanciális feltételei és az átvételi elismervény
+    # záradéka — üresen a beépített alapszöveg érvényesül.
+    customer_footer_text: str | None = Field(default=None, max_length=2000)
+    intake_footer_text: str | None = Field(default=None, max_length=2000)
     accent_color: str = Field(default="#1e40af")
     show_materials: bool = True
     show_hours: bool = True
@@ -332,6 +336,11 @@ class WorksheetSettingsOut(BaseModel):
     company_name: str | None
     company_address: str | None
     footer_text: str | None
+    customer_footer_text: str | None
+    intake_footer_text: str | None
+    # A beépített alapszövegek — a felület placeholderként mutatja őket.
+    customer_footer_default: str
+    intake_footer_default: str
     accent_color: str
     show_materials: bool
     show_hours: bool
@@ -352,10 +361,19 @@ async def _get_or_create_worksheet(db: AsyncSession) -> WorksheetSettings:
 
 
 def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
+    from app.services.wfm.worksheet_pdf import (
+        DEFAULT_CUSTOMER_FOOTER,
+        DEFAULT_INTAKE_FOOTER,
+    )
+
     return WorksheetSettingsOut(
         company_name=row.company_name,
         company_address=row.company_address,
         footer_text=row.footer_text,
+        customer_footer_text=row.customer_footer_text,
+        intake_footer_text=row.intake_footer_text,
+        customer_footer_default=DEFAULT_CUSTOMER_FOOTER,
+        intake_footer_default=DEFAULT_INTAKE_FOOTER,
         accent_color=row.accent_color,
         show_materials=row.show_materials,
         show_hours=row.show_hours,
@@ -397,6 +415,8 @@ async def update_worksheet_settings(
     row.company_name = body.company_name
     row.company_address = body.company_address
     row.footer_text = body.footer_text
+    row.customer_footer_text = (body.customer_footer_text or "").strip() or None
+    row.intake_footer_text = (body.intake_footer_text or "").strip() or None
     row.accent_color = body.accent_color
     row.show_materials = body.show_materials
     row.show_hours = body.show_hours

@@ -61,11 +61,20 @@ export default function FeladatokPage() {
   const [externalService, setExternalService] = useState(false);
   // KSZ-munkalap tárgy-gépe: ebből jön a karbantartási díj és a számlázási partner
   const [taskAssetId, setTaskAssetId] = useState("");
-  const [assetOptions, setAssetOptions] = useState<{ id: string; name: string; barcode: string; partner_name: string | null }[]>([]);
+  const [assetOptions, setAssetOptions] = useState<{ id: string; name: string; barcode: string; partner_name: string | null; manufacturer: string | null; category: string | null; article_number: string | null; serial_number: string | null }[]>([]);
   useEffect(() => {
-    api.get<{ id: string; name: string; barcode: string; partner_name: string | null }[]>("/api/assets")
+    api.get<{ id: string; name: string; barcode: string; partner_name: string | null; manufacturer: string | null; category: string | null; article_number: string | null; serial_number: string | null }[]>("/api/assets")
       .then(setAssetOptions).catch(() => {});
   }, []);
+  // Új (ügyfél-tulajdonú) gép felvétele közvetlenül a munkalap-űrlapról
+  const [newAssetMode, setNewAssetMode] = useState(false);
+  const [newAsset, setNewAsset] = useState({ name: "", manufacturer: "", serial_number: "", partner_id: "" });
+  const [partnerOptions, setPartnerOptions] = useState<{ id: string; name: string; city?: string | null }[]>([]);
+  useEffect(() => {
+    if (!newAssetMode || partnerOptions.length > 0) return;
+    api.get<{ id: string; name: string; city?: string | null }[]>("/api/partners")
+      .then(setPartnerOptions).catch(() => {});
+  }, [newAssetMode, partnerOptions.length]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -150,6 +159,28 @@ export default function FeladatokPage() {
     setBusy(true);
     setError(null);
     try {
+      // Új ügyfél-gép felvétele menet közben: auto-vonalkód, mentés, kihelyezés
+      let assetIdForTask = taskAssetId;
+      let createdAsset: { id: string; barcode: string } | null = null;
+      if (externalService && newAssetMode) {
+        if (!newAsset.name.trim()) {
+          setError(t("tasks.newAssetNameRequired"));
+          setBusy(false);
+          return;
+        }
+        const { barcode } = await api.get<{ barcode: string }>("/api/assets/generate-barcode");
+        createdAsset = await api.post<{ id: string; barcode: string }>("/api/assets", {
+          barcode,
+          name: newAsset.name.trim(),
+          manufacturer: newAsset.manufacturer.trim() || null,
+          serial_number: newAsset.serial_number.trim() || null,
+          customer_owned: true,
+        });
+        if (newAsset.partner_id) {
+          await api.post(`/api/assets/${createdAsset.id}/deploy`, { partner_id: newAsset.partner_id });
+        }
+        assetIdForTask = createdAsset.id;
+      }
       const created = await api.post<TaskOut & { ai_reason?: string | null }>("/api/tasks", {
         title: form.title,
         description: form.description || null,
@@ -160,11 +191,13 @@ export default function FeladatokPage() {
         client_name: form.client_name || null,
         client_location: form.client_location || null,
         external_service: externalService,
-        asset_id: externalService && taskAssetId ? taskAssetId : null,
+        asset_id: externalService && assetIdForTask ? assetIdForTask : null,
       });
       setShowForm(false);
       setExternalService(false);
       setTaskAssetId("");
+      setNewAssetMode(false);
+      setNewAsset({ name: "", manufacturer: "", serial_number: "", partner_id: "" });
       setForm({
         title: "", description: "", employee_id: "", due_date: todayIso(),
         required_skill_id: 0, client_name: "", client_location: "",
@@ -183,6 +216,17 @@ export default function FeladatokPage() {
       }
       if (messages.length > 0) toast(messages.join("\n\n"), "success");
       load();
+      if (createdAsset) {
+        // frissítjük a gép-választót, és felkínáljuk a kávérendelős QR-címkét
+        api.get<typeof assetOptions>("/api/assets").then(setAssetOptions).catch(() => {});
+        if (await confirm(t("tasks.newAssetQrConfirm", { barcode: createdAsset.barcode }))) {
+          try {
+            await downloadFile(`/api/assets/${createdAsset.id}/qr-label`, `QR-${createdAsset.barcode}.pdf`);
+          } catch (err) {
+            toast(errorMessage(err), "error");
+          }
+        }
+      }
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -226,6 +270,7 @@ export default function FeladatokPage() {
   interface WsData {
     work_description: string;
     works: { name: string; cost_net: number | null; price_net: number | null }[];
+    repair_options: { name: string; cost_net: number | null; price_net: number | null }[];
     materials: { name: string; qty: string; unit: string; cost_net: number | null; price_net: number | null }[];
     hours_spent: number | null;
     client_name: string | null;
@@ -233,8 +278,9 @@ export default function FeladatokPage() {
     maintenance_fee: number | null;
     fee_discount: boolean;
     invoiced: boolean;
+    customer_note: string | null;
   }
-  const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[]; workPrices: string[]; fee: string; discount: boolean } | null>(null);
+  const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[]; workPrices: string[]; repairPrices: string[]; fee: string; discount: boolean; customerNote: string } | null>(null);
 
   async function openPriceEdit(task: TaskOut) {
     try {
@@ -244,8 +290,10 @@ export default function FeladatokPage() {
         ws,
         prices: (ws.materials ?? []).map((m) => (m.price_net != null ? String(m.price_net) : "")),
         workPrices: (ws.works ?? []).map((w) => (w.price_net != null ? String(w.price_net) : "")),
+        repairPrices: (ws.repair_options ?? []).map((w) => (w.price_net != null ? String(w.price_net) : "")),
         fee: ws.maintenance_fee != null ? String(ws.maintenance_fee) : "",
         discount: ws.fee_discount,
+        customerNote: ws.customer_note ?? "",
       });
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -262,6 +310,11 @@ export default function FeladatokPage() {
           cost_net: w.cost_net,
           price_net: priceEdit.workPrices[i] ? Number(priceEdit.workPrices[i]) : null,
         })),
+        repair_options: (priceEdit.ws.repair_options ?? []).map((w, i) => ({
+          name: w.name,
+          cost_net: w.cost_net,
+          price_net: priceEdit.repairPrices[i] ? Number(priceEdit.repairPrices[i]) : null,
+        })),
         hours_spent: priceEdit.ws.hours_spent,
         client_name: priceEdit.ws.client_name,
         client_location: priceEdit.ws.client_location,
@@ -272,6 +325,7 @@ export default function FeladatokPage() {
         })),
         maintenance_fee: priceEdit.fee ? Number(priceEdit.fee) : null,
         fee_discount: priceEdit.discount,
+        customer_note: priceEdit.customerNote,
       });
       setPriceEdit(null);
       toast(t("common.saved"), "success");
@@ -583,17 +637,70 @@ export default function FeladatokPage() {
               </span>
             </label>
             {externalService && (
-              <label className="block text-sm">
+              <div className="block text-sm">
                 {t("tasks.wsMachine")}
-                <SearchSelect
-                  items={assetOptions.map((a) => ({ id: a.id, label: a.name, sublabel: a.partner_name, badge: a.barcode }))}
-                  value={taskAssetId}
-                  onChange={setTaskAssetId}
-                  placeholder={t("service.machineSearchPh")}
-                  className="mt-1 w-full"
-                />
-                <span className="mt-0.5 block text-xs text-slate-400">{t("tasks.wsMachineHint")}</span>
-              </label>
+                {!newAssetMode && (
+                  <>
+                    <SearchSelect
+                      items={assetOptions.map((a) => ({
+                        id: a.id,
+                        label: a.manufacturer ? `${a.name} — ${a.manufacturer}` : a.name,
+                        sublabel: [a.category, a.partner_name].filter(Boolean).join(" · ") || null,
+                        badge: a.barcode,
+                        keywords: [a.article_number, a.serial_number].filter(Boolean).join(" ") || null,
+                      }))}
+                      value={taskAssetId}
+                      onChange={setTaskAssetId}
+                      placeholder={t("service.machineSearchPh")}
+                      className="mt-1 w-full"
+                    />
+                    <span className="mt-0.5 block text-xs text-slate-400">{t("tasks.wsMachineHint")}</span>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setNewAssetMode(!newAssetMode); setTaskAssetId(""); }}
+                  className="mt-1 block text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                >
+                  {newAssetMode ? t("tasks.newAssetBack") : t("tasks.newAssetToggle")}
+                </button>
+                {newAssetMode && (
+                  <div className="mt-2 space-y-2 rounded-xl border border-sky-200 bg-sky-50 p-3">
+                    <p className="text-xs text-sky-800">{t("tasks.newAssetHint")}</p>
+                    <input
+                      value={newAsset.name}
+                      onChange={(e) => setNewAsset({ ...newAsset, name: e.target.value })}
+                      placeholder={t("tasks.newAssetName")}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        value={newAsset.manufacturer}
+                        onChange={(e) => setNewAsset({ ...newAsset, manufacturer: e.target.value })}
+                        placeholder={t("tasks.newAssetManufacturer")}
+                        className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
+                      />
+                      <input
+                        value={newAsset.serial_number}
+                        onChange={(e) => setNewAsset({ ...newAsset, serial_number: e.target.value })}
+                        placeholder={t("tasks.newAssetSerial")}
+                        className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
+                      />
+                    </div>
+                    <label className="block text-xs text-sky-800">
+                      {t("tasks.newAssetPartner")}
+                      <SearchSelect
+                        items={partnerOptions.map((p) => ({ id: p.id, label: p.name, sublabel: p.city ?? null }))}
+                        value={newAsset.partner_id}
+                        onChange={(id) => setNewAsset({ ...newAsset, partner_id: id })}
+                        placeholder={t("tasks.newAssetPartnerPh")}
+                        className="mt-1 w-full"
+                        allowEmpty
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
             )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
@@ -640,6 +747,39 @@ export default function FeladatokPage() {
                             const next = [...priceEdit.workPrices];
                             next[i] = e.target.value;
                             setPriceEdit({ ...priceEdit, workPrices: next });
+                          }}
+                          className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {(priceEdit.ws.repair_options ?? []).length > 0 && (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-400">
+                    <th className="py-1 pr-2">{t("tasks.repairCol")}</th>
+                    <th className="py-1 pr-2 text-right">{t("myTasks.wsCostNet")}</th>
+                    <th className="py-1 text-right">{t("myTasks.wsPriceNet")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceEdit.ws.repair_options.map((w, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="py-1.5 pr-2">🛠 {w.name}</td>
+                      <td className="py-1.5 pr-2 text-right text-orange-700">
+                        {w.cost_net != null ? `${w.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
+                      </td>
+                      <td className="py-1.5 text-right">
+                        <input
+                          type="number" min={0}
+                          value={priceEdit.repairPrices[i] ?? ""}
+                          onChange={(e) => {
+                            const next = [...priceEdit.repairPrices];
+                            next[i] = e.target.value;
+                            setPriceEdit({ ...priceEdit, repairPrices: next });
                           }}
                           className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
                         />
@@ -719,6 +859,18 @@ export default function FeladatokPage() {
               </div>
               <p className="mt-1 text-xs text-indigo-700">{t("tasks.maintFeeHint")}</p>
             </div>
+            {/* Az ügyfél-példány megjegyzése — a szervizes belső leírása helyett */}
+            <label className="block text-sm">
+              {t("tasks.customerNote")}
+              <textarea
+                value={priceEdit.customerNote}
+                onChange={(e) => setPriceEdit({ ...priceEdit, customerNote: e.target.value })}
+                rows={3}
+                placeholder={t("tasks.customerNotePh")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+              <span className="mt-0.5 block text-xs text-slate-400">{t("tasks.customerNoteHint")}</span>
+            </label>
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setPriceEdit(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
               <button

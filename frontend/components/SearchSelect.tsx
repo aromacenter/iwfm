@@ -14,6 +14,7 @@ export interface SearchItem {
   label: string;
   sublabel?: string | null; // pl. kategória · egység
   badge?: string | null; // rövid kód/jelvény a sor végén
+  keywords?: string | null; // rejtett kereső-szöveg (pl. gyártó, cikkszám, gyári szám)
   inactive?: boolean;
 }
 
@@ -78,7 +79,7 @@ export default function SearchSelect({
     const tokens = norm(query).split(/\s+/).filter(Boolean);
     if (!tokens.length) return items;
     return items.filter((it) => {
-      const h = norm([it.label, it.sublabel, it.badge].filter(Boolean).join(" "));
+      const h = norm([it.label, it.sublabel, it.badge, it.keywords].filter(Boolean).join(" "));
       return tokens.every((tok) => h.includes(tok));
     });
   }, [items, query]);

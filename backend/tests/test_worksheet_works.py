@@ -110,6 +110,71 @@ async def test_works_roundtrip_price_preserve_and_asset_info(client, admin, mana
     assert res.status_code == 422
     assert res.json()["detail"]["code"] == "worksheet.empty"
 
+    # Javítási konstrukciók: szervizes viszi fel, képviselői ár megőrződik
+    res = await client.put(
+        f"/api/me/tasks/{task_id}/worksheet",
+        json={
+            "work_description": "kész",
+            "works": [{"name": "Szivattyú csere", "cost_net": 8500}],
+            "repair_options": [
+                {"name": "Javítás felújított alkatrésszel", "cost_net": 12000},
+                {"name": "Javítás új alkatrésszel", "cost_net": 22000},
+            ],
+            "materials": [],
+        },
+        headers=emp_headers,
+    )
+    assert res.status_code == 200, res.text
+    res = await client.put(
+        f"/api/tasks/{task_id}/worksheet",
+        json={
+            "work_description": "kész",
+            "works": [{"name": "Szivattyú csere", "cost_net": 8500, "price_net": 14000}],
+            "repair_options": [
+                {"name": "Javítás felújított alkatrésszel", "cost_net": 12000, "price_net": 19000},
+                {"name": "Javítás új alkatrésszel", "cost_net": 22000, "price_net": 32000},
+            ],
+            "materials": [],
+        },
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    res = await client.put(
+        f"/api/me/tasks/{task_id}/worksheet",
+        json={
+            "work_description": "kész",
+            "works": [{"name": "Szivattyú csere", "cost_net": 8500}],
+            "repair_options": [
+                {"name": "Javítás felújított alkatrésszel", "cost_net": 12500},
+                {"name": "Javítás új alkatrésszel", "cost_net": 22000},
+            ],
+            "materials": [],
+        },
+        headers=emp_headers,
+    )
+    ropts = {w["name"]: w for w in res.json()["repair_options"]}
+    assert ropts["Javítás felújított alkatrésszel"]["price_net"] == 19000
+    assert ropts["Javítás felújított alkatrésszel"]["cost_net"] == 12500
+    assert ropts["Javítás új alkatrésszel"]["price_net"] == 32000
+
+    # Ügyfél-megjegyzés: a képviselő állítja; a szervizes mentése nem törli
+    res = await client.put(
+        f"/api/tasks/{task_id}/worksheet",
+        json={"work_description": "belső leírás", "works": [], "materials": [],
+              "customer_note": "Garancia: 6 hónap a cserélt szivattyúra."},
+        headers=mgr,
+    )
+    assert res.status_code == 200
+    res = await client.put(
+        f"/api/me/tasks/{task_id}/worksheet",
+        json={"work_description": "belső leírás v2", "works": [], "materials": []},
+        headers=emp_headers,
+    )
+    assert res.status_code == 200
+    ws = (await client.get(f"/api/tasks/{task_id}/worksheet", headers=mgr)).json()
+    assert ws["customer_note"] == "Garancia: 6 hónap a cserélt szivattyúra."
+    assert ws["work_description"] == "belső leírás v2"
+
     # Mindkét PDF-változat elkészül (belső + ügyfél -1)
     res = await client.get(f"/api/tasks/{task_id}/worksheet/pdf", headers=mgr)
     assert res.status_code == 200 and res.content[:4] == b"%PDF"

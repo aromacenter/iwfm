@@ -48,6 +48,10 @@ interface AssetOption {
   barcode: string;
   name: string;
   partner_name: string | null;
+  manufacturer: string | null;
+  category: string | null;
+  article_number: string | null;
+  serial_number: string | null;
 }
 
 interface MaintenanceDue {
@@ -564,7 +568,11 @@ export default function SzervizPage() {
                 {t("service.machine")}
                 <SearchSelect
                   items={assets.map((a) => ({
-                    id: a.id, label: a.name, sublabel: a.partner_name, badge: a.barcode,
+                    id: a.id,
+                    label: a.manufacturer ? `${a.name} — ${a.manufacturer}` : a.name,
+                    sublabel: [a.category, a.partner_name].filter(Boolean).join(" · ") || null,
+                    badge: a.barcode,
+                    keywords: [a.article_number, a.serial_number].filter(Boolean).join(" ") || null,
                   }))}
                   value={form.asset_id}
                   onChange={(id) => setForm({ ...form, asset_id: id })}

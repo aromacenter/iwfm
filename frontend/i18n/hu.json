@@ -156,7 +156,8 @@
     },
     "warehouse": "Raktár",
     "contracts": "Szerződések",
-    "quotes": "Ajánlatkérések"
+    "quotes": "Ajánlatkérések",
+    "intake": "Átvétel"
   },
   "roles": {
     "admin": "Admin",
@@ -1140,10 +1141,24 @@
     "wsMachine": "Gép (karbantartás tárgya)",
     "wsMachineHint": "A karbantartási díj a gépből előtöltődik, és a számla a gép partneréhez készül.",
     "maintFee": "Karbantartási díj (nettó)",
-    "maintFeeDiscount": "Kedvezmény — díj elengedve (nem készül számla)",
+    "maintFeeDiscount": "Kedvezmény",
     "maintFeeInvoiced": "kiszámlázva",
     "maintFeeHint": "A gépből előtöltve, szabadon átírható. Ha nincs kedvezmény pipálva, a munkalap MINDKÉT aláírása után a díjról automatikusan számla készül és e-mailben kimegy az ügyfélnek a munkalappal együtt.",
-    "workItemsCol": "Elvégzett munka"
+    "workItemsCol": "Elvégzett munka",
+    "newAssetToggle": "➕ Új gép felvétele (az ügyfél gépe még nincs a rendszerben)",
+    "newAssetBack": "← meglévő gép választása",
+    "newAssetName": "gép neve *",
+    "newAssetManufacturer": "gyártó / márka",
+    "newAssetSerial": "gyári szám",
+    "newAssetPartner": "Ügyfél (partner) — a kávérendelős QR-hez",
+    "newAssetPartnerPh": "partner keresése…",
+    "newAssetHint": "A gépet az ügyfél tulajdonaként mentjük, automatikus vonalkóddal. Mentés után QR-címkét nyomtathatsz, amivel az ügyfél kávét tud rendelni.",
+    "newAssetNameRequired": "Add meg az új gép nevét.",
+    "newAssetQrConfirm": "Gép felvéve ({{barcode}}). Letöltsük a QR-címkét a kávérendeléshez?",
+    "customerNote": "Megjegyzés az ügyfél-példányra (−1)",
+    "customerNotePh": "pl. garanciális információ, következő karbantartás…",
+    "customerNoteHint": "A szervizes belső leírása nem kerül az ügyfél elé — ide írhatsz helyette megjegyzést, ha kell.",
+    "repairCol": "Javítási konstrukció"
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1198,7 +1213,11 @@
     "wsWorksInternalHint": "A beírt munkadíj belső adat — az ügyfél −1-es példányára a képviselő által beállított ár kerül.",
     "assetSerial": "gyári szám",
     "assetBarcode": "vonalkód",
-    "assetCounter": "számláló"
+    "assetCounter": "számláló",
+    "wsRepairs": "Javítási konstrukció (ajánlat)",
+    "wsAddRepair": "+ konstrukció",
+    "wsRepairName": "konstrukció megnevezése (pl. felújított alkatrésszel)",
+    "wsRepairsHint": "Alternatív javítási ajánlatok árral — nem összegződnek, az ügyfél választ közülük."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1335,7 +1354,11 @@
     "promptHint": "Ezzel az utasítással dolgozik az AI a dolgozó kiválasztásakor. Használható helyettesítők: {title}, {description}, {due_date}, {required_skill}, {candidates}. A gépi feldolgozáshoz szükséges válaszformátum-utasítás automatikusan a végére kerül.",
     "promptCustom": "egyedi",
     "promptDefault": "alapértelmezett",
-    "promptReset": "Alapértelmezett visszaállítása"
+    "promptReset": "Alapértelmezett visszaállítása",
+    "wsCustomerFooter": "Garanciális feltételek (ügyfél-munkalap alja)",
+    "wsCustomerFooterHint": "Üresen hagyva a beépített alapszöveg kerül az ügyfél-példány (−1) aljára.",
+    "wsIntakeFooter": "Átvételi elismervény záradéka",
+    "wsIntakeFooterHint": "Üresen hagyva a beépített 60 napos tárolási záradék kerül az elismervény aljára."
   },
   "kiosk": {
     "title": "Munkaidő-terminál",
@@ -1865,5 +1888,31 @@
   },
   "worksheet": {
     "empty": "Adj meg leírást vagy legalább egy munkatételt."
+  },
+  "intake": {
+    "title": "Átvétel",
+    "subtitle": "Behozott gépek rögzítése és átvételi elismervény nyomtatása",
+    "new": "+ Új átvétel",
+    "newTitle": "Gép átvétele",
+    "newHint": "Az átvétel dátuma automatikusan a rögzítés időpontja. Mentés után az elismervény azonnal nyomtatható.",
+    "machine": "Gép",
+    "clientName": "Ügyfél neve",
+    "clientPhone": "Telefon",
+    "accessories": "Tartozékok",
+    "accessoriesPh": "pl. víztartály, tejhabosító, kávéőrlő, tápkábel…",
+    "faults": "Bejelentett hibák / állapot",
+    "faultsPh": "pl. nem melegít, folyik a víz, kopott burkolat…",
+    "note": "Megjegyzés (opcionális)",
+    "save": "Átvétel rögzítése",
+    "created": "Átvétel rögzítve: {serial}",
+    "printConfirm": "{serial} rögzítve. Nyomtassuk az átvételi elismervényt?",
+    "print": "Elismervény",
+    "receivedBy": "átvette",
+    "empty": "Még nincs rögzített átvétel. Az „+ Új átvétel” gombbal rögzítheted az első behozott gépet.",
+    "assetRequired": "Válassz gépet, vagy vegyél fel újat.",
+    "newAssetNameRequired": "Add meg az új gép nevét.",
+    "deleteConfirm": "Biztosan törlöd: {serial}?",
+    "deletedOk": "Átvétel törölve.",
+    "clauseInfo": "Az elismervény alján automatikusan megjelenik a 60 napos tárolási záradék — a szövege a Beállítások → Munkalap kártyán szerkeszthető."
   }
 }

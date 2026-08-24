@@ -70,6 +70,7 @@ interface WorkRow {
 interface WorksheetForm {
   work_description: string;
   works: WorkRow[];
+  repairs: WorkRow[]; // javítási konstrukciók (alternatív ajánlatok árral)
   hours_spent: string;
   materials: MaterialRow[];
   client_name: string;
@@ -83,6 +84,7 @@ interface WorksheetForm {
 const EMPTY_WS: WorksheetForm = {
   work_description: "",
   works: [],
+  repairs: [],
   hours_spent: "",
   materials: [],
   client_name: "",
@@ -194,6 +196,7 @@ export default function FeladataimPage() {
         const existing = await api.get<{
           work_description: string;
           works: { name: string; cost_net: number | null; price_net: number | null }[];
+          repair_options: { name: string; cost_net: number | null; price_net: number | null }[];
           materials: (Omit<MaterialRow, "cost_net" | "price_net"> & {
             cost_net: number | null;
             price_net: number | null;
@@ -209,6 +212,10 @@ export default function FeladataimPage() {
         setWs({
           work_description: existing.work_description,
           works: (existing.works ?? []).map((w) => {
+            const fee = task.worksheet_external ? w.cost_net : w.price_net;
+            return { name: w.name, fee: fee != null ? String(fee) : "" };
+          }),
+          repairs: (existing.repair_options ?? []).map((w) => {
             const fee = task.worksheet_external ? w.cost_net : w.price_net;
             return { name: w.name, fee: fee != null ? String(fee) : "" };
           }),
@@ -323,6 +330,14 @@ export default function FeladataimPage() {
             ? { name: w.name, cost_net: fee, price_net: null }
             : { name: w.name, cost_net: null, price_net: fee };
         }),
+        repair_options: ws.repairs
+          .filter((w) => w.name.trim())
+          .map((w) => {
+            const fee = w.fee ? Number(w.fee) : null;
+            return wsTask.worksheet_external
+              ? { name: w.name, cost_net: fee, price_net: null }
+              : { name: w.name, cost_net: null, price_net: fee };
+          }),
         hours_spent: ws.hours_spent ? Number(ws.hours_spent) : null,
         materials: ws.materials
           .filter((m) => m.name.trim())
@@ -584,6 +599,57 @@ export default function FeladataimPage() {
               ))}
               {wsTask?.worksheet_external && ws.works.length > 0 && (
                 <p className="text-xs text-slate-400">{t("myTasks.wsWorksInternalHint")}</p>
+              )}
+            </div>
+
+            {/* Javítási konstrukciók: alternatív ajánlatok árral */}
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-sm text-slate-600">{t("myTasks.wsRepairs")}</span>
+                <button
+                  type="button"
+                  onClick={() => setWs({ ...ws, repairs: [...ws.repairs, { name: "", fee: "" }] })}
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                >
+                  {t("myTasks.wsAddRepair")}
+                </button>
+              </div>
+              {ws.repairs.map((w, i) => (
+                <div key={i} className="mb-1 flex gap-1">
+                  <input
+                    value={w.name}
+                    onChange={(e) => {
+                      const next = [...ws.repairs];
+                      next[i] = { ...w, name: e.target.value };
+                      setWs({ ...ws, repairs: next });
+                    }}
+                    placeholder={t("myTasks.wsRepairName")}
+                    className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    value={w.fee}
+                    onChange={(e) => {
+                      const next = [...ws.repairs];
+                      next[i] = { ...w, fee: e.target.value };
+                      setWs({ ...ws, repairs: next });
+                    }}
+                    placeholder={t("myTasks.wsWorkFee")}
+                    title={t("myTasks.wsWorkFee")}
+                    className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setWs({ ...ws, repairs: ws.repairs.filter((_, idx) => idx !== i) })}
+                    className="px-1 text-slate-400 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {ws.repairs.length > 0 && (
+                <p className="text-xs text-slate-400">{t("myTasks.wsRepairsHint")}</p>
               )}
             </div>
 

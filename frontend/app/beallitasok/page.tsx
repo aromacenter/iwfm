@@ -38,6 +38,10 @@ interface WorksheetSettings {
   company_name: string | null;
   company_address: string | null;
   footer_text: string | null;
+  customer_footer_text: string | null;
+  intake_footer_text: string | null;
+  customer_footer_default: string;
+  intake_footer_default: string;
   accent_color: string;
   show_materials: boolean;
   show_hours: boolean;
@@ -228,12 +232,15 @@ export default function BeallitasokPage() {
     company_name: "",
     company_address: "",
     footer_text: "",
+    customer_footer_text: "",
+    intake_footer_text: "",
     accent_color: "#1e40af",
     show_materials: true,
     show_hours: true,
     show_client_signature: true,
     show_comments: true,
   });
+  const [wsDefaults, setWsDefaults] = useState({ customer: "", intake: "" });
   const [wsHasLogo, setWsHasLogo] = useState(false);
   const [wsLogo, setWsLogo] = useState<string | null>(null); // újonnan feltöltött data URL
   const [wsRemoveLogo, setWsRemoveLogo] = useState(false);
@@ -321,12 +328,15 @@ export default function BeallitasokPage() {
           company_name: s.company_name ?? "",
           company_address: s.company_address ?? "",
           footer_text: s.footer_text ?? "",
+          customer_footer_text: s.customer_footer_text ?? "",
+          intake_footer_text: s.intake_footer_text ?? "",
           accent_color: s.accent_color,
           show_materials: s.show_materials,
           show_hours: s.show_hours,
           show_client_signature: s.show_client_signature,
           show_comments: s.show_comments,
         });
+        setWsDefaults({ customer: s.customer_footer_default, intake: s.intake_footer_default });
         setWsHasLogo(s.has_logo);
         setWsLogo(null);
         setWsRemoveLogo(false);
@@ -801,6 +811,8 @@ export default function BeallitasokPage() {
         company_name: ws.company_name || null,
         company_address: ws.company_address || null,
         footer_text: ws.footer_text || null,
+        customer_footer_text: ws.customer_footer_text || null,
+        intake_footer_text: ws.intake_footer_text || null,
         accent_color: ws.accent_color,
         show_materials: ws.show_materials,
         show_hours: ws.show_hours,
@@ -925,6 +937,28 @@ export default function BeallitasokPage() {
           <label className="block text-sm">
             {t("settings.wsFooter")}
             <input value={ws.footer_text} onChange={(e) => setWs({ ...ws, footer_text: e.target.value })} className={inputCls} />
+          </label>
+          <label className="block text-sm">
+            {t("settings.wsCustomerFooter")}
+            <textarea
+              value={ws.customer_footer_text}
+              onChange={(e) => setWs({ ...ws, customer_footer_text: e.target.value })}
+              rows={4}
+              placeholder={wsDefaults.customer}
+              className={inputCls}
+            />
+            <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsCustomerFooterHint")}</span>
+          </label>
+          <label className="block text-sm">
+            {t("settings.wsIntakeFooter")}
+            <textarea
+              value={ws.intake_footer_text}
+              onChange={(e) => setWs({ ...ws, intake_footer_text: e.target.value })}
+              rows={3}
+              placeholder={wsDefaults.intake}
+              className={inputCls}
+            />
+            <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsIntakeFooterHint")}</span>
           </label>
           <div className="flex items-center gap-3">
             <span className="text-sm">{t("settings.wsAccent")}</span>
