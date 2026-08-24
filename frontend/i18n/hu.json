@@ -157,7 +157,8 @@
     "warehouse": "Raktár",
     "contracts": "Szerződések",
     "quotes": "Ajánlatkérések",
-    "intake": "Átvétel"
+    "intake": "Átvétel",
+    "handover": "Átadás"
   },
   "roles": {
     "admin": "Admin",
@@ -579,7 +580,10 @@
       "stock_low": "Alacsony készlet",
       "task_assigned": "Feladat kiosztva",
       "worksheet_signed": "Munkalap aláírva",
-      "intake_created": "Gép átvéve (Átvétel)"
+      "intake_created": "Gép átvéve (Átvétel)",
+      "worksheet_quote_accepted": "Árajánlat elfogadva",
+      "worksheet_picked_up": "Gép elhozva a szerelőtől",
+      "worksheet_handed_over": "Gép átadva az ügyfélnek"
     },
     "ops": {
       "eq": "=",
@@ -1169,7 +1173,12 @@
     "quoteSentInfo": "Árajánlat kiküldve ({date}) — {to}. Várjuk az ügyfél jóváhagyását.",
     "quoteAccepted": "Az ügyfél jóváhagyta: {option} — a szerviz értesítést kapott, a munka kezdhető.",
     "quoteHint": "Az ügyfél egy linken választ a konstrukciók közül; jóváhagyás után a munkalapon már csak a kiválasztott opció marad, a szervizes pedig (ár nélkül) értesítést kap, hogy kezdheti a munkát.",
-    "quoteDeclined": "Az ügyfél NEM kérte a javítást — a felmérési díj számlázandó, a gép összeszerelve visszaadandó."
+    "quoteDeclined": "Az ügyfél NEM kérte a javítást — a felmérési díj számlázandó, a gép összeszerelve visszaadandó.",
+    "pickupButton": "Gép elhozva a szerelőtől — ügyfél értesítése",
+    "pickupHint": "Megjelöljük, hogy a kész gépet elhoztuk; az ügyfél e-mailt kap, hogy a javítás elkészült és a gép átvehető.",
+    "pickupConfirm": "A gép elhozását rögzítjük, és értesítő e-mail megy ide: {to}. Mehet?",
+    "pickupDone": "Rögzítve — az ügyfél értesítve: a gép átvehető.",
+    "pickedUpAt": "Gép elhozva a szerelőtől ({date}) — az ügyfél értesítve, a gép átvehető."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1616,7 +1625,8 @@
       "deployed": "Kihelyezve",
       "customer": "Ügyfél gépe",
       "maintenance": "Szervizen",
-      "retired": "Selejtezve"
+      "retired": "Selejtezve",
+      "handed_over": "Átadott"
     },
     "qrLabelsSmall": "QR 51×25 mm",
     "qrLabelsSmallHint": "Címkenyomtatóra (VOID címke): címkénként egy oldal, partner-név nélkül",
@@ -1905,7 +1915,9 @@
   "worksheet": {
     "empty": "Adj meg leírást vagy legalább egy munkatételt.",
     "quote_no_options": "Előbb vigyél fel javítási konstrukciókat ügyfél-árral.",
-    "quote_already_accepted": "Az ajánlatot az ügyfél már elfogadta."
+    "quote_already_accepted": "Az ajánlatot az ügyfél már elfogadta.",
+    "already_picked_up": "A gép elhozása már rögzítve van.",
+    "pickup_no_email": "Nincs ügyfél-e-mail — add meg a címet."
   },
   "intake": {
     "title": "Átvétel",
@@ -1950,5 +1962,26 @@
     "partnerCreated": "Ügyfél felvéve: {name}",
     "worksheetConfirm": "Minden adat megvan — készítsünk belőle munkalapot is?",
     "worksheet": "Munkalap"
+  },
+  "handover": {
+    "title": "Átadás",
+    "subtitle": "Megjavított, átadásra váró gépek — fizetés, számla, lezárás",
+    "empty": "Nincs átadásra váró gép. A szerelőtől elhozott (📦) KSZ-munkalapok jelennek meg itt.",
+    "pickedUp": "elhozva",
+    "grossLabel": "fizetendő (bruttó)",
+    "back": "vissza a listához",
+    "totalNet": "Összesen (nettó)",
+    "totalGross": "Fizetendő (bruttó, 27% ÁFA)",
+    "discount": "Kedvezmény — nem készül számla",
+    "discountHint": "Bejelölve az átadás számla nélkül történik (0 Ft).",
+    "cash": "Készpénz",
+    "card": "Bankkártya",
+    "confirmPay": "{serial}: {total} fizetendő ({method}). Elkészítjük a számlát és átadjuk a gépet?",
+    "confirmDiscount": "{serial}: kedvezménnyel, SZÁMLA NÉLKÜL adjuk át a gépet?",
+    "submitPay": "Fizetés + számla + átadás",
+    "submitDiscount": "Átadás kedvezménnyel (számla nélkül)",
+    "submitHint": "Átadás után a gép átadott státuszt kap, a munkalap lezárul, a feladat befejeződik.",
+    "doneInvoiced": "{serial} átadva — a Billingó-számla elkészült, a munkalap lezárva.",
+    "doneDiscount": "{serial} átadva kedvezménnyel — számla nem készült, a munkalap lezárva."
   }
 }

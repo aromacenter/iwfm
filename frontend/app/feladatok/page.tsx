@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import SearchSelect from "@/components/SearchSelect";
-import { api, downloadFile, errorMessage } from "@/lib/api";
+import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
 import type { EmployeeOut } from "@/lib/types";
@@ -321,6 +321,7 @@ export default function FeladatokPage() {
     quote_sent_at: string | null;
     quote_accepted_at: string | null;
     quote_selected_name: string | null;
+    picked_up_at: string | null;
   }
   const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[]; workPrices: string[]; repairPrices: string[]; fee: string; discount: boolean; customerNote: string } | null>(null);
 
@@ -398,6 +399,31 @@ export default function FeladatokPage() {
       );
       setPriceEdit({ ...priceEdit, ws });
       toast(t("tasks.quoteSent", { to }), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  // A kész gépet elhoztuk a szerelőtől → az ügyfél e-mailt kap: átvehető
+  async function markPickedUp() {
+    if (!priceEdit) return;
+    let to: string | null = priceEdit.ws.quote_email;
+    if (to) {
+      if (!(await confirm(t("tasks.pickupConfirm", { to })))) return;
+    } else {
+      to = await prompt(t("tasks.quoteEmailPrompt"), { type: "email", placeholder: "ugyfel@example.com" });
+      if (!to) return;
+    }
+    try {
+      const ws = await api.post<WsData>(`/api/tasks/${priceEdit.task.id}/worksheet/picked-up`, { to });
+      setPriceEdit({ ...priceEdit, ws });
+      toast(t("tasks.pickupDone"), "success");
+      // azonnal nyomtatási ablakban a vevői munkalap (átadás-QR-rel)
+      try {
+        await printFile(`/api/tasks/${priceEdit.task.id}/worksheet/pdf?variant=customer`);
+      } catch (err) {
+        toast(errorMessage(err), "error");
+      }
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -973,6 +999,25 @@ export default function FeladatokPage() {
                 )}
               </div>
             )}
+            {/* A kész gép elhozása a szerelőtől → ügyfél-értesítés (átvehető) */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              {priceEdit.ws.picked_up_at ? (
+                <p className="font-medium text-emerald-700">
+                  📦 {t("tasks.pickedUpAt", { date: priceEdit.ws.picked_up_at.slice(0, 10) })}
+                </p>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={markPickedUp}
+                    className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+                  >
+                    🚚 {t("tasks.pickupButton")}
+                  </button>
+                  <p className="mt-1 text-xs text-slate-500">{t("tasks.pickupHint")}</p>
+                </>
+              )}
+            </div>
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setPriceEdit(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
               <button

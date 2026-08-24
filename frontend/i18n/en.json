@@ -157,7 +157,8 @@
     "warehouse": "Warehouse",
     "contracts": "Contracts",
     "quotes": "Quote requests",
-    "intake": "Intake"
+    "intake": "Intake",
+    "handover": "Handover"
   },
   "roles": {
     "admin": "Admin",
@@ -579,7 +580,10 @@
       "stock_low": "Low stock",
       "task_assigned": "Task assigned",
       "worksheet_signed": "Worksheet signed",
-      "intake_created": "Machine intake"
+      "intake_created": "Machine intake",
+      "worksheet_quote_accepted": "Quote accepted",
+      "worksheet_picked_up": "Machine picked up from technician",
+      "worksheet_handed_over": "Machine handed over"
     },
     "ops": {
       "eq": "=",
@@ -1169,7 +1173,12 @@
     "quoteSentInfo": "Quote sent ({date}) — {to}. Waiting for the customer's approval.",
     "quoteAccepted": "Customer approved: {option} — the technician was notified and can start.",
     "quoteHint": "The customer picks an option via a link; after approval only the selected option remains on the worksheet and the technician is notified (without prices).",
-    "quoteDeclined": "The customer DECLINED the repair — invoice the survey fee, reassemble and return the machine."
+    "quoteDeclined": "The customer DECLINED the repair — invoice the survey fee, reassemble and return the machine.",
+    "pickupButton": "Machine picked up — notify customer",
+    "pickupHint": "Marks that we collected the finished machine; the customer gets an email that the repair is done and the machine is ready for pickup.",
+    "pickupConfirm": "Pickup will be recorded and a notification email sent to {to}. Proceed?",
+    "pickupDone": "Recorded — the customer was notified: machine ready for pickup.",
+    "pickedUpAt": "Machine picked up ({date}) — customer notified, ready for pickup."
   },
   "myTasks": {
     "title": "My tasks",
@@ -1616,7 +1625,8 @@
       "deployed": "Deployed",
       "customer": "Customer's machine",
       "maintenance": "Maintenance",
-      "retired": "Retired"
+      "retired": "Retired",
+      "handed_over": "Handed over"
     },
     "qrLabelsSmall": "QR 51×25 mm",
     "qrLabelsSmallHint": "For label printers (VOID label): one page per label, without partner name",
@@ -1905,7 +1915,9 @@
   "worksheet": {
     "empty": "Provide a description or at least one work item.",
     "quote_no_options": "Add repair options with customer prices first.",
-    "quote_already_accepted": "The customer has already accepted this quote."
+    "quote_already_accepted": "The customer has already accepted this quote.",
+    "already_picked_up": "Pickup has already been recorded.",
+    "pickup_no_email": "No customer email — enter an address."
   },
   "intake": {
     "title": "Intake",
@@ -1950,5 +1962,26 @@
     "partnerCreated": "Customer registered: {name}",
     "worksheetConfirm": "All data is here — create a worksheet from it as well?",
     "worksheet": "Worksheet"
+  },
+  "handover": {
+    "title": "Handover",
+    "subtitle": "Repaired machines awaiting handover — payment, invoice, closing",
+    "empty": "No machines awaiting handover. Picked-up (📦) external worksheets appear here.",
+    "pickedUp": "picked up",
+    "grossLabel": "payable (gross)",
+    "back": "back to list",
+    "totalNet": "Total (net)",
+    "totalGross": "Payable (gross, 27% VAT)",
+    "discount": "Discount — no invoice",
+    "discountHint": "When checked, the handover happens without an invoice (0 Ft).",
+    "cash": "Cash",
+    "card": "Card",
+    "confirmPay": "{serial}: {total} payable ({method}). Create the invoice and hand over?",
+    "confirmDiscount": "{serial}: hand over with discount, WITHOUT an invoice?",
+    "submitPay": "Pay + invoice + hand over",
+    "submitDiscount": "Hand over with discount (no invoice)",
+    "submitHint": "After handover the machine is marked handed over, the worksheet closes and the task completes.",
+    "doneInvoiced": "{serial} handed over — Billingo invoice created, worksheet closed.",
+    "doneDiscount": "{serial} handed over with discount — no invoice, worksheet closed."
   }
 }

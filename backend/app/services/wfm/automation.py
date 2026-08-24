@@ -56,6 +56,12 @@ TRIGGERS: dict[str, list[str]] = {
     "worksheet.quote_accepted": [
         "sorszam", "cim", "ugyfel", "opcio", "elfogado",
     ],
+    "worksheet.picked_up": [
+        "sorszam", "ugyfel", "gep_nev",
+    ],
+    "worksheet.handed_over": [
+        "sorszam", "ugyfel", "osszeg_netto", "fizetes_mod", "kedvezmeny",
+    ],
     "intake.created": [
         "sorszam", "ugyfel", "gep_nev", "gep_vonalkod", "hibak", "atvette",
     ],

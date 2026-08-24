@@ -226,6 +226,53 @@ async def create_maintenance_invoice(
     return str(created.get("id", "")), doc_type, due
 
 
+async def create_handover_invoice(
+    db: AsyncSession,
+    partner: Partner,
+    *,
+    serial: str,
+    items: list[dict],
+    payment_method: str,  # "cash" | "bankcard"
+    vat_percent: int = 27,
+) -> tuple[str, str]:
+    """Szerviz-átadás számlázása a helyszínen: azonnali teljesítés/fizetés,
+    készpénz vagy bankkártya. ``items``: [{name, amount_net}].
+    Visszatérés: (document_id, mode).
+    ValueError('billingo_not_configured'), ha nincs kulcs/blokk."""
+    settings = await get_or_create_settings(db)
+    api_key, block_id, test_mode = _account(settings, partner.invoicing_company)
+    if not settings.enabled or not api_key or not block_id:
+        raise ValueError("billingo_not_configured")
+
+    billingo_partner_id = await _find_or_create_billingo_partner(api_key, partner)
+    today = date.today()
+    doc_type = "proforma" if test_mode else "invoice"
+    body = {
+        "partner_id": billingo_partner_id,
+        "block_id": block_id,
+        "type": doc_type,
+        "fulfillment_date": today.isoformat(),
+        "due_date": today.isoformat(),
+        "payment_method": "bankcard" if payment_method == "card" else "cash",
+        "language": "hu",
+        "currency": "HUF",
+        "electronic": False,
+        "items": [
+            {
+                "name": f"{it['name']} ({serial})"[:255],
+                "unit_price": it["amount_net"],
+                "unit_price_type": "net",
+                "quantity": 1,
+                "unit": "db",
+                "vat": _vat_label(vat_percent),
+            }
+            for it in items
+        ],
+    }
+    created = await _api(api_key, "POST", "/documents", body)
+    return str(created.get("id", "")), doc_type
+
+
 async def fetch_payment_status(
     db: AsyncSession, document_id: str, company: str | None = None
 ) -> str | None:

@@ -62,11 +62,41 @@ async def test_quote_flow_and_price_hiding(client, admin, manager, monkeypatch):
     )
     assert res.status_code == 200, res.text
 
-    # a SZERVIZES nem láthatja az ügyfél-árakat és az ügyfél-jegyzetet
+    # képviselő karbantartási díjat is beállít (a MI árunk)
+    res = await client.put(
+        f"/api/tasks/{task_id}/worksheet",
+        json={"work_description": "diagnózis kész", "works": [], "materials": [],
+              "repair_options": [
+                  {"name": "Felújított alkatrésszel", "cost_net": 12000, "price_net": 19000},
+                  {"name": "Új alkatrésszel", "cost_net": 22000, "price_net": 32000},
+              ],
+              "maintenance_fee": 40000},
+        headers=mgr,
+    )
+    assert res.status_code == 200
+
+    # a SZERVIZES nem láthatja az ügyfél-árakat, a díjunkat és a jegyzetet
     ws = (await client.get(f"/api/me/tasks/{task_id}/worksheet", headers=emp_headers)).json()
     assert all(w["price_net"] is None for w in ws["repair_options"])
     assert ws["customer_note"] is None
+    assert ws["maintenance_fee"] is None  # a karbantartási díjunk is rejtve
     assert ws["repair_options"][0]["cost_net"] == 12000  # a sajátját látja
+
+    # a szervizes mentése a díjunkat nem írhatja át
+    res = await client.put(
+        f"/api/me/tasks/{task_id}/worksheet",
+        json={"work_description": "diagnózis kész", "works": [], "materials": [],
+              "repair_options": [
+                  {"name": "Felújított alkatrésszel", "cost_net": 12000},
+                  {"name": "Új alkatrésszel", "cost_net": 22000},
+              ],
+              "maintenance_fee": 1, "fee_discount": True},
+        headers=emp_headers,
+    )
+    assert res.status_code == 200
+    ws_mgr = (await client.get(f"/api/tasks/{task_id}/worksheet", headers=mgr)).json()
+    assert ws_mgr["maintenance_fee"] == 40000
+    assert ws_mgr["fee_discount"] is False
 
     # a szervizes mentése nem törli a beárazást
     res = await client.put(
@@ -144,6 +174,21 @@ async def test_quote_flow_and_price_hiding(client, admin, manager, monkeypatch):
         json={"option_name": "Felújított alkatrésszel", "accepted_by": "X"},
     )
     assert res.status_code == 422
+
+    # a kész gépet elhoztuk a szerelőtől → az ügyfél e-mailt kap (átvehető);
+    # cím nélkül a munkalapon tárolt ajánlat-email megy
+    res = await client.post(
+        f"/api/tasks/{task_id}/worksheet/picked-up", json={}, headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["picked_up_at"] is not None
+    assert any("átvehető" in m["subject"] for m in sent if "subject" in m)
+    # másodszor már nem rögzíthető
+    res = await client.post(
+        f"/api/tasks/{task_id}/worksheet/picked-up", json={}, headers=mgr,
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "worksheet.already_picked_up"
 
 
 async def test_quote_decline_with_survey_fee(client, admin, manager, monkeypatch):

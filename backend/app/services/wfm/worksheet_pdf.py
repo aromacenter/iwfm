@@ -318,6 +318,32 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         c.setFont(FONT, 8)
         c.drawCentredString(x + box_w / 2, sig_y - 4.5 * mm, label)
 
+    # ─── Átadás-QR (ügyfél-példány): a boltban beolvasva az Átadás menü ───
+    handover_url = data.get("handover_url")
+    if handover_url:
+        try:
+            from reportlab.graphics import renderPDF
+            from reportlab.graphics.barcode.qr import QrCodeWidget
+            from reportlab.graphics.shapes import Drawing
+
+            qr_size = 24 * mm
+            qr = QrCodeWidget(handover_url)
+            b = qr.getBounds()
+            d = Drawing(
+                qr_size, qr_size,
+                transform=[qr_size / (b[2] - b[0]), 0, 0, qr_size / (b[3] - b[1]), 0, 0],
+            )
+            d.add(qr)
+            qx = right - qr_size
+            qy = 62 * mm
+            renderPDF.draw(d, c, qx, qy)
+            c.setFont(FONT, 6.5)
+            c.setFillColorRGB(0.4, 0.4, 0.45)
+            c.drawCentredString(qx + qr_size / 2, qy - 3 * mm, "Átadáshoz: olvasd be")
+            c.setFillColorRGB(0, 0, 0)
+        except Exception:  # pragma: no cover - QR-hiba ne akassza a PDF-et
+            logger.warning("handover QR failed", exc_info=True)
+
     # ─── Extra lábléc-blokk (pl. garanciális feltételek az ügyfél-példányon) ───
     extra_footer = data.get("extra_footer")
     if extra_footer:

@@ -184,6 +184,7 @@ class WorksheetOut(BaseModel):
     quote_sent_at: datetime | None = None
     quote_accepted_at: datetime | None = None
     quote_selected_name: str | None = None
+    picked_up_at: datetime | None = None  # a gépet elhoztuk a szerelőtől
     updated_at: datetime
 
 
@@ -225,8 +226,10 @@ def _worksheet_out(ws: Worksheet, *, for_worker: bool = False) -> WorksheetOut:
         has_client_signature=ws.client_signature is not None,
         employee_signature=ws.employee_signature,
         client_signature=ws.client_signature,
-        maintenance_fee=ws.maintenance_fee,
-        fee_discount=ws.fee_discount,
+        # A karbantartási díj is a MI ügyfél-árunk — a külsős szerviz nem
+        # láthatja és nem is állíthatja (csak a képviselő, az ár-szerkesztőben).
+        maintenance_fee=None if hide else ws.maintenance_fee,
+        fee_discount=False if hide else ws.fee_discount,
         invoiced=ws.billingo_document_id is not None,
         customer_note=None if hide else ws.customer_note,
         quote_status=ws.quote_status or "none",
@@ -234,6 +237,7 @@ def _worksheet_out(ws: Worksheet, *, for_worker: bool = False) -> WorksheetOut:
         quote_sent_at=ws.quote_sent_at,
         quote_accepted_at=ws.quote_accepted_at,
         quote_selected_name=ws.quote_selected_name,
+        picked_up_at=ws.picked_up_at,
         updated_at=ws.updated_at,
     )
 
@@ -307,11 +311,12 @@ async def _upsert_worksheet(
     ws.hours_spent = body.hours_spent
     ws.client_name = (body.client_name or "").strip() or None
     ws.client_location = (body.client_location or "").strip() or None
-    # Karbantartási díj: a végző szabadon átírhatja; a kedvezmény-pipa csak
-    # kitöltve (True/False) változtat — None nem nyúl hozzá.
-    if body.maintenance_fee is not None:
+    # Karbantartási díj: a MI ügyfél-árunk — KSZ-en a dolgozói (szervizes)
+    # mentés nem nyúlhat hozzá, csak a képviselő állítja.
+    worker_on_external = preserve_prices and ws.external_service
+    if body.maintenance_fee is not None and not worker_on_external:
         ws.maintenance_fee = body.maintenance_fee
-    if body.fee_discount is not None:
+    if body.fee_discount is not None and not worker_on_external:
         ws.fee_discount = body.fee_discount
     if body.customer_note is not None:
         ws.customer_note = body.customer_note.strip() or None
@@ -892,6 +897,8 @@ async def _build_worksheet_pdf(
             fee_row = {"name": "Karbantartási díj", "qty": "1", "unit": "alkalom"}
             if variant == "customer":
                 fee_row["price_net"] = ws.maintenance_fee
+            elif variant == "worker":
+                pass  # a szervizes példányán az összeg (a mi árunk) nem szerepel
             else:
                 fee_row["name"] = f"Karbantartási díj — {ws.maintenance_fee:.0f} Ft (nettó)"
             materials.append(fee_row)
@@ -902,16 +909,25 @@ async def _build_worksheet_pdf(
     pdf_comments = [{"author": c.author_name, "text": c.text} for c in comments]
     pdf_settings = await _worksheet_pdf_settings(db)
     extra_footer = None
+    handover_url = None
     if ws.external_service and variant == "customer":
         work_description = ws.customer_note or ""
         pdf_comments = []
         # Garanciális feltételek — MINDIG rákerül az ügyfél-példány aljára
         # (a Beállításokban átírható, üresen a beépített alapszöveg).
         extra_footer = (pdf_settings or {}).get("customer_footer_text") or DEFAULT_CUSTOMER_FOOTER
+        # Átadás-QR: a boltban beolvasva az Átadás menü nyílik ezzel a
+        # munkalappal (fizetendő összeg, fizetési mód, számla).
+        from app.core.config import get_settings
+
+        handover_url = (
+            f"{get_settings().frontend_origin.rstrip('/')}/atadas?task={task.id}"
+        )
 
     pdf = build_worksheet_pdf(
         {
             "extra_footer": extra_footer,
+            "handover_url": handover_url,
             "serial": serial,
             "title": title,
             "price_column": price_column,
@@ -1287,7 +1303,7 @@ async def my_worksheet_pdf(
     −1-es példányát (a mi árainkkal) a képviselő küldi, a külsős szerviz a mi
     árainkat sosem láthatja."""
     task = await _own_task_or_404(db, emp, task_id)
-    pdf, serial = await _build_worksheet_pdf(db, task, "internal")
+    pdf, serial = await _build_worksheet_pdf(db, task, "worker")
     await record_audit(
         db, actor=user, action="worksheet.pdf_self", entity_type="worksheet",
         entity_id=serial, request=request,
@@ -1572,3 +1588,272 @@ async def public_worksheet_quote_accept(
         except Exception:
             pass
     return {"ok": True, "selected": selected_label, "declined": body.decline}
+
+
+# ─── Gép elhozva a szerelőtől → az ügyfél értesítése (átvehető) ──────────────
+
+
+class PickupBody(BaseModel):
+    to: EmailStr | None = None  # None → a munkalapon tárolt ajánlat-email
+
+
+@router.post("/{task_id}/worksheet/picked-up", response_model=WorksheetOut)
+async def worksheet_picked_up(
+    task_id: str,
+    body: PickupBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """Megjelöljük, hogy a kész gépet elhoztuk a külsős szerelőtől, és az
+    ügyfélnek e-mail megy: a javítás elkészült, a gép átvehető."""
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    if ws.picked_up_at is not None:
+        raise HTTPException(status_code=422, detail={"code": "worksheet.already_picked_up"})
+    to = (str(body.to) if body.to else None) or ws.quote_email
+    if not to:
+        raise HTTPException(status_code=422, detail={"code": "worksheet.pickup_no_email"})
+
+    smtp = await load_smtp_config(db)
+    if smtp is None:
+        raise HTTPException(status_code=422, detail={"code": "settings.email_not_configured"})
+    machine = ""
+    if ws.asset_id is not None:
+        a = (
+            await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+        ).scalar_one_or_none()
+        if a is not None:
+            machine = f"{a.name} — {a.manufacturer}" if a.manufacturer else a.name
+    row = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    company = (row.company_name if row else None) or "X-Presso"
+    lines = [
+        "Tisztelt Ügyfelünk!",
+        "",
+        f"Örömmel értesítjük, hogy a(z) {ws.serial} munkalapon szereplő"
+        + (f" készülék ({machine})" if machine else " készülék")
+        + " javítása elkészült.",
+        "",
+        "A gép átvehető üzletünkben, nyitvatartási időben.",
+        "",
+        "Üdvözlettel,",
+        company,
+    ]
+    ok = await send_email(
+        smtp, to, f"A javítás elkészült — a gép átvehető ({ws.serial})", "\n".join(lines)
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail={"code": "settings.email_send_failed"})
+
+    ws.picked_up_at = datetime.now(UTC)
+    await record_audit(
+        db, actor=actor, action="worksheet.picked_up", entity_type="worksheet",
+        entity_id=ws.serial, detail={"to": to}, request=request,
+    )
+    await db.commit()
+    await db.refresh(ws)
+    try:
+        from app.services.wfm.automation import fire_event
+
+        fire_event("worksheet.picked_up", {
+            "sorszam": ws.serial,
+            "ugyfel": ws.client_name or "",
+            "gep_nev": machine,
+        })
+    except Exception:
+        pass
+    return _worksheet_out(ws)
+
+
+# ─── Átadás az ügyfélnek (kész gép a boltban, fizetés + számla + lezárás) ────
+
+
+def _handover_items(ws: Worksheet) -> list[dict]:
+    """A vevő által fizetendő tételek — KIZÁRÓLAG a mi áraink (price_net)."""
+    items: list[dict] = []
+    for w in ws.works or []:
+        if w.get("price_net") is not None:
+            items.append({"name": w.get("name") or "Munkadíj", "amount_net": float(w["price_net"])})
+    for w in ws.repair_options or []:
+        if w.get("price_net") is not None:
+            items.append({"name": w.get("name") or "Javítás", "amount_net": float(w["price_net"])})
+    for m in ws.materials or []:
+        if m.get("price_net") is not None:
+            try:
+                qty = float(str(m.get("qty", "1")).replace(",", "."))
+            except ValueError:
+                qty = 1.0
+            items.append({
+                "name": m.get("name") or "Anyag",
+                "amount_net": float(m["price_net"]) * (qty if qty > 0 else 1.0),
+            })
+    if (ws.maintenance_fee or 0) > 0 and not ws.fee_discount:
+        items.append({"name": "Karbantartási díj", "amount_net": float(ws.maintenance_fee)})
+    return items
+
+
+async def _handover_row(db: AsyncSession, task: Task, ws: Worksheet) -> dict:
+    machine = None
+    if ws.asset_id is not None:
+        a = (
+            await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+        ).scalar_one_or_none()
+        if a is not None:
+            machine = f"{a.name} — {a.manufacturer}" if a.manufacturer else a.name
+    items = _handover_items(ws)
+    total = round(sum(i["amount_net"] for i in items), 2)
+    return {
+        "task_id": str(task.id),
+        "serial": ws.serial,
+        "title": task.title,
+        "machine": machine,
+        "client_name": ws.client_name,
+        "client_location": ws.client_location,
+        "quote_email": ws.quote_email,
+        "quote_status": ws.quote_status,
+        "picked_up_at": ws.picked_up_at,
+        "handed_over_at": ws.handed_over_at,
+        "handover_discount": ws.handover_discount,
+        "handover_payment_method": ws.handover_payment_method,
+        "handover_document_id": ws.handover_document_id,
+        "items": items,
+        "total_net": total,
+        "total_gross": round(total * 1.27, 0),
+    }
+
+
+@router.get("/handovers/list")
+async def list_handovers(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """Átadásra váró (megjavított, elhozott, de még át nem adott) gépek."""
+    rows = (
+        await db.execute(
+            select(Worksheet, Task)
+            .join(Task, Task.id == Worksheet.task_id)
+            .where(
+                Worksheet.external_service.is_(True),
+                Worksheet.picked_up_at.is_not(None),
+                Worksheet.handed_over_at.is_(None),
+            )
+            .order_by(Worksheet.picked_up_at.desc())
+            .limit(200)
+        )
+    ).all()
+    return [await _handover_row(db, task, ws) for ws, task in rows]
+
+
+@router.get("/{task_id}/handover")
+async def handover_detail(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    return await _handover_row(db, task, ws)
+
+
+class HandoverBody(BaseModel):
+    payment_method: str = Field(pattern="^(cash|card)$")
+    discount: bool = False  # kedvezmény → NEM készül számla
+
+
+@router.post("/{task_id}/handover")
+async def do_handover(
+    task_id: str,
+    body: HandoverBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    """Átadás: (opcionális) Billingó-számla készpénz/kártya fizetéssel, a gép
+    átadott státuszt kap, a munkalap lezárul (a feladat done lesz)."""
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    if ws.handed_over_at is not None:
+        raise HTTPException(status_code=422, detail={"code": "handover.already_done"})
+    items = _handover_items(ws)
+    total = round(sum(i["amount_net"] for i in items), 2)
+
+    document_id = None
+    if not body.discount:
+        if not items:
+            raise HTTPException(status_code=422, detail={"code": "handover.no_items"})
+        asset = None
+        if ws.asset_id is not None:
+            asset = (
+                await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+            ).scalar_one_or_none()
+        partner = None
+        if asset is not None and asset.partner_id is not None:
+            partner = (
+                await db.execute(select(Partner).where(Partner.id == asset.partner_id))
+            ).scalar_one_or_none()
+        if partner is None:
+            raise HTTPException(status_code=422, detail={"code": "handover.no_partner"})
+        from app.services.wfm import billingo_service
+
+        try:
+            document_id, _mode = await billingo_service.create_handover_invoice(
+                db, partner, serial=ws.serial, items=items,
+                payment_method=body.payment_method,
+            )
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
+        except Exception:
+            raise HTTPException(status_code=502, detail={"code": "billingo.request_failed"})
+
+    ws.handed_over_at = datetime.now(UTC)
+    ws.handover_payment_method = body.payment_method
+    ws.handover_discount = body.discount
+    ws.handover_total_net = 0.0 if body.discount else total
+    ws.handover_document_id = document_id
+    task.status = "done"
+    # A gép átadott státuszt kap
+    if ws.asset_id is not None:
+        asset = (
+            await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+        ).scalar_one_or_none()
+        if asset is not None:
+            asset.status = "handed_over"
+            from app.models import AssetMovement
+
+            db.add(AssetMovement(
+                asset_id=asset.id, action="handover",
+                actor_user_id=actor.id,
+                detail=f"Átadva az ügyfélnek ({ws.serial})"
+                + (" — kedvezmény, számla nélkül" if body.discount
+                   else f" — {('kártya' if body.payment_method == 'card' else 'készpénz')}, {total:.0f} Ft nettó"),
+            ))
+    await record_audit(
+        db, actor=actor, action="worksheet.handed_over", entity_type="worksheet",
+        entity_id=ws.serial,
+        detail={"payment_method": body.payment_method, "discount": body.discount,
+                "total_net": total, "document_id": document_id},
+        request=request,
+    )
+    await db.commit()
+    try:
+        from app.services.wfm.automation import fire_event
+
+        fire_event("worksheet.handed_over", {
+            "sorszam": ws.serial,
+            "ugyfel": ws.client_name or "",
+            "osszeg_netto": f"{total:.0f}" if not body.discount else "0",
+            "fizetes_mod": "kártya" if body.payment_method == "card" else "készpénz",
+            "kedvezmeny": "igen" if body.discount else "nem",
+        })
+    except Exception:
+        pass
+    return {"ok": True, "document_id": document_id, "total_net": total,
+            "discount": body.discount}

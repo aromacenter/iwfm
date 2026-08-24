@@ -385,6 +385,17 @@ class Worksheet(Base):
     quote_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     quote_selected_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     quote_accepted_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # A kész gépet elhoztuk a külsős szerelőtől — ekkor kap az ügyfél e-mailt,
+    # hogy a javítás elkészült és a gép átvehető.
+    picked_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Átadás az ügyfélnek: fizetési mód (cash/card), kedvezmény (= nem készül
+    # számla), a fizetett nettó végösszeg és a Billingó-bizonylat. Az átadással
+    # a munkalap lezárul, a feladat done lesz.
+    handed_over_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    handover_payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    handover_discount: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    handover_total_net: Mapped[float | None] = mapped_column(Float, nullable=True)
+    handover_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     hours_spent: Mapped[float | None] = mapped_column(Float, nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     client_location: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -647,7 +658,7 @@ class Asset(Base):
         UniqueConstraint("barcode", name="uq_assets_barcode"),
         Index("uq_assets_qr_token", "qr_token", unique=True),
         CheckConstraint(
-            "status IN ('in_stock','deployed','maintenance','retired')",
+            "status IN ('in_stock','deployed','maintenance','retired','handed_over')",
             name="ck_assets_status",
         ),
         Index("ix_assets_status", "status"),

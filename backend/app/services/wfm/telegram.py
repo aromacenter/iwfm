@@ -52,6 +52,8 @@ EVENT_TEMPLATES: dict[str, str] = {
     "task.assigned": "📋 Feladat kiosztva: {{cim}} → {{dolgozo}} (határidő: {{hatarido}})",
     "worksheet.signed": "✍️ Munkalap aláírva: {{sorszam}} — {{cim}} ({{dolgozo}})",
     "worksheet.quote_accepted": "🟢 Árajánlat elfogadva: {{sorszam}} — {{opcio}} ({{ugyfel}})",
+    "worksheet.picked_up": "📦 Gép elhozva a szerelőtől: {{sorszam}} — {{gep_nev}} · az ügyfél értesítve, a gép átvehető",
+    "worksheet.handed_over": "🤝 Gép átadva: {{sorszam}} — {{ugyfel}} · {{osszeg_netto}} Ft nettó ({{fizetes_mod}})",
     "intake.created": "📥 Gép átvéve: {{sorszam}} — {{gep_nev}} ({{ugyfel}}) · {{hibak}}",
 }
 

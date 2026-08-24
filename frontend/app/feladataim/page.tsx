@@ -356,8 +356,13 @@ export default function FeladataimPage() {
         client_location: ws.client_location || null,
         employee_signature: ws.employee_signature,
         client_signature: ws.client_signature,
-        maintenance_fee: ws.maintenance_fee ? Number(ws.maintenance_fee) : null,
-        fee_discount: ws.fee_discount,
+        // KSZ-en a díj a képviselőé — a dolgozói mentés nem küld díjat.
+        maintenance_fee: wsTask.worksheet_external
+          ? null
+          : ws.maintenance_fee
+            ? Number(ws.maintenance_fee)
+            : null,
+        fee_discount: wsTask.worksheet_external ? null : ws.fee_discount,
       });
       setWsTask(null);
       load();
@@ -771,29 +776,9 @@ export default function FeladataimPage() {
               {wsTask?.worksheet_external && ws.materials.length > 0 && (
                 <p className="text-xs text-slate-400">{t("myTasks.wsExternalHint2")}</p>
               )}
-              {wsTask?.worksheet_external && (
-                <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3">
-                  <label className="text-sm font-medium text-indigo-900">
-                    {t("tasks.maintFee")}
-                    <input
-                      type="number" min={0} step="1"
-                      value={ws.maintenance_fee}
-                      onChange={(e) => setWs({ ...ws, maintenance_fee: e.target.value })}
-                      className="ml-2 w-32 rounded-lg border border-indigo-300 bg-white px-2 py-1 text-right text-sm"
-                    /> Ft
-                  </label>
-                  <label className="mt-1.5 flex items-center gap-2 text-sm text-indigo-900">
-                    <input
-                      type="checkbox"
-                      checked={ws.fee_discount}
-                      onChange={(e) => setWs({ ...ws, fee_discount: e.target.checked })}
-                      className="h-4 w-4"
-                    />
-                    {t("tasks.maintFeeDiscount")}
-                  </label>
-                  <p className="mt-1 text-xs text-indigo-700">{t("tasks.maintFeeHint")}</p>
-                </div>
-              )}
+              {/* A karbantartási díj a MI ügyfél-árunk — a szervizes nem
+                  látja és nem állíthatja; a képviselő kezeli az
+                  ár-szerkesztőben. */}
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
