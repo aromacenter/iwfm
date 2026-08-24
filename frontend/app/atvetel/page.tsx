@@ -78,9 +78,21 @@ export default function AtvetelPage() {
   const canPartners = perms.can("partners");
   const canTasks = perms.can("tasks");
 
+  interface PartnerOption {
+    id: string;
+    name: string;
+    company_name: string | null;
+    contact_phone: string | null;
+    contact_email: string | null;
+    address: string | null;
+    address_zip: string | null;
+    address_city: string | null;
+    address_street: string | null;
+    address_number: string | null;
+  }
   const [intakes, setIntakes] = useState<Intake[]>([]);
   const [assets, setAssets] = useState<AssetOption[]>([]);
-  const [partners, setPartners] = useState<{ id: string; name: string; city?: string | null }[]>([]);
+  const [partners, setPartners] = useState<PartnerOption[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
@@ -96,9 +108,34 @@ export default function AtvetelPage() {
   const load = useCallback(() => {
     api.get<Intake[]>("/api/intakes").then(setIntakes).catch(() => {});
     api.get<AssetOption[]>("/api/assets").then(setAssets).catch(() => {});
-    api.get<{ id: string; name: string; city?: string | null }[]>("/api/partners")
-      .then(setPartners).catch(() => {});
+    api.get<PartnerOption[]>("/api/partners").then(setPartners).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Meglévő partner kiválasztásakor minden ügyfél-mezőt automatikusan
+  // kitöltünk a törzsadatokból (utána szabadon átírható).
+  function selectPartner(id: string) {
+    const p = partners.find((x) => x.id === id);
+    if (!p) {
+      setForm((f) => ({ ...f, partner_id: id }));
+      return;
+    }
+    const address =
+      (p.address || "").trim() ||
+      [p.address_zip, p.address_city, p.address_street, p.address_number]
+        .map((s) => (s || "").trim())
+        .filter(Boolean)
+        .join(" ");
+    setForm((f) => ({
+      ...f,
+      partner_id: id,
+      client_name: p.name,
+      client_company: p.company_name ?? "",
+      client_phone: p.contact_phone ?? "",
+      client_email: p.contact_email ?? "",
+      client_address: address,
+    }));
+  }
   useEffect(load, [load]);
 
   async function submit(e: React.FormEvent) {
@@ -362,9 +399,14 @@ export default function AtvetelPage() {
               {t("intake.customer")}
               {canPartners && !newPartnerMode && (
                 <SearchSelect
-                  items={partners.map((p) => ({ id: p.id, label: p.name, sublabel: p.city ?? null }))}
+                  items={partners.map((p) => ({
+                    id: p.id,
+                    label: p.name,
+                    sublabel: [p.address_city, p.company_name].filter(Boolean).join(" · ") || null,
+                    keywords: [p.contact_email, p.contact_phone].filter(Boolean).join(" ") || null,
+                  }))}
                   value={form.partner_id}
-                  onChange={(id) => setForm({ ...form, partner_id: id })}
+                  onChange={selectPartner}
                   placeholder={t("intake.partnerPh")}
                   className="mt-1 w-full"
                   allowEmpty
