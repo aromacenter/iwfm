@@ -41,6 +41,15 @@ interface TaskOut {
   worksheet_serial: string | null;
   worksheet_completed: boolean;
   worksheet_external: boolean;
+  asset: {
+    name: string;
+    barcode: string | null;
+    serial_number: string | null;
+    category: string | null;
+    partner_name: string | null;
+    counter: number | null;
+    maintenance_fee: number | null;
+  } | null;
 }
 
 interface MaterialRow {
@@ -53,8 +62,14 @@ interface MaterialRow {
   price_net?: string;
 }
 
+interface WorkRow {
+  name: string;
+  fee: string; // KSZ-en a szerviz nettó díja (cost_net), sima ML-en a mi árunk (price_net)
+}
+
 interface WorksheetForm {
   work_description: string;
+  works: WorkRow[];
   hours_spent: string;
   materials: MaterialRow[];
   client_name: string;
@@ -67,6 +82,7 @@ interface WorksheetForm {
 
 const EMPTY_WS: WorksheetForm = {
   work_description: "",
+  works: [],
   hours_spent: "",
   materials: [],
   client_name: "",
@@ -177,6 +193,7 @@ export default function FeladataimPage() {
       try {
         const existing = await api.get<{
           work_description: string;
+          works: { name: string; cost_net: number | null; price_net: number | null }[];
           materials: (Omit<MaterialRow, "cost_net" | "price_net"> & {
             cost_net: number | null;
             price_net: number | null;
@@ -191,6 +208,10 @@ export default function FeladataimPage() {
         }>(`/api/me/tasks/${task.id}/worksheet`);
         setWs({
           work_description: existing.work_description,
+          works: (existing.works ?? []).map((w) => {
+            const fee = task.worksheet_external ? w.cost_net : w.price_net;
+            return { name: w.name, fee: fee != null ? String(fee) : "" };
+          }),
           hours_spent: existing.hours_spent != null ? String(existing.hours_spent) : "",
           materials: (existing.materials ?? []).map((m) => ({
             ...m,
@@ -285,7 +306,8 @@ export default function FeladataimPage() {
 
   async function saveWorksheet() {
     if (!wsTask) return;
-    if (!ws.work_description.trim()) {
+    const workRows = ws.works.filter((w) => w.name.trim());
+    if (!ws.work_description.trim() && workRows.length === 0) {
       setWsError(t("myTasks.wsWorkRequired"));
       return;
     }
@@ -294,6 +316,13 @@ export default function FeladataimPage() {
     try {
       await api.put(`/api/me/tasks/${wsTask.id}/worksheet`, {
         work_description: ws.work_description,
+        works: workRows.map((w) => {
+          const fee = w.fee ? Number(w.fee) : null;
+          // KSZ: a beírt díj a szerviz BELSŐ költsége; sima ML: a mi árunk.
+          return wsTask.worksheet_external
+            ? { name: w.name, cost_net: fee, price_net: null }
+            : { name: w.name, cost_net: null, price_net: fee };
+        }),
         hours_spent: ws.hours_spent ? Number(ws.hours_spent) : null,
         materials: ws.materials
           .filter((m) => m.name.trim())
@@ -397,6 +426,23 @@ export default function FeladataimPage() {
               </span>
             </div>
             <p className="text-xs text-slate-400">{t("myTasks.due", { date: task.due_date })}</p>
+            {task.asset && (
+              <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                <p className="font-medium text-slate-700">☕ {task.asset.name}</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {[
+                    task.asset.serial_number && `${t("myTasks.assetSerial")}: ${task.asset.serial_number}`,
+                    task.asset.barcode && `${t("myTasks.assetBarcode")}: ${task.asset.barcode}`,
+                    task.asset.counter != null && `${t("myTasks.assetCounter")}: ${task.asset.counter}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                {task.asset.partner_name && (
+                  <p className="text-xs text-slate-500">📍 {task.asset.partner_name}</p>
+                )}
+              </div>
+            )}
             {task.description && (
               <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{task.description}</p>
             )}
@@ -491,6 +537,56 @@ export default function FeladataimPage() {
                 className="hidden"
               />
             </label>
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-sm text-slate-600">{t("myTasks.wsWorks")}</span>
+                <button
+                  type="button"
+                  onClick={() => setWs({ ...ws, works: [...ws.works, { name: "", fee: "" }] })}
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                >
+                  {t("myTasks.wsAddWork")}
+                </button>
+              </div>
+              {ws.works.map((w, i) => (
+                <div key={i} className="mb-1 flex gap-1">
+                  <input
+                    value={w.name}
+                    onChange={(e) => {
+                      const next = [...ws.works];
+                      next[i] = { ...w, name: e.target.value };
+                      setWs({ ...ws, works: next });
+                    }}
+                    placeholder={t("myTasks.wsWorkName")}
+                    className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    value={w.fee}
+                    onChange={(e) => {
+                      const next = [...ws.works];
+                      next[i] = { ...w, fee: e.target.value };
+                      setWs({ ...ws, works: next });
+                    }}
+                    placeholder={t("myTasks.wsWorkFee")}
+                    title={t("myTasks.wsWorkFee")}
+                    className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setWs({ ...ws, works: ws.works.filter((_, idx) => idx !== i) })}
+                    className="px-1 text-slate-400 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {wsTask?.worksheet_external && ws.works.length > 0 && (
+                <p className="text-xs text-slate-400">{t("myTasks.wsWorksInternalHint")}</p>
+              )}
+            </div>
+
             <label className="block text-sm">
               {t("myTasks.wsWork")}
               <textarea

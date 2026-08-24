@@ -197,6 +197,31 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         y -= 1 * mm
         line("Ráfordított idő:", f"{data['hours_spent']:g} óra")
 
+    # ─── Elvégzett munkák tételesen (soronkénti munkadíjjal) ───
+    works = data.get("works") or []
+    if works:
+        works_field = data.get("works_price_field") or "price_net"
+        section("Elvégzett munkák (tételes)")
+        c.setFont(FONT_BOLD, 9)
+        c.drawString(left, y, "Megnevezés")
+        c.drawRightString(right, y, data.get("works_price_label") or "Munkadíj (Ft, nettó)")
+        y -= 5 * mm
+        c.setFont(FONT, 9)
+        works_total = 0.0
+        for item in works[:25]:
+            c.drawString(left, y, str(item.get("name", ""))[:70])
+            price = item.get(works_field)
+            if price is not None:
+                works_total += float(price)
+                c.drawRightString(right, y, f"{float(price):,.0f} Ft".replace(",", " "))
+            y -= 4.5 * mm
+        if works_total > 0:
+            c.setFont(FONT_BOLD, 9)
+            c.drawRightString(
+                right, y, f"Munkadíj összesen (nettó): {works_total:,.0f} Ft".replace(",", " ")
+            )
+            y -= 5 * mm
+
     # ─── Anyagok / tételek ───
     materials = data.get("materials") or [] if show_materials else []
     # Külső szervizes munkalapon ár-oszlop: belső példányon a szerviz nettó

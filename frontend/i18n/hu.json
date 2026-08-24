@@ -1142,7 +1142,8 @@
     "maintFee": "Karbantartási díj (nettó)",
     "maintFeeDiscount": "Kedvezmény — díj elengedve (nem készül számla)",
     "maintFeeInvoiced": "kiszámlázva",
-    "maintFeeHint": "A gépből előtöltve, szabadon átírható. Ha nincs kedvezmény pipálva, a munkalap MINDKÉT aláírása után a díjról automatikusan számla készül és e-mailben kimegy az ügyfélnek a munkalappal együtt."
+    "maintFeeHint": "A gépből előtöltve, szabadon átírható. Ha nincs kedvezmény pipálva, a munkalap MINDKÉT aláírása után a díjról automatikusan számla készül és e-mailben kimegy az ügyfélnek a munkalappal együtt.",
+    "workItemsCol": "Elvégzett munka"
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1189,7 +1190,15 @@
     "wsExternalHint2": "Narancs mező: a külső szerviz visszaigazolt nettó költsége (belső adat). Az ügyfél-árakat a képviselő állítja be a Feladatok oldalon.",
     "myTickets": "Szervizjegyeim",
     "openInService": "Megnyitás a Szervizben",
-    "ticketStarted": "Szervizjegy folyamatban."
+    "ticketStarted": "Szervizjegy folyamatban.",
+    "wsWorks": "Elvégzett munkák (tételes)",
+    "wsAddWork": "+ munka sor",
+    "wsWorkName": "elvégzett munka megnevezése",
+    "wsWorkFee": "munkadíj (Ft, nettó)",
+    "wsWorksInternalHint": "A beírt munkadíj belső adat — az ügyfél −1-es példányára a képviselő által beállított ár kerül.",
+    "assetSerial": "gyári szám",
+    "assetBarcode": "vonalkód",
+    "assetCounter": "számláló"
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1853,5 +1862,8 @@
     "aiAdded": "Új év munkarendje betöltve — ellenőrizd a dátumokat!",
     "aiNothing": "Nincs betölthető új év (már megvan, vagy az AI nem ismeri még a rendeletet).",
     "mtLast": "Utolsó Mt.-ellenőrzés ({month})"
+  },
+  "worksheet": {
+    "empty": "Adj meg leírást vagy legalább egy munkatételt."
   }
 }

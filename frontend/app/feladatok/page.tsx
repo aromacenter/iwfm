@@ -225,6 +225,7 @@ export default function FeladatokPage() {
   // szervizes; a -1-es ügyfél-példányra ezek az árak kerülnek.
   interface WsData {
     work_description: string;
+    works: { name: string; cost_net: number | null; price_net: number | null }[];
     materials: { name: string; qty: string; unit: string; cost_net: number | null; price_net: number | null }[];
     hours_spent: number | null;
     client_name: string | null;
@@ -233,7 +234,7 @@ export default function FeladatokPage() {
     fee_discount: boolean;
     invoiced: boolean;
   }
-  const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[]; fee: string; discount: boolean } | null>(null);
+  const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[]; workPrices: string[]; fee: string; discount: boolean } | null>(null);
 
   async function openPriceEdit(task: TaskOut) {
     try {
@@ -242,6 +243,7 @@ export default function FeladatokPage() {
         task,
         ws,
         prices: (ws.materials ?? []).map((m) => (m.price_net != null ? String(m.price_net) : "")),
+        workPrices: (ws.works ?? []).map((w) => (w.price_net != null ? String(w.price_net) : "")),
         fee: ws.maintenance_fee != null ? String(ws.maintenance_fee) : "",
         discount: ws.fee_discount,
       });
@@ -255,6 +257,11 @@ export default function FeladatokPage() {
     try {
       await api.put(`/api/tasks/${priceEdit.task.id}/worksheet`, {
         work_description: priceEdit.ws.work_description,
+        works: (priceEdit.ws.works ?? []).map((w, i) => ({
+          name: w.name,
+          cost_net: w.cost_net,
+          price_net: priceEdit.workPrices[i] ? Number(priceEdit.workPrices[i]) : null,
+        })),
         hours_spent: priceEdit.ws.hours_spent,
         client_name: priceEdit.ws.client_name,
         client_location: priceEdit.ws.client_location,
@@ -609,6 +616,39 @@ export default function FeladatokPage() {
                 {t("tasks.priceEditNotFilled")}
               </p>
             )}
+            {(priceEdit.ws.works ?? []).length > 0 && (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-400">
+                    <th className="py-1 pr-2">{t("tasks.workItemsCol")}</th>
+                    <th className="py-1 pr-2 text-right">{t("myTasks.wsCostNet")}</th>
+                    <th className="py-1 text-right">{t("myTasks.wsPriceNet")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceEdit.ws.works.map((w, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="py-1.5 pr-2">🔧 {w.name}</td>
+                      <td className="py-1.5 pr-2 text-right text-orange-700">
+                        {w.cost_net != null ? `${w.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
+                      </td>
+                      <td className="py-1.5 text-right">
+                        <input
+                          type="number" min={0}
+                          value={priceEdit.workPrices[i] ?? ""}
+                          onChange={(e) => {
+                            const next = [...priceEdit.workPrices];
+                            next[i] = e.target.value;
+                            setPriceEdit({ ...priceEdit, workPrices: next });
+                          }}
+                          className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             {priceEdit.ws.materials.length === 0 ? (
               <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {t("tasks.priceEditEmpty")}
@@ -683,7 +723,7 @@ export default function FeladatokPage() {
               <button onClick={() => setPriceEdit(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
               <button
                 onClick={savePrices}
-                disabled={!priceEdit.ws.work_description.trim()}
+                disabled={!priceEdit.ws.work_description.trim() && (priceEdit.ws.works ?? []).length === 0}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
               >
                 💾 {t("common.save")}

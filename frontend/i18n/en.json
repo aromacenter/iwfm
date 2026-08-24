@@ -1142,7 +1142,8 @@
     "maintFee": "Maintenance fee (net)",
     "maintFeeDiscount": "Discount — fee waived (no invoice)",
     "maintFeeInvoiced": "invoiced",
-    "maintFeeHint": "Prefilled from the machine, freely editable. Without the discount checkbox, once BOTH signatures are on the worksheet the fee is invoiced automatically and emailed to the client with the worksheet."
+    "maintFeeHint": "Prefilled from the machine, freely editable. Without the discount checkbox, once BOTH signatures are on the worksheet the fee is invoiced automatically and emailed to the client with the worksheet.",
+    "workItemsCol": "Work item"
   },
   "myTasks": {
     "title": "My tasks",
@@ -1189,7 +1190,15 @@
     "wsExternalHint2": "Orange field: the external shop's confirmed net cost (internal). Customer prices are set by the rep on the Tasks page.",
     "myTickets": "My service tickets",
     "openInService": "Open in Service",
-    "ticketStarted": "Service ticket in progress."
+    "ticketStarted": "Service ticket in progress.",
+    "wsWorks": "Work items (itemised)",
+    "wsAddWork": "+ add work item",
+    "wsWorkName": "work performed",
+    "wsWorkFee": "labor fee (net HUF)",
+    "wsWorksInternalHint": "Fees entered here are internal — the customer −1 copy shows the prices set by the representative.",
+    "assetSerial": "serial no.",
+    "assetBarcode": "barcode",
+    "assetCounter": "counter"
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1853,5 +1862,8 @@
     "aiAdded": "New year's calendar loaded — verify the dates!",
     "aiNothing": "Nothing new to load (already present, or the AI doesn't know the decree yet).",
     "mtLast": "Last labor-law check ({month})"
+  },
+  "worksheet": {
+    "empty": "Provide a description or at least one work item."
   }
 }

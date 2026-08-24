@@ -58,7 +58,9 @@ DEFAULT_MATRIX: dict[str, list[str]] = {
         "dashboard", "partners", "machines", "products", "settlements",
         "invoicing", "agent_report",
     ],
-    "szervizes": ["machines", "service", "my_schedule", "my_tasks"],
+    # Külsős szervizes: munkaidőt nem tartunk nyilván róla — belépve csak a
+    # szerviz-funkciókat látja (jegyek + saját KSZ-munkalapok).
+    "szervizes": ["service", "my_tasks"],
     "employee": ["my_schedule", "my_tasks"],
 }
 
@@ -83,6 +85,24 @@ def permissions_for(role: str, matrix: dict[str, list[str]]) -> list[str]:
     if role == "admin":
         return list(FEATURES)
     return matrix.get(role, [])
+
+
+def require_any_perm(*features: str):
+    """Guard: legalább az egyik funkció engedélyezett (admin mindig) — pl. a
+    gép-lista a szervizeseknek is kell a gép-választóhoz."""
+
+    async def _guard(
+        user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    ) -> User:
+        if user.role == "admin":
+            return user
+        matrix = await get_permission_matrix(db)
+        allowed = matrix.get(user.role, [])
+        if not any(f in allowed for f in features):
+            raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+        return user
+
+    return _guard
 
 
 def require_perm(feature: str):

@@ -26,6 +26,7 @@ from app.api.deps import (
 )
 from app.db import get_db
 from app.models import (
+    Asset,
     Employee,
     Partner,
     Skill,
@@ -109,6 +110,7 @@ class TaskOut(BaseModel):
     worksheet_serial: str | None = None  # ML-2026-0001, ha van munkalap
     worksheet_completed: bool = False  # kitöltötte-e már a dolgozó
     worksheet_external: bool = False  # külső szerviznek átadott gép munkalapja
+    asset: dict | None = None  # a munkalaphoz kötött gép adatai (KSZ)
     ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
 
 
@@ -125,8 +127,19 @@ class MaterialItem(BaseModel):
     price_net: float | None = Field(default=None, ge=0)
 
 
+class WorkItem(BaseModel):
+    """Elvégzett munka egy sora. KSZ-en a cost_net a szerviz belső díja
+    (SOHA nem kerül az ügyfél elé), a price_net a MI árunk az ügyfél-példányra
+    — utóbbit a képviselő állítja be az ár-szerkesztőben."""
+
+    name: str = Field(min_length=1, max_length=256)
+    cost_net: float | None = Field(default=None, ge=0)
+    price_net: float | None = Field(default=None, ge=0)
+
+
 class WorksheetBody(BaseModel):
-    work_description: str = Field(min_length=1, max_length=8000)
+    work_description: str = Field(default="", max_length=8000)
+    works: list[WorkItem] = Field(default_factory=list, max_length=25)
     materials: list[MaterialItem] = Field(default_factory=list, max_length=25)
     hours_spent: float | None = Field(default=None, ge=0, le=1000)
     client_name: str | None = Field(default=None, max_length=256)
@@ -143,6 +156,7 @@ class WorksheetOut(BaseModel):
     serial: str
     external_service: bool = False
     work_description: str
+    works: list[WorkItem] = []
     materials: list[MaterialItem]
     hours_spent: float | None
     client_name: str | None
@@ -172,6 +186,7 @@ def _worksheet_out(ws: Worksheet) -> WorksheetOut:
         serial=ws.serial,
         external_service=ws.external_service,
         work_description=ws.work_description,
+        works=[WorkItem(**w) for w in (ws.works or [])],
         materials=[MaterialItem(**m) for m in (ws.materials or [])],
         hours_spent=ws.hours_spent,
         client_name=ws.client_name,
@@ -217,8 +232,24 @@ async def _upsert_worksheet(
     if ws is None:
         ws = Worksheet(task_id=task.id, serial=await _next_worksheet_serial(db), created_by=actor.id)
         db.add(ws)
+    # Leírás VAGY legalább egy tételes munka kell — mindkettő üresen 422.
+    if not body.work_description.strip() and not body.works:
+        raise HTTPException(status_code=422, detail={"code": "worksheet.empty"})
     ws.work_description = body.work_description.strip()
+    works = [w.model_dump() for w in body.works]
     materials = [m.model_dump() for m in body.materials]
+    if preserve_prices and ws.external_service:
+        # A munkadíjak ügyfél-árát is a képviselő állítja — a szervizes mentés
+        # nem írhatja felül/törölheti (név szerint átörökítjük).
+        old_wprices = {
+            str(w.get("name", "")).strip().lower(): w.get("price_net")
+            for w in (ws.works or [])
+            if w.get("price_net") is not None
+        }
+        for w in works:
+            if w.get("price_net") is None:
+                w["price_net"] = old_wprices.get(str(w.get("name", "")).strip().lower())
+    ws.works = works
     if preserve_prices and ws.external_service:
         # Az ügyfél-árakat a KÉPVISELŐ állítja be — a dolgozói (szervizes)
         # mentés nem írhatja felül/törölheti: név szerint átörökítjük.
@@ -392,13 +423,38 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
         await db.execute(
             select(
                 Worksheet.task_id, Worksheet.serial, Worksheet.work_description,
-                Worksheet.external_service,
+                Worksheet.external_service, Worksheet.asset_id,
             ).where(Worksheet.task_id.in_([t.id for t in tasks]))
         )
     ).all()
-    worksheet_serials = {tid: serial for tid, serial, _, _ in ws_rows}
-    worksheet_done = {tid: bool((desc or "").strip()) for tid, _, desc, _ in ws_rows}
-    worksheet_external = {tid: ext for tid, _, _, ext in ws_rows}
+    worksheet_serials = {tid: serial for tid, serial, _, _, _ in ws_rows}
+    worksheet_done = {tid: bool((desc or "").strip()) for tid, _, desc, _, _ in ws_rows}
+    worksheet_external = {tid: ext for tid, _, _, ext, _ in ws_rows}
+    ws_asset_ids = {tid: aid for tid, _, _, _, aid in ws_rows if aid}
+    task_assets: dict[uuid.UUID, dict] = {}
+    if ws_asset_ids:
+        asset_rows = (
+            await db.execute(
+                select(Asset, Partner.name)
+                .outerjoin(Partner, Partner.id == Asset.partner_id)
+                .where(Asset.id.in_(set(ws_asset_ids.values())))
+            )
+        ).all()
+        by_id = {
+            a.id: {
+                "name": a.name,
+                "barcode": a.barcode,
+                "serial_number": a.serial_number,
+                "category": a.category,
+                "partner_name": pname,
+                "counter": a.counter,
+                "maintenance_fee": a.maintenance_fee,
+            }
+            for a, pname in asset_rows
+        }
+        task_assets = {
+            tid: by_id[aid] for tid, aid in ws_asset_ids.items() if aid in by_id
+        }
     return [
         TaskOut(
             id=str(t.id),
@@ -418,6 +474,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             worksheet_serial=worksheet_serials.get(t.id),
             worksheet_completed=worksheet_done.get(t.id, False),
             worksheet_external=worksheet_external.get(t.id, False),
+            asset=task_assets.get(t.id),
         )
         for t in tasks
     ]
@@ -697,6 +754,20 @@ async def _build_worksheet_pdf(
     title = None
     price_column = None
     materials = list(ws.materials or [])
+    # Tételes munkadíjak: belső példányon a szerviz költsége (cost_net),
+    # ügyfél-példányon KIZÁRÓLAG a mi áraink (price_net) — a cost_net-et
+    # lehúzzuk, hogy véletlenül se kerülhessen az ügyfél elé.
+    works = list(ws.works or [])
+    works_price_field = "price_net"
+    works_price_label = "Munkadíj (Ft, nettó)"
+    if ws.external_service:
+        if variant == "customer":
+            works = [
+                {k: v for k, v in w.items() if k != "cost_net"} for w in works
+            ]
+        else:
+            works_price_field = "cost_net"
+            works_price_label = "Munkadíj — nettó költség (Ft)"
     if ws.external_service:
         if variant == "customer":
             serial = f"{ws.serial}-1"
@@ -734,6 +805,9 @@ async def _build_worksheet_pdf(
             "employee_code": emp.employee_code if emp else None,
             "job_title": emp.job_title if emp else None,
             "work_description": ws.work_description,
+            "works": works,
+            "works_price_field": works_price_field,
+            "works_price_label": works_price_label,
             "materials": materials,
             "hours_spent": ws.hours_spent,
             "client_name": ws.client_name,

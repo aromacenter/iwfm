@@ -367,6 +367,8 @@ class Worksheet(Base):
     work_description: Mapped[str] = mapped_column(Text, nullable=False)
     # [{"name": "...", "qty": "...", "unit": "db"}, ...]
     materials: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Elvégzett munkák tételesen: [{name, price_net}] — soronként ár (nettó Ft).
+    works: Mapped[list | None] = mapped_column(JSON, nullable=True)
     hours_spent: Mapped[float | None] = mapped_column(Float, nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     client_location: Mapped[str | None] = mapped_column(String(512), nullable=True)

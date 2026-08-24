@@ -15,7 +15,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import delete as sa_delete, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_perm
+from app.api.deps import record_audit, require_any_perm, require_perm
 from app.db import get_db
 from app.models import (
     Asset,
@@ -770,7 +770,8 @@ async def list_assets(
     status: str | None = Query(default=None),
     partner_id: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("machines")),
+    # A szervizes szerepkörnek is kell a gép-választóhoz (gépek menü nélkül).
+    _: User = Depends(require_any_perm("machines", "service")),
 ):
     query = select(Asset).order_by(Asset.created_at.desc())
     if q:
