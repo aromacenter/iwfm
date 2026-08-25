@@ -29,6 +29,7 @@ from app.models import (
     Asset,
     AuditEvent,
     Employee,
+    MachineIntake,
     Partner,
     Skill,
     Task,
@@ -181,6 +182,9 @@ class WorksheetOut(BaseModel):
     # Ügyfél-árajánlat állapota (none → sent → accepted)
     quote_status: str = "none"
     quote_email: str | None = None
+    # Ajánlott ügyfél-e-mail az ajánlat-küldő előtöltéséhez (átvételi
+    # elismervényről vagy a gép partnerétől) — csak vezetői nézetben.
+    suggested_email: str | None = None
     quote_sent_at: datetime | None = None
     quote_accepted_at: datetime | None = None
     quote_selected_name: str | None = None
@@ -200,7 +204,9 @@ def _strip_price(rows: list[dict]) -> list[dict]:
     return [{**r, "price_net": None} for r in rows]
 
 
-def _worksheet_out(ws: Worksheet, *, for_worker: bool = False) -> WorksheetOut:
+def _worksheet_out(
+    ws: Worksheet, *, for_worker: bool = False, suggested_email: str | None = None
+) -> WorksheetOut:
     """A munkalap API-képe. ``for_worker=True`` (dolgozói/me-végpontok) esetén
     KSZ-munkalapon az ÜGYFÉLNEK szánt áraink (price_net) és az ügyfél-
     megjegyzés SOSEM kerülnek a válaszba — a külsős szerviz nem láthatja őket."""
@@ -234,6 +240,7 @@ def _worksheet_out(ws: Worksheet, *, for_worker: bool = False) -> WorksheetOut:
         customer_note=None if hide else ws.customer_note,
         quote_status=ws.quote_status or "none",
         quote_email=None if hide else ws.quote_email,
+        suggested_email=None if hide else suggested_email,
         quote_sent_at=ws.quote_sent_at,
         quote_accepted_at=ws.quote_accepted_at,
         quote_selected_name=ws.quote_selected_name,
@@ -255,6 +262,40 @@ async def _next_worksheet_serial(db: AsyncSession, external: bool = False) -> st
         )
     ).scalar_one()
     return f"{prefix}-{year}-{count + 1:04d}"
+
+
+async def _suggest_quote_email(db: AsyncSession, ws: Worksheet) -> str | None:
+    """Az ajánlat-/értesítő-küldő előtöltéséhez ajánlott ügyfél-e-mail: a
+    munkalapon már megadott cím, ennek híján a gép legutóbbi átvételi
+    elismervényén rögzített cím, végül a gép partnerének kapcsolattartói címe."""
+    if ws.quote_email:
+        return ws.quote_email
+    if ws.asset_id is None:
+        return None
+    intake_email = (
+        await db.execute(
+            select(MachineIntake.client_email)
+            .where(
+                MachineIntake.asset_id == ws.asset_id,
+                MachineIntake.client_email.is_not(None),
+                MachineIntake.client_email != "",
+            )
+            .order_by(MachineIntake.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if intake_email:
+        return intake_email
+    asset = (
+        await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+    ).scalar_one_or_none()
+    if asset is not None and asset.partner_id is not None:
+        partner = (
+            await db.execute(select(Partner).where(Partner.id == asset.partner_id))
+        ).scalar_one_or_none()
+        if partner is not None and partner.contact_email:
+            return partner.contact_email
+    return None
 
 
 async def _get_worksheet(db: AsyncSession, task_id: uuid.UUID) -> Worksheet | None:
@@ -821,7 +862,7 @@ async def get_task_worksheet(
     ws = await _get_worksheet(db, task.id)
     if ws is None:
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
-    return _worksheet_out(ws)
+    return _worksheet_out(ws, suggested_email=await _suggest_quote_email(db, ws))
 
 
 @router.put("/{task_id}/worksheet", response_model=WorksheetOut)

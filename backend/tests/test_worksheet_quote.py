@@ -254,3 +254,61 @@ async def test_quote_decline_with_survey_fee(client, admin, manager, monkeypatch
     ws_self = (await client.get(f"/api/me/tasks/{task_id}/worksheet", headers=emp_headers)).json()
     assert ws_self["quote_status"] == "declined"
     assert all(w["price_net"] is None for w in ws_self["works"])
+
+
+async def test_suggested_email_prefill(client, admin, manager):
+    """Az ajánlat-küldő e-mail javaslata: átvételi elismervény címe erősebb a
+    partner kapcsolattartói címénél; a szervizes (me-nézet) nem kapja meg."""
+    _, mgr = manager
+    res = await client.post(
+        "/api/partners",
+        json={"name": "Előtöltős Kft.", "contact_email": "partner@example.com"},
+        headers=mgr,
+    )
+    partner = res.json()
+    res = await client.post(
+        "/api/assets",
+        json={"barcode": "SUGG-1", "name": "Előtöltős Gép", "manufacturer": "Jura"},
+        headers=mgr,
+    )
+    asset = res.json()
+    await client.post(
+        f"/api/assets/{asset['id']}/deploy", json={"partner_id": partner["id"]},
+        headers=mgr,
+    )
+    user, emp_headers = await make_user(email="sugg@example.com", role="szervizes")
+    emp = await make_employee_record(user, last_name="Előtölt", first_name="Ede")
+    res = await client.post(
+        "/api/tasks",
+        json={"title": "Előtöltős javítás", "employee_id": str(emp.id),
+              "due_date": "2026-09-15", "external_service": True,
+              "asset_id": asset["id"], "client_name": "Vevő"},
+        headers=mgr,
+    )
+    task_id = res.json()["id"]
+    res = await client.put(
+        f"/api/tasks/{task_id}/worksheet",
+        json={"work_description": "diagnózis", "works": [], "repair_options": [],
+              "materials": []},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+
+    # elismervény híján a gép partnerének kapcsolattartói címe a javaslat
+    ws = (await client.get(f"/api/tasks/{task_id}/worksheet", headers=mgr)).json()
+    assert ws["suggested_email"] == "partner@example.com"
+
+    # az átvételi elismervényen rögzített ügyfél-cím felülírja
+    res = await client.post(
+        "/api/intakes",
+        json={"asset_id": asset["id"], "client_name": "Vevő",
+              "client_email": "vevo@example.com"},
+        headers=mgr,
+    )
+    assert res.status_code in (200, 201), res.text
+    ws = (await client.get(f"/api/tasks/{task_id}/worksheet", headers=mgr)).json()
+    assert ws["suggested_email"] == "vevo@example.com"
+
+    # a külsős szervizes nem kapja meg az ügyfél elérhetőségét
+    ws = (await client.get(f"/api/me/tasks/{task_id}/worksheet", headers=emp_headers)).json()
+    assert ws["suggested_email"] is None

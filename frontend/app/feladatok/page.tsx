@@ -318,6 +318,7 @@ export default function FeladatokPage() {
     customer_note: string | null;
     quote_status: "none" | "sent" | "accepted" | "declined";
     quote_email: string | null;
+    suggested_email: string | null;
     quote_sent_at: string | null;
     quote_accepted_at: string | null;
     quote_selected_name: string | null;
@@ -388,6 +389,8 @@ export default function FeladatokPage() {
     const to = await prompt(t("tasks.quoteEmailPrompt"), {
       type: "email",
       placeholder: "ugyfel@example.com",
+      // előtöltve a munkalapról / átvételi elismervényről / partnertől
+      initial: priceEdit.ws.quote_email ?? priceEdit.ws.suggested_email ?? "",
     });
     if (!to) return;
     try {
@@ -411,7 +414,11 @@ export default function FeladatokPage() {
     if (to) {
       if (!(await confirm(t("tasks.pickupConfirm", { to })))) return;
     } else {
-      to = await prompt(t("tasks.quoteEmailPrompt"), { type: "email", placeholder: "ugyfel@example.com" });
+      to = await prompt(t("tasks.quoteEmailPrompt"), {
+        type: "email",
+        placeholder: "ugyfel@example.com",
+        initial: priceEdit.ws.suggested_email ?? "",
+      });
       if (!to) return;
     }
     try {
