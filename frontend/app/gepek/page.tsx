@@ -661,7 +661,10 @@ export default function GepekPage() {
                       </button>
                     ) : null}
                     <button onClick={() => downloadQrLabel(a)} title={t("inv.qrLabel")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
-                      🔳
+                      {/* mini QR-kód ikon */}
+                      <svg viewBox="0 0 24 24" className="inline h-[1em] w-[1em] align-[-0.1em] text-slate-700" fill="currentColor" aria-hidden="true">
+                        <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm1 1h2v2H6V6zM13 3h8v8h-8V3zm2 2v4h4V5h-4zm1 1h2v2h-2V6zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm1 1h2v2H6v-2zM13 13h3v3h-3v-3zm5 0h3v3h-3v-3zm-5 5h3v3h-3v-3zm5 2h3v1h-3v-1zm2-4h1v3h-1v-3zm-4 1h2v2h-2v-2z" />
+                      </svg>
                     </button>
                     <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       🕘

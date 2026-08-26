@@ -1606,7 +1606,7 @@
     "deploy": "Kihelyezés",
     "returnBtn": "Visszavétel",
     "history": "Előzmények",
-    "qrLabel": "QR-címke letöltése (PDF)",
+    "qrLabel": "QR-címke nyomtatása",
     "colMachine": "Gép",
     "colIds": "Azonosítók",
     "colPlace": "Partner / hely",

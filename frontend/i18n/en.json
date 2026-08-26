@@ -1606,7 +1606,7 @@
     "deploy": "Deploy",
     "returnBtn": "Return",
     "history": "History",
-    "qrLabel": "Download QR label (PDF)",
+    "qrLabel": "Print QR label",
     "colMachine": "Machine",
     "colIds": "Identifiers",
     "colPlace": "Partner / location",
