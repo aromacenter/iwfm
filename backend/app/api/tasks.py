@@ -932,7 +932,7 @@ async def _build_worksheet_pdf(
             price_column = {"field": "cost_net", "label": "Nettó költség (Ft)"}
         # Karbantartási díj sora (mindkét példányon): kedvezménynél elengedve.
         if ws.fee_discount:
-            materials.append({"name": "Karbantartási díj — KEDVEZMÉNY (elengedve)",
+            materials.append({"name": "Karbantartási díj — Kedvezmény",
                               "qty": "1", "unit": "alkalom"})
         elif (ws.maintenance_fee or 0) > 0:
             fee_row = {"name": "Karbantartási díj", "qty": "1", "unit": "alkalom"}
@@ -947,6 +947,7 @@ async def _build_worksheet_pdf(
     # Az ügyfél-példányra a szervizes BELSŐ leírása és a belső kommentek nem
     # kerülnek rá — helyettük a képviselő ügyfél-megjegyzése (ha van).
     work_description = ws.work_description
+    hours_spent = ws.hours_spent
     pdf_comments = [{"author": c.author_name, "text": c.text} for c in comments]
     pdf_settings = await _worksheet_pdf_settings(db)
     extra_footer = None
@@ -954,6 +955,10 @@ async def _build_worksheet_pdf(
     if ws.external_service and variant == "customer":
         work_description = ws.customer_note or ""
         pdf_comments = []
+        # A vevői példányon csak a TÉTELES munkák szerepelnek: az ajánlat-
+        # konstrukciók és a ráfordított idő nem kerülnek rá.
+        repair_options = []
+        hours_spent = None
         # Garanciális feltételek — MINDIG rákerül az ügyfél-példány aljára
         # (a Beállításokban átírható, üresen a beépített alapszöveg).
         extra_footer = (pdf_settings or {}).get("customer_footer_text") or DEFAULT_CUSTOMER_FOOTER
@@ -985,7 +990,7 @@ async def _build_worksheet_pdf(
             "works_price_field": works_price_field,
             "works_price_label": works_price_label,
             "materials": materials,
-            "hours_spent": ws.hours_spent,
+            "hours_spent": hours_spent,
             "client_name": ws.client_name,
             "client_location": ws.client_location,
             "employee_signature": ws.employee_signature,

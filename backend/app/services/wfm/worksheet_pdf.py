@@ -165,10 +165,7 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         c.setFillColorRGB(0.35, 0.4, 0.5)
         c.setFont(FONT, 8)
         c.drawString(left, y - 4.5 * mm, s.get("company_address") or "Intelligence Workforce Management")
-    elif company_name:
-        c.setFillColorRGB(0.35, 0.4, 0.5)
-        c.setFont(FONT, 8)
-        c.drawString(left, y - 12 * mm, company_name)
+    # logónál a cégnév-felirat NEM kerül alá — a logó maga a cégjelzés
 
     c.setFillColorRGB(0, 0, 0)
     c.setFont(FONT_BOLD, 16)
@@ -188,7 +185,7 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
     section("Feladat")
     line("Megnevezés:", data.get("task_title", ""))
     if data.get("task_description"):
-        line("Leírás:", "")
+        line("Leírás:", " ")  # a szöveg maga a következő sorokban jön
         y += 5.5 * mm - 4.5 * mm  # vissza a leírás sorához
         wrapped(data["task_description"])
     line("Határidő:", data.get("due_date", ""))
@@ -208,12 +205,16 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         if data.get("client_location"):
             line("Helyszín:", data["client_location"])
 
-    # ─── Elvégzett munka ───
-    section("Elvégzett munka")
-    wrapped(data.get("work_description", ""))
-    if show_hours and data.get("hours_spent") is not None:
-        y -= 1 * mm
-        line("Ráfordított idő:", f"{data['hours_spent']:g} óra")
+    # ─── Elvégzett munka (csak ha tényleg van szöveg vagy idő) ───
+    work_desc = (data.get("work_description") or "").strip()
+    has_hours = show_hours and data.get("hours_spent") is not None
+    if work_desc or has_hours:
+        section("Elvégzett munka")
+        if work_desc:
+            wrapped(work_desc)
+        if has_hours:
+            y -= 1 * mm
+            line("Ráfordított idő:", f"{data['hours_spent']:g} óra")
 
     # ─── Elvégzett munkák tételesen (soronkénti munkadíjjal) ───
     works = data.get("works") or []
@@ -326,7 +327,10 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             from reportlab.graphics.barcode.qr import QrCodeWidget
             from reportlab.graphics.shapes import Drawing
 
-            qr_size = 24 * mm
+            # A lap JOBB ALSÓ sarkában — ide tartalom sosem kerül, így nem
+            # csúszhat rá se táblázatra, se láblécre (a garanciális szöveg
+            # sorai ilyenkor rövidebbre tördelődnek, lásd lentebb).
+            qr_size = 22 * mm
             qr = QrCodeWidget(handover_url)
             b = qr.getBounds()
             d = Drawing(
@@ -335,7 +339,7 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             )
             d.add(qr)
             qx = right - qr_size
-            qy = 62 * mm
+            qy = 7 * mm
             renderPDF.draw(d, c, qx, qy)
             c.setFont(FONT, 6.5)
             c.setFillColorRGB(0.4, 0.4, 0.45)
@@ -347,6 +351,8 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
     # ─── Extra lábléc-blokk (pl. garanciális feltételek az ügyfél-példányon) ───
     extra_footer = data.get("extra_footer")
     if extra_footer:
+        # QR a jobb alsó sarokban → a sorok rövidebbek, hogy ne érjenek alá
+        max_line = 100 if data.get("handover_url") else 125
         c.setFont(FONT, 7)
         c.setFillColorRGB(0.25, 0.25, 0.3)
         fy = 31 * mm
@@ -355,11 +361,11 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             if not text:
                 continue
             while text and fy >= 19 * mm:
-                if len(text) <= 125:
+                if len(text) <= max_line:
                     cut = len(text)
                 else:
-                    cut = text.rfind(" ", 0, 125)
-                    cut = cut if cut > 0 else 125
+                    cut = text.rfind(" ", 0, max_line)
+                    cut = cut if cut > 0 else max_line
                 c.drawString(left, fy, text[:cut])
                 text = text[cut:].lstrip()
                 fy -= 3.2 * mm
