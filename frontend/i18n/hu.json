@@ -158,7 +158,8 @@
     "contracts": "Szerződések",
     "quotes": "Ajánlatkérések",
     "intake": "Átvétel",
-    "handover": "Átadás"
+    "handover": "Átadás",
+    "calendar": "Naptár"
   },
   "roles": {
     "admin": "Admin",
@@ -583,7 +584,8 @@
       "worksheet_handed_over": "Gép átadva az ügyfélnek",
       "warehouse_transfer_pending": "Raktár-átadás jóváhagyásra vár",
       "warehouse_transfer_accepted": "Raktár-átadás átvéve",
-      "warehouse_transfer_rejected": "Raktár-átadás elutasítva"
+      "warehouse_transfer_rejected": "Raktár-átadás elutasítva",
+      "warehouse_movement": "Raktárkészlet-mozgás"
     },
     "ops": {
       "eq": "=",
@@ -1561,7 +1563,8 @@
     "warehouse": {
       "transfer_not_found": "Az átadás nem található.",
       "transfer_decided": "Ezt az átadást már elbírálták.",
-      "not_your_transfer": "Ezt az átadást nem te hagyhatod jóvá — a fogadó félnek kell igazolnia az átvételt."
+      "not_your_transfer": "Ezt az átadást nem te hagyhatod jóvá — a fogadó félnek kell igazolnia az átvételt.",
+      "not_your_van": "Ebből az autóból csak a hozzárendelt üzletkötő indíthat kifelé mozgást."
     }
   },
   "inv": {
@@ -1932,7 +1935,7 @@
     "substituteHint": "Jóváhagyott szabadságod/betegséged idején a felelős-képviselői értesítések automatikusan hozzá futnak be."
   },
   "cal": {
-    "title": "Munkarend és Mt.-figyelés",
+    "title": "Naptár",
     "hint": "Az évente rendeletben kihirdetett áthelyezett pihenőnapok és ledolgozó szombatok. A rendszer évente automatikusan lekéri AI-val a következő évet és értesít — itt ellenőrizheted/javíthatod. Havonta automatikus Mt.-változás-ellenőrzés is fut.",
     "builtin": "Beépített (rendeletből rögzített) napok",
     "restDays": "Áthelyezett pihenőnapok (dátumok vesszővel)",
@@ -1943,7 +1946,11 @@
     "runMt": "Mt.-ellenőrzés most",
     "aiAdded": "Új év munkarendje betöltve — ellenőrizd a dátumokat!",
     "aiNothing": "Nincs betölthető új év (már megvan, vagy az AI nem ismeri még a rendeletet).",
-    "mtLast": "Utolsó Mt.-ellenőrzés ({month})"
+    "mtLast": "Utolsó Mt.-ellenőrzés ({month})",
+    "thisWeek": "Ez a hét",
+    "nextWeek": "Jövő hét",
+    "noTasks": "—",
+    "allTasks": "Feladatok listája →"
   },
   "worksheet": {
     "empty": "Adj meg leírást vagy legalább egy munkatételt.",

@@ -65,6 +65,9 @@ TRIGGERS: dict[str, list[str]] = {
     "intake.created": [
         "sorszam", "ugyfel", "gep_nev", "gep_vonalkod", "hibak", "atvette",
     ],
+    "warehouse.movement": [
+        "muvelet", "raktar", "termek_nev", "mennyiseg", "egyseg", "aki", "reszlet",
+    ],
     "warehouse.transfer_pending": [
         "termek_nev", "mennyiseg", "egyseg", "honnan", "hova", "inditotta",
     ],

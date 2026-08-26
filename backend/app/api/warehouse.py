@@ -87,6 +87,40 @@ async def _stock_row(
     return row
 
 
+async def _fire_movement(
+    db: AsyncSession,
+    *,
+    muvelet: str,
+    warehouse_id: uuid.UUID,
+    product: Product,
+    qty: float,
+    actor: User | None = None,
+    actor_id: uuid.UUID | None = None,
+    reszlet: str = "",
+) -> None:
+    """Telegram/automatizálás értesítés minden raktárkészlet-mozgásról
+    (warehouse.movement esemény a fő csoportba)."""
+    wh = (
+        await db.execute(select(Warehouse).where(Warehouse.id == warehouse_id))
+    ).scalar_one_or_none()
+    aki = ""
+    if actor is not None:
+        aki = actor.display_name or actor.email
+    elif actor_id is not None:
+        u = (await db.execute(select(User).where(User.id == actor_id))).scalar_one_or_none()
+        if u is not None:
+            aki = u.display_name or u.email
+    fire_event("warehouse.movement", {
+        "muvelet": muvelet,
+        "raktar": wh.name if wh else "?",
+        "termek_nev": product.name,
+        "mennyiseg": qty,
+        "egyseg": product.unit,
+        "aki": aki,
+        "reszlet": reszlet,
+    })
+
+
 async def warehouse_issue(
     db: AsyncSession,
     *,
@@ -97,7 +131,16 @@ async def warehouse_issue(
     actor_id: uuid.UUID | None,
 ) -> None:
     """Kiadás egy raktárból partner-feltöltéshez. 422, ha nincs elég készlet.
-    A consignment.replenish hívja, amikor forrás-raktár van megadva."""
+    A consignment.replenish hívja, amikor forrás-raktár van megadva.
+    Hozzárendelt üzletkötős autóból CSAK az az üzletkötő adhat ki."""
+    src = (
+        await db.execute(select(Warehouse).where(Warehouse.id == warehouse_id))
+    ).scalar_one_or_none()
+    if (
+        src is not None and src.kind == "van" and src.user_id is not None
+        and src.user_id != actor_id
+    ):
+        raise HTTPException(status_code=403, detail={"code": "warehouse.not_your_van"})
     stock = await _stock_row(db, warehouse_id, product.id)
     if stock.quantity + 1e-9 < quantity:
         raise HTTPException(
@@ -109,6 +152,14 @@ async def warehouse_issue(
         warehouse_id=warehouse_id, product_id=product.id, action="issue",
         quantity_delta=-quantity, ref_id=partner_id, actor_user_id=actor_id,
     ))
+    partner = (
+        await db.execute(select(Partner).where(Partner.id == partner_id))
+    ).scalar_one_or_none()
+    await _fire_movement(
+        db, muvelet="kiadás partnernek", warehouse_id=warehouse_id,
+        product=product, qty=quantity, actor_id=actor_id,
+        reszlet=f"→ {partner.name}" if partner else "",
+    )
 
 
 async def warehouse_receive_return(
@@ -141,6 +192,14 @@ async def warehouse_receive_return(
         warehouse_id=warehouse_id, product_id=product.id, action="receive",
         quantity_delta=quantity, ref_id=partner_id, actor_user_id=actor_id,
     ))
+    partner = (
+        await db.execute(select(Partner).where(Partner.id == partner_id))
+    ).scalar_one_or_none()
+    await _fire_movement(
+        db, muvelet="visszavét partnertől", warehouse_id=warehouse_id,
+        product=product, qty=quantity, actor_id=actor_id,
+        reszlet=f"← {partner.name}" if partner else "",
+    )
 
 
 # ─── Raktárak ───────────────────────────────────────────────────────────────
@@ -541,6 +600,10 @@ async def receive_stock(
         request=request,
     )
     await db.commit()
+    await _fire_movement(
+        db, muvelet="bevételezés", warehouse_id=wh.id, product=product,
+        qty=body.quantity, actor=actor,
+    )
     return WarehouseStockOut(
         product_id=str(product.id), product_name=product.name, unit=product.unit,
         quantity=round(stock.quantity, 2), min_quantity=stock.min_quantity,
@@ -568,6 +631,11 @@ async def transfer_stock(
     src = await _get_warehouse_or_404(db, body.from_warehouse_id)
     dst = await _get_warehouse_or_404(db, body.to_warehouse_id)
     product = await _get_product_or_404(db, body.product_id)
+
+    # Hozzárendelt üzletkötős autóból kifelé mozgást KIZÁRÓLAG az az
+    # üzletkötő indíthat — se raktáros, se admin, se másik üzletkötő.
+    if src.kind == "van" and src.user_id is not None and src.user_id != actor.id:
+        raise HTTPException(status_code=403, detail={"code": "warehouse.not_your_van"})
 
     src_stock = await _stock_row(db, src.id, product.id)
     if src_stock.quantity + 1e-9 < body.quantity:
@@ -916,6 +984,11 @@ async def adjust_stock(
         request=request,
     )
     await db.commit()
+    if abs(delta) > 1e-9:
+        await _fire_movement(
+            db, muvelet="leltár-korrekció", warehouse_id=wh.id, product=product,
+            qty=body.counted_qty, actor=actor, reszlet=f"(eltérés: {delta:+g})",
+        )
     return WarehouseStockOut(
         product_id=str(product.id), product_name=product.name, unit=product.unit,
         quantity=round(stock.quantity, 2), min_quantity=stock.min_quantity,

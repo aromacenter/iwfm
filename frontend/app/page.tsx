@@ -14,9 +14,7 @@ export default function Home() {
   useEffect(() => {
     api
       .get<AuthUser>("/api/auth/me")
-      .then((user) =>
-        router.replace(user.role === "employee" ? "/beosztasom" : "/vezerlopult")
-      )
+      .then(() => router.replace("/naptar"))
       .catch(() => router.replace("/login"));
   }, [router]);
   return <div className="p-10 text-slate-500">{t("common.loading")}</div>;

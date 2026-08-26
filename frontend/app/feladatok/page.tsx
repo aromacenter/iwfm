@@ -126,10 +126,13 @@ export default function FeladatokPage() {
       .then((rows) => {
         const r = rows.find((x) => x.id === intakeId);
         if (!r) return;
+        // a címbe a gép mellé az ügyfél neve is bekerül
         const machine = [r.asset_name, r.asset_manufacturer].filter(Boolean).join(" — ");
+        const client = r.client_name ?? r.partner_name ?? "";
+        const title = ["Javítás", machine, client].filter(Boolean).join(" — ");
         setForm((f) => ({
           ...f,
-          title: machine ? `Javítás — ${machine}` : "Javítás",
+          title,
           description: [
             `Átvétel: ${r.serial}`,
             r.faults && `Hiba: ${r.faults}`,

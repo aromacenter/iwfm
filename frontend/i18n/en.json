@@ -158,7 +158,8 @@
     "contracts": "Contracts",
     "quotes": "Quote requests",
     "intake": "Intake",
-    "handover": "Handover"
+    "handover": "Handover",
+    "calendar": "Calendar"
   },
   "roles": {
     "admin": "Admin",
@@ -583,7 +584,8 @@
       "worksheet_handed_over": "Machine handed over",
       "warehouse_transfer_pending": "Warehouse transfer awaiting approval",
       "warehouse_transfer_accepted": "Warehouse transfer received",
-      "warehouse_transfer_rejected": "Warehouse transfer rejected"
+      "warehouse_transfer_rejected": "Warehouse transfer rejected",
+      "warehouse_movement": "Warehouse stock movement"
     },
     "ops": {
       "eq": "=",
@@ -1561,7 +1563,8 @@
     "warehouse": {
       "transfer_not_found": "Transfer not found.",
       "transfer_decided": "This transfer has already been decided.",
-      "not_your_transfer": "You cannot approve this transfer — the receiving party must confirm receipt."
+      "not_your_transfer": "You cannot approve this transfer — the receiving party must confirm receipt.",
+      "not_your_van": "Only the assigned sales rep can move stock out of this van."
     }
   },
   "inv": {
@@ -1932,7 +1935,7 @@
     "substituteHint": "During your approved leave/sickness, responsible-agent notifications are routed to them automatically."
   },
   "cal": {
-    "title": "Work calendar & labor-law watch",
+    "title": "Calendar",
     "hint": "The yearly decree's moved rest days and make-up working Saturdays. The system fetches next year automatically via AI and notifies you — verify/correct here. A monthly labor-code change check also runs.",
     "builtin": "Built-in (decree-recorded) days",
     "restDays": "Moved rest days (dates, comma-separated)",
@@ -1943,7 +1946,11 @@
     "runMt": "Labor-law check now",
     "aiAdded": "New year's calendar loaded — verify the dates!",
     "aiNothing": "Nothing new to load (already present, or the AI doesn't know the decree yet).",
-    "mtLast": "Last labor-law check ({month})"
+    "mtLast": "Last labor-law check ({month})",
+    "thisWeek": "This week",
+    "nextWeek": "Next week",
+    "noTasks": "—",
+    "allTasks": "Task list →"
   },
   "worksheet": {
     "empty": "Provide a description or at least one work item.",

@@ -27,7 +27,10 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: "nav.groups.overview",
-    items: [{ href: "/vezerlopult", key: "nav.dashboard", perm: "dashboard", icon: "📊" }],
+    items: [
+      { href: "/naptar", key: "nav.calendar", perm: "always", icon: "📆" },
+      { href: "/vezerlopult", key: "nav.dashboard", perm: "dashboard", icon: "📊" },
+    ],
   },
   {
     labelKey: "nav.groups.operations",
@@ -195,7 +198,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const visibleGroups = NAV_GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((n) =>
-      n.perm === "admin-only" ? user.role === "admin" : perms.includes(n.perm),
+      n.perm === "always"
+        ? true
+        : n.perm === "admin-only" ? user.role === "admin" : perms.includes(n.perm),
     ),
   })).filter((g) => g.items.length > 0);
   const keys = sortBySaved(visibleGroups.map((g) => g.labelKey));

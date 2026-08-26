@@ -218,3 +218,70 @@ async def test_van_to_van_follows_same_flow(client, admin, manager):
     res = await client.post(f"/api/warehouses/transfers/{tid}/accept", headers=rep3_headers)
     assert res.status_code == 200, res.text
     assert await _qty(client, mgr, van2["id"], product["id"]) == 8
+
+
+async def test_van_outward_only_by_assigned_rep(client, admin, manager):
+    """Autóból kifelé mozgást (áthelyezés, partner-feltöltés) csak a
+    hozzárendelt üzletkötő indíthat — raktáros, admin, másik üzletkötő nem."""
+    _, adm = admin
+    _, mgr = manager
+    site, van, product, rep_headers, rep2_headers = await _setup(client, mgr)
+
+    res = await client.post(
+        "/api/warehouses/transfer",
+        json={"from_warehouse_id": site["id"], "to_warehouse_id": van["id"],
+              "product_id": product["id"], "quantity": 30},
+        headers=mgr,
+    )
+    await client.post(
+        f"/api/warehouses/transfers/{res.json()['transfer_id']}/accept",
+        headers=rep_headers,
+    )
+
+    body = {"from_warehouse_id": van["id"], "to_warehouse_id": site["id"],
+            "product_id": product["id"], "quantity": 5}
+    for headers in (mgr, adm, rep2_headers):
+        res = await client.post("/api/warehouses/transfer", json=body, headers=headers)
+        assert res.status_code == 403, res.text
+        assert res.json()["detail"]["code"] == "warehouse.not_your_van"
+    res = await client.post("/api/warehouses/transfer", json=body, headers=rep_headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["pending"] is True
+
+    # partner-feltöltés az autóból forrás-raktárként: ugyanez a szabály
+    partner = (await client.post(
+        "/api/partners", json={"name": "Kifelé Bolt"}, headers=mgr,
+    )).json()
+    rep_body = {"product_id": product["id"], "quantity": 2,
+                "source_warehouse_id": van["id"]}
+    res = await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish", json=rep_body, headers=mgr,
+    )
+    assert res.status_code == 403, res.text
+    res = await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish", json=rep_body,
+        headers=rep_headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+async def test_movement_event_fired(client, manager, monkeypatch):
+    """Minden készletmozgás warehouse.movement eseményt tüzel (Telegram a fő
+    csoportba) — az esemény és a sablon regisztrálva van."""
+    from app.services.wfm import automation, telegram
+
+    assert "warehouse.movement" in automation.TRIGGERS
+    assert "warehouse.movement" in telegram.EVENT_TEMPLATES
+
+    import app.api.warehouse as wh_mod
+
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(wh_mod, "fire_event", lambda ev, ctx: captured.append((ev, ctx)))
+
+    _, mgr = manager
+    site, van, product, rep_headers, _ = await _setup(client, mgr)  # bevételez 100-at
+    assert any(
+        ev == "warehouse.movement" and ctx["muvelet"] == "bevételezés"
+        and ctx["termek_nev"] == "Szemes kávé" and ctx["mennyiseg"] == 100
+        for ev, ctx in captured
+    ), captured

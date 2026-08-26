@@ -32,7 +32,8 @@ export default function LoginPage() {
               password,
               display_name: displayName,
             });
-      router.replace(user.role === "employee" ? "/beosztasom" : "/vezerlopult");
+      void user;
+      router.replace("/naptar"); // a főoldal mindenkinek a naptár
     } catch (err) {
       setError(errorMessage(err));
     } finally {
