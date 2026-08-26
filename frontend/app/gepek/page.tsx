@@ -11,7 +11,7 @@ import IconLegend from "@/components/IconLegend";
 import PartnerInfo from "@/components/PartnerInfo";
 import PartnerPicker from "@/components/PartnerPicker";
 import SearchSelect from "@/components/SearchSelect";
-import { api, ApiError, downloadFile, downloadFilePost, errorMessage } from "@/lib/api";
+import { api, ApiError, downloadFilePost, errorMessage, printFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -188,9 +188,10 @@ export default function GepekPage() {
     });
   }
 
+  // A sor QR-címke gombja nyomtatási ablakot nyit (nem letölt)
   async function downloadQrLabel(a: Asset) {
     try {
-      await downloadFile(`/api/assets/${a.id}/qr-label`, `QR-${a.barcode}.pdf`);
+      await printFile(`/api/assets/${a.id}/qr-label`);
     } catch (err) {
       toast(errorMessage(err), "error");
     }
