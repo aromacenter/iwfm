@@ -46,6 +46,7 @@ async def _qty(client, mgr, wh_id, product_id):
 
 
 async def test_transfer_to_van_needs_rep_approval(client, admin, manager):
+    _, adm = admin
     _, mgr = manager
     site, van, product, rep_headers, rep2_headers = await _setup(client, mgr)
 
@@ -69,6 +70,12 @@ async def test_transfer_to_van_needs_rep_approval(client, admin, manager):
     assert res.status_code == 403
     res = await client.post(f"/api/warehouses/transfers/{tr['id']}/accept", headers=rep2_headers)
     assert res.status_code == 403
+    # meg az admin SEM fogadhatja el mas neveben
+    res = await client.post(f"/api/warehouses/transfers/{tr['id']}/accept", headers=adm)
+    assert res.status_code == 403
+    # a nem erintett uzletkoto a listaban SEM latja
+    rows = (await client.get("/api/warehouses/transfers?status=pending", headers=rep2_headers)).json()
+    assert all(r["id"] != tr["id"] for r in rows)
 
     # az autóhoz rendelt üzletkötő igazolja az átvételt → rákerül az autóra
     rows = (await client.get("/api/warehouses/transfers?status=pending", headers=rep_headers)).json()
@@ -165,3 +172,49 @@ async def test_site_to_site_transfer_stays_immediate(client, admin, manager):
     assert res.status_code == 200, res.text
     assert res.json()["pending"] is False
     assert await _qty(client, mgr, site2["id"], product["id"]) == 20
+
+
+async def test_van_to_van_follows_same_flow(client, admin, manager):
+    """Autóról autóra: ugyanaz a szisztéma — a CÉL-autó üzletkötője igazol,
+    a küldő üzletkötő (és a raktáros) nem."""
+    _, mgr = manager
+    site, van, product, rep_headers, _rep2 = await _setup(client, mgr)
+    rep3_user, rep3_headers = await make_user(email="rep3@example.com", role="uzletkoto")
+    van2 = (await client.post(
+        "/api/warehouses",
+        json={"name": "Autó-2", "kind": "van", "user_id": str(rep3_user.id)},
+        headers=mgr,
+    )).json()
+
+    # készlet az 1-es autóra (elfogadott átadással)
+    res = await client.post(
+        "/api/warehouses/transfer",
+        json={"from_warehouse_id": site["id"], "to_warehouse_id": van["id"],
+              "product_id": product["id"], "quantity": 20},
+        headers=mgr,
+    )
+    await client.post(
+        f"/api/warehouses/transfers/{res.json()['transfer_id']}/accept",
+        headers=rep_headers,
+    )
+
+    # rep1 átad a rep3 autójára → függő; csak rep3 igazolhatja
+    res = await client.post(
+        "/api/warehouses/transfer",
+        json={"from_warehouse_id": van["id"], "to_warehouse_id": van2["id"],
+              "product_id": product["id"], "quantity": 8},
+        headers=rep_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["pending"] is True
+    tid = res.json()["transfer_id"]
+    assert await _qty(client, mgr, van["id"], product["id"]) == 12
+    assert await _qty(client, mgr, van2["id"], product["id"]) == 0
+
+    res = await client.post(f"/api/warehouses/transfers/{tid}/accept", headers=rep_headers)
+    assert res.status_code == 403  # a küldő nem
+    res = await client.post(f"/api/warehouses/transfers/{tid}/accept", headers=mgr)
+    assert res.status_code == 403  # a raktáros sem
+    res = await client.post(f"/api/warehouses/transfers/{tid}/accept", headers=rep3_headers)
+    assert res.status_code == 200, res.text
+    assert await _qty(client, mgr, van2["id"], product["id"]) == 8

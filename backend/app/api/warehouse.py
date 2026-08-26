@@ -664,13 +664,12 @@ class TransferRowOut(BaseModel):
 
 
 def _can_decide(t: WarehouseTransfer, dst: Warehouse, actor: User) -> bool:
-    """Autóra menőt csak az autó üzletkötője (vagy admin); telephelyre (vagy
-    üzletkötő nélküli autóra) menőt bárki raktár-joggal, kivéve magát a
-    küldőt (admin kivétel)."""
+    """Hozzárendelt üzletkötős autóra menőt KIZÁRÓLAG az az üzletkötő
+    fogadhat el, a saját belépésével (még az admin sem más nevében);
+    telephelyre vagy gazdátlan autóra menőt bárki raktár-joggal, kivéve
+    magát a küldőt."""
     if t.status != "pending":
         return False
-    if actor.role == "admin":
-        return True
     if dst.kind == "van" and dst.user_id is not None:
         return dst.user_id == actor.id
     return t.created_by != actor.id
@@ -709,6 +708,15 @@ async def _transfer_rows(
         src, dst = whs.get(t.from_warehouse_id), whs.get(t.to_warehouse_id)
         p = prods.get(t.product_id)
         creator = users.get(t.created_by) if t.created_by else None
+        # Csak az érintettek látják: a fogadó fél (aki dönthet), a küldő
+        # (aki visszavonhat / követi) és az admin (felügyelet).
+        involved = (
+            (dst is not None and _can_decide(t, dst, actor))
+            or t.created_by == actor.id
+            or actor.role == "admin"
+        )
+        if not involved:
+            continue
         out.append(TransferRowOut(
             id=str(t.id),
             from_warehouse=src.name if src else "?",
