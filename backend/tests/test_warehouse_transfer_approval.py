@@ -70,9 +70,9 @@ async def test_transfer_to_van_needs_rep_approval(client, admin, manager):
     assert res.status_code == 403
     res = await client.post(f"/api/warehouses/transfers/{tr['id']}/accept", headers=rep2_headers)
     assert res.status_code == 403
-    # meg az admin SEM fogadhatja el mas neveben
-    res = await client.post(f"/api/warehouses/transfers/{tr['id']}/accept", headers=adm)
-    assert res.status_code == 403
+    # az ADMIN elbirálhatja (felugyeleti jog) — itt csak a jogot ellenorizzuk
+    rows_adm = (await client.get("/api/warehouses/transfers?status=pending", headers=adm)).json()
+    assert next(r for r in rows_adm if r["id"] == tr["id"])["can_decide"] is True
     # a nem erintett uzletkoto a listaban SEM latja
     rows = (await client.get("/api/warehouses/transfers?status=pending", headers=rep2_headers)).json()
     assert all(r["id"] != tr["id"] for r in rows)
@@ -285,3 +285,20 @@ async def test_movement_event_fired(client, manager, monkeypatch):
         and ctx["termek_nev"] == "Szemes kávé" and ctx["mennyiseg"] == 100
         for ev, ctx in captured
     ), captured
+
+
+async def test_admin_can_accept_any_transfer(client, admin, manager):
+    """Az admin BÁRMILYEN függő átadást elfogadhat — autóra menőt is."""
+    _, adm = admin
+    _, mgr = manager
+    site, van, product, _rep, _rep2 = await _setup(client, mgr)
+    res = await client.post(
+        "/api/warehouses/transfer",
+        json={"from_warehouse_id": site["id"], "to_warehouse_id": van["id"],
+              "product_id": product["id"], "quantity": 12},
+        headers=mgr,
+    )
+    tid = res.json()["transfer_id"]
+    res = await client.post(f"/api/warehouses/transfers/{tid}/accept", headers=adm)
+    assert res.status_code == 200, res.text
+    assert await _qty(client, mgr, van["id"], product["id"]) == 12

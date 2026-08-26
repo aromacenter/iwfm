@@ -732,12 +732,14 @@ class TransferRowOut(BaseModel):
 
 
 def _can_decide(t: WarehouseTransfer, dst: Warehouse, actor: User) -> bool:
-    """Hozzárendelt üzletkötős autóra menőt KIZÁRÓLAG az az üzletkötő
-    fogadhat el, a saját belépésével (még az admin sem más nevében);
-    telephelyre vagy gazdátlan autóra menőt bárki raktár-joggal, kivéve
-    magát a küldőt."""
+    """Az ADMIN minden átadást elbírálhat. Hozzárendelt üzletkötős autóra
+    menőt rajta kívül kizárólag az az üzletkötő fogadhat el, a saját
+    belépésével; telephelyre vagy gazdátlan autóra menőt bárki
+    raktár-joggal, kivéve magát a küldőt."""
     if t.status != "pending":
         return False
+    if actor.role == "admin":
+        return True
     if dst.kind == "van" and dst.user_id is not None:
         return dst.user_id == actor.id
     return t.created_by != actor.id
