@@ -65,6 +65,15 @@ TRIGGERS: dict[str, list[str]] = {
     "intake.created": [
         "sorszam", "ugyfel", "gep_nev", "gep_vonalkod", "hibak", "atvette",
     ],
+    "warehouse.transfer_pending": [
+        "termek_nev", "mennyiseg", "egyseg", "honnan", "hova", "inditotta",
+    ],
+    "warehouse.transfer_accepted": [
+        "termek_nev", "mennyiseg", "egyseg", "honnan", "hova", "dontott",
+    ],
+    "warehouse.transfer_rejected": [
+        "termek_nev", "mennyiseg", "egyseg", "honnan", "hova", "dontott", "indok",
+    ],
 }
 
 OPS = ("eq", "ne", "gte", "lte", "contains")

@@ -99,6 +99,22 @@ interface AssignableUser {
   role: string;
 }
 
+interface PendingTransfer {
+  id: string;
+  from_warehouse: string;
+  to_warehouse: string;
+  to_kind: "site" | "van";
+  product_name: string;
+  unit: string;
+  quantity: number;
+  note: string | null;
+  status: string;
+  created_by_name: string | null;
+  created_at: string;
+  can_decide: boolean;
+  can_cancel: boolean;
+}
+
 const PO_CHIP: Record<PO["status"], string> = {
   draft: "bg-slate-100 text-slate-700",
   ordered: "bg-sky-100 text-sky-800",
@@ -135,6 +151,29 @@ export default function RaktarPage() {
     api.get<AssignableUser[]>("/api/warehouses/assignable-users").then(setAssignUsers).catch(() => {});
   }, []);
   useEffect(load, [load]);
+
+  // ── Függő átadások (telephely↔autó, jóváhagyással) ──
+  const [transfers, setTransfers] = useState<PendingTransfer[]>([]);
+  const loadTransfers = useCallback(() => {
+    api.get<PendingTransfer[]>("/api/warehouses/transfers?status=pending").then(setTransfers).catch(() => {});
+  }, []);
+  useEffect(loadTransfers, [loadTransfers]);
+
+  async function decideTransfer(tr: PendingTransfer, verb: "accept" | "reject" | "cancel") {
+    const msg =
+      verb === "accept" ? t("wh.transferAcceptConfirm", { qty: tr.quantity, unit: tr.unit, product: tr.product_name })
+      : verb === "reject" ? t("wh.transferRejectConfirm", { product: tr.product_name })
+      : t("wh.transferCancelConfirm", { product: tr.product_name });
+    if (!(await confirm(msg))) return;
+    try {
+      await api.post(`/api/warehouses/transfers/${tr.id}/${verb}`, {});
+      toast(t(`wh.transfer_${verb}Done`), "success");
+      loadTransfers();
+      loadStock();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   const loadStock = useCallback(() => {
     if (!selectedId) { setStock([]); setMovements([]); return; }
@@ -220,13 +259,23 @@ export default function RaktarPage() {
           note: action.note || null,
         });
       } else if (action.kind === "transfer") {
-        await api.post("/api/warehouses/transfer", {
+        const res = await api.post<{ pending?: boolean }>("/api/warehouses/transfer", {
           from_warehouse_id: selectedId,
           to_warehouse_id: action.to_id,
           product_id: action.product_id,
           quantity: Number(action.qty),
           note: action.note || null,
         });
+        // Autót érintő mozgás: a fogadó félnek jóvá kell hagynia
+        if (res.pending) {
+          toast(t("wh.transferPendingCreated"), "success");
+          setAction(null);
+          load();
+          loadStock();
+          loadTransfers();
+          setBusy(false);
+          return;
+        }
       } else {
         await api.post(`/api/warehouses/${selectedId}/adjust`, {
           product_id: action.product_id,
@@ -365,6 +414,53 @@ export default function RaktarPage() {
           {t("wh.new")}
         </button>
       </div>
+
+      {/* Függő átadások: a fogadó fél igazolja az átvételt */}
+      {transfers.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div className="mb-2 text-sm font-semibold text-amber-900">
+            🚚 {t("wh.pendingTransfers", { count: transfers.length })}
+          </div>
+          <ul className="space-y-2">
+            {transfers.map((tr) => (
+              <li key={tr.id} className="flex flex-wrap items-center gap-2 text-sm text-amber-900">
+                <span>
+                  <b>{tr.product_name}</b> — {fmtQty(tr.quantity)} {tr.unit} · {tr.from_warehouse} → <b>{tr.to_warehouse}</b>
+                  {tr.created_by_name && <span className="text-amber-700"> · {tr.created_by_name}</span>}
+                  {tr.note && <span className="text-amber-700"> · „{tr.note}”</span>}
+                </span>
+                {tr.can_decide && (
+                  <span className="flex gap-1.5">
+                    <button
+                      onClick={() => decideTransfer(tr, "accept")}
+                      className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                    >
+                      ✔ {t("wh.transferAccept")}
+                    </button>
+                    <button
+                      onClick={() => decideTransfer(tr, "reject")}
+                      className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-medium text-white hover:bg-rose-700"
+                    >
+                      ✖ {t("wh.transferReject")}
+                    </button>
+                  </span>
+                )}
+                {!tr.can_decide && tr.can_cancel && (
+                  <button
+                    onClick={() => decideTransfer(tr, "cancel")}
+                    className="rounded-lg border border-amber-400 px-3 py-1 text-xs text-amber-800 hover:bg-amber-100"
+                  >
+                    {t("wh.transferCancel")}
+                  </button>
+                )}
+                {!tr.can_decide && !tr.can_cancel && (
+                  <span className="text-xs text-amber-600">⏳ {t("wh.transferWaiting")}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {suggestions.length > 0 && (
         <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">

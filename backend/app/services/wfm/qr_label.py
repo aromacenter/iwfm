@@ -140,18 +140,18 @@ def build_qr_labels_ezpl(items: list[dict]) -> bytes:
     kiküldhető. 203 dpi (8 dot/mm): 51 mm = 408 dot, 25 mm = 200 dot.
     QR: W parancs (x,y,mode,type,ec,mask,mul,len,rotate + adatsor).
 
-    Minden szövegsor a gép nevéhez hasonló, jól olvasható méretben megy ki
-    (dupla magasság; a hosszú sorok keskenyebb betűvel, hogy kiférjenek).
-    Ügyfél behozott gépénél (customer_owned) a tulajdon-felirat lemarad."""
+    MINDEN szövegsor pontosan a gép nevének betűjével (AB-font, 1×) megy ki —
+    a hosszú tulajdon-felirat ezért két sorba törve fér el. Ügyfél behozott
+    gépénél (customer_owned) a tulajdon-felirat lemarad."""
     TEXT_X = 170
-    MAX_W = 408 - TEXT_X - 4  # a szövegoszlop szélessége dotban
+    MAX_CHARS = 18  # ennyi AB-karakter fér el a szövegoszlopban
 
     out: list[str] = []
     for item in items:
         url = str(item["url"])
-        name = _ascii(str(item.get("name") or ""))[:24]
+        name = _ascii(str(item.get("name") or ""))[:MAX_CHARS]
         barcode = str(item.get("barcode") or "")
-        serial = _ascii(str(item.get("serial_number") or ""))[:18]
+        serial = _ascii(str(item.get("serial_number") or ""))
         out += [
             "^Q25,3",   # címkemagasság 25 mm, rés 3 mm
             "^W51",     # címkeszélesség 51 mm
@@ -167,24 +167,21 @@ def build_qr_labels_ezpl(items: list[dict]) -> bytes:
             "^E12",
             "~R255",
             "^L",
-            # a QR függőlegesen nagyjából középre kerül (nem a lap tetejére)
-            f"W12,28,5,2,M,8,3,{len(url)},0",
+            # a QR lejjebb tolva, hogy ne a lap tetején üljön
+            f"W12,40,5,2,M,8,3,{len(url)},0",
             url,
-            f"AB,{TEXT_X},8,1,1,0,0,{name}",
         ]
-        texts = [f"Kod: {barcode}"]
+        texts = [name, f"Kod: {barcode}"[:MAX_CHARS]]
         if serial:
-            texts.append(f"Gy.sz: {serial}")
+            texts.append(f"Gy.sz: {serial}"[:MAX_CHARS])
         if not item.get("customer_owned"):
-            texts.append("X-Presso Coffee Kft tulajdona")
-        texts.append("Olvassa be a QR-kodot!")
-        y = 48
+            texts += ["X-Presso Coffee", "Kft tulajdona"]
+        texts.append("Olvassa be a QR-t!")
+        # legfeljebb 6 sor: 8, 38, 68, 98, 128, 158 (egy sor ~20 dot magas)
+        y = 8
         for text in texts:
-            # AA-font: 8 dot/karakter — ha duplán szélesen kifér, úgy megy,
-            # különben sima szélesség; a magasság mindig dupla (olvasható).
-            mul_x = 2 if 16 * len(text) <= MAX_W else 1
-            out.append(f"AA,{TEXT_X},{y},{mul_x},2,0,0,{text}")
-            y += 34
+            out.append(f"AB,{TEXT_X},{y},1,1,0,0,{text}")
+            y += 30
         out.append("E")
     return ("\n".join(out) + "\n").encode("ascii", errors="replace")
 

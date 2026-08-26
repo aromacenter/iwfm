@@ -27,7 +27,9 @@ from app.models import (
     Warehouse,
     WarehouseMovement,
     WarehouseStock,
+    WarehouseTransfer,
 )
+from app.services.wfm.automation import fire_event
 
 router = APIRouter()
 po_router = APIRouter()
@@ -573,6 +575,44 @@ async def transfer_stock(
             status_code=422,
             detail={"code": "warehouse.insufficient_stock", "available": src_stock.quantity},
         )
+
+    # Autót érintő mozgás NEM azonnali: függő átadás lesz, amit a fogadó fél
+    # (autónál a hozzárendelt üzletkötő, telephelynél a raktáros) hagy jóvá.
+    # A forrásról már most lekerül a mennyiség (úton van).
+    if src.kind == "van" or dst.kind == "van":
+        src_stock.quantity -= body.quantity
+        transfer = WarehouseTransfer(
+            from_warehouse_id=src.id, to_warehouse_id=dst.id,
+            product_id=product.id, quantity=body.quantity, note=body.note,
+            status="pending", created_by=actor.id,
+        )
+        db.add(transfer)
+        await db.flush()
+        db.add(WarehouseMovement(
+            warehouse_id=src.id, product_id=product.id, action="transfer_out",
+            quantity_delta=-body.quantity, ref_id=dst.id,
+            note=f"függő átadás → {dst.name}" + (f" ({body.note})" if body.note else ""),
+            actor_user_id=actor.id,
+        ))
+        await record_audit(
+            db, actor=actor, action="warehouse.transfer_pending", entity_type="warehouse",
+            entity_id=str(src.id),
+            detail={"to": dst.name, "product": product.name, "qty": body.quantity},
+            request=request,
+        )
+        await db.commit()
+        fire_event("warehouse.transfer_pending", {
+            "termek_nev": product.name, "mennyiseg": body.quantity,
+            "egyseg": product.unit, "honnan": src.name, "hova": dst.name,
+            "inditotta": actor.display_name or actor.email,
+        })
+        return {
+            "ok": True,
+            "pending": True,
+            "transfer_id": str(transfer.id),
+            "from_quantity": round(src_stock.quantity, 2),
+        }
+
     dst_stock = await _stock_row(db, dst.id, product.id)
     src_stock.quantity -= body.quantity
     dst_stock.quantity += body.quantity
@@ -595,9 +635,241 @@ async def transfer_stock(
     await db.commit()
     return {
         "ok": True,
+        "pending": False,
         "from_quantity": round(src_stock.quantity, 2),
         "to_quantity": round(dst_stock.quantity, 2),
     }
+
+
+# ─── Függő átadások (telephely↔autó jóváhagyással) ──────────────────────────
+
+
+class TransferRowOut(BaseModel):
+    id: str
+    from_warehouse: str
+    to_warehouse: str
+    to_kind: str
+    product_name: str
+    unit: str
+    quantity: float
+    note: str | None
+    status: str
+    created_by_name: str | None
+    created_at: datetime
+    decided_at: datetime | None
+    decision_note: str | None
+    # A bejelentkezett felhasználó dönthet-e / vonhatja-e vissza
+    can_decide: bool
+    can_cancel: bool
+
+
+def _can_decide(t: WarehouseTransfer, dst: Warehouse, actor: User) -> bool:
+    """Autóra menőt csak az autó üzletkötője (vagy admin); telephelyre (vagy
+    üzletkötő nélküli autóra) menőt bárki raktár-joggal, kivéve magát a
+    küldőt (admin kivétel)."""
+    if t.status != "pending":
+        return False
+    if actor.role == "admin":
+        return True
+    if dst.kind == "van" and dst.user_id is not None:
+        return dst.user_id == actor.id
+    return t.created_by != actor.id
+
+
+async def _transfer_rows(
+    db: AsyncSession, actor: User, status: str | None
+) -> list[TransferRowOut]:
+    q = select(WarehouseTransfer).order_by(WarehouseTransfer.created_at.desc()).limit(100)
+    if status:
+        q = q.where(WarehouseTransfer.status == status)
+    rows = (await db.execute(q)).scalars().all()
+    if not rows:
+        return []
+    wh_ids = {t.from_warehouse_id for t in rows} | {t.to_warehouse_id for t in rows}
+    whs = {
+        w.id: w for w in (
+            await db.execute(select(Warehouse).where(Warehouse.id.in_(wh_ids)))
+        ).scalars().all()
+    }
+    prods = {
+        p.id: p for p in (
+            await db.execute(select(Product).where(
+                Product.id.in_({t.product_id for t in rows})
+            ))
+        ).scalars().all()
+    }
+    user_ids = {t.created_by for t in rows if t.created_by}
+    users = {
+        u.id: u for u in (
+            await db.execute(select(User).where(User.id.in_(user_ids)))
+        ).scalars().all()
+    } if user_ids else {}
+    out = []
+    for t in rows:
+        src, dst = whs.get(t.from_warehouse_id), whs.get(t.to_warehouse_id)
+        p = prods.get(t.product_id)
+        creator = users.get(t.created_by) if t.created_by else None
+        out.append(TransferRowOut(
+            id=str(t.id),
+            from_warehouse=src.name if src else "?",
+            to_warehouse=dst.name if dst else "?",
+            to_kind=dst.kind if dst else "site",
+            product_name=p.name if p else "?",
+            unit=p.unit if p else "",
+            quantity=round(t.quantity, 2),
+            note=t.note,
+            status=t.status,
+            created_by_name=(creator.display_name or creator.email) if creator else None,
+            created_at=t.created_at,
+            decided_at=t.decided_at,
+            decision_note=t.decision_note,
+            can_decide=dst is not None and _can_decide(t, dst, actor),
+            can_cancel=t.status == "pending" and (
+                t.created_by == actor.id or actor.role == "admin"
+            ),
+        ))
+    return out
+
+
+@router.get("/transfers", response_model=list[TransferRowOut])
+async def list_transfers(
+    status: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    return await _transfer_rows(db, actor, status)
+
+
+async def _pending_transfer_or_404(db: AsyncSession, transfer_id: str) -> WarehouseTransfer:
+    tid = _parse_uuid(transfer_id, "warehouse.transfer_not_found")
+    t = (
+        await db.execute(select(WarehouseTransfer).where(WarehouseTransfer.id == tid))
+    ).scalar_one_or_none()
+    if t is None:
+        raise HTTPException(status_code=404, detail={"code": "warehouse.transfer_not_found"})
+    if t.status != "pending":
+        raise HTTPException(status_code=422, detail={"code": "warehouse.transfer_decided"})
+    return t
+
+
+class DecisionBody(BaseModel):
+    note: str | None = Field(default=None, max_length=512)
+
+
+async def _transfer_ctx(db: AsyncSession, t: WarehouseTransfer, actor: User) -> dict:
+    src = (await db.execute(select(Warehouse).where(Warehouse.id == t.from_warehouse_id))).scalar_one_or_none()
+    dst = (await db.execute(select(Warehouse).where(Warehouse.id == t.to_warehouse_id))).scalar_one_or_none()
+    p = (await db.execute(select(Product).where(Product.id == t.product_id))).scalar_one_or_none()
+    return {
+        "termek_nev": p.name if p else "?", "mennyiseg": t.quantity,
+        "egyseg": p.unit if p else "", "honnan": src.name if src else "?",
+        "hova": dst.name if dst else "?",
+        "dontott": actor.display_name or actor.email,
+    }
+
+
+@router.post("/transfers/{transfer_id}/accept")
+async def accept_transfer(
+    transfer_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Az átadás átvételének igazolása — csak ekkor kerül a cél-raktárra."""
+    t = await _pending_transfer_or_404(db, transfer_id)
+    dst = (
+        await db.execute(select(Warehouse).where(Warehouse.id == t.to_warehouse_id))
+    ).scalar_one_or_none()
+    if dst is None or not _can_decide(t, dst, actor):
+        raise HTTPException(status_code=403, detail={"code": "warehouse.not_your_transfer"})
+    dst_stock = await _stock_row(db, dst.id, t.product_id)
+    dst_stock.quantity += t.quantity
+    db.add(WarehouseMovement(
+        warehouse_id=dst.id, product_id=t.product_id, action="transfer_in",
+        quantity_delta=t.quantity, ref_id=t.from_warehouse_id,
+        note="átadás elfogadva", actor_user_id=actor.id,
+    ))
+    t.status = "accepted"
+    t.decided_by = actor.id
+    t.decided_at = datetime.now(UTC)
+    await record_audit(
+        db, actor=actor, action="warehouse.transfer_accepted", entity_type="warehouse",
+        entity_id=str(dst.id), detail={"transfer": str(t.id), "qty": t.quantity},
+        request=request,
+    )
+    ctx = await _transfer_ctx(db, t, actor)
+    await db.commit()
+    fire_event("warehouse.transfer_accepted", ctx)
+    return {"ok": True, "to_quantity": round(dst_stock.quantity, 2)}
+
+
+@router.post("/transfers/{transfer_id}/reject")
+async def reject_transfer(
+    transfer_id: str,
+    body: DecisionBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Az átadás elutasítása — a mennyiség visszakerül a forrás-raktárra."""
+    t = await _pending_transfer_or_404(db, transfer_id)
+    dst = (
+        await db.execute(select(Warehouse).where(Warehouse.id == t.to_warehouse_id))
+    ).scalar_one_or_none()
+    if dst is None or not _can_decide(t, dst, actor):
+        raise HTTPException(status_code=403, detail={"code": "warehouse.not_your_transfer"})
+    src_stock = await _stock_row(db, t.from_warehouse_id, t.product_id)
+    src_stock.quantity += t.quantity
+    db.add(WarehouseMovement(
+        warehouse_id=t.from_warehouse_id, product_id=t.product_id, action="transfer_in",
+        quantity_delta=t.quantity, ref_id=t.to_warehouse_id,
+        note="elutasított átadás visszavéve", actor_user_id=actor.id,
+    ))
+    t.status = "rejected"
+    t.decided_by = actor.id
+    t.decided_at = datetime.now(UTC)
+    t.decision_note = body.note
+    await record_audit(
+        db, actor=actor, action="warehouse.transfer_rejected", entity_type="warehouse",
+        entity_id=str(t.from_warehouse_id),
+        detail={"transfer": str(t.id), "qty": t.quantity, "note": body.note},
+        request=request,
+    )
+    ctx = await _transfer_ctx(db, t, actor)
+    ctx["indok"] = body.note or ""
+    await db.commit()
+    fire_event("warehouse.transfer_rejected", ctx)
+    return {"ok": True, "from_quantity": round(src_stock.quantity, 2)}
+
+
+@router.post("/transfers/{transfer_id}/cancel")
+async def cancel_transfer(
+    transfer_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """A küldő visszavonja a saját függő átadását — a készlet visszakerül."""
+    t = await _pending_transfer_or_404(db, transfer_id)
+    if t.created_by != actor.id and actor.role != "admin":
+        raise HTTPException(status_code=403, detail={"code": "warehouse.not_your_transfer"})
+    src_stock = await _stock_row(db, t.from_warehouse_id, t.product_id)
+    src_stock.quantity += t.quantity
+    db.add(WarehouseMovement(
+        warehouse_id=t.from_warehouse_id, product_id=t.product_id, action="transfer_in",
+        quantity_delta=t.quantity, ref_id=t.to_warehouse_id,
+        note="visszavont átadás", actor_user_id=actor.id,
+    ))
+    t.status = "cancelled"
+    t.decided_by = actor.id
+    t.decided_at = datetime.now(UTC)
+    await record_audit(
+        db, actor=actor, action="warehouse.transfer_cancelled", entity_type="warehouse",
+        entity_id=str(t.from_warehouse_id), detail={"transfer": str(t.id)},
+        request=request,
+    )
+    await db.commit()
+    return {"ok": True, "from_quantity": round(src_stock.quantity, 2)}
 
 
 class AdjustBody(BaseModel):

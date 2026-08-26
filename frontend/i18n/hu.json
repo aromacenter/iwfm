@@ -583,7 +583,10 @@
       "intake_created": "Gép átvéve (Átvétel)",
       "worksheet_quote_accepted": "Árajánlat elfogadva",
       "worksheet_picked_up": "Gép elhozva a szerelőtől",
-      "worksheet_handed_over": "Gép átadva az ügyfélnek"
+      "worksheet_handed_over": "Gép átadva az ügyfélnek",
+      "warehouse_transfer_pending": "Raktár-átadás jóváhagyásra vár",
+      "warehouse_transfer_accepted": "Raktár-átadás átvéve",
+      "warehouse_transfer_rejected": "Raktár-átadás elutasítva"
     },
     "ops": {
       "eq": "=",
@@ -1558,7 +1561,12 @@
     "quote.bad_agent": "A megadott üzletkötő nem található.",
     "stock.return_empty": "Nincs mit visszavenni — a partner készlete üres.",
     "stock.return_too_much": "A visszavett mennyiség több, mint a partner készlete.",
-    "asset.tangible_xor_customer": "Egy gép nem lehet egyszerre tárgyi eszköz ÉS az ügyfél saját gépe — válaszd az egyiket."
+    "asset.tangible_xor_customer": "Egy gép nem lehet egyszerre tárgyi eszköz ÉS az ügyfél saját gépe — válaszd az egyiket.",
+    "warehouse": {
+      "transfer_not_found": "Az átadás nem található.",
+      "transfer_decided": "Ezt az átadást már elbírálták.",
+      "not_your_transfer": "Ezt az átadást nem te hagyhatod jóvá — a fogadó félnek kell igazolnia az átvételt."
+    }
   },
   "inv": {
     "title": "Gépek",
@@ -1709,7 +1717,19 @@
     "noMovements": "Nincs mozgás a szűrésnek megfelelően.",
     "delete": "Törlés",
     "deleteConfirm": "Biztosan törlöd a(z) „{name}” raktárat? A mozgástörténete is törlődik — az audit-napló megmarad.",
-    "deleted": "Raktár törölve."
+    "deleted": "Raktár törölve.",
+    "transferPendingCreated": "Az átadás rögzítve — a fogadó fél jóváhagyására vár, addig „úton van”.",
+    "pendingTransfers": "Jóváhagyásra váró átadások ({count})",
+    "transferAccept": "Átvettem",
+    "transferReject": "Elutasítom",
+    "transferCancel": "Visszavonás",
+    "transferWaiting": "a fogadó jóváhagyására vár",
+    "transferAcceptConfirm": "Igazolod az átvételt? {product} — {qty} {unit} ezzel rákerül a raktárra.",
+    "transferRejectConfirm": "Elutasítod az átadást ({product})? A mennyiség visszakerül a küldő raktárába.",
+    "transferCancelConfirm": "Visszavonod az átadást ({product})? A mennyiség visszakerül a raktárba.",
+    "transfer_acceptDone": "Átvétel igazolva — a készlet rákerült a raktárra.",
+    "transfer_rejectDone": "Átadás elutasítva — a készlet visszakerült a küldőhöz.",
+    "transfer_cancelDone": "Átadás visszavonva."
   },
   "po": {
     "title": "Beszerzési rendelések",

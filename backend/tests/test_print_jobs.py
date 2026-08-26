@@ -115,5 +115,6 @@ async def test_customer_owned_label_has_no_owner_text(client, admin, manager):
     cust_payload = next(p for lbl, p in by_label.items() if "PRN-CUST" in lbl)
     assert "tulajdona" in own_payload
     assert "tulajdona" not in cust_payload
-    # minden szövegsor dupla magassaggal megy ki (olvashato meret)
-    assert ",1,2,0,0,Kod:" in cust_payload or ",2,2,0,0,Kod:" in cust_payload
+    # minden szövegsor a gépnév betűjével (AB-font, 1×) megy ki
+    assert ",1,1,0,0,Kod:" in cust_payload
+    assert "\nAA," not in cust_payload

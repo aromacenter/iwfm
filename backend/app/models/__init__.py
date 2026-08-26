@@ -49,6 +49,7 @@ from app.models.models import (  # noqa: F401
     Warehouse,
     WarehouseMovement,
     WarehouseStock,
+    WarehouseTransfer,
     Worksheet,
     WorksheetSettings,
 )

@@ -22,8 +22,10 @@ async def _make_warehouse(client, headers, name="Telephely", kind="site"):
     return res.json()
 
 
-async def test_warehouse_receive_transfer_adjust(client, manager):
-    """Bevét → áthelyezés autóra → elégtelen készlet → leltár-korrekció."""
+async def test_warehouse_receive_transfer_adjust(client, admin, manager):
+    """Bevét → áthelyezés autóra (jóváhagyással) → elégtelen készlet →
+    leltár-korrekció."""
+    _, adm = admin
     _, mgr = manager
     product = await _make_product(client, mgr)
     site = await _make_warehouse(client, mgr, "Telephely", "site")
@@ -43,7 +45,7 @@ async def test_warehouse_receive_transfer_adjust(client, manager):
     prod = next(p for p in res.json() if p["id"] == product["id"])
     assert prod["purchase_price"] == 4200
 
-    # áthelyezés 8 kg az autóra
+    # áthelyezés 8 kg az autóra — függő átadás lesz, a fogadó fél igazolja
     res = await client.post(
         "/api/warehouses/transfer",
         json={
@@ -53,7 +55,12 @@ async def test_warehouse_receive_transfer_adjust(client, manager):
         headers=mgr,
     )
     assert res.status_code == 200, res.text
+    assert res.json()["pending"] is True
     assert res.json()["from_quantity"] == 12.0
+    res = await client.post(
+        f"/api/warehouses/transfers/{res.json()['transfer_id']}/accept", headers=adm,
+    )
+    assert res.status_code == 200, res.text
     assert res.json()["to_quantity"] == 8.0
 
     # elégtelen készlet: 100 kg nem mozgatható
@@ -146,9 +153,10 @@ async def test_stock_manual_assignment(client, manager):
     assert res.json() == []
 
 
-async def test_movements_log_who_what_when(client, manager):
-    """A mozgásnapló rögzíti: ki, mikor, mit, mennyit — vételezés (áthelyezés)
-    és partnernek kiadás ellenoldallal együtt."""
+async def test_movements_log_who_what_when(client, admin, manager):
+    """A mozgásnapló rögzíti: ki, mikor, mit, mennyit — vételezés (áthelyezés
+    jóváhagyással) és partnernek kiadás ellenoldallal együtt."""
+    _, adm = admin
     _, mgr = manager
     product = await _make_product(client, mgr)
     site = await _make_warehouse(client, mgr, "Telephely", "site")
@@ -158,11 +166,14 @@ async def test_movements_log_who_what_when(client, manager):
         json={"product_id": product["id"], "quantity": 12.0, "unit_cost": 4000},
         headers=mgr,
     )
-    await client.post(
+    res = await client.post(
         "/api/warehouses/transfer",
         json={"from_warehouse_id": site["id"], "to_warehouse_id": van["id"],
               "product_id": product["id"], "quantity": 7.0},
         headers=mgr,
+    )
+    await client.post(
+        f"/api/warehouses/transfers/{res.json()['transfer_id']}/accept", headers=adm,
     )
     res = await client.post("/api/partners", json={"name": "Napi Bolt"}, headers=mgr)
     partner = res.json()

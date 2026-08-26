@@ -55,6 +55,9 @@ EVENT_TEMPLATES: dict[str, str] = {
     "worksheet.picked_up": "📦 Gép elhozva a szerelőtől: {{sorszam}} — {{gep_nev}} · az ügyfél értesítve, a gép átvehető",
     "worksheet.handed_over": "🤝 Gép átadva: {{sorszam}} — {{ugyfel}} · {{osszeg_netto}} Ft nettó ({{fizetes_mod}})",
     "intake.created": "📥 Gép átvéve: {{sorszam}} — {{gep_nev}} ({{ugyfel}}) · {{hibak}}",
+    "warehouse.transfer_pending": "🚚 Átadás jóváhagyásra vár: {{termek_nev}} {{mennyiseg}} {{egyseg}} · {{honnan}} → {{hova}} ({{inditotta}})",
+    "warehouse.transfer_accepted": "✅ Átadás átvéve: {{termek_nev}} {{mennyiseg}} {{egyseg}} · {{honnan}} → {{hova}} ({{dontott}})",
+    "warehouse.transfer_rejected": "🚫 Átadás elutasítva: {{termek_nev}} {{mennyiseg}} {{egyseg}} · {{honnan}} → {{hova}} ({{dontott}}) {{indok}}",
 }
 
 

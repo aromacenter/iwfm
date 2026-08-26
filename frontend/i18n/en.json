@@ -583,7 +583,10 @@
       "intake_created": "Machine intake",
       "worksheet_quote_accepted": "Quote accepted",
       "worksheet_picked_up": "Machine picked up from technician",
-      "worksheet_handed_over": "Machine handed over"
+      "worksheet_handed_over": "Machine handed over",
+      "warehouse_transfer_pending": "Warehouse transfer awaiting approval",
+      "warehouse_transfer_accepted": "Warehouse transfer received",
+      "warehouse_transfer_rejected": "Warehouse transfer rejected"
     },
     "ops": {
       "eq": "=",
@@ -1558,7 +1561,12 @@
     "quote.bad_agent": "The selected sales rep was not found.",
     "stock.return_empty": "Nothing to take back — the partner's stock is empty.",
     "stock.return_too_much": "The returned quantity exceeds the partner's stock.",
-    "asset.tangible_xor_customer": "A machine cannot be both a fixed asset AND customer-owned — pick one."
+    "asset.tangible_xor_customer": "A machine cannot be both a fixed asset AND customer-owned — pick one.",
+    "warehouse": {
+      "transfer_not_found": "Transfer not found.",
+      "transfer_decided": "This transfer has already been decided.",
+      "not_your_transfer": "You cannot approve this transfer — the receiving party must confirm receipt."
+    }
   },
   "inv": {
     "title": "Machines",
@@ -1709,7 +1717,19 @@
     "noMovements": "No movements match the filter.",
     "delete": "Delete",
     "deleteConfirm": "Delete warehouse “{name}”? Its movement history is removed too — the audit log is kept.",
-    "deleted": "Warehouse deleted."
+    "deleted": "Warehouse deleted.",
+    "transferPendingCreated": "Transfer recorded — waiting for the receiver's approval; the goods are “in transit”.",
+    "pendingTransfers": "Transfers awaiting approval ({count})",
+    "transferAccept": "Received",
+    "transferReject": "Reject",
+    "transferCancel": "Cancel",
+    "transferWaiting": "waiting for the receiver",
+    "transferAcceptConfirm": "Confirm receipt? {product} — {qty} {unit} will be added to the warehouse.",
+    "transferRejectConfirm": "Reject this transfer ({product})? The quantity returns to the sender's warehouse.",
+    "transferCancelConfirm": "Cancel this transfer ({product})? The quantity returns to the warehouse.",
+    "transfer_acceptDone": "Receipt confirmed — stock added to the warehouse.",
+    "transfer_rejectDone": "Transfer rejected — stock returned to the sender.",
+    "transfer_cancelDone": "Transfer cancelled."
   },
   "po": {
     "title": "Purchase orders",

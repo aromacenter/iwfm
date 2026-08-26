@@ -1520,6 +1520,53 @@ class WarehouseMovement(Base):
     )
 
 
+class WarehouseTransfer(Base):
+    """Függő raktár-átadás (telephely↔autó): a mozgást a FOGADÓ félnek jóvá
+    kell hagynia. Indításkor a forrásról lekerül a mennyiség (úton van), a
+    cél-raktárra csak elfogadáskor könyvelődik; elutasításkor/visszavonáskor
+    visszakerül a forrásra. Autóra menő átadást csak az autóhoz rendelt
+    üzletkötő fogadhat el; autóról telephelyre menőt a raktáros — a küldő a
+    sajátját sosem hagyhatja jóvá."""
+
+    __tablename__ = "warehouse_transfers"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','accepted','rejected','cancelled')",
+            name="ck_wh_transfers_status",
+        ),
+        Index("ix_wh_transfers_status", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    from_warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("warehouses.id", ondelete="CASCADE"), nullable=False
+    )
+    to_warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("warehouses.id", ondelete="CASCADE"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_wh_transfers_creator"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_wh_transfers_decider"),
+        nullable=True,
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    decision_note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+
 class PurchaseOrder(Base):
     """Beszerzési rendelés egy szállítótól (Partner, partner_type supplier/both)
     egy cél-raktárba. Státusz: draft → ordered → received; cancelled."""
