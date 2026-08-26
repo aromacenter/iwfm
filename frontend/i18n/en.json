@@ -1950,7 +1950,9 @@
     "thisWeek": "This week",
     "nextWeek": "Next week",
     "noTasks": "—",
-    "allTasks": "Task list →"
+    "allTasks": "Task list →",
+    "today": "today",
+    "dayEmpty": "Nothing planned for this day."
   },
   "worksheet": {
     "empty": "Provide a description or at least one work item.",

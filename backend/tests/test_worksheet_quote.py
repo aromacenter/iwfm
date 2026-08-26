@@ -312,3 +312,88 @@ async def test_suggested_email_prefill(client, admin, manager):
     # a külsős szervizes nem kapja meg az ügyfél elérhetőségét
     ws = (await client.get(f"/api/me/tasks/{task_id}/worksheet", headers=emp_headers)).json()
     assert ws["suggested_email"] is None
+
+
+async def test_options_locked_after_decision(client, admin, manager, monkeypatch):
+    """Az ügyfél döntése után a konstrukció-lista zárt: semmilyen mentés nem
+    hozhatja vissza a nem választott opciókat; a kiválasztott díjai név
+    szerint frissülhetnek."""
+    _, mgr = manager
+    emp_headers, task_id = await _setup(client, mgr)
+    await client.put(
+        f"/api/me/tasks/{task_id}/worksheet",
+        json={"work_description": "diagnózis", "works": [], "materials": [],
+              "repair_options": [
+                  {"name": "Felújított alkatrésszel", "cost_net": 12000},
+                  {"name": "Új alkatrésszel", "cost_net": 22000},
+              ]},
+        headers=emp_headers,
+    )
+    await client.put(
+        f"/api/tasks/{task_id}/worksheet",
+        json={"work_description": "diagnózis", "works": [], "materials": [],
+              "repair_options": [
+                  {"name": "Felújított alkatrésszel", "cost_net": 12000, "price_net": 19000},
+                  {"name": "Új alkatrésszel", "cost_net": 22000, "price_net": 32000},
+              ]},
+        headers=mgr,
+    )
+
+    async def fake_send(smtp, to, subject, body, attachments=None):
+        fake_send.body = body
+        return True
+
+    async def fake_smtp(db):
+        return {"host": "x"}
+
+    import app.api.tasks as tasks_mod
+
+    monkeypatch.setattr(tasks_mod, "send_email", fake_send)
+    monkeypatch.setattr(tasks_mod, "load_smtp_config", fake_smtp)
+    res = await client.post(
+        f"/api/tasks/{task_id}/worksheet/send-quote",
+        json={"to": "zart@example.com"}, headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    token = fake_send.body.split("munkalap-ajanlat/")[1].splitlines()[0].strip()
+    res = await client.post(
+        f"/api/public/worksheet-quote/{token}/accept",
+        json={"option_name": "Felújított alkatrésszel", "accepted_by": "Zárt Zoltán"},
+    )
+    assert res.status_code == 200, res.text
+
+    # a szervizes MINDKÉT opcióval újra ment → csak a kiválasztott marad
+    res = await client.put(
+        f"/api/me/tasks/{task_id}/worksheet",
+        json={"work_description": "javítás kész",
+              "works": [{"name": "Szivattyú csere", "cost_net": 9000}],
+              "materials": [],
+              "repair_options": [
+                  {"name": "Felújított alkatrésszel", "cost_net": 13000},
+                  {"name": "Új alkatrésszel", "cost_net": 22000},
+              ]},
+        headers=emp_headers,
+    )
+    assert res.status_code == 200, res.text
+    ws = (await client.get(f"/api/tasks/{task_id}/worksheet", headers=mgr)).json()
+    assert [o["name"] for o in ws["repair_options"]] == ["Felújított alkatrésszel"]
+    # a szervizes költség-frissítése név szerint átment, az árunk megmaradt
+    assert ws["repair_options"][0]["cost_net"] == 13000
+    assert ws["repair_options"][0]["price_net"] == 19000
+
+    # a képviselő ár-frissítése a kiválasztotton átmegy, extra opció nem jön vissza
+    res = await client.put(
+        f"/api/tasks/{task_id}/worksheet",
+        json={"work_description": "javítás kész",
+              "works": [{"name": "Szivattyú csere", "cost_net": 9000, "price_net": 15000}],
+              "materials": [],
+              "repair_options": [
+                  {"name": "Felújított alkatrésszel", "cost_net": 13000, "price_net": 21000},
+                  {"name": "Csempészett opció", "cost_net": 1, "price_net": 2},
+              ]},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    ws = (await client.get(f"/api/tasks/{task_id}/worksheet", headers=mgr)).json()
+    assert [o["name"] for o in ws["repair_options"]] == ["Felújított alkatrésszel"]
+    assert ws["repair_options"][0]["price_net"] == 21000

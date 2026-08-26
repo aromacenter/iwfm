@@ -335,6 +335,24 @@ async def _upsert_worksheet(
             for w in new_rows:
                 if w.get("price_net") is None:
                     w["price_net"] = old_prices_by_name.get(str(w.get("name", "")).strip().lower())
+    if not created and (ws.quote_status or "none") in ("accepted", "declined"):
+        # Az ügyfél döntése után a konstrukció-lista ZÁRT: csak a kiválasztott
+        # opció maradhat — semmilyen mentés nem hozhatja vissza a többit; a
+        # megmaradt sor díjai név szerint frissülhetnek.
+        incoming_by_name = {
+            str(w.get("name", "")).strip().lower(): w for w in repair_options
+        }
+        locked = []
+        for old in (ws.repair_options or []):
+            row = dict(old)
+            upd = incoming_by_name.get(str(old.get("name", "")).strip().lower())
+            if upd is not None:
+                if upd.get("cost_net") is not None:
+                    row["cost_net"] = upd["cost_net"]
+                if upd.get("price_net") is not None:
+                    row["price_net"] = upd["price_net"]
+            locked.append(row)
+        repair_options = locked
     ws.works = works
     ws.repair_options = repair_options
     if preserve_prices and ws.external_service:

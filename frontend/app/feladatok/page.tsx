@@ -331,13 +331,19 @@ export default function FeladatokPage() {
 
   async function openPriceEdit(task: TaskOut) {
     try {
-      const ws = await api.get<WsData>(`/api/tasks/${task.id}/worksheet`);
+      const raw = await api.get<WsData>(`/api/tasks/${task.id}/worksheet`);
+      // Az ügyfél döntése után CSAK a kiválasztott konstrukció jelenik meg
+      const options =
+        raw.quote_status === "accepted" && raw.quote_selected_name
+          ? (raw.repair_options ?? []).filter((w) => w.name === raw.quote_selected_name)
+          : raw.repair_options ?? [];
+      const ws = { ...raw, repair_options: options };
       setPriceEdit({
         task,
         ws,
         prices: (ws.materials ?? []).map((m) => (m.price_net != null ? String(m.price_net) : "")),
         workPrices: (ws.works ?? []).map((w) => (w.price_net != null ? String(w.price_net) : "")),
-        repairPrices: (ws.repair_options ?? []).map((w) => (w.price_net != null ? String(w.price_net) : "")),
+        repairPrices: options.map((w) => (w.price_net != null ? String(w.price_net) : "")),
         fee: ws.maintenance_fee != null ? String(ws.maintenance_fee) : "",
         discount: ws.fee_discount,
         customerNote: ws.customer_note ?? "",
@@ -894,11 +900,15 @@ export default function FeladatokPage() {
                 </tbody>
               </table>
             )}
-            {priceEdit.ws.materials.length === 0 ? (
+            {/* a figyelmeztetés csak akkor, ha TÉNYLEG semmilyen tétel nincs */}
+            {priceEdit.ws.materials.length === 0 &&
+              priceEdit.ws.works.length === 0 &&
+              (priceEdit.ws.repair_options ?? []).length === 0 && (
               <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {t("tasks.priceEditEmpty")}
               </p>
-            ) : (
+            )}
+            {priceEdit.ws.materials.length > 0 && (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase text-slate-400">

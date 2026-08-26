@@ -17,6 +17,10 @@ interface CalTask {
   status: "open" | "done" | "needs_more_work";
   due_date: string | null;
   employee_name?: string | null;
+  description?: string | null;
+  worksheet_serial?: string | null;
+  worksheet_completed?: boolean;
+  asset?: { name?: string | null; barcode?: string | null; partner_name?: string | null } | null;
 }
 
 const STATUS_CHIP: Record<CalTask["status"], string> = {
@@ -83,6 +87,9 @@ export default function NaptarPage() {
   const taskHref = canAll ? "/feladatok" : "/feladataim";
   const locale = lang === "en" ? "en-GB" : "hu-HU";
 
+  // Nap-részletező: napra kattintva nagyban mutatja az aznapi teendőket
+  const [openDay, setOpenDay] = useState<string | null>(null);
+
   function week(offsetDays: number, titleKey: string) {
     const days = Array.from({ length: 7 }, (_, i) => addDays(thisMonday, offsetDays + i));
     return (
@@ -96,7 +103,8 @@ export default function NaptarPage() {
             return (
               <div
                 key={key}
-                className={`min-h-28 rounded-2xl border p-2 shadow-sm ${
+                onClick={() => setOpenDay(key)}
+                className={`min-h-28 cursor-pointer rounded-2xl border p-2 shadow-sm transition hover:ring-2 hover:ring-indigo-200 ${
                   isToday
                     ? "border-indigo-400 bg-indigo-50/60 ring-2 ring-indigo-300"
                     : "border-slate-200 bg-white"
@@ -115,6 +123,7 @@ export default function NaptarPage() {
                     <Link
                       key={task.id}
                       href={taskHref}
+                      onClick={(e) => e.stopPropagation()}
                       className={`block truncate rounded-lg border px-1.5 py-1 text-xs hover:opacity-80 ${STATUS_CHIP[task.status]}`}
                       title={task.title + (task.employee_name ? ` — ${task.employee_name}` : "")}
                     >
@@ -151,6 +160,73 @@ export default function NaptarPage() {
       </div>
       {week(0, "cal.thisWeek")}
       {week(7, "cal.nextWeek")}
+
+      {/* Nap-részletező: a kiválasztott nap teendői nagyban */}
+      {openDay && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setOpenDay(null); }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        >
+          <div className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold capitalize">
+                {new Date(`${openDay}T00:00:00`).toLocaleDateString(locale, {
+                  year: "numeric", month: "long", day: "numeric", weekday: "long",
+                })}
+                {openDay === todayIso && (
+                  <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                    {t("cal.today")}
+                  </span>
+                )}
+              </h2>
+              <button
+                onClick={() => setOpenDay(null)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+              >
+                {t("common.close")}
+              </button>
+            </div>
+            {(byDay.get(openDay) ?? []).length === 0 ? (
+              <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+                {t("cal.dayEmpty")}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {(byDay.get(openDay) ?? []).map((task) => (
+                  <Link
+                    key={task.id}
+                    href={taskHref}
+                    className={`block rounded-xl border p-3 hover:opacity-90 ${STATUS_CHIP[task.status]}`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold">{task.title}</span>
+                      <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-medium">
+                        {t(`tasks.statuses.${task.status}`)}
+                      </span>
+                    </div>
+                    <div className="mt-1 space-y-0.5 text-sm opacity-90">
+                      {task.employee_name && <p>👤 {task.employee_name}</p>}
+                      {task.asset?.name && (
+                        <p>☕ {task.asset.name}{task.asset.barcode ? ` (${task.asset.barcode})` : ""}</p>
+                      )}
+                      {task.worksheet_serial && (
+                        <p>🧾 {task.worksheet_serial}{task.worksheet_completed ? " ✓" : ""}</p>
+                      )}
+                      {task.description && (
+                        <p className="whitespace-pre-line text-xs opacity-80">
+                          {task.description.length > 300
+                            ? `${task.description.slice(0, 300)}…`
+                            : task.description}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

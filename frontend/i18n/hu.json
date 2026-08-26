@@ -1950,7 +1950,9 @@
     "thisWeek": "Ez a hét",
     "nextWeek": "Jövő hét",
     "noTasks": "—",
-    "allTasks": "Feladatok listája →"
+    "allTasks": "Feladatok listája →",
+    "today": "ma",
+    "dayEmpty": "Erre a napra nincs betervezett teendő."
   },
   "worksheet": {
     "empty": "Adj meg leírást vagy legalább egy munkatételt.",
