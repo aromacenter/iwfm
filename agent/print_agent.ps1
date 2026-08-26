@@ -11,6 +11,8 @@
 # Automatikus inditashoz futtasd egyszer a telepites.bat-ot.
 
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 5.1 alapbol regi TLS-t hasznal - a szerverhez TLS 1.2 kell
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configPath = Join-Path $dir "print_agent.json"
 $logPath = Join-Path $dir "print_agent.log"
@@ -23,6 +25,14 @@ function Log($msg) {
 if (-not (Test-Path $configPath)) {
     Log "HIBA: nincs print_agent.json - masold a print_agent.json.minta alapjan!"
     exit 1
+}
+
+# Egypeldanyos zar: ha mar fut egy ugynok, ez a peldany csendben kilep
+# (ket peldany minden cimket ketszer nyomtatna).
+$script:mutex = New-Object System.Threading.Mutex($false, "Global\IwfmPrintAgent")
+if (-not $script:mutex.WaitOne(0)) {
+    Log "Mar fut egy ugynok-peldany - ez a peldany kilep."
+    exit 0
 }
 $cfg = Get-Content $configPath -Raw | ConvertFrom-Json
 if (-not $cfg.agent_key) { Log "HIBA: ures agent_key a print_agent.json-ban"; exit 1 }
