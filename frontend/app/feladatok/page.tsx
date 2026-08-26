@@ -959,7 +959,6 @@ export default function FeladatokPage() {
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-xs text-indigo-700">{t("tasks.maintFeeHint")}</p>
             </div>
             {/* Az ügyfél-példány megjegyzése — a szervizes belső leírása helyett */}
             <label className="block text-sm">

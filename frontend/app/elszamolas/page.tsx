@@ -1842,10 +1842,7 @@ export default function ElszamolasPage() {
                   ))}
                 </select>
                 {noVat && (
-                  <span
-                    title={t("cons.noVatHint")}
-                    className="rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800"
-                  >
+                  <span className="rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
                     {t("cons.noVatBadge")}
                   </span>
                 )}
@@ -2009,10 +2006,7 @@ export default function ElszamolasPage() {
                       ✉{s.receipt_sent_at ? "✓" : ""}
                     </button>
                     {s.no_vat ? (
-                      <span
-                        title={t("cons.noVatHint")}
-                        className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
-                      >
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
                         {t("cons.noVatBadge")}
                       </span>
                     ) : s.invoiced ? (

@@ -194,7 +194,6 @@ export default function AtadasPage() {
               />
               <span className="font-medium">{t("handover.discount")}</span>
             </label>
-            <p className="mt-0.5 pl-6 text-xs text-slate-400">{t("handover.discountHint")}</p>
 
             {!discount && (
               <div className="mt-3 flex gap-2">
