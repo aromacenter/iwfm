@@ -64,9 +64,10 @@ def _draw_label(c: pdf_canvas.Canvas, item: dict, x: float, y: float) -> None:
     if item.get("serial_number"):
         c.drawString(text_x, text_y, f"Gyári szám: {str(item['serial_number'])[:20]}")
         text_y -= 5 * mm
-    c.setFillColorRGB(0.35, 0.4, 0.5)
-    c.drawString(text_x, text_y, OWNER_TEXT)
-    c.setFillColorRGB(0, 0, 0)
+    if not item.get("customer_owned"):
+        c.setFillColorRGB(0.35, 0.4, 0.5)
+        c.drawString(text_x, text_y, OWNER_TEXT)
+        c.setFillColorRGB(0, 0, 0)
 
     # alsó sáv: felszólítás + a QR-oldal funkciói (link nélkül)
     c.setFont(FONT_BOLD, 10.5)
@@ -92,18 +93,20 @@ def _draw_small_label(c: pdf_canvas.Canvas, item: dict) -> None:
     text_x = pad + qr_size + 2 * mm
     max_w = SMALL_W - text_x - pad
     c.setFillColorRGB(0, 0, 0)
-    c.setFont(FONT_BOLD, 7)
+    c.setFont(FONT_BOLD, 8)
     name = str(item.get("name") or "")
-    while name and c.stringWidth(name, FONT_BOLD, 7) > max_w:
+    while name and c.stringWidth(name, FONT_BOLD, 8) > max_w:
         name = name[:-1]
     c.drawString(text_x, SMALL_H - pad - 3 * mm, name)
-    c.setFont(FONT, 6)
-    c.drawString(text_x, SMALL_H - pad - 6.5 * mm, f"Kód: {item.get('barcode') or '—'}")
+    c.setFont(FONT, 7)
+    c.drawString(text_x, SMALL_H - pad - 6.8 * mm, f"Kód: {item.get('barcode') or '—'}")
     if item.get("serial_number"):
-        c.drawString(text_x, SMALL_H - pad - 9.5 * mm, f"Gy.sz.: {str(item['serial_number'])[:16]}")
-    c.setFont(FONT, 5.5)
+        c.drawString(text_x, SMALL_H - pad - 10.2 * mm, f"Gy.sz.: {str(item['serial_number'])[:16]}")
+    c.setFont(FONT, 6.5)
     c.setFillColorRGB(0.3, 0.35, 0.45)
-    c.drawString(text_x, pad + 4.5 * mm, OWNER_TEXT)
+    # Ügyfél behozott gépén nincs tulajdon-felirat
+    if not item.get("customer_owned"):
+        c.drawString(text_x, pad + 4.8 * mm, OWNER_TEXT)
     c.drawString(text_x, pad + 1.5 * mm, "Olvassa be a QR-kódot!")
     c.setFillColorRGB(0, 0, 0)
 
@@ -135,7 +138,14 @@ def build_qr_labels_ezpl(items: list[dict]) -> bytes:
     """Godex EZPL parancsfájl (.ezp) az 51×25 mm-es VOID címkéhez — a GoLabel
     megnyitja és a nyomtatóra tölti, vagy raw-nyomtatással közvetlenül
     kiküldhető. 203 dpi (8 dot/mm): 51 mm = 408 dot, 25 mm = 200 dot.
-    QR: W parancs (x,y,mode,type,ec,mask,mul,len,rotate + adatsor)."""
+    QR: W parancs (x,y,mode,type,ec,mask,mul,len,rotate + adatsor).
+
+    Minden szövegsor a gép nevéhez hasonló, jól olvasható méretben megy ki
+    (dupla magasság; a hosszú sorok keskenyebb betűvel, hogy kiférjenek).
+    Ügyfél behozott gépénél (customer_owned) a tulajdon-felirat lemarad."""
+    TEXT_X = 170
+    MAX_W = 408 - TEXT_X - 4  # a szövegoszlop szélessége dotban
+
     out: list[str] = []
     for item in items:
         url = str(item["url"])
@@ -157,18 +167,25 @@ def build_qr_labels_ezpl(items: list[dict]) -> bytes:
             "^E12",
             "~R255",
             "^L",
-            f"W12,12,5,2,M,8,3,{len(url)},0",
+            # a QR függőlegesen nagyjából középre kerül (nem a lap tetejére)
+            f"W12,28,5,2,M,8,3,{len(url)},0",
             url,
-            f"AB,170,16,1,1,0,0,{name}",
-            f"AA,170,52,1,1,0,0,Kod: {barcode}",
+            f"AB,{TEXT_X},8,1,1,0,0,{name}",
         ]
+        texts = [f"Kod: {barcode}"]
         if serial:
-            out.append(f"AA,170,80,1,1,0,0,Gy.sz: {serial}")
-        out += [
-            "AA,170,128,1,1,0,0,X-Presso Coffee Kft tulajdona",
-            "AA,170,156,1,1,0,0,Olvassa be a QR-kodot!",
-            "E",
-        ]
+            texts.append(f"Gy.sz: {serial}")
+        if not item.get("customer_owned"):
+            texts.append("X-Presso Coffee Kft tulajdona")
+        texts.append("Olvassa be a QR-kodot!")
+        y = 48
+        for text in texts:
+            # AA-font: 8 dot/karakter — ha duplán szélesen kifér, úgy megy,
+            # különben sima szélesség; a magasság mindig dupla (olvasható).
+            mul_x = 2 if 16 * len(text) <= MAX_W else 1
+            out.append(f"AA,{TEXT_X},{y},{mul_x},2,0,0,{text}")
+            y += 34
+        out.append("E")
     return ("\n".join(out) + "\n").encode("ascii", errors="replace")
 
 

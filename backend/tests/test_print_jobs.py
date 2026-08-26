@@ -85,3 +85,35 @@ async def test_print_job_error_reported(client, admin, manager):
     row = next(j for j in q["jobs"] if j["id"] == job["id"])
     assert row["status"] == "error"
     assert "nyomtató" in row["error"]
+
+
+async def test_customer_owned_label_has_no_owner_text(client, admin, manager):
+    """Ügyfél behozott gépének címkéjén NINCS tulajdon-felirat; a sajátunkon van."""
+    _, adm = admin
+    _, mgr = manager
+    res = await client.post(
+        "/api/assets",
+        json={"barcode": "PRN-OWN", "name": "Sajat Gep", "manufacturer": "Jura"},
+        headers=mgr,
+    )
+    own = res.json()
+    res = await client.post(
+        "/api/assets",
+        json={"barcode": "PRN-CUST", "name": "Ugyfel Gepe", "manufacturer": "Saeco",
+              "customer_owned": True},
+        headers=mgr,
+    )
+    cust = res.json()
+    key = (await client.post("/api/print-jobs/agent-key", headers=adm)).json()["key"]
+    agent = {"X-Agent-Key": key}
+
+    await client.post("/api/print-jobs", json={"ids": [own["id"]]}, headers=mgr)
+    await client.post("/api/print-jobs", json={"ids": [cust["id"]]}, headers=mgr)
+    jobs = (await client.get("/api/print-agent/jobs", headers=agent)).json()["jobs"]
+    by_label = {j["label"]: j["payload"] for j in jobs}
+    own_payload = next(p for lbl, p in by_label.items() if "PRN-OWN" in lbl)
+    cust_payload = next(p for lbl, p in by_label.items() if "PRN-CUST" in lbl)
+    assert "tulajdona" in own_payload
+    assert "tulajdona" not in cust_payload
+    # minden szövegsor dupla magassaggal megy ki (olvashato meret)
+    assert ",1,2,0,0,Kod:" in cust_payload or ",2,2,0,0,Kod:" in cust_payload
