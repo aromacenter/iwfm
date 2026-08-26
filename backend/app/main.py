@@ -109,6 +109,32 @@ async def lifespan(app: FastAPI):
         if filled_partners:
             logger.info("Backfilled %d partner codes", filled_partners)
 
+    # Nyomtató-ügynök kulcs bootstrapelése környezeti változóból: ha a
+    # WFM_PRINT_AGENT_KEY be van állítva, induláskor bekerül a
+    # print_settings-be. Így a kulcs kiadható úgy is, hogy a felületen
+    # (vagy bárhol máshol) sosem jelenik meg.
+    import os as _os_boot
+
+    boot_key = _os_boot.getenv("WFM_PRINT_AGENT_KEY")
+    if boot_key:
+        from sqlalchemy import select as _select
+
+        from app.models import PrintSettings
+
+        async with get_session_factory()() as session:
+            row = (
+                await session.execute(
+                    _select(PrintSettings).where(PrintSettings.id == 1)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                row = PrintSettings(id=1)
+                session.add(row)
+            if row.agent_key != boot_key:
+                row.agent_key = boot_key
+                await session.commit()
+                logger.info("Print agent key installed from WFM_PRINT_AGENT_KEY")
+
     # Értesítési háttérhurok (napi összefoglaló + heti mentés) — tesztben nem fut.
     import asyncio as _asyncio
     import os as _os

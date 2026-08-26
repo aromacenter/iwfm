@@ -60,7 +60,15 @@ while ($true) {
                 Send-ToPrinter $job.payload
                 Log ("Nyomtatva: {0} ({1})" -f $job.label, $job.id)
             } catch {
-                $ok = $false; $err = $_.Exception.Message
+                $err = $_.Exception.Message
+                if ($err -like "*nem erheto el*") {
+                    # a nyomtato most nincs elerheto halozaton - a feladat a
+                    # sorban marad, kesobb ujraprobaljuk (nem jelezzuk hibanak)
+                    Log ("Nyomtato nem erheto el - a sorban marad: {0}" -f $job.label)
+                    Start-Sleep -Seconds 30
+                    continue
+                }
+                $ok = $false
                 Log ("NYOMTATASI HIBA: {0} - {1}" -f $job.label, $err)
             }
             $body = @{ ok = $ok; error = $err } | ConvertTo-Json
