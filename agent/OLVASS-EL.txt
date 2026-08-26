@@ -1,0 +1,23 @@
+IWFM NYOMTATÓ-ÜGYNÖK (Godex címkenyomtatás)
+============================================
+
+Mit csinál? Az üzleti PC-n futva figyeli az X-admin nyomtatási sorát, és a
+Gépek oldalon a "Godex nyomtatás" gombbal sorba tett QR-címkéket azonnal
+kiküldi a hálózati Godex címkenyomtatóra. Így mobilról is lehet nyomtatni.
+
+Telepítés (egyszer, az üzleti PC-n):
+1. Másold ezt az "agent" mappát az üzleti PC-re (pl. C:\iwfm-agent).
+2. Az X-adminban: Beállítások → Címkenyomtató (Godex) → "Új ügynök-kulcs" —
+   a megjelenő kulcsot másold ki.
+3. Nevezd át a print_agent.json.minta fájlt print_agent.json-ra, és írd bele:
+   - agent_key: a kimásolt kulcs
+   - printer_ip: a Godex IP-címe (a nyomtató tesztoldala/kijelzője mutatja)
+4. Futtasd a telepites.bat-ot (jobb klikk → Futtatás rendszergazdaként).
+
+Ellenőrzés: a Beállításokban a Címkenyomtató-kártyán 1 percen belül
+"ügynök online" jelenik meg; a print_agent.log fájlban látszik minden
+nyomtatás és hiba.
+
+A Godex IP-jének megtudása: a legtöbb Godexen a FEED gombot nyomva tartva
+bekapcsolva tesztcímkét nyomtat, rajta az IP-vel; vagy a GoLabel →
+Printer Setup mutatja.

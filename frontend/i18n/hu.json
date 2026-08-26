@@ -1277,7 +1277,8 @@
       "support": "Ügyfél-támogatás",
       "skills": "Skillek",
       "permissions": "Jogosultságok",
-      "data": "Adatok és mentés"
+      "data": "Adatok és mentés",
+      "printer": "Címkenyomtató"
     },
     "tplTitle": "E-mail sablonok",
     "tplHint": "Újrafelhasználható sablonok az Automatizálások „E-mail küldése” akciójához. A tárgyban és a szövegben {{változók}} használhatók, amiket a trigger tölt ki.",
@@ -1383,7 +1384,19 @@
     "wsIntakeFooter": "Átvételi elismervény záradéka",
     "wsIntakeFooterHint": "Üresen hagyva a beépített 60 napos tárolási záradék kerül az elismervény aljára.",
     "wsSurveyFee": "Felmérési díj (nettó)",
-    "wsSurveyFeeHint": "Az árajánlat „Nem kérem a javítást” opciójának díja — üresen az alapérték érvényes."
+    "wsSurveyFeeHint": "Az árajánlat „Nem kérem a javítást” opciójának díja — üresen az alapérték érvényes.",
+    "printerTitle": "Címkenyomtató (Godex)",
+    "printerHint": "A Gépek oldal „Godex nyomtatás” gombja ide, a nyomtatási sorba küldi a címkéket; az üzleti PC-n futó nyomtató-ügynök viszi ki őket a nyomtatóra. Az ügynök telepítője a program „agent” mappájában van (OLVASS-EL.txt).",
+    "printerOnline": "Ügynök online",
+    "printerOffline": "Ügynök nem jelentkezik — ellenőrizd, hogy fut-e az üzleti PC-n",
+    "printerNotConfigured": "Nincs még ügynök beállítva — generálj kulcsot, és telepítsd az ügynököt",
+    "printerLastSeen": "utoljára jelentkezett: {date}",
+    "printerGenKey": "Új ügynök-kulcs",
+    "printerRefresh": "Frissítés",
+    "printerKeyConfirm": "Új kulcs generálása a régit érvényteleníti — az ügynök konfigurációjába az újat kell beírni. Folytatod?",
+    "printerKeyOnce": "A kulcs CSAK MOST látható — másold az ügynök print_agent.json fájljába (agent_key):",
+    "printerJobs": "Legutóbbi nyomtatások",
+    "printerSetupHint": "Telepítés röviden: 1) az „agent” mappát másold az üzleti PC-re, 2) generálj itt kulcsot és írd a print_agent.json-ba a nyomtató IP-címével együtt, 3) futtasd a telepites.bat-ot. Ezután a nyomtatás bárhonnan (mobilról is) egy gombnyomás."
   },
   "kiosk": {
     "title": "Munkaidő-terminál",
@@ -1645,7 +1658,11 @@
     "siteAddress": "Telepítési cím (üzlet/iroda)",
     "siteAddressHint": "Ha a gép nem a partner rögzített címén üzemel, add meg a helyszínt — mentéskor FELÜLÍRJA a partner címét (a számlázási cím marad), és az útvonaltervezés innentől ezt használja. Üresen hagyva nem változik semmi.",
     "maintenanceFee": "Karbantartási díj (nettó Ft/alkalom)",
-    "maintenanceFeeHint": "Külsős karbantartási munkalapon ez az előtöltött díj — ott átírható; kedvezmény-pipa nélkül a két aláírás után automatikusan kiszámlázódik."
+    "maintenanceFeeHint": "Külsős karbantartási munkalapon ez az előtöltött díj — ott átírható; kedvezmény-pipa nélkül a két aláírás után automatikusan kiszámlázódik.",
+    "godexPrint": "Godex nyomtatás",
+    "godexHint": "A címkék a nyomtatási sorba kerülnek, és az üzleti gépen futó nyomtató-ügynök azonnal kiküldi őket a Godex címkenyomtatóra.",
+    "godexConfirm": "{count} gép QR-címkéje kerül a Godex nyomtatási sorába. Mehet?",
+    "godexQueued": "{count} címke a nyomtatási sorban — a nyomtató hamarosan kiadja."
   },
   "wh": {
     "title": "Raktár",

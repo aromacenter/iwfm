@@ -29,6 +29,7 @@ from app.api import (
     orders,
     payroll,
     portal,
+    print_jobs as print_jobs_api,
     quotes as quotes_api,
     service,
     support,
@@ -181,6 +182,8 @@ def create_app() -> FastAPI:
     app.include_router(portal.router, prefix="/api/portal", tags=["portal"])
     app.include_router(portal.manage_router, prefix="/api/partners", tags=["portal"])
     app.include_router(support.labels_router, prefix="/api/assets", tags=["support"])
+    app.include_router(print_jobs_api.router, prefix="/api/print-jobs", tags=["print"])
+    app.include_router(print_jobs_api.agent_router, prefix="/api/print-agent", tags=["print"])
     app.include_router(support.public_router, prefix="/api/support", tags=["support"])
     app.include_router(knowledge.router, prefix="/api/knowledge", tags=["knowledge"])
     app.include_router(orders.router, prefix="/api/orders", tags=["orders"])

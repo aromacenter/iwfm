@@ -211,6 +211,20 @@ export default function GepekPage() {
     }
   }
 
+  // Godex címkenyomtatás: a címkék a nyomtatási sorba kerülnek, az üzleti
+  // PC-n futó nyomtató-ügynök küldi ki őket a nyomtatóra (mobilról is megy).
+  async function printOnGodex() {
+    const ids = selected.size > 0 ? [...selected] : assets.map((a) => a.id);
+    if (ids.length === 0) return;
+    if (!(await confirm(t("inv.godexConfirm", { count: ids.length })))) return;
+    try {
+      await api.post("/api/print-jobs", { ids });
+      toast(t("inv.godexQueued", { count: ids.length }), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function bulkDelete() {
     if (selected.size === 0) return;
     if (!(await confirm(t("bulk.confirm", { count: selected.size })))) return;
@@ -511,6 +525,13 @@ export default function GepekPage() {
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100"
             >
               🖨 {t("inv.qrLabelsEzpx")}
+            </button>
+            <button
+              onClick={printOnGodex}
+              title={t("inv.godexHint")}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              🖨️ {t("inv.godexPrint")}
             </button>
           </>
         )}

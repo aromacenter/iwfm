@@ -23,6 +23,8 @@ from app.models.models import (  # noqa: F401
     PartnerPrice,
     PartnerStock,
     PermissionSettings,
+    PrintJob,
+    PrintSettings,
     Product,
     ProductOrder,
     PurchaseOrder,

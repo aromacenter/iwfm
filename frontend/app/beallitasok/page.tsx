@@ -56,6 +56,7 @@ const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-
 
 const SETTINGS_TABS = [
   ["worksheet", "🧾"],
+  ["printer", "🖨️"],
   ["billing", "💳"],
   ["email", "✉️"],
   ["notifications", "🔔"],
@@ -101,6 +102,40 @@ export default function BeallitasokPage() {
   };
   const cardCls = (own: string, base: string) =>
     `${tab === own ? "" : "hidden "}${base}`;
+
+  // --- Címkenyomtató (Godex) — a helyi nyomtató-ügynök állapota és kulcsa ---
+  interface PrintQueue {
+    jobs: { id: string; label: string | null; status: string; error: string | null }[];
+    agent_configured: boolean;
+    agent_online: boolean;
+    agent_last_seen: string | null;
+  }
+  const [printQueue, setPrintQueue] = useState<PrintQueue | null>(null);
+  const [printKey, setPrintKey] = useState<string | null>(null);
+  const [printBusy, setPrintBusy] = useState(false);
+
+  const loadPrintQueue = useCallback(async () => {
+    try {
+      setPrintQueue(await api.get<PrintQueue>("/api/print-jobs"));
+    } catch {
+      /* nincs jogosultság vagy hálózati hiba — a kártya üresen marad */
+    }
+  }, []);
+  useEffect(() => { loadPrintQueue(); }, [loadPrintQueue]);
+
+  async function genPrintKey() {
+    if (!(await confirm(t("settings.printerKeyConfirm")))) return;
+    setPrintBusy(true);
+    try {
+      const res = await api.post<{ key: string }>("/api/print-jobs/agent-key", {});
+      setPrintKey(res.key);
+      await loadPrintQueue();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setPrintBusy(false);
+    }
+  }
 
   // --- E-mail sablonok (automatizálásokhoz) ---
   const [templates, setTemplates] = useState<EmailTpl[]>([]);
@@ -1016,6 +1051,66 @@ export default function BeallitasokPage() {
             {wsBusy ? t("common.saving") : t("common.save")}
           </button>
         </form>
+
+        {/* Címkenyomtató (Godex) — helyi nyomtató-ügynök */}
+        <div className={cardCls("printer", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
+          <h2 className="font-semibold">{t("settings.printerTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.printerHint")}</p>
+          {printQueue && (
+            <p className="text-sm">
+              {printQueue.agent_online ? (
+                <span className="font-medium text-emerald-600">● {t("settings.printerOnline")}</span>
+              ) : printQueue.agent_configured ? (
+                <span className="font-medium text-amber-600">● {t("settings.printerOffline")}</span>
+              ) : (
+                <span className="font-medium text-slate-500">● {t("settings.printerNotConfigured")}</span>
+              )}
+              {printQueue.agent_last_seen && (
+                <span className="ml-2 text-xs text-slate-400">
+                  {t("settings.printerLastSeen", {
+                    date: printQueue.agent_last_seen.replace("T", " ").slice(0, 16),
+                  })}
+                </span>
+              )}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={genPrintKey}
+              disabled={printBusy}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              🔑 {t("settings.printerGenKey")}
+            </button>
+            <button
+              type="button"
+              onClick={loadPrintQueue}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+            >
+              🔄 {t("settings.printerRefresh")}
+            </button>
+          </div>
+          {printKey && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+              <p className="mb-1 font-medium text-emerald-800">{t("settings.printerKeyOnce")}</p>
+              <code className="block select-all break-all rounded bg-white px-2 py-1 text-xs">{printKey}</code>
+            </div>
+          )}
+          {printQueue && printQueue.jobs.length > 0 && (
+            <div className="space-y-1 text-sm">
+              <p className="text-xs font-semibold uppercase text-slate-400">{t("settings.printerJobs")}</p>
+              {printQueue.jobs.slice(0, 8).map((j) => (
+                <p key={j.id} className="flex flex-wrap items-center gap-2">
+                  <span>{j.status === "done" ? "✅" : j.status === "error" ? "❌" : "⏳"}</span>
+                  <span>{j.label}</span>
+                  {j.error && <span className="text-xs text-rose-600">{j.error}</span>}
+                </p>
+              ))}
+            </div>
+          )}
+          <p className="whitespace-pre-line text-xs text-slate-500">{t("settings.printerSetupHint")}</p>
+        </div>
 
         {/* Billingó számlázó */}
         <form

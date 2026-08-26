@@ -555,6 +555,49 @@ class MachineIntake(Base):
     )
 
 
+class PrintJob(Base):
+    """Címkenyomtatási sor a Godex nyomtatóhoz. A felhő-backend nem éri el az
+    üzleti hálózat nyomtatóját, ezért a nyomtatandó EZPL itt várakozik, amíg a
+    helyi nyomtató-ügynök (agent/print_agent.ps1) le nem kéri és raw módban ki
+    nem küldi a nyomtató 9100-as portjára."""
+
+    __tablename__ = "print_jobs"
+    __table_args__ = (Index("ix_print_jobs_status", "status", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="qr_label")
+    # Emberi megnevezés a listákhoz, pl. "QR-címke ×3 (K-0012…)"
+    label: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)  # EZPL szöveg
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending"
+    )  # pending | done | error
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_print_jobs_user"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    printed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class PrintSettings(Base):
+    """A nyomtató-ügynök beállításai — egyetlen sor (id=1): a helyi ügynök
+    hitelesítő kulcsa és az utolsó jelentkezésének ideje (online-jelzéshez)."""
+
+    __tablename__ = "print_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    agent_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    agent_last_seen: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class Partner(Base):
     """Partner cég, akihez eszközök helyezhetők ki."""
 

@@ -1277,7 +1277,8 @@
       "support": "Customer support",
       "skills": "Skills",
       "permissions": "Permissions",
-      "data": "Data & backup"
+      "data": "Data & backup",
+      "printer": "Label printer"
     },
     "tplTitle": "Email templates",
     "tplHint": "Reusable templates for the Automations \"Send email\" action. {{variables}} can be used in the subject and body, filled by the trigger.",
@@ -1383,7 +1384,19 @@
     "wsIntakeFooter": "Intake receipt clause",
     "wsIntakeFooterHint": "If left empty, the built-in 60-day storage clause is printed.",
     "wsSurveyFee": "Survey fee (net)",
-    "wsSurveyFeeHint": "Fee for the quote's “I decline the repair” option — empty uses the default."
+    "wsSurveyFeeHint": "Fee for the quote's “I decline the repair” option — empty uses the default.",
+    "printerTitle": "Label printer (Godex)",
+    "printerHint": "The “Print on Godex” button on the Machines page queues labels here; the print agent running on the shop PC delivers them to the printer. The agent installer is in the app's “agent” folder (OLVASS-EL.txt).",
+    "printerOnline": "Agent online",
+    "printerOffline": "Agent not reporting — check that it is running on the shop PC",
+    "printerNotConfigured": "No agent configured yet — generate a key and install the agent",
+    "printerLastSeen": "last seen: {date}",
+    "printerGenKey": "New agent key",
+    "printerRefresh": "Refresh",
+    "printerKeyConfirm": "Generating a new key invalidates the old one — the agent config must be updated. Continue?",
+    "printerKeyOnce": "The key is shown ONLY NOW — copy it into the agent's print_agent.json (agent_key):",
+    "printerJobs": "Recent print jobs",
+    "printerSetupHint": "Setup in short: 1) copy the “agent” folder to the shop PC, 2) generate a key here and put it in print_agent.json along with the printer's IP, 3) run telepites.bat. Printing then works from anywhere, phones included."
   },
   "kiosk": {
     "title": "Time clock terminal",
@@ -1645,7 +1658,11 @@
     "siteAddress": "Installation address (shop/office)",
     "siteAddressHint": "If the machine operates somewhere other than the partner's recorded address, enter the site — it OVERWRITES the partner's address on save (billing address stays), and route planning uses it from then on. Leave empty to change nothing.",
     "maintenanceFee": "Maintenance fee (net Ft/visit)",
-    "maintenanceFeeHint": "Prefills the external maintenance worksheet — editable there; without the discount checkbox it is invoiced automatically after both signatures."
+    "maintenanceFeeHint": "Prefills the external maintenance worksheet — editable there; without the discount checkbox it is invoiced automatically after both signatures.",
+    "godexPrint": "Print on Godex",
+    "godexHint": "Labels are queued and the print agent running on the shop PC sends them straight to the Godex label printer.",
+    "godexConfirm": "QR labels for {count} machines will be queued for the Godex printer. Continue?",
+    "godexQueued": "{count} labels queued — the printer will produce them shortly."
   },
   "wh": {
     "title": "Warehouse",
