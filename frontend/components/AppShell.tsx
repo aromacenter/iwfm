@@ -123,6 +123,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, [router]);
 
+  // Licenc-állapot a bannerhez: türelmi idő vagy csak-olvasás mód jelzése
+  const [license, setLicense] = useState<{ state: string; grace_days_left: number | null } | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    api
+      .get<{ state: string; grace_days_left: number | null }>("/api/settings/license/status")
+      .then(setLicense)
+      .catch(() => {});
+  }, [user]);
+
   // Felhasználónkénti szekció-sorrend (▲▼ a csoportcímeken).
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
   useEffect(() => {
@@ -325,6 +335,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <main className="min-w-0 flex-1">
+        {license?.state === "grace" && (
+          <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-sm font-medium text-amber-800">
+            {t("license.graceBanner", { days: license.grace_days_left ?? 0 })}
+          </div>
+        )}
+        {license?.state === "expired" && (
+          <div className="border-b border-rose-300 bg-rose-50 px-4 py-2 text-center text-sm font-medium text-rose-800">
+            {t("license.expiredBanner")}
+          </div>
+        )}
         <div className="mx-auto max-w-6xl px-4 py-6">
           {children}
         </div>

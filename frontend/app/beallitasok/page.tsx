@@ -65,8 +65,22 @@ const SETTINGS_TABS = [
   ["support", "💬"],
   ["skills", "🎓"],
   ["permissions", "🔐"],
+  ["license", "🎫"],
   ["data", "🗄️"],
 ] as const;
+
+interface LicenseInfo {
+  plan: "s" | "m" | "l" | "xl";
+  max_users: number | null;
+  max_employees: number | null;
+  state: "ok" | "grace" | "expired";
+  days_left: number | null;
+  grace_days_left: number | null;
+  usage: { users: number; employees: number };
+  valid_until: string | null;
+  customer_name: string | null;
+  grace_days: number;
+}
 
 interface EmailTpl {
   id: string;
@@ -172,6 +186,41 @@ export default function BeallitasokPage() {
       setGlsMsg(errorMessage(err));
     } finally {
       setGlsBusy(false);
+    }
+  }
+
+  // --- Licenc ---
+  const [lic, setLic] = useState<LicenseInfo | null>(null);
+  const [licBusy, setLicBusy] = useState(false);
+  const [licForm, setLicForm] = useState({ plan: "xl", valid_until: "", customer_name: "" });
+  useEffect(() => {
+    api.get<LicenseInfo>("/api/settings/license")
+      .then((l) => {
+        setLic(l);
+        setLicForm({
+          plan: l.plan,
+          valid_until: l.valid_until ?? "",
+          customer_name: l.customer_name ?? "",
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  async function saveLicense(e: React.FormEvent) {
+    e.preventDefault();
+    setLicBusy(true);
+    try {
+      const l = await api.put<LicenseInfo>("/api/settings/license", {
+        plan: licForm.plan,
+        valid_until: licForm.valid_until || null,
+        customer_name: licForm.customer_name || null,
+      });
+      setLic(l);
+      toast(t("common.saved"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setLicBusy(false);
     }
   }
 
@@ -1275,6 +1324,68 @@ export default function BeallitasokPage() {
             >
               🔌 {t("settings.glsTest")}
             </button>
+          </div>
+        </form>
+
+        {/* Licenc (előfizetési sáv) */}
+        <form
+          onSubmit={saveLicense}
+          className={cardCls("license", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
+        >
+          <h2 className="font-semibold">{t("license.title")}</h2>
+          <p className="text-xs text-slate-500">{t("license.hint")}</p>
+          {lic && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 p-3 text-center">
+                <div className="font-mono text-lg font-semibold">{lic.usage.users}{lic.max_users != null ? ` / ${lic.max_users}` : ""}</div>
+                <div className="text-xs text-slate-500">{t("license.users")}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3 text-center">
+                <div className="font-mono text-lg font-semibold">{lic.usage.employees}{lic.max_employees != null ? ` / ${lic.max_employees}` : ""}</div>
+                <div className="text-xs text-slate-500">{t("license.employees")}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3 text-center">
+                <div className="font-mono text-lg font-semibold uppercase">{lic.plan}</div>
+                <div className="text-xs text-slate-500">{t("license.plan")}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3 text-center">
+                <div className={`font-mono text-lg font-semibold ${lic.state === "ok" ? "text-emerald-600" : lic.state === "grace" ? "text-amber-600" : "text-rose-600"}`}>
+                  {t(`license.state.${lic.state}`)}
+                </div>
+                <div className="text-xs text-slate-500">{lic.valid_until ? t("license.validUntil", { date: lic.valid_until }) : t("license.unlimited")}</div>
+              </div>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block text-sm">
+              {t("license.plan")}
+              <select
+                value={licForm.plan}
+                onChange={(e) => setLicForm({ ...licForm, plan: e.target.value })}
+                className={inputCls}
+              >
+                <option value="s">S — 2 {t("license.usersShort")} / 5 {t("license.employeesShort")}</option>
+                <option value="m">M — 5 / 15</option>
+                <option value="l">L — 12 / 40</option>
+                <option value="xl">XL — {t("license.unlimited")}</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              {t("license.validUntilLabel")}
+              <input type="date" value={licForm.valid_until} onChange={(e) => setLicForm({ ...licForm, valid_until: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              {t("license.customer")}
+              <input value={licForm.customer_name} onChange={(e) => setLicForm({ ...licForm, customer_name: e.target.value })} className={inputCls} />
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button disabled={licBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {licBusy ? t("common.saving") : t("common.save")}
+            </button>
+            <a className="text-sm font-medium text-indigo-600 hover:underline" href="mailto:hello@aromacenter.hu?subject=X-admin%20b%C5%91v%C3%ADt%C3%A9s">
+              {t("license.upgrade")}
+            </a>
           </div>
         </form>
 

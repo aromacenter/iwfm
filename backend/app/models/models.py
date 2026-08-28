@@ -561,6 +561,23 @@ class MachineIntake(Base):
     )
 
 
+class LicenseSettings(Base):
+    """Előfizetési licenc: sáv (S/M/L/XL), limitek és érvényesség. Egyetlen
+    sor (id=1); sor nélkül a rendszer korlátlan — a saját, nem bérelt
+    példányunk így fut."""
+
+    __tablename__ = "license_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    # s | m | l | xl — a sávok limitjeit a license szolgáltatás definiálja
+    plan: Mapped[str] = mapped_column(String(16), nullable=False, default="xl")
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # egyedi megállapodás esetén a sáv-limit felülírható
+    max_users_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_employees_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+
 class GlsSettings(Base):
     """MyGLS (GLS Hungary) integráció — egyetlen sor (id=1). A jelszó
     Fernet-titkosítva, write-only; a feladó-adatok a címkék PickupAddress-e."""

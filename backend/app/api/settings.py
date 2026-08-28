@@ -24,11 +24,13 @@ from app.models import (
     GlsSettings,
     EmailSettings,
     EmployeeSkill,
+    LicenseSettings,
     PermissionSettings,
     Skill,
     User,
     WorksheetSettings,
 )
+from app.services.wfm import license as license_service
 from app.services.wfm.ai_assign import DEFAULT_ASSIGN_PROMPT
 from app.services.wfm.ai_service import (
     PROVIDERS as AI_PROVIDERS,
@@ -635,6 +637,84 @@ async def update_gls_settings(
     )
     await db.commit()
     return _gls_out(row)
+
+
+# ─── Licenc (előfizetési sáv és limitek) ────────────────────────────────────
+
+
+class LicenseBody(BaseModel):
+    plan: str = Field(pattern="^(s|m|l|xl)$")
+    valid_until: str | None = None  # ISO dátum vagy None = határozatlan
+    max_users_override: int | None = Field(default=None, ge=1, le=10_000)
+    max_employees_override: int | None = Field(default=None, ge=1, le=100_000)
+    customer_name: str | None = Field(default=None, max_length=256)
+
+
+async def _license_status_payload(db: AsyncSession) -> dict:
+    row = await license_service.get_license_row(db)
+    lim = license_service.limits_for(row)
+    state = license_service.license_state(row)
+    used = await license_service.usage(db)
+    return {
+        **lim,
+        **state,
+        "usage": used,
+        "valid_until": row.valid_until.isoformat() if row and row.valid_until else None,
+        "customer_name": row.customer_name if row else None,
+        "grace_days": license_service.GRACE_DAYS,
+    }
+
+
+@router.get("/license/status")
+async def license_status(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Licenc-állapot a felület bannerjéhez — minden belépett user láthatja."""
+    return await _license_status_payload(db)
+
+
+@router.get("/license")
+async def get_license_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    return await _license_status_payload(db)
+
+
+@router.put("/license")
+async def update_license_settings(
+    body: LicenseBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    from datetime import date as _date
+
+    row = await license_service.get_license_row(db)
+    if row is None:
+        row = LicenseSettings(id=1)
+        db.add(row)
+    row.plan = body.plan
+    if body.valid_until:
+        try:
+            row.valid_until = _date.fromisoformat(body.valid_until)
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"code": "license.bad_date"})
+    else:
+        row.valid_until = None
+    row.max_users_override = body.max_users_override
+    row.max_employees_override = body.max_employees_override
+    row.customer_name = (body.customer_name or "").strip() or None
+    await record_audit(
+        db, actor=actor, action="settings.license_update", entity_type="settings",
+        entity_id="license",
+        detail={"plan": body.plan, "valid_until": body.valid_until},
+        request=request,
+    )
+    await db.commit()
+    license_service.invalidate_cache()
+    return await _license_status_payload(db)
 
 
 @router.post("/gls/test")

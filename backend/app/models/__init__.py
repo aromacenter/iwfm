@@ -18,6 +18,7 @@ from app.models.models import (  # noqa: F401
     GlsParcel,
     GlsSettings,
     KnowledgeEntry,
+    LicenseSettings,
     MachineIntake,
     NotificationSettings,
     Partner,

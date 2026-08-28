@@ -376,6 +376,11 @@ async def create_employee(
 ):
     sensitive = _validate_sensitive(body)
 
+    # licenc-limit: új dolgozó = +1 fiók és +1 aktív munkavállaló
+    from app.services.wfm.license import check_capacity
+
+    await check_capacity(db, new_users=1, new_employees=1)
+
     existing = (
         await db.execute(select(User).where(User.email == body.email.lower()))
     ).scalar_one_or_none()

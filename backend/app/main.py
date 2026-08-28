@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import (
     admin_tools,
@@ -168,6 +169,25 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
+
+    # Lejárt licenc (türelmi időn is túl): csak-olvasás mód. Adat nem vész
+    # el, a GET-ek és a belépés működnek — az írás áll meg, a licenc-oldal
+    # kivételével, hogy a hosszabbítást be lehessen állítani.
+    _license_write_allow = ("/api/auth/", "/api/settings/license", "/api/health")
+
+    @app.middleware("http")
+    async def license_guard(request, call_next):
+        if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.url.path.startswith(
+            "/api"
+        ) and not any(request.url.path.startswith(p) for p in _license_write_allow):
+            from app.db import get_session_factory
+            from app.services.wfm.license import expired_now
+
+            if await expired_now(get_session_factory()):
+                return JSONResponse(
+                    status_code=423, content={"detail": {"code": "license.expired"}}
+                )
+        return await call_next(request)
 
     @app.middleware("http")
     async def security_headers(request, call_next):

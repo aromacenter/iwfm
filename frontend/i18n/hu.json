@@ -1289,7 +1289,8 @@
       "permissions": "Jogosultságok",
       "data": "Adatok és mentés",
       "printer": "Címkenyomtató",
-      "gls": "GLS"
+      "gls": "GLS",
+      "license": "Licenc"
     },
     "tplTitle": "E-mail sablonok",
     "tplHint": "Újrafelhasználható sablonok az Automatizálások „E-mail küldése” akciójához. A tárgyban és a szövegben {{változók}} használhatók, amiket a trigger tölt ki.",
@@ -1594,6 +1595,12 @@
     "user": {
       "bad_signature": "Hibás aláírás-kép."
     },
+    "license": {
+      "user_limit": "Elérted a licenced fiók-limitjét ({limit}) — bővítsd az előfizetést új fiókhoz.",
+      "employee_limit": "Elérted a licenced dolgozó-limitjét ({limit}) — bővítsd az előfizetést.",
+      "expired": "A licenc lejárt — a rendszer csak-olvasás módban van. Hosszabbításhoz keresd az üzemeltetőt.",
+      "bad_date": "Érvénytelen dátum a licenc érvényességénél."
+    },
     "gls": {
       "error": {
         "withMessage": "GLS-hiba: {message}"
@@ -1604,6 +1611,27 @@
       "no_parcel_number": "Ehhez a csomaghoz nincs csomagszám.",
       "already_handed_over": "A csomagot a futár már átvette — innentől nem törölhető."
     }
+  },
+  "license": {
+    "title": "Licenc és előfizetés",
+    "hint": "Az előfizetési sáv, az érvényesség és a kihasználtság. A sáv szabja meg, hány belépős fiók és hány aktív dolgozó fér a rendszerbe — sor nélkül a rendszer korlátlan.",
+    "users": "Fiók (belépős)",
+    "employees": "Aktív dolgozó",
+    "usersShort": "fiók",
+    "employeesShort": "dolgozó",
+    "plan": "Sáv",
+    "state": {
+      "ok": "Érvényes",
+      "grace": "Türelmi idő",
+      "expired": "Lejárt"
+    },
+    "validUntil": "érvényes: {date}",
+    "validUntilLabel": "Érvényesség vége (üres = határozatlan)",
+    "unlimited": "korlátlan",
+    "customer": "Ügyfél neve (bérelt példányon)",
+    "upgrade": "Bővítést kérek →",
+    "graceBanner": "Az előfizetés lejárt — még {days} nap türelmi idő van hátra, utána a rendszer csak-olvasásra vált.",
+    "expiredBanner": "Az előfizetés lejárt — a rendszer csak-olvasás módban van. Az adatok biztonságban vannak, minden megtekinthető."
   },
   "inv": {
     "title": "Gépek",

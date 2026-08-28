@@ -1289,7 +1289,8 @@
       "permissions": "Permissions",
       "data": "Data & backup",
       "printer": "Label printer",
-      "gls": "GLS"
+      "gls": "GLS",
+      "license": "Licence"
     },
     "tplTitle": "Email templates",
     "tplHint": "Reusable templates for the Automations \"Send email\" action. {{variables}} can be used in the subject and body, filled by the trigger.",
@@ -1594,6 +1595,12 @@
     "user": {
       "bad_signature": "Invalid signature image."
     },
+    "license": {
+      "user_limit": "You reached your licence's account limit ({limit}) — upgrade to add more accounts.",
+      "employee_limit": "You reached your licence's employee limit ({limit}) — upgrade your subscription.",
+      "expired": "The licence has expired — the system is read-only. Contact the operator to renew.",
+      "bad_date": "Invalid licence validity date."
+    },
     "gls": {
       "error": {
         "withMessage": "GLS error: {message}"
@@ -1604,6 +1611,27 @@
       "no_parcel_number": "This parcel has no parcel number.",
       "already_handed_over": "The courier already picked up this parcel — it can no longer be deleted."
     }
+  },
+  "license": {
+    "title": "Licence & subscription",
+    "hint": "Subscription tier, validity and usage. The tier caps how many login accounts and active employees fit the system — with no row set, the system is unlimited.",
+    "users": "Accounts (login)",
+    "employees": "Active employees",
+    "usersShort": "accounts",
+    "employeesShort": "employees",
+    "plan": "Tier",
+    "state": {
+      "ok": "Valid",
+      "grace": "Grace period",
+      "expired": "Expired"
+    },
+    "validUntil": "valid until {date}",
+    "validUntilLabel": "Valid until (empty = open-ended)",
+    "unlimited": "unlimited",
+    "customer": "Customer name (rented instance)",
+    "upgrade": "Request an upgrade →",
+    "graceBanner": "The subscription has expired — {days} grace day(s) left before the system turns read-only.",
+    "expiredBanner": "The subscription has expired — the system is read-only. Your data is safe and everything can be viewed."
   },
   "inv": {
     "title": "Machines",
