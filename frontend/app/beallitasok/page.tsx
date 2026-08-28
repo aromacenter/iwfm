@@ -58,6 +58,7 @@ const SETTINGS_TABS = [
   ["worksheet", "🧾"],
   ["printer", "🖨️"],
   ["billing", "💳"],
+  ["gls", "📦"],
   ["email", "✉️"],
   ["notifications", "🔔"],
   ["ai", "✨"],
@@ -122,6 +123,57 @@ export default function BeallitasokPage() {
     }
   }, []);
   useEffect(() => { loadPrintQueue(); }, [loadPrintQueue]);
+
+  // --- GLS (MyGLS) beállítások ---
+  interface GlsForm {
+    username: string; password: string; client_number: string;
+    test_mode: boolean; printer_type: string;
+    sender_name: string; sender_zip: string; sender_city: string;
+    sender_street: string; sender_house: string; sender_phone: string; sender_email: string;
+  }
+  const EMPTY_GLS: GlsForm = {
+    username: "", password: "", client_number: "", test_mode: true, printer_type: "A4_2x2",
+    sender_name: "", sender_zip: "", sender_city: "", sender_street: "",
+    sender_house: "", sender_phone: "", sender_email: "",
+  };
+  const [gls, setGls] = useState<GlsForm>(EMPTY_GLS);
+  const [glsHasPw, setGlsHasPw] = useState(false);
+  const [glsBusy, setGlsBusy] = useState(false);
+  const [glsMsg, setGlsMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<GlsForm & { has_password: boolean }>("/api/settings/gls")
+      .then((s) => {
+        setGls({
+          username: s.username ?? "", password: "", client_number: s.client_number ?? "",
+          test_mode: s.test_mode, printer_type: s.printer_type,
+          sender_name: s.sender_name ?? "", sender_zip: s.sender_zip ?? "",
+          sender_city: s.sender_city ?? "", sender_street: s.sender_street ?? "",
+          sender_house: s.sender_house ?? "", sender_phone: s.sender_phone ?? "",
+          sender_email: s.sender_email ?? "",
+        });
+        setGlsHasPw(s.has_password);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function saveGls(e: React.FormEvent) {
+    e.preventDefault();
+    setGlsBusy(true);
+    setGlsMsg(null);
+    try {
+      const res = await api.put<{ has_password: boolean }>("/api/settings/gls", {
+        ...gls, password: gls.password || null,
+      });
+      setGlsHasPw(res.has_password);
+      setGls((g) => ({ ...g, password: "" }));
+      setGlsMsg(t("common.saved"));
+    } catch (err) {
+      setGlsMsg(errorMessage(err));
+    } finally {
+      setGlsBusy(false);
+    }
+  }
 
   async function genPrintKey() {
     if (!(await confirm(t("settings.printerKeyConfirm")))) return;
@@ -1111,6 +1163,88 @@ export default function BeallitasokPage() {
           )}
           <p className="whitespace-pre-line text-xs text-slate-500">{t("settings.printerSetupHint")}</p>
         </div>
+
+        {/* GLS (MyGLS) csomagfeladás */}
+        <form
+          onSubmit={saveGls}
+          className={cardCls("gls", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
+        >
+          <h2 className="font-semibold">{t("settings.glsTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.glsHint")}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              {t("settings.glsUsername")}
+              <input value={gls.username} onChange={(e) => setGls({ ...gls, username: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              {t("settings.glsPassword")} {glsHasPw && <span className="text-emerald-600">✓</span>}
+              <input
+                type="password"
+                value={gls.password}
+                onChange={(e) => setGls({ ...gls, password: e.target.value })}
+                placeholder={glsHasPw ? "••••••••" : ""}
+                className={inputCls}
+              />
+            </label>
+            <label className="block text-sm">
+              {t("settings.glsClientNumber")}
+              <input value={gls.client_number} onChange={(e) => setGls({ ...gls, client_number: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              {t("settings.glsPrinterType")}
+              <select
+                value={gls.printer_type}
+                onChange={(e) => setGls({ ...gls, printer_type: e.target.value })}
+                className={inputCls}
+              >
+                <option value="A4_2x2">A4 (2×2 címke)</option>
+                <option value="A4_4x1">A4 (4×1 címke)</option>
+                <option value="Thermo">Thermo (címkenyomtató)</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={gls.test_mode} onChange={(e) => setGls({ ...gls, test_mode: e.target.checked })} className="h-4 w-4" />
+              {t("settings.glsTestMode")}
+            </label>
+          </div>
+          <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
+            <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("settings.glsSender")}</legend>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-sm sm:col-span-2">
+                {t("settings.glsSenderName")}
+                <input value={gls.sender_name} onChange={(e) => setGls({ ...gls, sender_name: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("gls.zip")}
+                <input value={gls.sender_zip} onChange={(e) => setGls({ ...gls, sender_zip: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("gls.city")}
+                <input value={gls.sender_city} onChange={(e) => setGls({ ...gls, sender_city: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("gls.street")}
+                <input value={gls.sender_street} onChange={(e) => setGls({ ...gls, sender_street: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("gls.house")}
+                <input value={gls.sender_house} onChange={(e) => setGls({ ...gls, sender_house: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("gls.phone")}
+                <input value={gls.sender_phone} onChange={(e) => setGls({ ...gls, sender_phone: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("gls.email")}
+                <input value={gls.sender_email} onChange={(e) => setGls({ ...gls, sender_email: e.target.value })} className={inputCls} />
+              </label>
+            </div>
+          </fieldset>
+          {glsMsg && <p className="text-sm text-slate-600">{glsMsg}</p>}
+          <button disabled={glsBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            {glsBusy ? t("common.saving") : t("common.save")}
+          </button>
+        </form>
 
         {/* Billingó számlázó */}
         <form

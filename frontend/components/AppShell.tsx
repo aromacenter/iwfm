@@ -61,6 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
     labelKey: "nav.groups.billing",
     items: [
       { href: "/elszamolas", key: "nav.settlement", perm: "settlements", icon: "🧾" },
+      { href: "/csomagok", key: "nav.gls", perm: "settlements", icon: "📦" },
       { href: "/uzletkoto", key: "nav.agentReport", perm: "agent_report", icon: "💼" },
     ],
   },

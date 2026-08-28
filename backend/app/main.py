@@ -20,6 +20,7 @@ from app.api import (
     delivery as delivery_api,
     employees,
     geo,
+    gls as gls_api,
     import_export,
     intake as intake_api,
     inventory,
@@ -209,6 +210,7 @@ def create_app() -> FastAPI:
     app.include_router(portal.manage_router, prefix="/api/partners", tags=["portal"])
     app.include_router(support.labels_router, prefix="/api/assets", tags=["support"])
     app.include_router(print_jobs_api.router, prefix="/api/print-jobs", tags=["print"])
+    app.include_router(gls_api.router, prefix="/api/gls", tags=["gls"])
     app.include_router(print_jobs_api.agent_router, prefix="/api/print-agent", tags=["print"])
     app.include_router(support.public_router, prefix="/api/support", tags=["support"])
     app.include_router(knowledge.router, prefix="/api/knowledge", tags=["knowledge"])

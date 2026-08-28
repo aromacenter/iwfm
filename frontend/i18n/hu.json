@@ -159,7 +159,8 @@
     "quotes": "Ajánlatkérések",
     "intake": "Átvétel",
     "handover": "Átadás",
-    "calendar": "Naptár"
+    "calendar": "Naptár",
+    "gls": "Csomagok (GLS)"
   },
   "roles": {
     "admin": "Admin",
@@ -503,7 +504,8 @@
     "markDone": "Teljesítve",
     "cancel": "Elvetés",
     "markedDone": "Rendelés teljesítettként lezárva.",
-    "markedCancelled": "Rendelés elvetve."
+    "markedCancelled": "Rendelés elvetve.",
+    "glsShip": "GLS-csomag feladása ebből a rendelésből"
   },
   "portal": {
     "linkBtn": "Partner-portál link másolása",
@@ -1286,7 +1288,8 @@
       "skills": "Skillek",
       "permissions": "Jogosultságok",
       "data": "Adatok és mentés",
-      "printer": "Címkenyomtató"
+      "printer": "Címkenyomtató",
+      "gls": "GLS"
     },
     "tplTitle": "E-mail sablonok",
     "tplHint": "Újrafelhasználható sablonok az Automatizálások „E-mail küldése” akciójához. A tárgyban és a szövegben {{változók}} használhatók, amiket a trigger tölt ki.",
@@ -1404,7 +1407,16 @@
     "printerKeyConfirm": "Új kulcs generálása a régit érvényteleníti — az ügynök konfigurációjába az újat kell beírni. Folytatod?",
     "printerKeyOnce": "A kulcs CSAK MOST látható — másold az ügynök print_agent.json fájljába (agent_key):",
     "printerJobs": "Legutóbbi nyomtatások",
-    "printerSetupHint": "Telepítés röviden: 1) az „agent” mappát másold az üzleti PC-re, 2) generálj itt kulcsot és írd a print_agent.json-ba a nyomtató IP-címével együtt, 3) futtasd a telepites.bat-ot. Ezután a nyomtatás bárhonnan (mobilról is) egy gombnyomás."
+    "printerSetupHint": "Telepítés röviden: 1) az „agent” mappát másold az üzleti PC-re, 2) generálj itt kulcsot és írd a print_agent.json-ba a nyomtató IP-címével együtt, 3) futtasd a telepites.bat-ot. Ezután a nyomtatás bárhonnan (mobilról is) egy gombnyomás.",
+    "glsTitle": "GLS (MyGLS) csomagfeladás",
+    "glsHint": "A MyGLS fiók adatai — a jelszó titkosítva tárolódik, kiolvasni nem lehet (üresen hagyva marad a régi, kötőjellel törölhető). Teszt-módban az api.test.mygls.hu-ra megy minden.",
+    "glsUsername": "MyGLS felhasználó (e-mail)",
+    "glsPassword": "MyGLS jelszó",
+    "glsClientNumber": "Ügyfélszám (client number)",
+    "glsPrinterType": "Címke-formátum",
+    "glsTestMode": "Teszt-mód (api.test.mygls.hu)",
+    "glsSender": "Feladó (címkére kerülő cím)",
+    "glsSenderName": "Feladó neve"
   },
   "kiosk": {
     "title": "Munkaidő-terminál",
@@ -1578,6 +1590,13 @@
     },
     "user": {
       "bad_signature": "Hibás aláírás-kép."
+    },
+    "gls": {
+      "not_configured": "A GLS nincs beállítva — add meg a MyGLS adatokat a Beállításokban.",
+      "parcel_not_found": "A csomag nem található.",
+      "no_label": "Ehhez a csomaghoz nincs mentett címke.",
+      "no_parcel_number": "Ehhez a csomaghoz nincs csomagszám.",
+      "already_handed_over": "A csomagot a futár már átvette — innentől nem törölhető."
     }
   },
   "inv": {
@@ -2037,5 +2056,43 @@
     "submitHint": "Átadás után a gép átadott státuszt kap, a munkalap lezárul, a feladat befejeződik.",
     "doneInvoiced": "{serial} átadva — a Billingó-számla elkészült, a munkalap lezárva.",
     "doneDiscount": "{serial} átadva kedvezménnyel — a munkalap lezárva."
+  },
+  "gls": {
+    "title": "GLS-csomagfeladás",
+    "newParcel": "Új csomag",
+    "fromOrder": "Rendelésből előtöltve — ellenőrizd a címet, és mehet a címke.",
+    "partner": "Partner (címhez)",
+    "partnerPh": "Partner keresése…",
+    "recipientName": "Címzett neve",
+    "zip": "Irányítószám",
+    "city": "Város",
+    "street": "Utca",
+    "house": "Házszám",
+    "phone": "Telefon",
+    "email": "E-mail",
+    "content": "Tartalom",
+    "count": "Csomagok száma",
+    "cod": "Utánvét (COD)",
+    "codAmount": "Beszedendő összeg (Ft, bruttó)",
+    "codAmountRequired": "Utánvéthez add meg a beszedendő összeget.",
+    "createConfirm": "Címke készül a GLS-nél: {name}. Mehet?",
+    "create": "Címke készítése",
+    "created": "Címke kész — csomagszám: {number}. Nyomtatás indul…",
+    "recent": "Feladott csomagok",
+    "empty": "Még nincs feladott csomag.",
+    "printLabel": "Címke",
+    "refreshStatus": "Státusz",
+    "track": "Nyomkövetés",
+    "timeline": "Idővonal",
+    "delete": "Törlés",
+    "deleteConfirm": "Törlöd a feladást ({name})? A címke a GLS-nél is érvénytelenítődik — ez csak addig lehetséges, amíg a futár nem vette át.",
+    "deleted": "Feladás törölve — a címke érvénytelen.",
+    "status": {
+      "created": "Csomag létrehozva",
+      "handed_over": "Átadva futárnak",
+      "in_transit": "Szállítás alatt",
+      "delivered": "Kiszállítva",
+      "returned": "Visszáru"
+    }
   }
 }

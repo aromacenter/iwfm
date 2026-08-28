@@ -5,6 +5,7 @@
  *  „Kiszámlázott” gomb (Billingó). Az elszámoló a bejelentkezett user. */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
 import PartnerInfo from "@/components/PartnerInfo";
@@ -1158,6 +1159,13 @@ export default function ElszamolasPage() {
                     </td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <Link
+                          href={`/csomagok?order=${o.id}`}
+                          title={t("orders.glsShip")}
+                          className="rounded border border-sky-400 px-2 py-1 text-sm leading-none text-sky-700 hover:bg-sky-50"
+                        >
+                          📦
+                        </Link>
                         <button
                           onClick={() => setOrderStatus(o, "done")}
                           title={t("orders.markDone")}

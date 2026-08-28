@@ -15,6 +15,8 @@ from app.models.models import (  # noqa: F401
     EmailTemplate,
     Employee,
     EmployeeSkill,
+    GlsParcel,
+    GlsSettings,
     KnowledgeEntry,
     MachineIntake,
     NotificationSettings,

@@ -14,6 +14,7 @@ import uuid
 from datetime import UTC, date, datetime, time
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -553,6 +554,79 @@ class MachineIntake(Base):
     )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_intakes_user"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class GlsSettings(Base):
+    """MyGLS (GLS Hungary) integráció — egyetlen sor (id=1). A jelszó
+    Fernet-titkosítva, write-only; a feladó-adatok a címkék PickupAddress-e."""
+
+    __tablename__ = "gls_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    username: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    password_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    client_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Címke-formátum: A4_2x2 | A4_4x1 | Thermo (MyGLS TypeOfPrinter)
+    printer_type: Mapped[str] = mapped_column(String(16), nullable=False, default="A4_2x2")
+    sender_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    sender_zip: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    sender_city: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    sender_street: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    sender_house: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    sender_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    sender_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+
+
+class GlsParcel(Base):
+    """Feladott GLS-csomag: címzett, utánvét, csomagszám és a visszakapott
+    címke-PDF (újranyomtatáshoz tárolva)."""
+
+    __tablename__ = "gls_parcels"
+    __table_args__ = (Index("ix_gls_parcels_created", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("product_orders.id", ondelete="SET NULL", name="fk_gls_order"),
+        nullable=True,
+    )
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="SET NULL", name="fk_gls_partner"),
+        nullable=True,
+    )
+    recipient_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    recipient_zip: Mapped[str] = mapped_column(String(16), nullable=False)
+    recipient_city: Mapped[str] = mapped_column(String(128), nullable=False)
+    recipient_street: Mapped[str] = mapped_column(String(256), nullable=False)
+    recipient_house: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    recipient_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    recipient_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    content: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    cod_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cod_reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parcel_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # A MyGLS belső ParcelId-ja — a still-nem-átadott címke törléséhez kell.
+    gls_parcel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    label_pdf: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # Normalizált státusz: created (létrehozva) | handed_over (átadva
+    # futárnak) | in_transit (szállítás alatt) | delivered (kiszállítva) |
+    # returned (visszáru)
+    status_key: Mapped[str] = mapped_column(String(24), nullable=False, default="created")
+    last_status: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    last_status_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Teljes esemény-idővonal a GLS-től: [{date, description, depot, code}]
+    status_history: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_gls_user"),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(

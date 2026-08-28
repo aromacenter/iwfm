@@ -159,7 +159,8 @@
     "quotes": "Quote requests",
     "intake": "Intake",
     "handover": "Handover",
-    "calendar": "Calendar"
+    "calendar": "Calendar",
+    "gls": "Parcels (GLS)"
   },
   "roles": {
     "admin": "Admin",
@@ -503,7 +504,8 @@
     "markDone": "Fulfilled",
     "cancel": "Dismiss",
     "markedDone": "Order closed as fulfilled.",
-    "markedCancelled": "Order dismissed."
+    "markedCancelled": "Order dismissed.",
+    "glsShip": "Ship this order via GLS"
   },
   "portal": {
     "linkBtn": "Copy partner portal link",
@@ -1286,7 +1288,8 @@
       "skills": "Skills",
       "permissions": "Permissions",
       "data": "Data & backup",
-      "printer": "Label printer"
+      "printer": "Label printer",
+      "gls": "GLS"
     },
     "tplTitle": "Email templates",
     "tplHint": "Reusable templates for the Automations \"Send email\" action. {{variables}} can be used in the subject and body, filled by the trigger.",
@@ -1404,7 +1407,16 @@
     "printerKeyConfirm": "Generating a new key invalidates the old one — the agent config must be updated. Continue?",
     "printerKeyOnce": "The key is shown ONLY NOW — copy it into the agent's print_agent.json (agent_key):",
     "printerJobs": "Recent print jobs",
-    "printerSetupHint": "Setup in short: 1) copy the “agent” folder to the shop PC, 2) generate a key here and put it in print_agent.json along with the printer's IP, 3) run telepites.bat. Printing then works from anywhere, phones included."
+    "printerSetupHint": "Setup in short: 1) copy the “agent” folder to the shop PC, 2) generate a key here and put it in print_agent.json along with the printer's IP, 3) run telepites.bat. Printing then works from anywhere, phones included.",
+    "glsTitle": "GLS (MyGLS) shipping",
+    "glsHint": "MyGLS account details — the password is stored encrypted and cannot be read back (leave empty to keep, dash to delete). Test mode uses api.test.mygls.hu.",
+    "glsUsername": "MyGLS user (email)",
+    "glsPassword": "MyGLS password",
+    "glsClientNumber": "Client number",
+    "glsPrinterType": "Label format",
+    "glsTestMode": "Test mode (api.test.mygls.hu)",
+    "glsSender": "Sender (address on the label)",
+    "glsSenderName": "Sender name"
   },
   "kiosk": {
     "title": "Time clock terminal",
@@ -1578,6 +1590,13 @@
     },
     "user": {
       "bad_signature": "Invalid signature image."
+    },
+    "gls": {
+      "not_configured": "GLS is not configured — set the MyGLS credentials in Settings.",
+      "parcel_not_found": "Parcel not found.",
+      "no_label": "No stored label for this parcel.",
+      "no_parcel_number": "This parcel has no parcel number.",
+      "already_handed_over": "The courier already picked up this parcel — it can no longer be deleted."
     }
   },
   "inv": {
@@ -2037,5 +2056,43 @@
     "submitHint": "After handover the machine is marked handed over, the worksheet closes and the task completes.",
     "doneInvoiced": "{serial} handed over — Billingo invoice created, worksheet closed.",
     "doneDiscount": "{serial} handed over with discount — worksheet closed."
+  },
+  "gls": {
+    "title": "GLS shipping",
+    "newParcel": "New parcel",
+    "fromOrder": "Prefilled from an order — check the address and print the label.",
+    "partner": "Partner (for the address)",
+    "partnerPh": "Search partner…",
+    "recipientName": "Recipient name",
+    "zip": "ZIP",
+    "city": "City",
+    "street": "Street",
+    "house": "House no.",
+    "phone": "Phone",
+    "email": "Email",
+    "content": "Content",
+    "count": "Parcel count",
+    "cod": "Cash on delivery (COD)",
+    "codAmount": "Amount to collect (HUF, gross)",
+    "codAmountRequired": "COD requires the amount to collect.",
+    "createConfirm": "A label will be created at GLS for {name}. Continue?",
+    "create": "Create label",
+    "created": "Label ready — parcel number: {number}. Printing…",
+    "recent": "Shipped parcels",
+    "empty": "No parcels yet.",
+    "printLabel": "Label",
+    "refreshStatus": "Status",
+    "track": "Track",
+    "timeline": "Timeline",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this shipment ({name})? The label is voided at GLS — only possible until the courier picks it up.",
+    "deleted": "Shipment deleted — the label is void.",
+    "status": {
+      "created": "Created",
+      "handed_over": "Handed to courier",
+      "in_transit": "In transit",
+      "delivered": "Delivered",
+      "returned": "Returned"
+    }
   }
 }

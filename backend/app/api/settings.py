@@ -21,6 +21,7 @@ from app.core.crypto import encrypt_pii
 from app.db import get_db
 from app.models import (
     BillingoSettings,
+    GlsSettings,
     EmailSettings,
     EmployeeSkill,
     PermissionSettings,
@@ -537,6 +538,103 @@ async def update_billingo_settings(
     )
     await db.commit()
     return _billingo_out(row)
+
+
+# ─── GLS (MyGLS) csomagfeladás ──────────────────────────────────────────────
+
+
+class GlsSettingsBody(BaseModel):
+    username: str | None = Field(default=None, max_length=320)
+    password: str | None = Field(default=None, max_length=256)  # üresen: marad a régi
+    client_number: str | None = Field(default=None, max_length=32)
+    test_mode: bool = True
+    printer_type: str = Field(default="A4_2x2", max_length=16)
+    sender_name: str | None = Field(default=None, max_length=256)
+    sender_zip: str | None = Field(default=None, max_length=16)
+    sender_city: str | None = Field(default=None, max_length=128)
+    sender_street: str | None = Field(default=None, max_length=256)
+    sender_house: str | None = Field(default=None, max_length=32)
+    sender_phone: str | None = Field(default=None, max_length=32)
+    sender_email: str | None = Field(default=None, max_length=320)
+
+
+class GlsSettingsOut(BaseModel):
+    username: str | None
+    has_password: bool
+    client_number: str | None
+    test_mode: bool
+    printer_type: str
+    sender_name: str | None
+    sender_zip: str | None
+    sender_city: str | None
+    sender_street: str | None
+    sender_house: str | None
+    sender_phone: str | None
+    sender_email: str | None
+
+
+async def _get_or_create_gls(db: AsyncSession) -> GlsSettings:
+    row = (
+        await db.execute(select(GlsSettings).where(GlsSettings.id == 1))
+    ).scalar_one_or_none()
+    if row is None:
+        row = GlsSettings(id=1)
+        db.add(row)
+        await db.flush()
+    return row
+
+
+def _gls_out(row: GlsSettings) -> GlsSettingsOut:
+    return GlsSettingsOut(
+        username=row.username,
+        has_password=row.password_encrypted is not None,
+        client_number=row.client_number,
+        test_mode=row.test_mode,
+        printer_type=row.printer_type,
+        sender_name=row.sender_name, sender_zip=row.sender_zip,
+        sender_city=row.sender_city, sender_street=row.sender_street,
+        sender_house=row.sender_house, sender_phone=row.sender_phone,
+        sender_email=row.sender_email,
+    )
+
+
+@router.get("/gls", response_model=GlsSettingsOut)
+async def get_gls_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    return _gls_out(await _get_or_create_gls(db))
+
+
+@router.put("/gls", response_model=GlsSettingsOut)
+async def update_gls_settings(
+    body: GlsSettingsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    from app.services.wfm.gls_service import PRINTER_TYPES
+
+    row = await _get_or_create_gls(db)
+    row.username = (body.username or "").strip() or None
+    row.client_number = (body.client_number or "").strip() or None
+    row.test_mode = body.test_mode
+    row.printer_type = body.printer_type if body.printer_type in PRINTER_TYPES else "A4_2x2"
+    if body.password:  # üres = nem változik; "-" = törlés
+        row.password_encrypted = (
+            None if body.password.strip() == "-" else encrypt_pii(body.password.strip())
+        )
+    for field in (
+        "sender_name", "sender_zip", "sender_city", "sender_street",
+        "sender_house", "sender_phone", "sender_email",
+    ):
+        setattr(row, field, (getattr(body, field) or "").strip() or None)
+    await record_audit(
+        db, actor=actor, action="settings.gls_update", entity_type="settings",
+        entity_id="gls", detail={"test_mode": body.test_mode}, request=request,
+    )
+    await db.commit()
+    return _gls_out(row)
 
 
 # ─── Ügyfél-támogatás (QR-oldal tudásbázisa) ────────────────────────────────
