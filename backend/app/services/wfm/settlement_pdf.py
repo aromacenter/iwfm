@@ -249,6 +249,13 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
         c.line(x, sig_y, x + box_w, sig_y)
         c.setFont(FONT, 8)
         c.drawCentredString(x + box_w / 2, sig_y - 4.5 * mm, label)
+        # a partner-aláírás alatt a begépelt aláíró-név is szerepel
+        if sig_key == "partner_signature" and data.get("signer_name"):
+            c.setFont(FONT_BOLD, 8)
+            c.drawCentredString(
+                x + box_w / 2, sig_y - 9 * mm, str(data["signer_name"])[:40]
+            )
+            c.setFont(FONT, 8)
 
     # ─── Lábléc ───
     footer_text = s.get("footer_text")

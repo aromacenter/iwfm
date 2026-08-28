@@ -178,6 +178,43 @@ async def me(
     return _user_out(user, permissions_for(user.role, matrix))
 
 
+class SignatureSampleBody(BaseModel):
+    signature: str | None = None  # None/üres = a minta törlése
+
+
+@router.get("/me/signature")
+async def get_my_signature_sample(
+    user: User = Depends(get_current_user),
+):
+    """A saját elmentett aláírás-minta (PNG data URL) — egy kattintással
+    beszúrható a munkalap dolgozói aláírásához."""
+    return {"signature": user.signature_sample}
+
+
+@router.put("/me/signature")
+async def set_my_signature_sample(
+    body: SignatureSampleBody,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if body.signature:
+        if (
+            not body.signature.startswith("data:image/png;base64,")
+            or len(body.signature) > 300_000
+        ):
+            raise HTTPException(status_code=422, detail={"code": "user.bad_signature"})
+        user.signature_sample = body.signature
+    else:
+        user.signature_sample = None
+    await record_audit(
+        db, actor=user, action="user.signature_sample", entity_type="user",
+        entity_id=str(user.id), request=request,
+    )
+    await db.commit()
+    return {"ok": True, "has_signature": user.signature_sample is not None}
+
+
 class SubstituteBody(BaseModel):
     user_id: str | None = None  # None = helyettes törlése
 

@@ -278,15 +278,24 @@ async def test_settlement_receipt_pdf_and_signature(client, manager):
     # érvénytelen aláírás-adat
     bad = await client.post(
         f"/api/settlements/{body['id']}/signature",
-        json={"signature": "data:text/plain;base64,aGVsbG8hIGl0J3Mgbm90IGEgcG5n"},
+        json={"signature": "data:text/plain;base64,aGVsbG8hIGl0J3Mgbm90IGEgcG5n",
+              "signer_name": "Teszt Elek"},
         headers=mgr,
     )
     assert bad.status_code == 422
     assert bad.json()["detail"]["code"] == "settlement.bad_signature"
 
-    ok = await client.post(
+    # aláíró-név nélkül nem rögzíthető (kötelező mező)
+    noname = await client.post(
         f"/api/settlements/{body['id']}/signature",
         json={"signature": PNG_DATA_URL},
+        headers=mgr,
+    )
+    assert noname.status_code == 422
+
+    ok = await client.post(
+        f"/api/settlements/{body['id']}/signature",
+        json={"signature": PNG_DATA_URL, "signer_name": "Boltos Béla"},
         headers=mgr,
     )
     assert ok.status_code == 200, ok.text

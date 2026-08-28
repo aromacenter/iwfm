@@ -63,6 +63,9 @@ class User(Base):
     # A kiadott JWT-k érvényességi pecsétje: növelésekor minden korábbi token
     # érvénytelenné válik (jelszóváltás / kényszerített kijelentkeztetés).
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Elmentett aláírás-minta (PNG data URL) — munkalapon egy kattintással
+    # beszúrható a dolgozói aláíráshoz.
+    signature_sample: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Helyettes a távollét (jóváhagyott szabadság/betegség) idejére — a
     # felelős-képviselői értesítések ilyenkor hozzá futnak be.
     substitute_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -402,6 +405,8 @@ class Worksheet(Base):
     # PNG data URL-ek a képernyős aláírásról (max ~200KB, szerveroldalon ellenőrizve)
     employee_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     client_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Az ügyfél-aláíráshoz KÖTELEZŐEN begépelt név — az azonosítás biztos.
+    client_signer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -971,6 +976,8 @@ class Settlement(Base):
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # A partner képernyős aláírása a bizonylaton (PNG data URL)
     partner_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Az aláíráshoz KÖTELEZŐEN begépelt név (ki írta alá a partnernél).
+    signer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     receipt_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Tartozás-görgetés: a partner nyitott egyenlege az elszámolás ELŐTT
     # (pillanatkép) + a helyszínen ténylegesen fizetett összeg (bruttó Ft).

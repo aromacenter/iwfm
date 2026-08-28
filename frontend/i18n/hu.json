@@ -430,7 +430,9 @@
     "handoverSaleTitle": "Átadott áruk (azonnal fizetendő)",
     "consignmentFlag": "Bizományos termék (kávé)",
     "consignmentFlagHint": "Fogyás alapján számoljuk el a partnernél. Ha NINCS bepipálva, a termék eladás: átadáskor / kiszállításkor azonnal fizetendő.",
-    "consignmentBadge": "bizomány"
+    "consignmentBadge": "bizomány",
+    "signerName": "Aláíró neve (kötelező)",
+    "signerNameRequired": "Az aláíráshoz kötelező begépelni az aláíró nevét."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1241,7 +1243,12 @@
     "wsRepairsHint": "Alternatív javítási ajánlatok árral — nem összegződnek, az ügyfél választ közülük.",
     "quoteAccepted": "Árajánlat elfogadva — kezdhető a munka! Konstrukció: {option}",
     "quotePending": "Árajánlat kiküldve az ügyfélnek — a jóváhagyásig ne kezdd meg a javítást.",
-    "quoteDeclined": "Az ügyfél nem kérte a javítást — NE javítsd, a gépet összeszerelve add vissza."
+    "quoteDeclined": "Az ügyfél nem kérte a javítást — NE javítsd, a gépet összeszerelve add vissza.",
+    "sigUseSample": "Aláírás-minta beszúrása",
+    "sigSaveSample": "Mentés mintaként",
+    "sigSampleSaved": "Aláírás-minta elmentve — legközelebb egy kattintás!",
+    "wsSignerName": "Aláíró neve (kötelező az ügyfél-aláíráshoz)",
+    "wsSignerNameRequired": "Az ügyfél-aláíráshoz kötelező begépelni az aláíró nevét."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1565,6 +1572,12 @@
       "transfer_decided": "Ezt az átadást már elbírálták.",
       "not_your_transfer": "Ezt az átadást nem te hagyhatod jóvá — a fogadó félnek kell igazolnia az átvételt.",
       "not_your_van": "Ebből az autóból csak a hozzárendelt üzletkötő indíthat kifelé mozgást."
+    },
+    "worksheet": {
+      "signer_name_required": "Az ügyfél-aláíráshoz kötelező az aláíró nevét begépelni."
+    },
+    "user": {
+      "bad_signature": "Hibás aláírás-kép."
     }
   },
   "inv": {

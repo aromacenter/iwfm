@@ -430,7 +430,9 @@
     "handoverSaleTitle": "Handed-over goods (payable now)",
     "consignmentFlag": "Consignment product (coffee)",
     "consignmentFlagHint": "Settled by consumption at the partner. If UNCHECKED, the product is a sale: payable immediately on handover / delivery.",
-    "consignmentBadge": "consignment"
+    "consignmentBadge": "consignment",
+    "signerName": "Signer's name (required)",
+    "signerNameRequired": "The signature requires the signer's typed name."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1241,7 +1243,12 @@
     "wsRepairsHint": "Alternative repair offers with prices — not summed; the customer picks one.",
     "quoteAccepted": "Quote approved — work can start! Option: {option}",
     "quotePending": "Quote sent to the customer — please wait for approval before starting.",
-    "quoteDeclined": "The customer declined the repair — do NOT repair, reassemble and return the machine."
+    "quoteDeclined": "The customer declined the repair — do NOT repair, reassemble and return the machine.",
+    "sigUseSample": "Insert saved signature",
+    "sigSaveSample": "Save as sample",
+    "sigSampleSaved": "Signature sample saved — next time it's one click!",
+    "wsSignerName": "Signer's name (required for the client signature)",
+    "wsSignerNameRequired": "The client signature requires the signer's typed name."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1565,6 +1572,12 @@
       "transfer_decided": "This transfer has already been decided.",
       "not_your_transfer": "You cannot approve this transfer — the receiving party must confirm receipt.",
       "not_your_van": "Only the assigned sales rep can move stock out of this van."
+    },
+    "worksheet": {
+      "signer_name_required": "The client signature requires the signer's typed name."
+    },
+    "user": {
+      "bad_signature": "Invalid signature image."
     }
   },
   "inv": {

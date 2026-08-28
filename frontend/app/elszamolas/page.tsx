@@ -264,6 +264,7 @@ export default function ElszamolasPage() {
   const [signing, setSigning] = useState<Settlement | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
   const [signEmail, setSignEmail] = useState("");
+  const [signName, setSignName] = useState("");  // az aláíró kötelező neve
   const [prices, setPrices] = useState<PartnerPrice[] | null>(null); // null = modal zárva
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -897,15 +898,21 @@ export default function ElszamolasPage() {
 
   async function saveSignature() {
     if (!signing || !signature) return;
+    if (!signName.trim()) {
+      toast(t("cons.signerNameRequired"), "error");
+      return;
+    }
     setBusy(true);
     try {
       await api.post(`/api/settlements/${signing.id}/signature`, {
         signature,
+        signer_name: signName.trim(),
         partner_email: signEmail.trim() || null,
       });
       toast(t("cons.signatureSaved"), "success");
       setSigning(null);
       setSignature(null);
+      setSignName("");
       setSignEmail("");
       loadHistory();
     } catch (err) {
@@ -2101,6 +2108,15 @@ export default function ElszamolasPage() {
               {signing.partner_name} · {ft(signing.total_gross)} · {fmt(signing.created_at)}
             </p>
             <SignatureCanvas label={t("cons.signLabel")} onChange={setSignature} />
+            {/* Az aláíráshoz kötelező a begépelt név — így biztos, ki írta alá */}
+            <input
+              value={signName}
+              onChange={(e) => setSignName(e.target.value)}
+              placeholder={t("cons.signerName")}
+              className={`w-full rounded-lg border px-3 py-2 text-sm ${
+                signature && !signName.trim() ? "border-rose-400 bg-rose-50" : "border-slate-300"
+              }`}
+            />
             {!partners.find((p) => p.id === signing.partner_id)?.contact_email && (
               <label className="block text-sm">
                 {t("cons.signEmail")}
@@ -2123,7 +2139,7 @@ export default function ElszamolasPage() {
               </button>
               <button
                 onClick={saveSignature}
-                disabled={busy || !signature}
+                disabled={busy || !signature || !signName.trim()}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
                 {busy ? t("common.saving") : t("cons.signSave")}

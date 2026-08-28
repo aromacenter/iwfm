@@ -8,9 +8,15 @@ import { useT } from "@/lib/i18n";
 export default function SignatureCanvas({
   label,
   onChange,
+  preset,
+  onSavePreset,
 }: {
   label: string;
   onChange: (dataUrl: string | null) => void;
+  /** Elmentett aláírás-minta: gombbal egy kattintással beszúrható. */
+  preset?: string | null;
+  /** Ha megadott, a megrajzolt aláírás elmenthető mintaként. */
+  onSavePreset?: (dataUrl: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
@@ -72,19 +78,59 @@ export default function SignatureCanvas({
     onChange(null);
   }
 
+  // Az elmentett minta berajzolása a vászonra — egy kattintás, kész.
+  function usePreset() {
+    if (!preset) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const rect = canvas.getBoundingClientRect();
+      ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      setHasInk(true);
+      onChange(preset);
+    };
+    img.src = preset;
+  }
+
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between gap-2">
         <span className="text-sm text-slate-600">{label}</span>
-        {hasInk && (
-          <button
-            type="button"
-            onClick={clear}
-            className="text-xs text-slate-400 hover:text-red-600"
-          >
-            {t("myTasks.sigClear")}
-          </button>
-        )}
+        <span className="flex items-center gap-2">
+          {preset && !hasInk && (
+            <button
+              type="button"
+              onClick={usePreset}
+              className="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+            >
+              ✍️ {t("myTasks.sigUseSample")}
+            </button>
+          )}
+          {onSavePreset && hasInk && (
+            <button
+              type="button"
+              onClick={() => {
+                const d = canvasRef.current?.toDataURL("image/png");
+                if (d) onSavePreset(d);
+              }}
+              className="text-xs text-indigo-500 hover:underline"
+            >
+              💾 {t("myTasks.sigSaveSample")}
+            </button>
+          )}
+          {hasInk && (
+            <button
+              type="button"
+              onClick={clear}
+              className="text-xs text-slate-400 hover:text-red-600"
+            >
+              {t("myTasks.sigClear")}
+            </button>
+          )}
+        </span>
       </div>
       <canvas
         ref={canvasRef}

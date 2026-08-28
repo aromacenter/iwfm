@@ -2630,6 +2630,7 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes,
             "debt_before": s.debt_before,
             "paid_amount": s.paid_amount,
             "partner_signature": s.partner_signature,
+            "signer_name": s.signer_name,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
         },
         settings,
@@ -2660,6 +2661,8 @@ async def settlement_pdf(
 
 class SignatureBody(BaseModel):
     signature: str = Field(min_length=30, max_length=500_000)
+    # Az aláíróhoz KÖTELEZŐEN begépelt név — így biztos, ki írta alá.
+    signer_name: str = Field(min_length=2, max_length=256)
     # Opcionális e-mail-gyűjtés aláíráskor: csak akkor mentjük a partnerre,
     # ha még nincs e-mail címe (kézi értéket nem írunk felül).
     partner_email: EmailStr | None = None
@@ -2681,6 +2684,7 @@ async def sign_settlement(
         raise HTTPException(status_code=422, detail={"code": "settlement.bad_signature"})
     s = await _get_settlement_or_404(db, settlement_id)
     s.partner_signature = body.signature
+    s.signer_name = body.signer_name.strip()
     partner = (
         await db.execute(select(Partner).where(Partner.id == s.partner_id))
     ).scalar_one_or_none()

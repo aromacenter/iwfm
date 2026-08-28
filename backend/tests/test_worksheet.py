@@ -32,6 +32,7 @@ def ws_payload(**kw) -> dict:
         "client_location": "Budapest, Fő u. 1.",
         "employee_signature": TINY_PNG,
         "client_signature": TINY_PNG,
+        "client_signer_name": "Aláíró Aladár",
     }
     base.update(kw)
     return base

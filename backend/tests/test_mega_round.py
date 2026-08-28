@@ -219,7 +219,7 @@ async def test_signature_collects_email(client, manager):
     png = "data:image/png;base64," + "A" * 40
     res = await client.post(
         f"/api/settlements/{settlement['id']}/signature",
-        json={"signature": png, "partner_email": "uj@partner.hu"},
+        json={"signature": png, "signer_name": "Boltos Béla", "partner_email": "uj@partner.hu"},
         headers=mgr,
     )
     assert res.status_code == 200, res.text

@@ -86,7 +86,7 @@ async def test_worksheet_fee_prefill_and_flow(client, admin, manager, monkeypatc
     res = await client.put(
         f"/api/tasks/{task_id}/worksheet",
         json={"work_description": "Karbantartás kész", "materials": [],
-              "client_signature": PNG_SIG},
+              "client_signature": PNG_SIG, "client_signer_name": "Aláíró Aladár"},
         headers=mgr,
     )
     assert res.status_code == 200, res.text
@@ -138,7 +138,8 @@ async def test_fee_discount_skips_invoice(client, admin, manager, monkeypatch):
     res = await client.put(
         f"/api/tasks/{task_id}/worksheet",
         json={"work_description": "Kész", "materials": [], "fee_discount": True,
-              "employee_signature": PNG_SIG, "client_signature": PNG_SIG},
+              "employee_signature": PNG_SIG, "client_signature": PNG_SIG,
+              "client_signer_name": "Aláíró Aladár"},
         headers=mgr,
     )
     assert res.status_code == 200, res.text

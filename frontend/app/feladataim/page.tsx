@@ -77,6 +77,7 @@ interface WorksheetForm {
   client_location: string;
   employee_signature: string | null;
   client_signature: string | null;
+  client_signer_name: string;
   maintenance_fee: string;
   fee_discount: boolean;
 }
@@ -91,6 +92,7 @@ const EMPTY_WS: WorksheetForm = {
   client_location: "",
   employee_signature: null,
   client_signature: null,
+  client_signer_name: "",
   maintenance_fee: "",
   fee_discount: false,
 };
@@ -115,6 +117,23 @@ export default function FeladataimPage() {
   const [wsQuote, setWsQuote] = useState<{ status: string; selected: string | null }>({ status: "none", selected: null });
   const { t } = useT();
   const { toast, prompt } = useUI();
+
+  // Elmentett aláírás-minta: egy kattintással beszúrható a dolgozói aláíráshoz
+  const [sigSample, setSigSample] = useState<string | null>(null);
+  useEffect(() => {
+    api.get<{ signature: string | null }>("/api/auth/me/signature")
+      .then((r) => setSigSample(r.signature))
+      .catch(() => {});
+  }, []);
+  async function saveSigSample(dataUrl: string) {
+    try {
+      await api.put("/api/auth/me/signature", { signature: dataUrl });
+      setSigSample(dataUrl);
+      toast(t("myTasks.sigSampleSaved"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   // Szervizjegyeim: a bejelentkezett szervizesre kiosztott nyitott jegyek —
   // hogy a kiosztás a "feladatai közt" is látsszon, ne csak a Szerviz oldalon.
@@ -209,6 +228,7 @@ export default function FeladataimPage() {
           client_location: string | null;
           employee_signature: string | null;
           client_signature: string | null;
+          client_signer_name: string | null;
           maintenance_fee: number | null;
           fee_discount: boolean;
           quote_status: string;
@@ -235,6 +255,7 @@ export default function FeladataimPage() {
           client_location: existing.client_location ?? "",
           employee_signature: null,
           client_signature: null,
+          client_signer_name: existing.client_signer_name ?? "",
           maintenance_fee: existing.maintenance_fee != null ? String(existing.maintenance_fee) : "",
           fee_discount: existing.fee_discount,
         });
@@ -324,6 +345,11 @@ export default function FeladataimPage() {
       setWsError(t("myTasks.wsWorkRequired"));
       return;
     }
+    // Új ügyfél-aláíráshoz kötelező az aláíró begépelt neve
+    if (ws.client_signature && !ws.client_signer_name.trim()) {
+      setWsError(t("myTasks.wsSignerNameRequired"));
+      return;
+    }
     setWsBusy(true);
     setWsError(null);
     try {
@@ -356,6 +382,7 @@ export default function FeladataimPage() {
         client_location: ws.client_location || null,
         employee_signature: ws.employee_signature,
         client_signature: ws.client_signature,
+        client_signer_name: ws.client_signer_name.trim() || null,
         // KSZ-en a díj a képviselőé — a dolgozói mentés nem küld díjat.
         maintenance_fee: wsTask.worksheet_external
           ? null
@@ -819,6 +846,8 @@ export default function FeladataimPage() {
               <SignatureCanvas
                 label={wsTask.worksheet_completed ? t("myTasks.wsEmpSigKeep") : t("myTasks.wsEmpSig")}
                 onChange={(d) => setWs((w) => ({ ...w, employee_signature: d }))}
+                preset={sigSample}
+                onSavePreset={saveSigSample}
               />
             )}
             {wsSaved.client && !redoSig.client ? (
@@ -837,10 +866,23 @@ export default function FeladataimPage() {
                 <img src={wsSaved.client} alt="" className="h-24 w-full rounded-lg border border-emerald-200 bg-white object-contain" />
               </div>
             ) : (
-              <SignatureCanvas
-                label={wsTask.worksheet_completed ? t("myTasks.wsClientSigKeep") : t("myTasks.wsClientSig")}
-                onChange={(d) => setWs((w) => ({ ...w, client_signature: d }))}
-              />
+              <div className="space-y-2">
+                <SignatureCanvas
+                  label={wsTask.worksheet_completed ? t("myTasks.wsClientSigKeep") : t("myTasks.wsClientSig")}
+                  onChange={(d) => setWs((w) => ({ ...w, client_signature: d }))}
+                />
+                {/* Az ügyfél-aláíráshoz kötelező a begépelt név */}
+                <input
+                  value={ws.client_signer_name}
+                  onChange={(e) => setWs((w) => ({ ...w, client_signer_name: e.target.value }))}
+                  placeholder={t("myTasks.wsSignerName")}
+                  className={`w-full rounded-lg border px-3 py-2 text-sm ${
+                    ws.client_signature && !ws.client_signer_name.trim()
+                      ? "border-rose-400 bg-rose-50"
+                      : "border-slate-300"
+                  }`}
+                />
+              </div>
             )}
 
             {wsError && <p className="text-sm text-red-600">{wsError}</p>}

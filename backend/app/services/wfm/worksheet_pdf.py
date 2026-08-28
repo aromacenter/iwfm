@@ -318,6 +318,13 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         c.line(x, sig_y, x + box_w, sig_y)
         c.setFont(FONT, 8)
         c.drawCentredString(x + box_w / 2, sig_y - 4.5 * mm, label)
+        # az ügyfél-aláírás alatt a begépelt név is szerepel (azonosítás)
+        if sig_key == "client_signature" and data.get("client_signer_name"):
+            c.setFont(FONT_BOLD, 8)
+            c.drawCentredString(
+                x + box_w / 2, sig_y - 9 * mm, str(data["client_signer_name"])[:40]
+            )
+            c.setFont(FONT, 8)
 
     # ─── Átadás-QR (ügyfél-példány): a boltban beolvasva az Átadás menü ───
     handover_url = data.get("handover_url")

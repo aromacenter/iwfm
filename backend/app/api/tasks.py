@@ -151,6 +151,8 @@ class WorksheetBody(BaseModel):
     client_location: str | None = Field(default=None, max_length=512)
     employee_signature: str | None = None
     client_signature: str | None = None
+    # Az ügyfél-aláíráshoz KÖTELEZŐ begépelt név — új aláírás név nélkül 422.
+    client_signer_name: str | None = Field(default=None, max_length=256)
     # Karbantartási díj (nettó, a gép díjából előtöltve — átírható) és a
     # kedvezmény-pipa (elengedve → nem készül automatikus számla).
     maintenance_fee: float | None = Field(default=None, ge=0)
@@ -171,6 +173,7 @@ class WorksheetOut(BaseModel):
     client_location: str | None
     has_employee_signature: bool
     has_client_signature: bool
+    client_signer_name: str | None = None
     # A mentett aláírás-képek (data URL) — újranyitáskor a felület megjeleníti
     # őket, hogy ne tűnjenek "elveszettnek".
     employee_signature: str | None
@@ -230,6 +233,7 @@ def _worksheet_out(
         client_location=ws.client_location,
         has_employee_signature=ws.employee_signature is not None,
         has_client_signature=ws.client_signature is not None,
+        client_signer_name=ws.client_signer_name,
         employee_signature=ws.employee_signature,
         client_signature=ws.client_signature,
         # A karbantartási díj is a MI ügyfél-árunk — a külsős szerviz nem
@@ -384,7 +388,17 @@ async def _upsert_worksheet(
     if body.employee_signature:
         ws.employee_signature = _validate_signature(body.employee_signature)
     if body.client_signature:
+        # ÚJ ügyfél-aláíráshoz kötelező a begépelt név (azonosítás)
+        signer = (body.client_signer_name or "").strip()
+        if not signer and not ws.client_signer_name:
+            raise HTTPException(
+                status_code=422, detail={"code": "worksheet.signer_name_required"}
+            )
         ws.client_signature = _validate_signature(body.client_signature)
+        if signer:
+            ws.client_signer_name = signer
+    elif (body.client_signer_name or "").strip():
+        ws.client_signer_name = body.client_signer_name.strip()
     await db.flush()
     await record_audit(
         db, actor=actor, action="worksheet.create" if created else "worksheet.update",
@@ -1013,6 +1027,7 @@ async def _build_worksheet_pdf(
             "client_location": ws.client_location,
             "employee_signature": ws.employee_signature,
             "client_signature": ws.client_signature,
+            "client_signer_name": ws.client_signer_name,
             "comments": pdf_comments,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
         },
