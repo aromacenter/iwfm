@@ -240,7 +240,12 @@ export function errorMessage(err: unknown): string {
         ? translate(`errors.${err.code}.withMessage`, { message: detailMsg })
         : detailMsg;
     }
-    const localized = translate(`errors.${err.code}`);
+    // A backend detail-mezői ({limit}, {name}...) behelyettesítődnek a szövegbe
+    const params =
+      err.detail && typeof err.detail === "object" && !Array.isArray(err.detail)
+        ? (err.detail as Record<string, string | number>)
+        : undefined;
+    const localized = translate(`errors.${err.code}`, params);
     if (localized !== `errors.${err.code}`) return localized;
     if (ERROR_MESSAGES[err.code]) return ERROR_MESSAGES[err.code];
 
