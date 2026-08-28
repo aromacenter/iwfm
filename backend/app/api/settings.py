@@ -401,6 +401,32 @@ async def get_worksheet_settings(
     return _worksheet_out(await _get_or_create_worksheet(db))
 
 
+@router.get("/branding")
+async def get_branding(db: AsyncSession = Depends(get_db)):
+    """Publikus arculat a felületnek (fejléc, belépő-oldal): cégnév, szín és
+    hogy van-e logó. Érzékeny adat nincs benne — bérelt példányon így lesz
+    az ügyfél márkája a felületen is."""
+    row = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    return {
+        "company_name": row.company_name if row else None,
+        "accent_color": row.accent_color if row else "#1e40af",
+        "has_logo": bool(row and row.logo_data is not None),
+    }
+
+
+@router.get("/branding/logo")
+async def get_branding_logo(db: AsyncSession = Depends(get_db)):
+    """A céglogó publikusan — a belépő-oldal és a fejléc is mutathatja."""
+    row = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    if row is None or row.logo_data is None:
+        raise HTTPException(status_code=404, detail={"code": "settings.no_logo"})
+    return Response(content=bytes(row.logo_data), media_type=row.logo_mime or "image/png")
+
+
 @router.get("/worksheet/logo")
 async def get_worksheet_logo(
     db: AsyncSession = Depends(get_db),

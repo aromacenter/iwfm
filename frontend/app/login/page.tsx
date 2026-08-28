@@ -33,7 +33,8 @@ export default function LoginPage() {
               display_name: displayName,
             });
       void user;
-      router.replace("/naptar"); // a főoldal mindenkinek a naptár
+      // friss telepítésnél (bootstrap) a beüzemelő varázsló fogad
+      router.replace(mode === "bootstrap" ? "/onboarding" : "/naptar");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
