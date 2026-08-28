@@ -228,6 +228,18 @@ export function errorMessage(err: unknown): string {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { translate } = require("@/lib/i18n") as typeof import("@/lib/i18n");
   if (err instanceof ApiError) {
+    // Külső szolgáltatás (pl. MyGLS) konkrét hibaszövege: mutassuk, ne a
+    // generikus "Szerverhiba" jöjjön — enélkül nem lehet tudni, mi a gond.
+    const detailMsg =
+      err.detail && typeof err.detail === "object"
+        ? (err.detail as { message?: unknown }).message
+        : undefined;
+    if (typeof detailMsg === "string" && detailMsg) {
+      return translate(`errors.${err.code}.withMessage`) !==
+        `errors.${err.code}.withMessage`
+        ? translate(`errors.${err.code}.withMessage`, { message: detailMsg })
+        : detailMsg;
+    }
     const localized = translate(`errors.${err.code}`);
     if (localized !== `errors.${err.code}`) return localized;
     if (ERROR_MESSAGES[err.code]) return ERROR_MESSAGES[err.code];

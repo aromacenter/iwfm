@@ -1592,6 +1592,9 @@
       "bad_signature": "Invalid signature image."
     },
     "gls": {
+      "error": {
+        "withMessage": "GLS error: {message}"
+      },
       "not_configured": "GLS is not configured — set the MyGLS credentials in Settings.",
       "parcel_not_found": "Parcel not found.",
       "no_label": "No stored label for this parcel.",

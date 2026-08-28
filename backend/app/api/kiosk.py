@@ -26,14 +26,19 @@ router = APIRouter()
 
 _MAX_ATTEMPTS = 10
 _WINDOW_SECONDS = 5 * 60
+# IP-től független, globális korlát: hamisított X-Forwarded-For fejléccel
+# (IP-váltogatással) sem lehet végigpróbálgatni a 6 jegyű kódteret.
+_GLOBAL_MAX = 30
+_GLOBAL_WINDOW = 15 * 60
+_GLOBAL_KEY = "\x00global"
 _failed: dict[str, list[float]] = defaultdict(list)
 
 
-def _throttled(ip: str) -> bool:
+def _throttled(key: str, limit: int = _MAX_ATTEMPTS, window: int = _WINDOW_SECONDS) -> bool:
     now = _time.monotonic()
-    attempts = [t for t in _failed[ip] if now - t < _WINDOW_SECONDS]
-    _failed[ip] = attempts
-    return len(attempts) >= _MAX_ATTEMPTS
+    attempts = [t for t in _failed[key] if now - t < window]
+    _failed[key] = attempts
+    return len(attempts) >= limit
 
 
 class KioskClockBody(BaseModel):
@@ -54,7 +59,7 @@ async def kiosk_clock(
     db: AsyncSession = Depends(get_db),
 ):
     ip = request.client.host if request.client else "?"
-    if _throttled(ip):
+    if _throttled(ip) or _throttled(_GLOBAL_KEY, _GLOBAL_MAX, _GLOBAL_WINDOW):
         raise HTTPException(status_code=429, detail={"code": "kiosk.rate_limited"})
 
     emp = (
@@ -66,6 +71,7 @@ async def kiosk_clock(
     ).scalar_one_or_none()
     if emp is None:
         _failed[ip].append(_time.monotonic())
+        _failed[_GLOBAL_KEY].append(_time.monotonic())
         raise HTTPException(status_code=404, detail={"code": "kiosk.unknown_code"})
     _failed.pop(ip, None)
 

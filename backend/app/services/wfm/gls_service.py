@@ -82,7 +82,11 @@ def _format_errors(errors: list[dict]) -> str:
     out = []
     for e in errors or []:
         desc = e.get("ErrorDescription") or e.get("ErrorCode") or "ismeretlen hiba"
-        out.append(str(desc))
+        code = e.get("ErrorCode")
+        if code is not None and str(code) != str(desc):
+            out.append(f"{desc} [{code}]")
+        else:
+            out.append(str(desc))
     return "; ".join(out) or "ismeretlen GLS-hiba"
 
 
@@ -138,6 +142,7 @@ async def create_label(
     )
     errors = data.get("PrintLabelsErrorList") or []
     if errors:
+        logger.warning("MyGLS PrintLabels hibalista: %s", _format_errors(errors))
         raise RuntimeError(_format_errors(errors))
     info = (data.get("PrintLabelsInfoList") or [{}])[0]
     parcel_number = str(info.get("ParcelNumber") or "")
@@ -177,6 +182,7 @@ async def get_statuses(db: AsyncSession, parcel_number: str) -> list[dict]:
     )
     err = data.get("GetParcelStatusErrors") or []
     if err:
+        logger.warning("MyGLS GetParcelStatuses hibalista: %s", _format_errors(err))
         raise RuntimeError(_format_errors(err))
     return [
         {
@@ -196,4 +202,5 @@ async def delete_label(db: AsyncSession, gls_parcel_id: int) -> None:
     data = await _call(cfg, "DeleteLabels", {"ParcelIdList": [int(gls_parcel_id)]})
     errors = data.get("DeleteLabelsErrorList") or []
     if errors:
+        logger.warning("MyGLS DeleteLabels hibalista: %s", _format_errors(errors))
         raise RuntimeError(_format_errors(errors))

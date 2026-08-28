@@ -1592,6 +1592,9 @@
       "bad_signature": "Hibás aláírás-kép."
     },
     "gls": {
+      "error": {
+        "withMessage": "GLS-hiba: {message}"
+      },
       "not_configured": "A GLS nincs beállítva — add meg a MyGLS adatokat a Beállításokban.",
       "parcel_not_found": "A csomag nem található.",
       "no_label": "Ehhez a csomaghoz nincs mentett címke.",

@@ -30,14 +30,18 @@ router = APIRouter()
 
 _MAX_ATTEMPTS = 5
 _WINDOW_SECONDS = 15 * 60
+# IP-től független korlát fiókonként: hamisított X-Forwarded-For fejléccel
+# (IP-váltogatással) sem lehet korlátlanul jelszót próbálgatni egy emailre.
+_MAX_EMAIL_ATTEMPTS = 20
+_EMAIL_WINDOW_SECONDS = 60 * 60
 _failed_logins: dict[str, list[float]] = defaultdict(list)
 
 
-def _throttled(key: str) -> bool:
+def _throttled(key: str, limit: int = _MAX_ATTEMPTS, window: int = _WINDOW_SECONDS) -> bool:
     now = _time.monotonic()
-    attempts = [t for t in _failed_logins[key] if now - t < _WINDOW_SECONDS]
+    attempts = [t for t in _failed_logins[key] if now - t < window]
     _failed_logins[key] = attempts
-    return len(attempts) >= _MAX_ATTEMPTS
+    return len(attempts) >= limit
 
 
 def _record_failure(key: str) -> None:
@@ -134,7 +138,10 @@ async def login(
 ):
     ip = request.client.host if request.client else "?"
     throttle_key = f"{body.email.lower()}|{ip}"
-    if _throttled(throttle_key):
+    email_key = f"email:{body.email.lower()}"
+    if _throttled(throttle_key) or _throttled(
+        email_key, _MAX_EMAIL_ATTEMPTS, _EMAIL_WINDOW_SECONDS
+    ):
         raise HTTPException(status_code=429, detail={"code": "auth.rate_limited"})
 
     user = (
@@ -144,10 +151,12 @@ async def login(
         user.password_hash, body.password
     ):
         _record_failure(throttle_key)
+        _record_failure(email_key)
         # Egységes hibaüzenet — nem áruljuk el, hogy az email létezik-e.
         raise HTTPException(status_code=401, detail={"code": "auth.bad_credentials"})
 
     _failed_logins.pop(throttle_key, None)
+    _failed_logins.pop(email_key, None)
     # Aznapi első belépéskor automatikus jelenlét-nyitás (látszik, mikor
     # kezdett) — a kiléptetést a háttérhurok végzi a munkaidő végén.
     from app.services.wfm.timeclock_auto import auto_clockin_on_login
@@ -164,7 +173,35 @@ async def login(
 
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """Kijelentkezés: a süti törlése MELLETT a token_version emelésével a
+    kiadott tokent szerver-oldalon is érvénytelenítjük — egy ellopott token
+    sem él tovább a kijelentkezés után. Érvénytelen/hiányzó tokennel is 200."""
+    import uuid as _uuid
+
+    import jwt as _pyjwt
+
+    from app.api.deps import _extract_token
+    from app.core.security import decode_token
+
+    token = _extract_token(request)
+    if token:
+        try:
+            payload = decode_token(token)
+            user = (
+                await db.execute(
+                    select(User).where(User.id == _uuid.UUID(payload["sub"]))
+                )
+            ).scalar_one_or_none()
+            if user is not None and int(payload.get("tv", 0)) == user.token_version:
+                user.token_version += 1
+                await db.commit()
+        except (_pyjwt.PyJWTError, KeyError, ValueError):
+            pass
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"ok": True}
 

@@ -62,6 +62,35 @@ async def test_me_requires_auth(client):
     assert res.status_code == 401
 
 
+async def test_logout_invalidates_token_server_side(client):
+    """A kijelentkezés a token_version emelésével az ellopott/megőrzött
+    tokent is érvényteleníti — nem csak a sütit törli."""
+    _, headers = await make_user(
+        email="kilepo@example.com", role="manager", password="Titkos-Jelszo-77"
+    )
+    assert (await client.get("/api/auth/me", headers=headers)).status_code == 200
+    res = await client.post("/api/auth/logout", headers=headers)
+    assert res.status_code == 200
+    # ugyanaz a Bearer token többé nem érvényes
+    assert (await client.get("/api/auth/me", headers=headers)).status_code == 401
+
+
+async def test_login_email_throttle_ip_independent():
+    """IP-váltogatással (hamis X-Forwarded-For) sem lehet korlátlanul
+    próbálkozni egy fiókra: fiókonkénti, IP-független korlát is él."""
+    from app.api import auth as auth_module
+
+    auth_module._failed_logins.clear()
+    for _ in range(auth_module._MAX_EMAIL_ATTEMPTS):
+        auth_module._record_failure("email:celpont@example.com")
+    assert auth_module._throttled(
+        "email:celpont@example.com",
+        auth_module._MAX_EMAIL_ATTEMPTS,
+        auth_module._EMAIL_WINDOW_SECONDS,
+    )
+    auth_module._failed_logins.clear()
+
+
 async def test_inactive_user_rejected(client):
     import app.db as app_db
     from sqlalchemy import update
