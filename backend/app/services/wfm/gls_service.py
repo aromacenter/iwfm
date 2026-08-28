@@ -99,6 +99,7 @@ async def create_label(
     cod_amount: float | None,
     cod_reference: str | None,
     client_reference: str | None,
+    exchange: bool = False,
 ) -> tuple[str, bytes]:
     """Címke készítése (PrintLabels). Visszaad: (csomagszám, címke-PDF).
 
@@ -135,6 +136,9 @@ async def create_label(
         parcel["ServiceList"].append(
             {"Code": "FDS", "FDSParameter": {"Value": recipient["email"]}}
         )
+    # csomagcsere (XS): a futár az új csomag átadásakor a cserét elhozza
+    if exchange:
+        parcel["ServiceList"].append({"Code": "XS"})
 
     data = await _call(
         cfg, "PrintLabels",
@@ -151,6 +155,34 @@ async def create_label(
     if not parcel_number or not label_bytes:
         raise RuntimeError("gls.empty_response")
     return parcel_number, gls_parcel_id, label_bytes
+
+
+async def test_connection(db: AsyncSession) -> dict:
+    """Hitelesítés-próba címkekészítés NÉLKÜL: olcsó, csak-olvasó
+    GetParcelList hívás egy szűk dátum-ablakra. Rossz belépési adatoknál a
+    MyGLS hibaszövegével RuntimeError; sikernél a környezetet adja vissza."""
+    from datetime import UTC, datetime, timedelta
+
+    cfg = await load_gls_config(db)
+
+    def _wcf(dt: datetime) -> str:
+        # A MyGLS a WCF-féle dátumformátumot várja: /Date(ezredmásodperc)/
+        return f"/Date({int(dt.timestamp() * 1000)})/"
+
+    now = datetime.now(UTC)
+    data = await _call(
+        cfg, "GetParcelList",
+        {"PickupDateFrom": _wcf(now - timedelta(days=1)), "PickupDateTo": _wcf(now)},
+    )
+    # A hibamező neve metódusonként változik — minden *Error* listát összegyűjtünk.
+    errors: list[dict] = []
+    for key, value in data.items():
+        if "Error" in key and isinstance(value, list):
+            errors.extend(v for v in value if v)
+    if errors:
+        logger.warning("MyGLS GetParcelList hibalista: %s", _format_errors(errors))
+        raise RuntimeError(_format_errors(errors))
+    return {"ok": True, "test_mode": cfg["test_mode"]}
 
 
 def normalize_status(events: list[dict]) -> str:

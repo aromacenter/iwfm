@@ -45,6 +45,7 @@ interface Parcel {
   content: string | null;
   count: number;
   cod_amount: number | null;
+  exchange: boolean;
   status_key: "created" | "handed_over" | "in_transit" | "delivered" | "returned";
   last_status: string | null;
   last_status_at: string | null;
@@ -78,6 +79,7 @@ const EMPTY_FORM = {
   count: "1",
   cod: false,
   cod_amount: "",
+  exchange: false,
 };
 
 export default function CsomagokPage() {
@@ -174,6 +176,7 @@ export default function CsomagokPage() {
         content: form.content || null,
         count: Number(form.count) || 1,
         cod_amount: codAmount,
+        exchange: form.exchange,
       });
       toast(t("gls.created", { number: parcel.parcel_number ?? "?" }), "success");
       setForm({ ...EMPTY_FORM });
@@ -289,6 +292,13 @@ export default function CsomagokPage() {
               </label>
             )}
           </div>
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={form.exchange} onChange={(e) => setForm({ ...form, exchange: e.target.checked })} className="h-4 w-4" />
+              {t("gls.exchange")}
+            </label>
+            {form.exchange && <p className="mt-1 text-xs text-slate-500">{t("gls.exchangeHint")}</p>}
+          </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
             {busy ? t("common.saving") : `🏷️ ${t("gls.create")}`}
@@ -313,6 +323,11 @@ export default function CsomagokPage() {
                   {p.cod_amount != null && (
                     <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
                       COD {p.cod_amount.toLocaleString("hu-HU")} Ft
+                    </span>
+                  )}
+                  {p.exchange && (
+                    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800">
+                      {t("gls.exchangeBadge")}
                     </span>
                   )}
                 </span>

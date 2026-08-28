@@ -34,6 +34,8 @@ class ParcelCreateBody(BaseModel):
     count: int = Field(default=1, ge=1, le=20)
     cod_amount: float | None = Field(default=None, ge=0, le=5_000_000)
     cod_reference: str | None = Field(default=None, max_length=64)
+    # csomagcsere (XS): kézbesítéskor a futár csere-csomagot hoz el (pl. gépcsere)
+    exchange: bool = False
 
 
 class ParcelOut(BaseModel):
@@ -45,6 +47,7 @@ class ParcelOut(BaseModel):
     content: str | None
     count: int
     cod_amount: float | None
+    exchange: bool = False
     # created | handed_over | in_transit | delivered | returned
     status_key: str = "created"
     last_status: str | None
@@ -76,7 +79,8 @@ async def _out(db: AsyncSession, rows: list[GlsParcel]) -> list[ParcelOut]:
             id=str(p.id), parcel_number=p.parcel_number,
             recipient_name=p.recipient_name, recipient_city=p.recipient_city,
             recipient_zip=p.recipient_zip, content=p.content, count=p.count,
-            cod_amount=p.cod_amount, status_key=p.status_key or "created",
+            cod_amount=p.cod_amount, exchange=bool(p.exchange_service),
+            status_key=p.status_key or "created",
             last_status=p.last_status,
             last_status_at=p.last_status_at,
             history=p.status_history or [],
@@ -149,6 +153,7 @@ async def create_parcel(
             cod_amount=body.cod_amount,
             cod_reference=body.cod_reference,
             client_reference=order.order_no if order else None,
+            exchange=body.exchange,
         )
     except ValueError:
         raise HTTPException(status_code=422, detail={"code": "gls.not_configured"})
@@ -172,6 +177,7 @@ async def create_parcel(
         count=body.count,
         cod_amount=body.cod_amount if (body.cod_amount or 0) > 0 else None,
         cod_reference=(body.cod_reference or "").strip() or None,
+        exchange_service=body.exchange,
         parcel_number=parcel_number,
         gls_parcel_id=int(gls_parcel_id) if gls_parcel_id else None,
         label_pdf=label_pdf,
@@ -183,7 +189,8 @@ async def create_parcel(
     await record_audit(
         db, actor=actor, action="gls.create", entity_type="gls_parcel",
         entity_id=parcel_number,
-        detail={"to": body.recipient_name, "cod": body.cod_amount, "count": body.count},
+        detail={"to": body.recipient_name, "cod": body.cod_amount,
+                "count": body.count, "exchange": body.exchange},
         request=request,
     )
     await db.commit()

@@ -1416,7 +1416,10 @@
     "glsPrinterType": "Label format",
     "glsTestMode": "Test mode (api.test.mygls.hu)",
     "glsSender": "Sender (address on the label)",
-    "glsSenderName": "Sender name"
+    "glsSenderName": "Sender name",
+    "glsTest": "Save + test connection",
+    "glsTestOkTest": "Connection OK ✓ — MyGLS accepted the credentials (test server).",
+    "glsTestOkProd": "Connection OK ✓ — MyGLS accepted the credentials (live server)."
   },
   "kiosk": {
     "title": "Time clock terminal",
@@ -2078,6 +2081,9 @@
     "cod": "Cash on delivery (COD)",
     "codAmount": "Amount to collect (HUF, gross)",
     "codAmountRequired": "COD requires the amount to collect.",
+    "exchange": "Exchange service (XS)",
+    "exchangeHint": "On delivery the courier also picks up the exchange parcel (e.g. the old machine) from the recipient.",
+    "exchangeBadge": "EXCHANGE",
     "createConfirm": "A label will be created at GLS for {name}. Continue?",
     "create": "Create label",
     "created": "Label ready — parcel number: {number}. Printing…",

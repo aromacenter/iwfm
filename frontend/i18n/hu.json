@@ -1416,7 +1416,10 @@
     "glsPrinterType": "Címke-formátum",
     "glsTestMode": "Teszt-mód (api.test.mygls.hu)",
     "glsSender": "Feladó (címkére kerülő cím)",
-    "glsSenderName": "Feladó neve"
+    "glsSenderName": "Feladó neve",
+    "glsTest": "Mentés + kapcsolat-teszt",
+    "glsTestOkTest": "Sikeres kapcsolat ✓ — a MyGLS elfogadta a belépési adatokat (teszt-szerver).",
+    "glsTestOkProd": "Sikeres kapcsolat ✓ — a MyGLS elfogadta a belépési adatokat (éles szerver)."
   },
   "kiosk": {
     "title": "Munkaidő-terminál",
@@ -2078,6 +2081,9 @@
     "cod": "Utánvét (COD)",
     "codAmount": "Beszedendő összeg (Ft, bruttó)",
     "codAmountRequired": "Utánvéthez add meg a beszedendő összeget.",
+    "exchange": "Csomagcsere (XS)",
+    "exchangeHint": "A futár az új csomag átadásakor a cserélendő csomagot (pl. a régi gépet) elhozza a címzettől.",
+    "exchangeBadge": "CSERE",
     "createConfirm": "Címke készül a GLS-nél: {name}. Mehet?",
     "create": "Címke készítése",
     "created": "Címke kész — csomagszám: {number}. Nyomtatás indul…",

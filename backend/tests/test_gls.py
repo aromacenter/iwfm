@@ -87,13 +87,14 @@ async def test_gls_settings_and_parcel_flow(client, admin, manager, monkeypatch)
               "recipient_city": "Budapest", "recipient_street": "Fő utca",
               "recipient_house": "1", "recipient_email": "vince@example.com",
               "content": "Szemes kávé 2 kg", "count": 1,
-              "cod_amount": 19990},
+              "cod_amount": 19990, "exchange": True},
         headers=mgr,
     )
     assert res.status_code == 200, res.text
     parcel = res.json()
     assert parcel["parcel_number"] == "12345678901"
     assert parcel["cod_amount"] == 19990
+    assert parcel["exchange"] is True
     assert parcel["test_mode"] is True
 
     sent = calls[0]["payload"]["ParcelList"][0]
@@ -104,6 +105,8 @@ async def test_gls_settings_and_parcel_flow(client, admin, manager, monkeypatch)
     assert sent["DeliveryAddress"]["Name"] == "Vevő Vince"
     # e-mail értesítés szolgáltatás a címzett címére
     assert any(s.get("Code") == "FDS" for s in sent["ServiceList"])
+    # csomagcsere (XS) szolgáltatás rákerült a feladásra
+    assert any(s.get("Code") == "XS" for s in sent["ServiceList"])
 
     # a címke-PDF visszakérhető (újranyomtatás)
     res = await client.get(f"/api/gls/{parcel['id']}/label", headers=mgr)
@@ -153,12 +156,61 @@ async def test_gls_delete_before_pickup(client, admin, manager, monkeypatch):
         headers=mgr,
     )
     parcel = res.json()
+    # csomagcsere nélkül nem megy XS-kód a GLS-nek
+    sent = calls[0]["payload"]["ParcelList"][0]
+    assert not any(s.get("Code") == "XS" for s in sent["ServiceList"])
     res = await client.delete(f"/api/gls/{parcel['id']}", headers=mgr)
     assert res.status_code == 200, res.text
     delete_call = next(c for c in calls if c["method"] == "DeleteLabels")
     assert delete_call["payload"]["ParcelIdList"] == [555]
     rows = (await client.get("/api/gls", headers=mgr)).json()
     assert all(r["id"] != parcel["id"] for r in rows)
+
+
+async def test_gls_connection_test(client, admin, manager, monkeypatch):
+    """Kapcsolat-teszt gomb: beállítás nélkül 422, csak admin hívhatja;
+    jó adatokkal ok+környezet, rossz adatokkal a MyGLS hibaszövege (502)."""
+    _, adm = admin
+    _, mgr = manager
+
+    # beállítás nélkül: 422
+    res = await client.post("/api/settings/gls/test", headers=adm)
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "gls.not_configured"
+
+    await client.put("/api/settings/gls", json=GLS_SETTINGS, headers=adm)
+
+    # nem admin: tiltott
+    res = await client.post("/api/settings/gls/test", headers=mgr)
+    assert res.status_code in (401, 403)
+
+    from app.services.wfm import gls_service
+
+    # siker: üres csomaglista, nincs hiba
+    async def fake_ok(cfg, method, payload):
+        assert method == "GetParcelList"
+        assert "PickupDateFrom" in payload and "PickupDateTo" in payload
+        return {"GetParcelListErrors": [], "PrintDataInfoList": []}
+
+    monkeypatch.setattr(gls_service, "_call", fake_ok)
+    res = await client.post("/api/settings/gls/test", headers=adm)
+    assert res.status_code == 200, res.text
+    assert res.json() == {"ok": True, "test_mode": True}
+
+    # rossz belépési adatok: a MyGLS hibaszövege jön vissza
+    async def fake_unauthorized(cfg, method, payload):
+        return {
+            "GetParcelListErrors": [
+                {"ErrorDescription": "Unauthorized.", "ErrorCode": -1}
+            ]
+        }
+
+    monkeypatch.setattr(gls_service, "_call", fake_unauthorized)
+    res = await client.post("/api/settings/gls/test", headers=adm)
+    assert res.status_code == 502
+    detail = res.json()["detail"]
+    assert detail["code"] == "gls.error"
+    assert "Unauthorized" in detail["message"]
 
 
 async def test_gls_status_normalization():

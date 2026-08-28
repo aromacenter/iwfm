@@ -175,6 +175,28 @@ export default function BeallitasokPage() {
     }
   }
 
+  async function testGls() {
+    // Előbb elmentjük, amit a mezőkben látsz (különben a régi adatokat
+    // tesztelnénk), aztán jön a kapcsolat-próba — címke nem készül.
+    setGlsBusy(true);
+    setGlsMsg(null);
+    try {
+      const res = await api.put<{ has_password: boolean }>("/api/settings/gls", {
+        ...gls, password: gls.password || null,
+      });
+      setGlsHasPw(res.has_password);
+      setGls((g) => ({ ...g, password: "" }));
+      const out = await api.post<{ ok: boolean; test_mode: boolean }>(
+        "/api/settings/gls/test", {},
+      );
+      setGlsMsg(t(out.test_mode ? "settings.glsTestOkTest" : "settings.glsTestOkProd"));
+    } catch (err) {
+      setGlsMsg(errorMessage(err));
+    } finally {
+      setGlsBusy(false);
+    }
+  }
+
   async function genPrintKey() {
     if (!(await confirm(t("settings.printerKeyConfirm")))) return;
     setPrintBusy(true);
@@ -1241,9 +1263,19 @@ export default function BeallitasokPage() {
             </div>
           </fieldset>
           {glsMsg && <p className="text-sm text-slate-600">{glsMsg}</p>}
-          <button disabled={glsBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-            {glsBusy ? t("common.saving") : t("common.save")}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button disabled={glsBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {glsBusy ? t("common.saving") : t("common.save")}
+            </button>
+            <button
+              type="button"
+              onClick={testGls}
+              disabled={glsBusy}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              🔌 {t("settings.glsTest")}
+            </button>
+          </div>
         </form>
 
         {/* Billingó számlázó */}

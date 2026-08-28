@@ -637,6 +637,25 @@ async def update_gls_settings(
     return _gls_out(row)
 
 
+@router.post("/gls/test")
+async def test_gls_connection(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Kapcsolat-próba a MENTETT adatokkal — címke nem készül, csak a
+    belépést ellenőrizzük egy olvasó hívással."""
+    from app.services.wfm import gls_service
+
+    try:
+        return await gls_service.test_connection(db)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "gls.not_configured"})
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502, detail={"code": "gls.error", "message": str(exc)}
+        )
+
+
 # ─── Ügyfél-támogatás (QR-oldal tudásbázisa) ────────────────────────────────
 
 

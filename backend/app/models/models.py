@@ -610,6 +610,8 @@ class GlsParcel(Base):
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     cod_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     cod_reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # XS (Exchange) szolgáltatás: a futár kézbesítéskor csere-csomagot hoz el
+    exchange_service: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     parcel_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # A MyGLS belső ParcelId-ja — a still-nem-átadott címke törléséhez kell.
     gls_parcel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
