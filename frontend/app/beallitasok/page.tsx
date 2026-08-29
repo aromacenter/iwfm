@@ -1498,8 +1498,15 @@ export default function BeallitasokPage() {
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{t("license.plansTitle")}</p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {(["s", "m", "l", "xl"] as const).map((p) => {
-                  const limits = lic.plans?.[p];
+                {[
+                  ...(lic.plans?.[lic.plan] ? [] : [lic.plan]),
+                  "s", "m", "l", "xl",
+                ].map((p) => {
+                  const limits =
+                    lic.plans?.[p] ??
+                    (p === lic.plan
+                      ? { max_users: lic.max_users, max_employees: lic.max_employees }
+                      : undefined);
                   const current = lic.plan === p;
                   return (
                     <div

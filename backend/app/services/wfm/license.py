@@ -86,12 +86,14 @@ async def get_license_row(db: AsyncSession) -> LicenseSettings | None:
 
 
 def limits_for(row: LicenseSettings | None) -> dict:
-    """A hatályos limitek: sáv + esetleges egyedi felülírás."""
+    """A hatályos limitek: sáv + esetleges egyedi felülírás. Ismeretlen
+    (Flotta-oldali egyedi) csomagkódnál a limitek az override-okból jönnek —
+    a Flotta hozzárendeléskor mindig explicit átküldi őket."""
     if row is None:
         return {"plan": "xl", "max_users": None, "max_employees": None}
-    base = PLANS.get(row.plan, PLANS["xl"])
+    base = PLANS.get(row.plan, {"max_users": None, "max_employees": None})
     return {
-        "plan": row.plan if row.plan in PLANS else "xl",
+        "plan": row.plan,
         "max_users": row.max_users_override
         if row.max_users_override is not None else base["max_users"],
         "max_employees": row.max_employees_override

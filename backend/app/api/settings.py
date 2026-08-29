@@ -735,7 +735,9 @@ async def update_courier_settings(
 
 
 class LicenseBody(BaseModel):
-    plan: str = Field(pattern="^(s|m|l|xl)$")
+    # s/m/l/xl a beépített sávok; a Flotta-pult egyedi csomagkódot is küldhet
+    # (olyankor a limiteket mindig explicit override-ként adja át)
+    plan: str = Field(pattern="^[a-z0-9_-]{1,16}$")
     valid_until: str | None = None  # ISO dátum vagy None = határozatlan
     max_users_override: int | None = Field(default=None, ge=1, le=10_000)
     max_employees_override: int | None = Field(default=None, ge=1, le=100_000)
