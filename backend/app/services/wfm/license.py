@@ -11,11 +11,33 @@ from __future__ import annotations
 import time as _time
 from datetime import date
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db import get_db
 from app.models import Employee, LicenseSettings, User
+
+# Kapcsolható extra modulok — minden más funkció az alap-csomag része.
+# NULL enabled_modules = MINDEN modul megy (saját/X-Presso példány).
+MODULES = ("billing", "gls", "labels", "ai", "portal", "support")
+
+
+def require_module(key: str):
+    """Router-függőség: 403, ha a modul nincs bekapcsolva ezen a példányon."""
+
+    async def dep(db: AsyncSession = Depends(get_db)) -> None:
+        row = await get_license_row(db)
+        if row is None or row.enabled_modules is None:
+            return  # tiltólista nélkül minden megy
+        if key not in (row.enabled_modules or []):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "license.module_disabled", "module": key},
+            )
+
+    return dep
+
 
 # Sávok: fiók = belépős felhasználó, dolgozó = aktív munkavállalói törzsadat.
 PLANS: dict[str, dict] = {

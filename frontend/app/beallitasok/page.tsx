@@ -69,8 +69,18 @@ const SETTINGS_TABS = [
   ["data", "🗄️"],
 ] as const;
 
+// beállítás-fül → kapcsolható modul (kikapcsolva a fül eltűnik)
+const TAB_MODULE: Record<string, string> = {
+  billing: "billing",
+  gls: "gls",
+  printer: "labels",
+  ai: "ai",
+  support: "support",
+};
+
 interface LicenseInfo {
   plan: "s" | "m" | "l" | "xl";
+  modules: string[] | null;
   max_users: number | null;
   max_employees: number | null;
   state: "ok" | "grace" | "expired";
@@ -1008,7 +1018,13 @@ export default function BeallitasokPage() {
 
       {/* Alfülek: a beállítások logikus csoportokban */}
       <div className="mb-5 flex flex-wrap gap-1.5">
-        {SETTINGS_TABS.map(([k, icon]) => (
+        {SETTINGS_TABS.filter(
+          ([k]) =>
+            !TAB_MODULE[k] ||
+            !lic ||
+            lic.modules === null ||
+            lic.modules.includes(TAB_MODULE[k]),
+        ).map(([k, icon]) => (
           <button
             key={k}
             onClick={() => setTab(k)}

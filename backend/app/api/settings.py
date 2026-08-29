@@ -535,7 +535,10 @@ def _billingo_out(row: BillingoSettings) -> BillingoSettingsOut:
     )
 
 
-@router.get("/billingo", response_model=BillingoSettingsOut)
+@router.get(
+    "/billingo", response_model=BillingoSettingsOut,
+    dependencies=[Depends(license_service.require_module("billing"))],
+)
 async def get_billingo_settings(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role("admin")),
@@ -543,7 +546,10 @@ async def get_billingo_settings(
     return _billingo_out(await _get_or_create_billingo(db))
 
 
-@router.put("/billingo", response_model=BillingoSettingsOut)
+@router.put(
+    "/billingo", response_model=BillingoSettingsOut,
+    dependencies=[Depends(license_service.require_module("billing"))],
+)
 async def update_billingo_settings(
     body: BillingoSettingsBody,
     request: Request,
@@ -674,6 +680,18 @@ class LicenseBody(BaseModel):
     max_users_override: int | None = Field(default=None, ge=1, le=10_000)
     max_employees_override: int | None = Field(default=None, ge=1, le=100_000)
     customer_name: str | None = Field(default=None, max_length=256)
+    # None = minden modul (X-Presso mód); lista = csak a felsoroltak
+    enabled_modules: list[str] | None = None
+
+    @field_validator("enabled_modules")
+    @classmethod
+    def _known_modules(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        bad = [m for m in v if m not in license_service.MODULES]
+        if bad:
+            raise ValueError("license.unknown_module")
+        return sorted(set(v))
 
 
 async def _license_status_payload(db: AsyncSession) -> dict:
@@ -688,6 +706,9 @@ async def _license_status_payload(db: AsyncSession) -> dict:
         "valid_until": row.valid_until.isoformat() if row and row.valid_until else None,
         "customer_name": row.customer_name if row else None,
         "grace_days": license_service.GRACE_DAYS,
+        # None = minden modul elérhető
+        "modules": row.enabled_modules if row else None,
+        "all_modules": list(license_service.MODULES),
     }
 
 
@@ -730,6 +751,10 @@ async def apply_license_update(
     row.max_users_override = body.max_users_override
     row.max_employees_override = body.max_employees_override
     row.customer_name = (body.customer_name or "").strip() or None
+    # a modul-lista csak akkor változik, ha a kérés kifejezetten küldte —
+    # a példány-beli licenc-mentés így nem nyitja ki véletlenül a modulokat
+    if "enabled_modules" in body.model_fields_set:
+        row.enabled_modules = body.enabled_modules
     await record_audit(
         db, actor=actor, action="settings.license_update", entity_type="settings",
         entity_id="license",
@@ -1205,7 +1230,10 @@ async def send_test_digest(
     return {"sent": sent}
 
 
-@router.post("/billingo/test")
+@router.post(
+    "/billingo/test",
+    dependencies=[Depends(license_service.require_module("billing"))],
+)
 async def test_billingo(
     company: str | None = Query(default=None),  # xp (alap) | pc
     db: AsyncSession = Depends(get_db),

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -230,14 +230,39 @@ def create_app() -> FastAPI:
     app.include_router(service.router, prefix="/api/service", tags=["service"])
     app.include_router(intake_api.router, prefix="/api/intakes", tags=["intakes"])
     app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
-    app.include_router(portal.router, prefix="/api/portal", tags=["portal"])
-    app.include_router(portal.manage_router, prefix="/api/partners", tags=["portal"])
+    # Kapcsolható extra modulok: kikapcsolva a teljes router zárva (403),
+    # nem csak a menü tűnik el. NULL modullista = minden megy (X-Presso).
+    from app.services.wfm.license import require_module as _mod
+
+    app.include_router(
+        portal.router, prefix="/api/portal", tags=["portal"],
+        dependencies=[Depends(_mod("portal"))],
+    )
+    app.include_router(
+        portal.manage_router, prefix="/api/partners", tags=["portal"],
+        dependencies=[Depends(_mod("portal"))],
+    )
     app.include_router(support.labels_router, prefix="/api/assets", tags=["support"])
-    app.include_router(print_jobs_api.router, prefix="/api/print-jobs", tags=["print"])
-    app.include_router(gls_api.router, prefix="/api/gls", tags=["gls"])
-    app.include_router(print_jobs_api.agent_router, prefix="/api/print-agent", tags=["print"])
-    app.include_router(support.public_router, prefix="/api/support", tags=["support"])
-    app.include_router(knowledge.router, prefix="/api/knowledge", tags=["knowledge"])
+    app.include_router(
+        print_jobs_api.router, prefix="/api/print-jobs", tags=["print"],
+        dependencies=[Depends(_mod("labels"))],
+    )
+    app.include_router(
+        gls_api.router, prefix="/api/gls", tags=["gls"],
+        dependencies=[Depends(_mod("gls"))],
+    )
+    app.include_router(
+        print_jobs_api.agent_router, prefix="/api/print-agent", tags=["print"],
+        dependencies=[Depends(_mod("labels"))],
+    )
+    app.include_router(
+        support.public_router, prefix="/api/support", tags=["support"],
+        dependencies=[Depends(_mod("support"))],
+    )
+    app.include_router(
+        knowledge.router, prefix="/api/knowledge", tags=["knowledge"],
+        dependencies=[Depends(_mod("support"))],
+    )
     app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
@@ -246,7 +271,10 @@ def create_app() -> FastAPI:
     app.include_router(quotes_api.router, prefix="/api/quotes", tags=["quotes"])
     app.include_router(quotes_api.public_router, prefix="/api/public", tags=["quotes"])
     app.include_router(warehouse.po_router, prefix="/api/purchase-orders", tags=["purchase-orders"])
-    app.include_router(assistant_api.router, prefix="/api/assistant", tags=["assistant"])
+    app.include_router(
+        assistant_api.router, prefix="/api/assistant", tags=["assistant"],
+        dependencies=[Depends(_mod("ai"))],
+    )
     app.include_router(admin_tools.router, prefix="/api/admin", tags=["admin"])
     app.include_router(automation_api.router)
 

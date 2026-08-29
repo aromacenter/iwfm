@@ -1596,6 +1596,8 @@
       "bad_signature": "Hibás aláírás-kép."
     },
     "license": {
+      "module_disabled": "Ez a modul nincs bekapcsolva ezen az előfizetésen — bővítésért keresd az üzemeltetőt.",
+      "unknown_module": "Ismeretlen modul-név.",
       "user_limit": "Elérted a licenced fiók-limitjét ({limit}) — bővítsd az előfizetést új fiókhoz.",
       "employee_limit": "Elérted a licenced dolgozó-limitjét ({limit}) — bővítsd az előfizetést.",
       "expired": "A licenc lejárt — a rendszer csak-olvasás módban van. Hosszabbításhoz keresd az üzemeltetőt.",

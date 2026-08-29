@@ -1,0 +1,67 @@
+"""Modul-kapcsolók: NULL lista = minden megy; üres/részleges lista = a
+kikapcsolt modul routere 403-mal zárva."""
+
+from __future__ import annotations
+
+
+async def test_module_switches(client, admin, manager):
+    _, adm = admin
+    _, mgr = manager
+
+    # licenc-sor nélkül (X-Presso mód): minden modul él
+    res = await client.get("/api/gls", headers=mgr)
+    assert res.status_code == 200
+    res = await client.get("/api/settings/billingo", headers=adm)
+    assert res.status_code == 200
+
+    # csak-alap licenc: az extra modulok teljes routere zárva
+    res = await client.put(
+        "/api/settings/license",
+        json={"plan": "m", "valid_until": None, "enabled_modules": []},
+        headers=adm,
+    )
+    assert res.status_code == 200, res.text
+    out = res.json()
+    assert out["modules"] == []
+    assert "gls" in out["all_modules"]
+
+    for path in ("/api/gls",):
+        res = await client.get(path, headers=mgr)
+        assert res.status_code == 403, f"{path}: {res.status_code}"
+        assert res.json()["detail"]["code"] == "license.module_disabled"
+    res = await client.get("/api/settings/billingo", headers=adm)
+    assert res.status_code == 403
+    assert res.json()["detail"]["code"] == "license.module_disabled"
+
+    # ismeretlen modul-név: validációs hiba
+    res = await client.put(
+        "/api/settings/license",
+        json={"plan": "m", "valid_until": None, "enabled_modules": ["kavefozo"]},
+        headers=adm,
+    )
+    assert res.status_code == 422
+
+    # gls bekapcsolva: a GLS megy, a Billingó továbbra sem
+    await client.put(
+        "/api/settings/license",
+        json={"plan": "m", "valid_until": None, "enabled_modules": ["gls"]},
+        headers=adm,
+    )
+    assert (await client.get("/api/gls", headers=mgr)).status_code == 200
+    assert (await client.get("/api/settings/billingo", headers=adm)).status_code == 403
+
+    # a mező NÉLKÜLI mentés (példány-beli licenc-kártya) NEM piszkálja a modulokat
+    res = await client.put(
+        "/api/settings/license", json={"plan": "m", "valid_until": None}, headers=adm
+    )
+    assert res.json()["modules"] == ["gls"]
+    assert (await client.get("/api/settings/billingo", headers=adm)).status_code == 403
+
+    # NULL = megint minden (és más tesztet sem zavarunk)
+    res = await client.put(
+        "/api/settings/license",
+        json={"plan": "xl", "valid_until": None, "enabled_modules": None},
+        headers=adm,
+    )
+    assert res.json()["modules"] is None
+    assert (await client.get("/api/settings/billingo", headers=adm)).status_code == 200

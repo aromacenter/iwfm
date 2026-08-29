@@ -576,6 +576,10 @@ class LicenseSettings(Base):
     max_users_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_employees_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     customer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Bekapcsolt extra modulok listája (billing/gls/labels/ai/portal/support).
+    # NULL = MINDEN modul megy (a saját, X-Presso példány így fut — az új
+    # modulok nála kapcsolgatás nélkül, azonnal élnek).
+    enabled_modules: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
 
 class GlsSettings(Base):

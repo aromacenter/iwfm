@@ -1596,6 +1596,8 @@
       "bad_signature": "Invalid signature image."
     },
     "license": {
+      "module_disabled": "This module is not enabled on this subscription — contact the operator to upgrade.",
+      "unknown_module": "Unknown module name.",
       "user_limit": "You reached your licence's account limit ({limit}) — upgrade to add more accounts.",
       "employee_limit": "You reached your licence's employee limit ({limit}) — upgrade your subscription.",
       "expired": "The licence has expired — the system is read-only. Contact the operator to renew.",

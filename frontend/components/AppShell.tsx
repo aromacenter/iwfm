@@ -17,6 +17,8 @@ interface NavItem {
   key: string;
   perm: string | "admin-only";
   icon: string;
+  // kapcsolható modul kulcsa — kikapcsolt modulnál a menüpont eltűnik
+  module?: string;
 }
 
 interface NavGroup {
@@ -39,7 +41,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/szerviz", key: "nav.service", perm: "service", icon: "🔧" },
       { href: "/atvetel", key: "nav.intake", perm: "service", icon: "📥" },
       { href: "/atadas", key: "nav.handover", perm: "invoicing", icon: "🤝" },
-      { href: "/tudasbazis", key: "nav.kb", perm: "service", icon: "📚" },
+      { href: "/tudasbazis", key: "nav.kb", perm: "service", icon: "📚", module: "support" },
       { href: "/beosztas", key: "nav.schedule", perm: "schedule", icon: "🗓️" },
       { href: "/jelenlet", key: "nav.attendance", perm: "attendance", icon: "⏱️" },
       { href: "/tavollet", key: "nav.timeOff", perm: "timeoff", icon: "🏖️" },
@@ -61,7 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
     labelKey: "nav.groups.billing",
     items: [
       { href: "/elszamolas", key: "nav.settlement", perm: "settlements", icon: "🧾" },
-      { href: "/csomagok", key: "nav.gls", perm: "settlements", icon: "📦" },
+      { href: "/csomagok", key: "nav.gls", perm: "settlements", icon: "📦", module: "gls" },
       { href: "/uzletkoto", key: "nav.agentReport", perm: "agent_report", icon: "💼" },
     ],
   },
@@ -123,15 +125,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, [router]);
 
-  // Licenc-állapot a bannerhez: türelmi idő vagy csak-olvasás mód jelzése
-  const [license, setLicense] = useState<{ state: string; grace_days_left: number | null } | null>(null);
+  // Licenc-állapot a bannerhez + a modul-kapcsolók a menü szűréséhez
+  const [license, setLicense] = useState<{
+    state: string;
+    grace_days_left: number | null;
+    modules: string[] | null;
+  } | null>(null);
   useEffect(() => {
     if (!user) return;
     api
-      .get<{ state: string; grace_days_left: number | null }>("/api/settings/license/status")
+      .get<{ state: string; grace_days_left: number | null; modules: string[] | null }>(
+        "/api/settings/license/status",
+      )
       .then(setLicense)
       .catch(() => {});
   }, [user]);
+  // amíg nincs adat, mindent mutatunk (X-Presso módban nincs villanás)
+  const moduleOn = (key?: string) =>
+    !key || !license || license.modules === null || license.modules.includes(key);
 
   // Felhasználónkénti szekció-sorrend (▲▼ a csoportcímeken).
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
@@ -208,10 +219,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const perms = user.permissions ?? [];
   const visibleGroups = NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((n) =>
-      n.perm === "always"
-        ? true
-        : n.perm === "admin-only" ? user.role === "admin" : perms.includes(n.perm),
+    items: g.items.filter(
+      (n) =>
+        moduleOn(n.module) &&
+        (n.perm === "always"
+          ? true
+          : n.perm === "admin-only" ? user.role === "admin" : perms.includes(n.perm)),
     ),
   })).filter((g) => g.items.length > 0);
   const keys = sortBySaved(visibleGroups.map((g) => g.labelKey));
@@ -350,7 +363,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
-      <AssistantChat />
+      {moduleOn("ai") && <AssistantChat />}
 
       {pwOpen && (
         <div
