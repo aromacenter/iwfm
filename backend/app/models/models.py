@@ -580,6 +580,9 @@ class LicenseSettings(Base):
     # NULL = MINDEN modul megy (a saját, X-Presso példány így fut — az új
     # modulok nála kapcsolgatás nélkül, azonnal élnek).
     enabled_modules: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # A Flotta-pult által lenyomott csomag-katalógus (név/limit/ár lista) —
+    # az ügyfél-oldali "Elérhető csomagok" kártyák ebből épülnek.
+    plan_catalog: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
 
 class GlsSettings(Base):

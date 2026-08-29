@@ -112,10 +112,19 @@ const COURIER_FORMS: { key: string; fields: { name: string; secret?: boolean }[]
   ]},
 ];
 
+interface PlanCard {
+  code: string;
+  name?: string;
+  max_users: number | null;
+  max_employees: number | null;
+  price_monthly?: number | null;
+}
+
 interface LicenseInfo {
-  plan: "s" | "m" | "l" | "xl";
+  plan: string;
   modules: string[] | null;
   plans: Record<string, { max_users: number | null; max_employees: number | null }>;
+  plan_list?: PlanCard[];
   max_users: number | null;
   max_employees: number | null;
   state: "ok" | "grace" | "expired";
@@ -1498,44 +1507,58 @@ export default function BeallitasokPage() {
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{t("license.plansTitle")}</p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {[
-                  ...(lic.plans?.[lic.plan] ? [] : [lic.plan]),
-                  "s", "m", "l", "xl",
-                ].map((p) => {
-                  const limits =
-                    lic.plans?.[p] ??
-                    (p === lic.plan
-                      ? { max_users: lic.max_users, max_employees: lic.max_employees }
-                      : undefined);
-                  const current = lic.plan === p;
-                  return (
-                    <div
-                      key={p}
-                      className={`flex flex-col gap-1 rounded-xl border p-3 text-center ${
-                        current ? "border-indigo-400 bg-indigo-50 ring-1 ring-indigo-200" : "border-slate-200"
-                      }`}
-                    >
-                      <div className="font-mono text-xl font-bold uppercase">{p}</div>
-                      <div className="text-xs text-slate-500">
-                        {limits?.max_users != null
-                          ? `${limits.max_users} ${t("license.usersShort")} / ${limits.max_employees} ${t("license.employeesShort")}`
-                          : t("license.unlimited")}
+                {(() => {
+                  const list: PlanCard[] =
+                    lic.plan_list && lic.plan_list.length > 0
+                      ? lic.plan_list
+                      : (["s", "m", "l", "xl"] as const).map((c) => ({
+                          code: c,
+                          ...(lic.plans?.[c] ?? { max_users: null, max_employees: null }),
+                        }));
+                  if (!list.some((p) => p.code === lic.plan)) {
+                    list.unshift({
+                      code: lic.plan,
+                      max_users: lic.max_users,
+                      max_employees: lic.max_employees,
+                    });
+                  }
+                  return list.map((p) => {
+                    const current = lic.plan === p.code;
+                    return (
+                      <div
+                        key={p.code}
+                        className={`flex flex-col gap-1 rounded-xl border p-3 text-center ${
+                          current ? "border-indigo-400 bg-indigo-50 ring-1 ring-indigo-200" : "border-slate-200"
+                        }`}
+                      >
+                        <div className="text-sm font-bold">{p.name ?? p.code.toUpperCase()}</div>
+                        <div className="text-xs text-slate-500">
+                          {p.max_users != null
+                            ? `${p.max_users} ${t("license.usersShort")} / ${p.max_employees} ${t("license.employeesShort")}`
+                            : t("license.unlimited")}
+                        </div>
+                        {p.price_monthly != null && (
+                          <div className="font-mono text-sm font-semibold">
+                            {Number(p.price_monthly).toLocaleString("hu-HU")} Ft
+                            <span className="text-[10px] font-normal text-slate-400">/hó</span>
+                          </div>
+                        )}
+                        {current ? (
+                          <span className="mt-1 rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                            {t("license.currentPlan")}
+                          </span>
+                        ) : (
+                          <a
+                            className="mt-1 rounded-full border border-indigo-300 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50"
+                            href={`mailto:hello@aromacenter.hu?subject=${encodeURIComponent(`X-admin csomagváltás — ${(p.name ?? p.code).toUpperCase()}`)}`}
+                          >
+                            {t("license.requestPlan")}
+                          </a>
+                        )}
                       </div>
-                      {current ? (
-                        <span className="mt-1 rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white">
-                          {t("license.currentPlan")}
-                        </span>
-                      ) : (
-                        <a
-                          className="mt-1 rounded-full border border-indigo-300 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50"
-                          href={`mailto:hello@aromacenter.hu?subject=${encodeURIComponent(`X-admin csomagváltás — ${p.toUpperCase()}`)}`}
-                        >
-                          {t("license.requestPlan")}
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             </div>
           )}

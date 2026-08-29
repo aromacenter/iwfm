@@ -771,8 +771,17 @@ async def _license_status_payload(db: AsyncSession) -> dict:
         # None = minden modul elérhető (licenc-sor + env-alapértelmezés együtt)
         "modules": license_service.effective_modules(row),
         "all_modules": list(license_service.MODULES),
-        # az elérhető csomagok a felület árlap-kártyáihoz
+        # az elérhető csomagok a felület árlap-kártyáihoz: a Flotta által
+        # lenyomott katalógus, annak hiányában a beépített sávok
         "plans": license_service.PLANS,
+        "plan_list": (
+            row.plan_catalog
+            if row is not None and row.plan_catalog
+            else [
+                {"code": c, "name": c.upper(), **v}
+                for c, v in license_service.PLANS.items()
+            ]
+        ),
     }
 
 

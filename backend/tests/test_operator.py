@@ -45,6 +45,24 @@ async def test_operator_endpoints(client, admin, monkeypatch):
     assert res.json()["plan"] == "m"
     assert res.json()["customer_name"] == "Demo Kávé Kft."
 
+    # csomag-katalógus lenyomása: az ügyfél-oldali kártyák ebből épülnek
+    res = await client.put(
+        "/api/operator/plan-catalog",
+        json={"plans": [
+            {"code": "start", "name": "Start", "max_users": 1,
+             "max_employees": 2, "price_monthly": 9900},
+            {"code": "xl", "name": "XL — Korlátlan", "max_users": None,
+             "max_employees": None, "price_monthly": 169900},
+        ]},
+        headers=ok,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["count"] == 2
+    status = (await client.get("/api/settings/license/status", headers=adm)).json()
+    codes = [p["code"] for p in status["plan_list"]]
+    assert codes == ["start", "xl"]
+    assert status["plan_list"][0]["price_monthly"] == 9900
+
     # vissza korlátlanra, hogy más tesztet ne zavarjon
     await client.put(
         "/api/operator/license", json={"plan": "xl", "valid_until": None}, headers=ok
