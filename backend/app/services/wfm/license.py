@@ -23,14 +23,31 @@ from app.models import Employee, LicenseSettings, User
 MODULES = ("billing", "gls", "labels", "ai", "portal", "support")
 
 
+def effective_modules(row: LicenseSettings | None) -> list[str] | None:
+    """A hatályos modul-lista: a licenc-sor beállítása, annak hiányában a
+    WFM_DEFAULT_MODULES env (bérelt példányon üres = csak alap), env nélkül
+    None = minden modul (saját példány)."""
+    if row is not None and row.enabled_modules is not None:
+        if "*" in row.enabled_modules:  # explicit "minden modul" (X-Presso mód)
+            return None
+        return [m for m in row.enabled_modules if m in MODULES]
+    from app.core.config import get_settings
+
+    env = get_settings().default_modules
+    if env is None:
+        return None
+    return [m for m in (p.strip() for p in env.split(",")) if m in MODULES]
+
+
 def require_module(key: str):
     """Router-függőség: 403, ha a modul nincs bekapcsolva ezen a példányon."""
 
     async def dep(db: AsyncSession = Depends(get_db)) -> None:
         row = await get_license_row(db)
-        if row is None or row.enabled_modules is None:
+        modules = effective_modules(row)
+        if modules is None:
             return  # tiltólista nélkül minden megy
-        if key not in (row.enabled_modules or []):
+        if key not in modules:
             raise HTTPException(
                 status_code=403,
                 detail={"code": "license.module_disabled", "module": key},

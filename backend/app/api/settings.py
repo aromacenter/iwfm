@@ -688,7 +688,7 @@ class LicenseBody(BaseModel):
     def _known_modules(cls, v: list[str] | None) -> list[str] | None:
         if v is None:
             return None
-        bad = [m for m in v if m not in license_service.MODULES]
+        bad = [m for m in v if m != "*" and m not in license_service.MODULES]
         if bad:
             raise ValueError("license.unknown_module")
         return sorted(set(v))
@@ -706,8 +706,8 @@ async def _license_status_payload(db: AsyncSession) -> dict:
         "valid_until": row.valid_until.isoformat() if row and row.valid_until else None,
         "customer_name": row.customer_name if row else None,
         "grace_days": license_service.GRACE_DAYS,
-        # None = minden modul elérhető
-        "modules": row.enabled_modules if row else None,
+        # None = minden modul elérhető (licenc-sor + env-alapértelmezés együtt)
+        "modules": license_service.effective_modules(row),
         "all_modules": list(license_service.MODULES),
     }
 

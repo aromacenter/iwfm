@@ -4,6 +4,39 @@ kikapcsolt modul routere 403-mal zárva."""
 from __future__ import annotations
 
 
+async def test_default_modules_env(client, admin, manager, monkeypatch):
+    """Licenc-sor nélkül a WFM_DEFAULT_MODULES env dönt: üres = csak alap,
+    lista = a felsoroltak; env nélkül minden megy (saját példány)."""
+    from app.core.config import get_settings
+
+    _, adm = admin
+    _, mgr = manager
+    settings = get_settings()
+
+    monkeypatch.setattr(settings, "default_modules", "", raising=False)
+    res = await client.get("/api/gls", headers=mgr)
+    assert res.status_code == 403
+    assert res.json()["detail"]["code"] == "license.module_disabled"
+    status = (await client.get("/api/settings/license/status", headers=adm)).json()
+    assert status["modules"] == []
+
+    monkeypatch.setattr(settings, "default_modules", "gls, billing")
+    assert (await client.get("/api/gls", headers=mgr)).status_code == 200
+    status = (await client.get("/api/settings/license/status", headers=adm)).json()
+    assert sorted(status["modules"]) == ["billing", "gls"]
+
+    # a licenc-sor explicit "minden modul" (["*"]) az env-et is felülírja
+    await client.put(
+        "/api/settings/license",
+        json={"plan": "xl", "valid_until": None, "enabled_modules": ["*"]},
+        headers=adm,
+    )
+    monkeypatch.setattr(settings, "default_modules", "")
+    assert (await client.get("/api/gls", headers=mgr)).status_code == 200
+    status = (await client.get("/api/settings/license/status", headers=adm)).json()
+    assert status["modules"] is None
+
+
 async def test_module_switches(client, admin, manager):
     _, adm = admin
     _, mgr = manager

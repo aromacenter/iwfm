@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # Üzemeltetői (Flotta-pult) token: a licenc táv-kezeléséhez. Üresen a
     # /api/operator végpontok zárva vannak.
     operator_token: str = ""
+    # Modul-alapértelmezés, amíg nincs licenc-sorban beállítás: None (nincs
+    # env) = minden modul (saját példány); beállítva = vesszős lista, üres
+    # string = csak az alap-funkciók (bérelt példány így születik).
+    default_modules: str | None = None
 
     model_config = {"env_prefix": "WFM_", "env_file": ".env", "extra": "ignore"}
 
