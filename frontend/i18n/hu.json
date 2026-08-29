@@ -401,6 +401,11 @@
     "categoryHint": "pl. Kávék, Kávégépek, Alkatrészek, Kellékek",
     "categoryAll": "Mind",
     "categoryNone": "Kategória nélkül",
+    "categoryNew": "Új kategória…",
+    "backfillBtn": "Régi árak betöltése",
+    "backfillConfirm": "A régi rendszerből importált árak betöltése a Megjegyzésekből: az eladási ár csak ott áll be, ahol most 0, a beszerzési csak ahol üres — meglévő értéket nem ír felül. Mehet?",
+    "backfillDone": "Kész: {price} eladási és {purchase} beszerzési ár betöltve.",
+    "priceHistory": "Ár-történet",
     "discountAll": "Kedvezmény",
     "nextCounter": "Következő számláló",
     "portionPrice": "Adagár",
@@ -1187,6 +1192,11 @@
   },
   "myTasks": {
     "title": "Feladataim",
+    "filter": {
+      "open": "Nyitott",
+      "done": "Befejezett",
+      "all": "Mind"
+    },
     "empty": "Most nincs kiosztott feladatod. 🎉",
     "due": "Határidő: {date}",
     "commentPlaceholder": "Komment a munkáról…",
@@ -1294,6 +1304,15 @@
       "foxpost": "FoxPost",
       "dpd": "DPD",
       "license": "Licenc"
+    },
+    "tabGroups": {
+      "company": "Cég és eszközök",
+      "couriers": "Futárszolgálatok",
+      "finance": "Pénzügy",
+      "comms": "Kommunikáció",
+      "customer": "Ügyfél és AI",
+      "team": "Csapat",
+      "system": "Rendszer"
     },
     "courier": {
       "testMode": "Teszt-mód",
@@ -1701,6 +1720,11 @@
     "unlimited": "korlátlan",
     "customer": "Ügyfél neve (bérelt példányon)",
     "upgrade": "Bővítést kérek →",
+    "readonlyHint": "A jelenlegi csomagod és a kihasználtság. A csomagot az üzemeltető kezeli — váltáshoz kattints a kívánt csomag gombjára, és kérésed e-mailben érkezik hozzánk.",
+    "plansTitle": "Elérhető csomagok",
+    "currentPlan": "Jelenlegi csomag",
+    "requestPlan": "Váltást kérek →",
+    "paymentNote": "💳 A díjfizetés jelenleg átutalással, számla alapján történik — a csomagváltás-kérés után küldjük a díjbekérőt. A bankkártyás online fizetés hamarosan érkezik.",
     "graceBanner": "Az előfizetés lejárt — még {days} nap türelmi idő van hátra, utána a rendszer csak-olvasásra vált.",
     "expiredBanner": "Az előfizetés lejárt — a rendszer csak-olvasás módban van. Az adatok biztonságban vannak, minden megtekinthető."
   },

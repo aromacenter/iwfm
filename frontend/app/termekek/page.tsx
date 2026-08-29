@@ -80,8 +80,20 @@ export default function TermekekPage() {
     [products, categoryFilter],
   );
 
+  // kategória: igazi lenyíló + "új kategória" mód
+  const [newCat, setNewCat] = useState(false);
+  // ár-történet a szerkesztő-modálban
+  const [priceHistory, setPriceHistory] = useState<
+    { changed_at: string; price_per_portion: number | null; purchase_price: number | null; source: string }[] | null
+  >(null);
+
   function edit(p: Product) {
     setError(null);
+    setNewCat(false);
+    setPriceHistory(null);
+    api.get<typeof priceHistory>(`/api/products/${p.id}/price-history`)
+      .then((rows) => setPriceHistory(rows))
+      .catch(() => {});
     setForm({
       id: p.id,
       name: p.name,
@@ -173,8 +185,25 @@ export default function TermekekPage() {
           </button>
         )}
         <button
-          onClick={() => { setError(null); setForm({ ...EMPTY }); }}
-          className={`${selected.size > 0 ? "" : "ml-auto "}rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700`}
+          onClick={async () => {
+            if (!(await confirm(t("cons.backfillConfirm")))) return;
+            try {
+              const res = await api.post<{ updated_price: number; updated_purchase: number }>(
+                "/api/products/backfill-import-prices", {},
+              );
+              toast(t("cons.backfillDone", { price: res.updated_price, purchase: res.updated_purchase }), "success");
+              load();
+            } catch (err) {
+              toast(errorMessage(err), "error");
+            }
+          }}
+          className={`${selected.size > 0 ? "" : "ml-auto "}rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50`}
+        >
+          🪄 {t("cons.backfillBtn")}
+        </button>
+        <button
+          onClick={() => { setError(null); setNewCat(false); setPriceHistory(null); setForm({ ...EMPTY }); }}
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
         >
           {t("cons.newProduct")}
         </button>
@@ -312,18 +341,36 @@ export default function TermekekPage() {
             </label>
             <label className="block text-sm">
               {t("cons.category")}
-              <input
-                list="category-options"
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                placeholder={t("cons.categoryHint")}
+              <select
+                value={newCat ? "__new__" : form.category}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") {
+                    setNewCat(true);
+                    setForm({ ...form, category: "" });
+                  } else {
+                    setNewCat(false);
+                    setForm({ ...form, category: e.target.value });
+                  }
+                }}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-              <datalist id="category-options">
-                {[...new Set([...DEFAULT_CATEGORIES, ...categories])].map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
+              >
+                <option value="">{t("cons.categoryNone")}</option>
+                {[...new Set([...DEFAULT_CATEGORIES, ...categories, ...(form.category ? [form.category] : [])])]
+                  .sort((a, b) => a.localeCompare(b, "hu"))
+                  .map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                <option value="__new__">➕ {t("cons.categoryNew")}</option>
+              </select>
+              {newCat && (
+                <input
+                  autoFocus
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  placeholder={t("cons.categoryHint")}
+                  className="mt-2 w-full rounded-lg border border-indigo-300 px-3 py-2"
+                />
+              )}
             </label>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="block text-sm">
@@ -368,6 +415,24 @@ export default function TermekekPage() {
               <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="h-4 w-4" />
               {t("cons.active")}
             </label>
+            {form.id && priceHistory && priceHistory.length > 0 && (
+              <details className="rounded-xl border border-slate-200 p-3 text-sm">
+                <summary className="cursor-pointer font-medium text-slate-600">
+                  📈 {t("cons.priceHistory")} ({priceHistory.length})
+                </summary>
+                <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                  {priceHistory.slice(0, 12).map((h, i) => (
+                    <li key={i} className="flex flex-wrap justify-between gap-2">
+                      <span>{h.changed_at.slice(0, 16).replace("T", " ")}{h.source === "import" ? " · import" : ""}</span>
+                      <span className="font-mono">
+                        {h.price_per_portion != null && `${h.price_per_portion.toLocaleString("hu-HU")} Ft`}
+                        {h.purchase_price != null && ` · besz. ${h.purchase_price.toLocaleString("hu-HU")} Ft`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setForm(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>

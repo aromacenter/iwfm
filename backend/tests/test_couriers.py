@@ -1,9 +1,11 @@
-"""Több-futáros réteg: beállítások (write-only), diszpécser, modul-kapuk,
+﻿"""Több-futáros réteg: beállítások (write-only), diszpécser, modul-kapuk,
 adapter-mezőleképezések (mockolt futár-API-kkal)."""
 
 from __future__ import annotations
 
 import base64
+
+from tests.test_license import OP, _arm_operator
 
 from app.services.wfm import couriers
 
@@ -113,10 +115,11 @@ async def test_foxpost_parcel_flow(client, admin, manager, monkeypatch):
 async def test_carrier_module_gate(client, admin, manager, monkeypatch):
     _, adm = admin
     _, mgr = manager
+    _arm_operator(monkeypatch)
     await client.put(
-        "/api/settings/license",
+        "/api/operator/license",
         json={"plan": "m", "valid_until": None, "enabled_modules": ["gls"]},
-        headers=adm,
+        headers=OP,
     )
     res = await client.post(
         "/api/gls", json={**RECIPIENT, "carrier": "foxpost"}, headers=mgr
@@ -129,9 +132,9 @@ async def test_carrier_module_gate(client, admin, manager, monkeypatch):
     res = await client.get("/api/settings/courier/foxpost", headers=adm)
     assert res.status_code == 403
     await client.put(
-        "/api/settings/license",
+        "/api/operator/license",
         json={"plan": "xl", "valid_until": None, "enabled_modules": None},
-        headers=adm,
+        headers=OP,
     )
 
 

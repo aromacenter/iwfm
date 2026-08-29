@@ -20,6 +20,7 @@ from app.models.models import (  # noqa: F401
     GlsSettings,
     KnowledgeEntry,
     LicenseSettings,
+    ProductPriceLog,
     MachineIntake,
     NotificationSettings,
     Partner,

@@ -105,6 +105,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function FeladataimPage() {
   const [tasks, setTasks] = useState<TaskOut[]>([]);
+  // státusz-szűrő: alapból a nyitottak, hogy a hosszú múlt ne lassítson
+  const [statusFilter, setStatusFilter] = useState<"open" | "done" | "all">("open");
   const [comments, setComments] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [noEmployee, setNoEmployee] = useState(false);
@@ -415,6 +417,23 @@ export default function FeladataimPage() {
       <div className="mx-auto max-w-lg space-y-4">
         <h1 className="text-xl font-bold">{t("myTasks.title")}</h1>
 
+        {/* Státusz-szűrő: nyitott (alap) / befejezett / mind */}
+        <div className="flex rounded-xl border border-slate-200 bg-white p-1 text-sm font-medium">
+          {(["open", "done", "all"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`flex-1 rounded-lg px-3 py-1.5 transition-colors ${
+                statusFilter === f
+                  ? "bg-indigo-600 text-white shadow"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {t(`myTasks.filter.${f}`)}
+            </button>
+          ))}
+        </div>
+
         {/* Rám osztott nyitott szervizjegyek */}
         {myTickets.length > 0 && (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
@@ -465,12 +484,24 @@ export default function FeladataimPage() {
           </section>
         )}
 
-        {tasks.length === 0 && (
+        {tasks.filter(
+          (task) =>
+            statusFilter === "all" ||
+            (statusFilter === "done"
+              ? task.status === "done"
+              : task.status !== "done"),
+        ).length === 0 && (
           <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
             {t("myTasks.empty")}
           </p>
         )}
-        {tasks.map((task) => (
+        {tasks.filter(
+          (task) =>
+            statusFilter === "all" ||
+            (statusFilter === "done"
+              ? task.status === "done"
+              : task.status !== "done"),
+        ).map((task) => (
           <section key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <h2 className="font-semibold">{task.title}</h2>

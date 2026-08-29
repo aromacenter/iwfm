@@ -1,4 +1,4 @@
-"""Licenc-réteg: sávok, fiók/dolgozó-limitek, lejárat + türelmi idő,
+﻿"""Licenc-réteg: sávok, fiók/dolgozó-limitek, lejárat + türelmi idő,
 csak-olvasás mód a türelmi idő után."""
 
 from __future__ import annotations
@@ -7,7 +7,14 @@ from datetime import date, timedelta
 
 from tests.test_employees import employee_payload
 
+from app.core.config import get_settings
 from app.services.wfm.license import GRACE_DAYS
+
+OP = {"X-Operator-Token": "teszt-operator"}
+
+
+def _arm_operator(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "operator_token", "teszt-operator", raising=False)
 
 
 async def test_license_default_unlimited(client, admin):
@@ -21,15 +28,16 @@ async def test_license_default_unlimited(client, admin):
     assert out["usage"]["users"] >= 1
 
 
-async def test_license_limits_block_creation(client, admin, manager):
+async def test_license_limits_block_creation(client, admin, manager, monkeypatch):
     _, adm = admin
     _, mgr = manager
+    _arm_operator(monkeypatch)
 
-    # csak admin állíthatja
+    # a példányból a licenc NEM módosítható — csak az üzemeltetői végponton át
     res = await client.put(
-        "/api/settings/license", json={"plan": "s", "valid_until": None}, headers=mgr
+        "/api/settings/license", json={"plan": "s", "valid_until": None}, headers=adm
     )
-    assert res.status_code in (401, 403)
+    assert res.status_code == 405
 
     status = (await client.get("/api/settings/license/status", headers=adm)).json()
     users_now = status["usage"]["users"]
@@ -37,10 +45,10 @@ async def test_license_limits_block_creation(client, admin, manager):
 
     # fiók-limit: pontosan a mostani létszám — új dolgozó (=új fiók) már nem fér
     res = await client.put(
-        "/api/settings/license",
+        "/api/operator/license",
         json={"plan": "s", "valid_until": None, "max_users_override": users_now,
               "max_employees_override": 1000},
-        headers=adm,
+        headers=OP,
     )
     assert res.status_code == 200, res.text
     res = await client.post(
@@ -52,7 +60,7 @@ async def test_license_limits_block_creation(client, admin, manager):
     # dolgozó-limit külön: előbb felvenni egy dolgozót (XL alatt), majd a
     # keretet pont a mostani létszámra húzni — a következő már nem fér
     await client.put(
-        "/api/settings/license", json={"plan": "xl", "valid_until": None}, headers=adm
+        "/api/operator/license", json={"plan": "xl", "valid_until": None}, headers=OP
     )
     res = await client.post(
         "/api/employees", json=employee_payload(email="elso@example.com"), headers=adm
@@ -63,10 +71,10 @@ async def test_license_limits_block_creation(client, admin, manager):
     ).json()["usage"]["employees"]
     assert employees_now >= 1
     res = await client.put(
-        "/api/settings/license",
+        "/api/operator/license",
         json={"plan": "s", "valid_until": None, "max_users_override": 1000,
               "max_employees_override": employees_now},
-        headers=adm,
+        headers=OP,
     )
     assert res.status_code == 200, res.text
     assert res.json()["max_users"] == 1000, res.text
@@ -78,7 +86,7 @@ async def test_license_limits_block_creation(client, admin, manager):
 
     # bővítés (XL) után már mehet
     await client.put(
-        "/api/settings/license", json={"plan": "xl", "valid_until": None}, headers=adm
+        "/api/operator/license", json={"plan": "xl", "valid_until": None}, headers=OP
     )
     res = await client.post(
         "/api/employees", json=employee_payload(email="limit3@example.com"), headers=adm
@@ -86,14 +94,15 @@ async def test_license_limits_block_creation(client, admin, manager):
     assert res.status_code == 201, res.text
 
 
-async def test_license_expiry_read_only(client, admin):
+async def test_license_expiry_read_only(client, admin, monkeypatch):
     _, adm = admin
+    _arm_operator(monkeypatch)
 
     # türelmi időn belül: figyelmeztetés van, írás még megy
     grace_date = (date.today() - timedelta(days=1)).isoformat()
     res = await client.put(
-        "/api/settings/license", json={"plan": "xl", "valid_until": grace_date},
-        headers=adm,
+        "/api/operator/license", json={"plan": "xl", "valid_until": grace_date},
+        headers=OP,
     )
     assert res.status_code == 200
     assert res.json()["state"] == "grace"
@@ -105,8 +114,8 @@ async def test_license_expiry_read_only(client, admin):
     # türelmi időn túl: minden írás 423, az olvasás és a licenc-oldal működik
     expired_date = (date.today() - timedelta(days=GRACE_DAYS + 2)).isoformat()
     await client.put(
-        "/api/settings/license", json={"plan": "xl", "valid_until": expired_date},
-        headers=adm,
+        "/api/operator/license", json={"plan": "xl", "valid_until": expired_date},
+        headers=OP,
     )
     res = await client.post(
         "/api/employees", json=employee_payload(email="tiltva@example.com"), headers=adm
@@ -118,7 +127,7 @@ async def test_license_expiry_read_only(client, admin):
 
     # hosszabbítás a licenc-végponton át megengedett — utána újra él a rendszer
     res = await client.put(
-        "/api/settings/license", json={"plan": "xl", "valid_until": None}, headers=adm
+        "/api/operator/license", json={"plan": "xl", "valid_until": None}, headers=OP
     )
     assert res.status_code == 200
     assert res.json()["state"] == "ok"

@@ -1,17 +1,20 @@
-"""Modul-kapcsolók: NULL lista = minden megy; üres/részleges lista = a
+﻿"""Modul-kapcsolók: NULL lista = minden megy; üres/részleges lista = a
 kikapcsolt modul routere 403-mal zárva."""
 
 from __future__ import annotations
+
+from tests.test_license import OP, _arm_operator
+
+from app.core.config import get_settings
 
 
 async def test_default_modules_env(client, admin, manager, monkeypatch):
     """Licenc-sor nélkül a WFM_DEFAULT_MODULES env dönt: üres = csak alap,
     lista = a felsoroltak; env nélkül minden megy (saját példány)."""
-    from app.core.config import get_settings
-
     _, adm = admin
     _, mgr = manager
     settings = get_settings()
+    _arm_operator(monkeypatch)
 
     monkeypatch.setattr(settings, "default_modules", "", raising=False)
     res = await client.get("/api/gls", headers=mgr)
@@ -27,9 +30,9 @@ async def test_default_modules_env(client, admin, manager, monkeypatch):
 
     # a licenc-sor explicit "minden modul" (["*"]) az env-et is felülírja
     await client.put(
-        "/api/settings/license",
+        "/api/operator/license",
         json={"plan": "xl", "valid_until": None, "enabled_modules": ["*"]},
-        headers=adm,
+        headers=OP,
     )
     monkeypatch.setattr(settings, "default_modules", "")
     assert (await client.get("/api/gls", headers=mgr)).status_code == 200
@@ -37,9 +40,10 @@ async def test_default_modules_env(client, admin, manager, monkeypatch):
     assert status["modules"] is None
 
 
-async def test_module_switches(client, admin, manager):
+async def test_module_switches(client, admin, manager, monkeypatch):
     _, adm = admin
     _, mgr = manager
+    _arm_operator(monkeypatch)
 
     # licenc-sor nélkül (X-Presso mód): minden modul él
     res = await client.get("/api/gls", headers=mgr)
@@ -49,9 +53,9 @@ async def test_module_switches(client, admin, manager):
 
     # csak-alap licenc: az extra modulok teljes routere zárva
     res = await client.put(
-        "/api/settings/license",
+        "/api/operator/license",
         json={"plan": "m", "valid_until": None, "enabled_modules": []},
-        headers=adm,
+        headers=OP,
     )
     assert res.status_code == 200, res.text
     out = res.json()
@@ -68,33 +72,33 @@ async def test_module_switches(client, admin, manager):
 
     # ismeretlen modul-név: validációs hiba
     res = await client.put(
-        "/api/settings/license",
+        "/api/operator/license",
         json={"plan": "m", "valid_until": None, "enabled_modules": ["kavefozo"]},
-        headers=adm,
+        headers=OP,
     )
     assert res.status_code == 422
 
     # gls bekapcsolva: a GLS megy, a Billingó továbbra sem
     await client.put(
-        "/api/settings/license",
+        "/api/operator/license",
         json={"plan": "m", "valid_until": None, "enabled_modules": ["gls"]},
-        headers=adm,
+        headers=OP,
     )
     assert (await client.get("/api/gls", headers=mgr)).status_code == 200
     assert (await client.get("/api/settings/billingo", headers=adm)).status_code == 403
 
     # a mező NÉLKÜLI mentés (példány-beli licenc-kártya) NEM piszkálja a modulokat
     res = await client.put(
-        "/api/settings/license", json={"plan": "m", "valid_until": None}, headers=adm
+        "/api/operator/license", json={"plan": "m", "valid_until": None}, headers=OP
     )
     assert res.json()["modules"] == ["gls"]
     assert (await client.get("/api/settings/billingo", headers=adm)).status_code == 403
 
     # NULL = megint minden (és más tesztet sem zavarunk)
     res = await client.put(
-        "/api/settings/license",
+        "/api/operator/license",
         json={"plan": "xl", "valid_until": None, "enabled_modules": None},
-        headers=adm,
+        headers=OP,
     )
     assert res.json()["modules"] is None
     assert (await client.get("/api/settings/billingo", headers=adm)).status_code == 200

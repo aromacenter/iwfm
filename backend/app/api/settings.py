@@ -769,6 +769,8 @@ async def _license_status_payload(db: AsyncSession) -> dict:
         # None = minden modul elérhető (licenc-sor + env-alapértelmezés együtt)
         "modules": license_service.effective_modules(row),
         "all_modules": list(license_service.MODULES),
+        # az elérhető csomagok a felület árlap-kártyáihoz
+        "plans": license_service.PLANS,
     }
 
 
@@ -826,14 +828,9 @@ async def apply_license_update(
     return await _license_status_payload(db)
 
 
-@router.put("/license")
-async def update_license_settings(
-    body: LicenseBody,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("admin")),
-):
-    return await apply_license_update(db, body, actor=actor, request=request)
+# FONTOS: a példányon belül a licenc NEM módosítható — a sávot, érvényességet
+# és modulokat kizárólag az üzemeltető állítja a Flotta-pultból
+# (/api/operator/license). A korábbi PUT /license végpont ezért megszűnt.
 
 
 @router.post("/gls/test")

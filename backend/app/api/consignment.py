@@ -33,6 +33,7 @@ from app.models import (
     PartnerPrice,
     PartnerStock,
     Product,
+    ProductPriceLog,
     Settlement,
     SettlementLine,
     SettlementMachine,
@@ -172,6 +173,16 @@ async def list_products(
     return [_product_out(p) for p in rows]
 
 
+def _log_price(db: AsyncSession, p: Product, source: str = "manual") -> None:
+    """Árváltozás naplózása — a történet évek alatt statisztikává érik."""
+    db.add(ProductPriceLog(
+        product_id=p.id,
+        price_per_portion=p.price_per_portion,
+        purchase_price=p.purchase_price,
+        source=source,
+    ))
+
+
 @products_router.post("", response_model=ProductOut, status_code=201)
 async def create_product(
     body: ProductBody,
@@ -182,6 +193,7 @@ async def create_product(
     p = Product(**body.model_dump())
     db.add(p)
     await db.flush()
+    _log_price(db, p)
     await record_audit(
         db, actor=actor, action="product.create", entity_type="product",
         entity_id=str(p.id), request=request,
@@ -199,8 +211,14 @@ async def update_product(
     actor: User = Depends(require_perm("products")),
 ):
     p = await _get_product_or_404(db, product_id)
+    price_changed = (
+        p.price_per_portion != body.price_per_portion
+        or p.purchase_price != body.purchase_price
+    )
     for key, value in body.model_dump().items():
         setattr(p, key, value)
+    if price_changed:
+        _log_price(db, p)
     await record_audit(
         db, actor=actor, action="product.update", entity_type="product",
         entity_id=str(p.id), request=request,
@@ -211,6 +229,92 @@ async def update_product(
 
 class BulkDeleteBody(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+@products_router.get("/{product_id}/price-history")
+async def product_price_history(
+    product_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("products")),
+):
+    """A termék korábbi eladási/beszerzési árai, legújabb elöl."""
+    p = await _get_product_or_404(db, product_id)
+    rows = (
+        await db.execute(
+            select(ProductPriceLog)
+            .where(ProductPriceLog.product_id == p.id)
+            .order_by(ProductPriceLog.changed_at.desc())
+            .limit(50)
+        )
+    ).scalars().all()
+    return [
+        {
+            "changed_at": r.changed_at.isoformat(),
+            "price_per_portion": r.price_per_portion,
+            "purchase_price": r.purchase_price,
+            "source": r.source,
+        }
+        for r in rows
+    ]
+
+
+def _parse_ft(raw: str) -> float | None:
+    s = raw.replace(" ", "").replace(" ", "")
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        value = float(s)
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
+@products_router.post("/backfill-import-prices")
+async def backfill_import_prices(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("products")),
+):
+    """A régi rendszerből importált árak betöltése a Megjegyzés szövegéből:
+    a "Régi eladási ár" az ár/adag mezőbe kerül (csak ha az most 0), a
+    "Beszerzési ár" a beszerzési mezőbe (csak ha üres). Meglévő értéket
+    SOSEM ír felül."""
+    import re as _re
+
+    sell_re = _re.compile(r"R[ée]gi elad[áa]si [áa]r[^:]*:\s*([\d\s.,]+)\s*Ft", _re.I)
+    buy_re = _re.compile(r"Beszerz[ée]si [áa]r[^:]*:\s*([\d\s.,]+)\s*Ft", _re.I)
+    rows = (await db.execute(select(Product))).scalars().all()
+    updated_price = 0
+    updated_purchase = 0
+    for p in rows:
+        if not p.notes:
+            continue
+        changed = False
+        m = sell_re.search(p.notes)
+        if m and (p.price_per_portion or 0) == 0:
+            value = _parse_ft(m.group(1))
+            if value is not None:
+                p.price_per_portion = value
+                updated_price += 1
+                changed = True
+        m = buy_re.search(p.notes)
+        if m and p.purchase_price is None:
+            value = _parse_ft(m.group(1))
+            if value is not None:
+                p.purchase_price = value
+                updated_purchase += 1
+                changed = True
+        if changed:
+            _log_price(db, p, source="import")
+    await record_audit(
+        db, actor=actor, action="product.backfill_prices", entity_type="product",
+        detail={"price": updated_price, "purchase": updated_purchase},
+        request=request,
+    )
+    await db.commit()
+    return {"updated_price": updated_price, "updated_purchase": updated_purchase}
 
 
 @products_router.post("/bulk-delete")

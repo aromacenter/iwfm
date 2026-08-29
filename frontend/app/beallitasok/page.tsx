@@ -84,6 +84,18 @@ const TAB_MODULE: Record<string, string> = {
   support: "support",
 };
 
+// A fülek logikai csoportjai — a menü csoport-kártyákban jelenik meg;
+// a modul-szűrés után üresen maradó csoport el sem látszik.
+const TAB_GROUPS: { labelKey: string; tabs: string[] }[] = [
+  { labelKey: "company", tabs: ["worksheet", "printer"] },
+  { labelKey: "couriers", tabs: ["gls", "mpl", "foxpost", "dpd"] },
+  { labelKey: "finance", tabs: ["billing"] },
+  { labelKey: "comms", tabs: ["email", "notifications"] },
+  { labelKey: "customer", tabs: ["support", "ai"] },
+  { labelKey: "team", tabs: ["skills", "permissions"] },
+  { labelKey: "system", tabs: ["license", "data"] },
+];
+
 // futár-beállítás űrlapok: mező-lista futáronként (secret = write-only)
 const COURIER_FORMS: { key: string; fields: { name: string; secret?: boolean }[] }[] = [
   { key: "mpl", fields: [
@@ -103,6 +115,7 @@ const COURIER_FORMS: { key: string; fields: { name: string; secret?: boolean }[]
 interface LicenseInfo {
   plan: "s" | "m" | "l" | "xl";
   modules: string[] | null;
+  plans: Record<string, { max_users: number | null; max_employees: number | null }>;
   max_users: number | null;
   max_employees: number | null;
   state: "ok" | "grace" | "expired";
@@ -221,40 +234,13 @@ export default function BeallitasokPage() {
     }
   }
 
-  // --- Licenc ---
+  // --- Licenc (csak olvasható — a sávot az üzemeltető állítja) ---
   const [lic, setLic] = useState<LicenseInfo | null>(null);
-  const [licBusy, setLicBusy] = useState(false);
-  const [licForm, setLicForm] = useState({ plan: "xl", valid_until: "", customer_name: "" });
   useEffect(() => {
     api.get<LicenseInfo>("/api/settings/license")
-      .then((l) => {
-        setLic(l);
-        setLicForm({
-          plan: l.plan,
-          valid_until: l.valid_until ?? "",
-          customer_name: l.customer_name ?? "",
-        });
-      })
+      .then(setLic)
       .catch(() => {});
   }, []);
-
-  async function saveLicense(e: React.FormEvent) {
-    e.preventDefault();
-    setLicBusy(true);
-    try {
-      const l = await api.put<LicenseInfo>("/api/settings/license", {
-        plan: licForm.plan,
-        valid_until: licForm.valid_until || null,
-        customer_name: licForm.customer_name || null,
-      });
-      setLic(l);
-      toast(t("common.saved"), "success");
-    } catch (err) {
-      toast(errorMessage(err), "error");
-    } finally {
-      setLicBusy(false);
-    }
-  }
 
   // --- Futárok (MPL/FoxPost/DPD) ---
   const [courier, setCourier] = useState<Record<string, Record<string, string>>>({});
@@ -1093,26 +1079,54 @@ export default function BeallitasokPage() {
       <h1 className="mb-4 text-xl font-bold">{t("settings.title")}</h1>
 
       {/* Alfülek: a beállítások logikus csoportokban */}
-      <div className="mb-5 flex flex-wrap gap-1.5">
-        {SETTINGS_TABS.filter(
-          ([k]) =>
-            !TAB_MODULE[k] ||
-            !lic ||
-            lic.modules === null ||
-            lic.modules.includes(TAB_MODULE[k]),
-        ).map(([k, icon]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-              tab === k
-                ? "bg-indigo-600 text-white"
-                : "border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {icon} {t(`settings.tabs.${k}`)}
-          </button>
-        ))}
+      <div className="mb-6 flex flex-wrap items-stretch gap-2">
+        {TAB_GROUPS.map((group) => {
+          const visible = group.tabs
+            .map((k) => SETTINGS_TABS.find(([key]) => key === k))
+            .filter((entry): entry is (typeof SETTINGS_TABS)[number] => {
+              if (!entry) return false;
+              const k = entry[0];
+              return (
+                !TAB_MODULE[k] ||
+                !lic ||
+                lic.modules === null ||
+                lic.modules.includes(TAB_MODULE[k])
+              );
+            });
+          if (visible.length === 0) return null;
+          const groupActive = visible.some(([k]) => k === tab);
+          return (
+            <div
+              key={group.labelKey}
+              className={`flex flex-col gap-1 rounded-2xl border px-2 pb-1.5 pt-1.5 transition-colors ${
+                groupActive
+                  ? "border-indigo-300 bg-indigo-50/60 shadow-sm"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <span className={`px-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                groupActive ? "text-indigo-500" : "text-slate-400"
+              }`}>
+                {t(`settings.tabGroups.${group.labelKey}`)}
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {visible.map(([k, icon]) => (
+                  <button
+                    key={k}
+                    onClick={() => setTab(k)}
+                    className={`rounded-xl px-2.5 py-1 text-sm font-medium transition-all ${
+                      tab === k
+                        ? "bg-indigo-600 text-white shadow"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {icon} {t(`settings.tabs.${k}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Jogosultságok — szerepkör × funkció mátrix */}
@@ -1453,13 +1467,10 @@ export default function BeallitasokPage() {
           </form>
         ))}
 
-        {/* Licenc (előfizetési sáv) */}
-        <form
-          onSubmit={saveLicense}
-          className={cardCls("license", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
-        >
+        {/* Licenc — csak olvasható: a csomagot az üzemeltető kezeli */}
+        <div className={cardCls("license", "space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
           <h2 className="font-semibold">{t("license.title")}</h2>
-          <p className="text-xs text-slate-500">{t("license.hint")}</p>
+          <p className="text-xs text-slate-500">{t("license.readonlyHint")}</p>
           {lic && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-xl border border-slate-200 p-3 text-center">
@@ -1482,38 +1493,47 @@ export default function BeallitasokPage() {
               </div>
             </div>
           )}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="block text-sm">
-              {t("license.plan")}
-              <select
-                value={licForm.plan}
-                onChange={(e) => setLicForm({ ...licForm, plan: e.target.value })}
-                className={inputCls}
-              >
-                <option value="s">S — 2 {t("license.usersShort")} / 5 {t("license.employeesShort")}</option>
-                <option value="m">M — 5 / 15</option>
-                <option value="l">L — 12 / 40</option>
-                <option value="xl">XL — {t("license.unlimited")}</option>
-              </select>
-            </label>
-            <label className="block text-sm">
-              {t("license.validUntilLabel")}
-              <input type="date" value={licForm.valid_until} onChange={(e) => setLicForm({ ...licForm, valid_until: e.target.value })} className={inputCls} />
-            </label>
-            <label className="block text-sm">
-              {t("license.customer")}
-              <input value={licForm.customer_name} onChange={(e) => setLicForm({ ...licForm, customer_name: e.target.value })} className={inputCls} />
-            </label>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button disabled={licBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-              {licBusy ? t("common.saving") : t("common.save")}
-            </button>
-            <a className="text-sm font-medium text-indigo-600 hover:underline" href="mailto:hello@aromacenter.hu?subject=X-admin%20b%C5%91v%C3%ADt%C3%A9s">
-              {t("license.upgrade")}
-            </a>
-          </div>
-        </form>
+          {/* Elérhető csomagok — váltás-kérés az üzemeltetőnek */}
+          {lic && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{t("license.plansTitle")}</p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {(["s", "m", "l", "xl"] as const).map((p) => {
+                  const limits = lic.plans?.[p];
+                  const current = lic.plan === p;
+                  return (
+                    <div
+                      key={p}
+                      className={`flex flex-col gap-1 rounded-xl border p-3 text-center ${
+                        current ? "border-indigo-400 bg-indigo-50 ring-1 ring-indigo-200" : "border-slate-200"
+                      }`}
+                    >
+                      <div className="font-mono text-xl font-bold uppercase">{p}</div>
+                      <div className="text-xs text-slate-500">
+                        {limits?.max_users != null
+                          ? `${limits.max_users} ${t("license.usersShort")} / ${limits.max_employees} ${t("license.employeesShort")}`
+                          : t("license.unlimited")}
+                      </div>
+                      {current ? (
+                        <span className="mt-1 rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                          {t("license.currentPlan")}
+                        </span>
+                      ) : (
+                        <a
+                          className="mt-1 rounded-full border border-indigo-300 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50"
+                          href={`mailto:hello@aromacenter.hu?subject=${encodeURIComponent(`X-admin csomagváltás — ${p.toUpperCase()}`)}`}
+                        >
+                          {t("license.requestPlan")}
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-slate-500">{t("license.paymentNote")}</p>
+        </div>
 
         {/* Billingó számlázó */}
         <form

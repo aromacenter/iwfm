@@ -401,6 +401,11 @@
     "categoryHint": "e.g. Coffees, Machines, Parts, Supplies",
     "categoryAll": "All",
     "categoryNone": "Uncategorized",
+    "categoryNew": "New category…",
+    "backfillBtn": "Load legacy prices",
+    "backfillConfirm": "Load imported legacy prices from the Notes: selling price is set only where it is 0, purchase price only where empty — existing values are never overwritten. Proceed?",
+    "backfillDone": "Done: {price} selling and {purchase} purchase prices loaded.",
+    "priceHistory": "Price history",
     "discountAll": "Discount",
     "nextCounter": "Next counter",
     "portionPrice": "Price/portion",
@@ -1187,6 +1192,11 @@
   },
   "myTasks": {
     "title": "My tasks",
+    "filter": {
+      "open": "Open",
+      "done": "Done",
+      "all": "All"
+    },
     "empty": "No tasks assigned right now. 🎉",
     "due": "Due: {date}",
     "commentPlaceholder": "Comment about the work…",
@@ -1294,6 +1304,15 @@
       "foxpost": "FoxPost",
       "dpd": "DPD",
       "license": "Licence"
+    },
+    "tabGroups": {
+      "company": "Company & tools",
+      "couriers": "Couriers",
+      "finance": "Finance",
+      "comms": "Communication",
+      "customer": "Customer & AI",
+      "team": "Team",
+      "system": "System"
     },
     "courier": {
       "testMode": "Test mode",
@@ -1701,6 +1720,11 @@
     "unlimited": "unlimited",
     "customer": "Customer name (rented instance)",
     "upgrade": "Request an upgrade →",
+    "readonlyHint": "Your current plan and usage. The plan is managed by the operator — to change it, click the desired plan and your request reaches us by e-mail.",
+    "plansTitle": "Available plans",
+    "currentPlan": "Current plan",
+    "requestPlan": "Request switch →",
+    "paymentNote": "💳 Billing is currently invoice-based via bank transfer — after a plan-change request we send the invoice. Online card payment is coming soon.",
     "graceBanner": "The subscription has expired — {days} grace day(s) left before the system turns read-only.",
     "expiredBanner": "The subscription has expired — the system is read-only. Your data is safe and everything can be viewed."
   },

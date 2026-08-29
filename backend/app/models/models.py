@@ -941,6 +941,27 @@ class BillingoSettings(Base):
     )
 
 
+class ProductPriceLog(Base):
+    """Termék-árváltozások naplója: mikor mennyi volt az eladási (adag-) és a
+    beszerzési ár — visszakereshető, évek alatt statisztika lesz belőle."""
+
+    __tablename__ = "product_price_logs"
+    __table_args__ = (Index("ix_price_logs_product", "product_id", "changed_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("products.id", ondelete="CASCADE", name="fk_pricelog_product"),
+        nullable=False,
+    )
+    price_per_portion: Mapped[float | None] = mapped_column(Float, nullable=True)
+    purchase_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class Product(Base):
     """Bizományba kihelyezhető fogyóeszköz (pl. kávé). kg-ban töltjük fel a
     partner külső raktárába; a gramm/adag alapján számoljuk az adagszámot és
