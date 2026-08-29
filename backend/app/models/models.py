@@ -583,6 +583,13 @@ class LicenseSettings(Base):
     # A Flotta-pult által lenyomott csomag-katalógus (név/limit/ár lista) —
     # az ügyfél-oldali "Elérhető csomagok" kártyák ebből épülnek.
     plan_catalog: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Az ügyfél csomagváltás-kérése — a Flotta-pultban jelenik meg, a
+    # jóváhagyás (operator licenc-mentés) törli.
+    requested_plan: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    requested_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class GlsSettings(Base):

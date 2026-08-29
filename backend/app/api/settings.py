@@ -771,6 +771,11 @@ async def _license_status_payload(db: AsyncSession) -> dict:
         # None = minden modul elérhető (licenc-sor + env-alapértelmezés együtt)
         "modules": license_service.effective_modules(row),
         "all_modules": list(license_service.MODULES),
+        # függő csomagváltás-kérés (a Flotta jóváhagyása törli)
+        "requested_plan": row.requested_plan if row else None,
+        "requested_at": (
+            row.requested_at.isoformat() if row and row.requested_at else None
+        ),
         # az elérhető csomagok a felület árlap-kártyáihoz: a Flotta által
         # lenyomott katalógus, annak hiányában a beépített sávok
         "plans": license_service.PLANS,
@@ -828,6 +833,10 @@ async def apply_license_update(
     # a példány-beli licenc-mentés így nem nyitja ki véletlenül a modulokat
     if "enabled_modules" in body.model_fields_set:
         row.enabled_modules = body.enabled_modules
+    # az üzemeltetői mentés a függő csomagváltás-kérést lezárja
+    row.requested_plan = None
+    row.requested_at = None
+    row.requested_by = None
     await record_audit(
         db, actor=actor, action="settings.license_update", entity_type="settings",
         entity_id="license",
@@ -842,6 +851,49 @@ async def apply_license_update(
 # FONTOS: a példányon belül a licenc NEM módosítható — a sávot, érvényességet
 # és modulokat kizárólag az üzemeltető állítja a Flotta-pultból
 # (/api/operator/license). A korábbi PUT /license végpont ezért megszűnt.
+
+
+class PlanRequestBody(BaseModel):
+    # None = a kérés visszavonása
+    plan: str | None = Field(default=None, pattern="^[a-z0-9_-]{1,16}$")
+
+
+@router.post("/license/request")
+async def request_plan_change(
+    body: PlanRequestBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """Csomagváltás-kérés: a Flotta-pultban jelenik meg jóváhagyásra —
+    a licencet ez NEM módosítja."""
+    from datetime import UTC as _UTC, datetime as _dt
+
+    row = await license_service.get_license_row(db)
+    if row is None:
+        row = LicenseSettings(id=1)
+        db.add(row)
+    if body.plan:
+        catalog_codes = {p.get("code") for p in (row.plan_catalog or [])} or set(
+            license_service.PLANS
+        )
+        if body.plan not in catalog_codes:
+            raise HTTPException(
+                status_code=422, detail={"code": "license.unknown_plan"}
+            )
+        row.requested_plan = body.plan
+        row.requested_at = _dt.now(_UTC)
+        row.requested_by = actor.display_name or actor.email
+    else:
+        row.requested_plan = None
+        row.requested_at = None
+        row.requested_by = None
+    await record_audit(
+        db, actor=actor, action="license.plan_request", entity_type="settings",
+        entity_id="license", detail={"plan": body.plan}, request=request,
+    )
+    await db.commit()
+    return await _license_status_payload(db)
 
 
 @router.post("/gls/test")

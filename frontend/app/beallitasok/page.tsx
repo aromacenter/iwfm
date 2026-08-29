@@ -125,6 +125,7 @@ interface LicenseInfo {
   modules: string[] | null;
   plans: Record<string, { max_users: number | null; max_employees: number | null }>;
   plan_list?: PlanCard[];
+  requested_plan?: string | null;
   max_users: number | null;
   max_employees: number | null;
   state: "ok" | "grace" | "expired";
@@ -250,6 +251,16 @@ export default function BeallitasokPage() {
       .then(setLic)
       .catch(() => {});
   }, []);
+
+  async function requestPlan(plan: string | null) {
+    try {
+      const l = await api.post<LicenseInfo>("/api/settings/license/request", { plan });
+      setLic(l);
+      toast(plan ? t("license.requestSent") : t("license.requestCancelled"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   // --- Futárok (MPL/FoxPost/DPD) ---
   const [courier, setCourier] = useState<Record<string, Record<string, string>>>({});
@@ -1491,7 +1502,10 @@ export default function BeallitasokPage() {
                 <div className="text-xs text-slate-500">{t("license.employees")}</div>
               </div>
               <div className="rounded-xl border border-slate-200 p-3 text-center">
-                <div className="font-mono text-lg font-semibold uppercase">{lic.plan}</div>
+                <div className="text-lg font-semibold">
+                  {lic.plan_list?.find((p) => p.code === lic.plan)?.name ??
+                    lic.plan.toUpperCase()}
+                </div>
                 <div className="text-xs text-slate-500">{t("license.plan")}</div>
               </div>
               <div className="rounded-xl border border-slate-200 p-3 text-center">
@@ -1547,13 +1561,21 @@ export default function BeallitasokPage() {
                           <span className="mt-1 rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white">
                             {t("license.currentPlan")}
                           </span>
+                        ) : lic.requested_plan === p.code ? (
+                          <button
+                            onClick={() => requestPlan(null)}
+                            className="mt-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-200"
+                            title={t("license.requestCancel")}
+                          >
+                            ⏳ {t("license.requestedBadge")}
+                          </button>
                         ) : (
-                          <a
+                          <button
+                            onClick={() => requestPlan(p.code)}
                             className="mt-1 rounded-full border border-indigo-300 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50"
-                            href={`mailto:hello@aromacenter.hu?subject=${encodeURIComponent(`X-admin csomagváltás — ${(p.name ?? p.code).toUpperCase()}`)}`}
                           >
                             {t("license.requestPlan")}
-                          </a>
+                          </button>
                         )}
                       </div>
                     );
@@ -1561,6 +1583,15 @@ export default function BeallitasokPage() {
                 })()}
               </div>
             </div>
+          )}
+          {lic?.requested_plan && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              {t("license.requestPending", {
+                name:
+                  lic.plan_list?.find((p) => p.code === lic.requested_plan)?.name ??
+                  lic.requested_plan.toUpperCase(),
+              })}
+            </p>
           )}
           <p className="text-xs text-slate-500">{t("license.paymentNote")}</p>
         </div>

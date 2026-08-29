@@ -1648,7 +1648,8 @@
       "user_limit": "You reached your licence's account limit ({limit}) — upgrade to add more accounts.",
       "employee_limit": "You reached your licence's employee limit ({limit}) — upgrade your subscription.",
       "expired": "The licence has expired — the system is read-only. Contact the operator to renew.",
-      "bad_date": "Invalid licence validity date."
+      "bad_date": "Invalid licence validity date.",
+      "unknown_plan": "Unknown plan — refresh the page and try again."
     },
     "courier": {
       "not_configured": "This courier is not configured — enter its credentials in Settings.",
@@ -1709,7 +1710,7 @@
     "employees": "Active employees",
     "usersShort": "accounts",
     "employeesShort": "employees",
-    "plan": "Tier",
+    "plan": "Plan",
     "state": {
       "ok": "Valid",
       "grace": "Grace period",
@@ -1720,7 +1721,12 @@
     "unlimited": "unlimited",
     "customer": "Customer name (rented instance)",
     "upgrade": "Request an upgrade →",
-    "readonlyHint": "Your current plan and usage. The plan is managed by the operator — to change it, click the desired plan and your request reaches us by e-mail.",
+    "readonlyHint": "Your current plan and usage. The plan is managed by the operator — to change it, click the desired plan and your request reaches us instantly for approval.",
+    "requestSent": "Change request sent ✓ — we will approve it shortly.",
+    "requestCancelled": "Change request withdrawn.",
+    "requestedBadge": "Request sent — cancel?",
+    "requestCancel": "Click to withdraw the request",
+    "requestPending": "⏳ Your change request is pending: {name} — awaiting operator approval. Click the requested plan's button to withdraw.",
     "plansTitle": "Available plans",
     "currentPlan": "Current plan",
     "requestPlan": "Request switch →",

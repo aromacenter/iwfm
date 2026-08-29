@@ -1648,7 +1648,8 @@
       "user_limit": "Elérted a licenced fiók-limitjét ({limit}) — bővítsd az előfizetést új fiókhoz.",
       "employee_limit": "Elérted a licenced dolgozó-limitjét ({limit}) — bővítsd az előfizetést.",
       "expired": "A licenc lejárt — a rendszer csak-olvasás módban van. Hosszabbításhoz keresd az üzemeltetőt.",
-      "bad_date": "Érvénytelen dátum a licenc érvényességénél."
+      "bad_date": "Érvénytelen dátum a licenc érvényességénél.",
+      "unknown_plan": "Ismeretlen csomag — frissítsd az oldalt, és próbáld újra."
     },
     "courier": {
       "not_configured": "Ez a futár nincs beállítva — add meg az adatait a Beállításokban.",
@@ -1709,7 +1710,7 @@
     "employees": "Aktív dolgozó",
     "usersShort": "fiók",
     "employeesShort": "dolgozó",
-    "plan": "Sáv",
+    "plan": "Csomag",
     "state": {
       "ok": "Érvényes",
       "grace": "Türelmi idő",
@@ -1720,7 +1721,12 @@
     "unlimited": "korlátlan",
     "customer": "Ügyfél neve (bérelt példányon)",
     "upgrade": "Bővítést kérek →",
-    "readonlyHint": "A jelenlegi csomagod és a kihasználtság. A csomagot az üzemeltető kezeli — váltáshoz kattints a kívánt csomag gombjára, és kérésed e-mailben érkezik hozzánk.",
+    "readonlyHint": "A jelenlegi csomagod és a kihasználtság. A csomagot az üzemeltető kezeli — váltáshoz kattints a kívánt csomag gombjára, és a kérésed azonnal megérkezik hozzánk jóváhagyásra.",
+    "requestSent": "Váltási kérés elküldve ✓ — hamarosan jóváhagyjuk.",
+    "requestCancelled": "A váltási kérés visszavonva.",
+    "requestedBadge": "Kérés elküldve — mégse?",
+    "requestCancel": "Kattints a kérés visszavonásához",
+    "requestPending": "⏳ Váltási kérésed folyamatban: {name} — az üzemeltető jóváhagyására vár. A kért csomag gombjával visszavonhatod.",
     "plansTitle": "Elérhető csomagok",
     "currentPlan": "Jelenlegi csomag",
     "requestPlan": "Váltást kérek →",

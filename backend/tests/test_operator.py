@@ -63,6 +63,37 @@ async def test_operator_endpoints(client, admin, monkeypatch):
     assert codes == ["start", "xl"]
     assert status["plan_list"][0]["price_monthly"] == 9900
 
+    # csomagváltás-kérés: az ügyfél kér, a status mutatja, a jóváhagyás törli
+    res = await client.post(
+        "/api/settings/license/request", json={"plan": "xl"}, headers=adm
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["requested_plan"] == "xl"
+    op_status = (
+        await client.get("/api/operator/status", headers=ok)
+    ).json()
+    assert op_status["requested_plan"] == "xl"
+    # ismeretlen csomagra nem lehet kérni
+    res = await client.post(
+        "/api/settings/license/request", json={"plan": "nemletezo"}, headers=adm
+    )
+    assert res.status_code == 422
+    # a jóváhagyás (operator licenc-mentés) lezárja a kérést
+    await client.put(
+        "/api/operator/license", json={"plan": "xl", "valid_until": None}, headers=ok
+    )
+    status = (await client.get("/api/settings/license/status", headers=adm)).json()
+    assert status["requested_plan"] is None
+
+    # a kérés vissza is vonható (a "start" a lenyomott katalógusban szerepel)
+    await client.post(
+        "/api/settings/license/request", json={"plan": "start"}, headers=adm
+    )
+    res = await client.post(
+        "/api/settings/license/request", json={"plan": None}, headers=adm
+    )
+    assert res.json()["requested_plan"] is None
+
     # vissza korlátlanra, hogy más tesztet ne zavarjon
     await client.put(
         "/api/operator/license", json={"plan": "xl", "valid_until": None}, headers=ok
