@@ -20,7 +20,10 @@ from app.models import Employee, LicenseSettings, User
 
 # Kapcsolható extra modulok — minden más funkció az alap-csomag része.
 # NULL enabled_modules = MINDEN modul megy (saját/X-Presso példány).
-MODULES = ("billing", "gls", "labels", "ai", "portal", "support")
+MODULES = (
+    "billing", "gls", "labels", "ai", "portal", "support",
+    "mpl", "foxpost", "dpd",
+)
 
 
 def effective_modules(row: LicenseSettings | None) -> list[str] | None:

@@ -59,6 +59,9 @@ const SETTINGS_TABS = [
   ["printer", "🖨️"],
   ["billing", "💳"],
   ["gls", "📦"],
+  ["mpl", "📮"],
+  ["foxpost", "🦊"],
+  ["dpd", "🚛"],
   ["email", "✉️"],
   ["notifications", "🔔"],
   ["ai", "✨"],
@@ -73,10 +76,29 @@ const SETTINGS_TABS = [
 const TAB_MODULE: Record<string, string> = {
   billing: "billing",
   gls: "gls",
+  mpl: "mpl",
+  foxpost: "foxpost",
+  dpd: "dpd",
   printer: "labels",
   ai: "ai",
   support: "support",
 };
+
+// futár-beállítás űrlapok: mező-lista futáronként (secret = write-only)
+const COURIER_FORMS: { key: string; fields: { name: string; secret?: boolean }[] }[] = [
+  { key: "mpl", fields: [
+    { name: "client_id" }, { name: "client_secret", secret: true },
+    { name: "accounting_code" }, { name: "agreement" }, { name: "basic_service" },
+  ]},
+  { key: "foxpost", fields: [
+    { name: "username" }, { name: "password", secret: true },
+    { name: "api_key", secret: true },
+  ]},
+  { key: "dpd", fields: [
+    { name: "username" }, { name: "password", secret: true },
+    { name: "api_key", secret: true },
+  ]},
+];
 
 interface LicenseInfo {
   plan: "s" | "m" | "l" | "xl";
@@ -231,6 +253,60 @@ export default function BeallitasokPage() {
       toast(errorMessage(err), "error");
     } finally {
       setLicBusy(false);
+    }
+  }
+
+  // --- Futárok (MPL/FoxPost/DPD) ---
+  const [courier, setCourier] = useState<Record<string, Record<string, string>>>({});
+  const [courierHas, setCourierHas] = useState<Record<string, Record<string, boolean>>>({});
+  const [courierTest, setCourierTest] = useState<Record<string, boolean>>({});
+  const [courierBusy, setCourierBusy] = useState<string | null>(null);
+  useEffect(() => {
+    COURIER_FORMS.forEach(({ key }) => {
+      api.get<Record<string, unknown>>(`/api/settings/courier/${key}`)
+        .then((cfg) => {
+          const values: Record<string, string> = {};
+          const has: Record<string, boolean> = {};
+          Object.entries(cfg).forEach(([k, v]) => {
+            if (k.startsWith("has_")) has[k.slice(4)] = Boolean(v);
+            else if (k === "test_mode") setCourierTest((t0) => ({ ...t0, [key]: Boolean(v) }));
+            else values[k] = (v as string) ?? "";
+          });
+          setCourier((c) => ({ ...c, [key]: values }));
+          setCourierHas((h) => ({ ...h, [key]: has }));
+        })
+        .catch(() => {});
+    });
+  }, []);
+
+  async function saveCourier(e: React.FormEvent, key: string) {
+    e.preventDefault();
+    setCourierBusy(key);
+    try {
+      await api.put(`/api/settings/courier/${key}`, {
+        ...(courier[key] ?? {}),
+        test_mode: courierTest[key] ?? false,
+      });
+      // a titkos mezők kiürítése + has-jelzők frissítése
+      const cfg = await api.get<Record<string, unknown>>(`/api/settings/courier/${key}`);
+      const has: Record<string, boolean> = {};
+      Object.entries(cfg).forEach(([k, v]) => {
+        if (k.startsWith("has_")) has[k.slice(4)] = Boolean(v);
+      });
+      setCourierHas((h) => ({ ...h, [key]: has }));
+      setCourier((c) => ({
+        ...c,
+        [key]: Object.fromEntries(
+          Object.entries(c[key] ?? {}).map(([k, v]) => [
+            k, COURIER_FORMS.find((f) => f.key === key)?.fields.find((fl) => fl.name === k)?.secret ? "" : v,
+          ]),
+        ),
+      }));
+      toast(t("common.saved"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setCourierBusy(null);
     }
   }
 
@@ -1342,6 +1418,40 @@ export default function BeallitasokPage() {
             </button>
           </div>
         </form>
+
+        {/* Futárok: MPL / FoxPost / DPD */}
+        {COURIER_FORMS.map(({ key, fields }) => (
+          <form
+            key={key}
+            onSubmit={(e) => saveCourier(e, key)}
+            className={cardCls(key, "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
+          >
+            <h2 className="font-semibold">{t(`settings.courier.${key}.title`)}</h2>
+            <p className="text-xs text-slate-500">{t(`settings.courier.${key}.hint`)}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {fields.map((f) => (
+                <label key={f.name} className="block text-sm">
+                  {t(`settings.courier.fields.${f.name}`)}{" "}
+                  {f.secret && courierHas[key]?.[f.name] && <span className="text-emerald-600">✓</span>}
+                  <input
+                    type={f.secret ? "password" : "text"}
+                    value={courier[key]?.[f.name] ?? ""}
+                    placeholder={f.secret && courierHas[key]?.[f.name] ? "••••••••" : ""}
+                    onChange={(e) => setCourier((c) => ({ ...c, [key]: { ...(c[key] ?? {}), [f.name]: e.target.value } }))}
+                    className={inputCls}
+                  />
+                </label>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={courierTest[key] ?? false} onChange={(e) => setCourierTest((t0) => ({ ...t0, [key]: e.target.checked }))} className="h-4 w-4" />
+              {t("settings.courier.testMode")}
+            </label>
+            <button disabled={courierBusy === key} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {courierBusy === key ? t("common.saving") : t("common.save")}
+            </button>
+          </form>
+        ))}
 
         {/* Licenc (előfizetési sáv) */}
         <form

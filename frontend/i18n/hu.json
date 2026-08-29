@@ -1290,7 +1290,35 @@
       "data": "Adatok és mentés",
       "printer": "Címkenyomtató",
       "gls": "GLS",
+      "mpl": "MPL",
+      "foxpost": "FoxPost",
+      "dpd": "DPD",
       "license": "Licenc"
+    },
+    "courier": {
+      "testMode": "Teszt-mód",
+      "fields": {
+        "client_id": "API kulcs (client_id)",
+        "client_secret": "API titok (client_secret)",
+        "accounting_code": "Elszámolási kód (X-Accounting-Code)",
+        "agreement": "Megállapodás-szám (agreement)",
+        "basic_service": "Alap-szolgáltatás kód (üresen: A_175_UZL)",
+        "username": "Felhasználónév",
+        "password": "Jelszó",
+        "api_key": "API-kulcs"
+      },
+      "mpl": {
+        "title": "MPL (Magyar Posta) csomagfeladás",
+        "hint": "Az adatok a Posta fejlesztői portálján (devportal.posta.hu) igényelhetők. A feladó-cím a GLS-fülön beállított Feladó-blokkból megy. A titkos mezők írás-után nem olvashatók vissza; kötőjellel törölhetők."
+      },
+      "foxpost": {
+        "title": "FoxPost csomagfeladás",
+        "hint": "A FoxPost üzleti API-adatai (webapi.foxpost.hu). Automatás kézbesítéshez a csomag-űrlapon adható meg az automata kódja; üresen házhozszállítás megy."
+      },
+      "dpd": {
+        "title": "DPD csomagfeladás",
+        "hint": "A DPD Weblabel webservice adatai — a hozzáférést a DPD-től (it@dpd.hu) kell kérni az ügyfélszámmal. A jelszó titkosítva tárolódik, visszaolvasni nem lehet."
+      }
     },
     "tplTitle": "E-mail sablonok",
     "tplHint": "Újrafelhasználható sablonok az Automatizálások „E-mail küldése” akciójához. A tárgyban és a szövegben {{változók}} használhatók, amiket a trigger tölt ki.",
@@ -1603,9 +1631,13 @@
       "expired": "A licenc lejárt — a rendszer csak-olvasás módban van. Hosszabbításhoz keresd az üzemeltetőt.",
       "bad_date": "Érvénytelen dátum a licenc érvényességénél."
     },
+    "courier": {
+      "not_configured": "Ez a futár nincs beállítva — add meg az adatait a Beállításokban.",
+      "unknown": "Ismeretlen futárszolgálat."
+    },
     "gls": {
       "error": {
-        "withMessage": "GLS-hiba: {message}"
+        "withMessage": "Futár-hiba: {message}"
       },
       "not_configured": "A GLS nincs beállítva — add meg a MyGLS adatokat a Beállításokban.",
       "parcel_not_found": "A csomag nem található.",
@@ -2145,6 +2177,10 @@
     "email": "E-mail",
     "content": "Tartalom",
     "count": "Csomagok száma",
+    "carrier": "Futárszolgálat",
+    "weight": "Súly (kg)",
+    "apmId": "FoxPost automata kódja (üresen: házhozszállítás)",
+    "apmPh": "pl. hu1234",
     "cod": "Utánvét (COD)",
     "codAmount": "Beszedendő összeg (Ft, bruttó)",
     "codAmountRequired": "Utánvéthez add meg a beszedendő összeget.",

@@ -671,6 +671,66 @@ async def update_gls_settings(
     return _gls_out(row)
 
 
+# ─── Futár-beállítások (MPL / FoxPost / DPD) ────────────────────────────────
+
+
+class CourierConfigBody(BaseModel):
+    model_config = {"extra": "allow"}
+    test_mode: bool = False
+
+
+async def _check_courier_module(db: AsyncSession, carrier: str) -> None:
+    modules = license_service.effective_modules(
+        await license_service.get_license_row(db)
+    )
+    if modules is not None and carrier not in modules:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "license.module_disabled", "module": carrier},
+        )
+
+
+@router.get("/courier/{carrier}")
+async def get_courier_settings(
+    carrier: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    from app.services.wfm import couriers
+
+    if carrier not in ("mpl", "foxpost", "dpd"):
+        raise HTTPException(status_code=404, detail={"code": "courier.unknown"})
+    await _check_courier_module(db, carrier)
+    try:
+        cfg = await couriers.load_config(db, carrier)
+    except ValueError:
+        cfg = {}
+    return couriers.masked_config(carrier, cfg)
+
+
+@router.put("/courier/{carrier}")
+async def update_courier_settings(
+    carrier: str,
+    body: CourierConfigBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    from app.services.wfm import couriers
+
+    if carrier not in ("mpl", "foxpost", "dpd"):
+        raise HTTPException(status_code=404, detail={"code": "courier.unknown"})
+    await _check_courier_module(db, carrier)
+    cfg = await couriers.save_config(db, carrier, body.model_dump())
+    await record_audit(
+        db, actor=actor, action="settings.courier_update", entity_type="settings",
+        entity_id=carrier, detail={"test_mode": bool(cfg.get("test_mode"))},
+        request=request,
+    )
+    await db.commit()
+    return couriers.masked_config(carrier, cfg)
+
+
 # ─── Licenc (előfizetési sáv és limitek) ────────────────────────────────────
 
 

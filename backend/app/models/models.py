@@ -604,14 +604,31 @@ class GlsSettings(Base):
     sender_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
 
 
+class CourierSettings(Base):
+    """Futár-hitelesítő adatok futáronként (mpl/foxpost/dpd) — a teljes
+    konfiguráció Fernet-titkosított JSON, write-only."""
+
+    __tablename__ = "courier_settings"
+
+    carrier: Mapped[str] = mapped_column(String(16), primary_key=True)
+    config_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class GlsParcel(Base):
-    """Feladott GLS-csomag: címzett, utánvét, csomagszám és a visszakapott
-    címke-PDF (újranyomtatáshoz tárolva)."""
+    """Feladott csomag (történeti okból gls_parcels a tábla, de minden futár
+    ide kerül): címzett, utánvét, csomagszám és a címke-PDF."""
 
     __tablename__ = "gls_parcels"
     __table_args__ = (Index("ix_gls_parcels_created", "created_at"),)
 
     id: Mapped[uuid.UUID] = _uuid_pk()
+    # gls | mpl | foxpost | dpd
+    carrier: Mapped[str] = mapped_column(String(16), nullable=False, default="gls")
+    # a futár belső azonosítója (törléshez/követéshez, ha nem a csomagszám)
+    carrier_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
     order_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("product_orders.id", ondelete="SET NULL", name="fk_gls_order"),
         nullable=True,

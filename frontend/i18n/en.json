@@ -1290,7 +1290,35 @@
       "data": "Data & backup",
       "printer": "Label printer",
       "gls": "GLS",
+      "mpl": "MPL",
+      "foxpost": "FoxPost",
+      "dpd": "DPD",
       "license": "Licence"
+    },
+    "courier": {
+      "testMode": "Test mode",
+      "fields": {
+        "client_id": "API key (client_id)",
+        "client_secret": "API secret (client_secret)",
+        "accounting_code": "Accounting code (X-Accounting-Code)",
+        "agreement": "Agreement number",
+        "basic_service": "Basic service code (empty: A_175_UZL)",
+        "username": "Username",
+        "password": "Password",
+        "api_key": "API key"
+      },
+      "mpl": {
+        "title": "MPL (Magyar Posta) shipping",
+        "hint": "Credentials from the Posta developer portal (devportal.posta.hu). The sender address comes from the Sender block on the GLS tab. Secret fields are write-only; a dash deletes them."
+      },
+      "foxpost": {
+        "title": "FoxPost shipping",
+        "hint": "FoxPost business API credentials (webapi.foxpost.hu). For locker delivery enter the APM code on the parcel form; empty means home delivery."
+      },
+      "dpd": {
+        "title": "DPD shipping",
+        "hint": "DPD Weblabel webservice credentials — request access from DPD (it@dpd.hu) with your customer number. The password is stored encrypted and cannot be read back."
+      }
     },
     "tplTitle": "Email templates",
     "tplHint": "Reusable templates for the Automations \"Send email\" action. {{variables}} can be used in the subject and body, filled by the trigger.",
@@ -1603,9 +1631,13 @@
       "expired": "The licence has expired — the system is read-only. Contact the operator to renew.",
       "bad_date": "Invalid licence validity date."
     },
+    "courier": {
+      "not_configured": "This courier is not configured — enter its credentials in Settings.",
+      "unknown": "Unknown courier."
+    },
     "gls": {
       "error": {
-        "withMessage": "GLS error: {message}"
+        "withMessage": "Courier error: {message}"
       },
       "not_configured": "GLS is not configured — set the MyGLS credentials in Settings.",
       "parcel_not_found": "Parcel not found.",
@@ -2145,6 +2177,10 @@
     "email": "Email",
     "content": "Content",
     "count": "Parcel count",
+    "carrier": "Courier",
+    "weight": "Weight (kg)",
+    "apmId": "FoxPost locker code (empty: home delivery)",
+    "apmPh": "e.g. hu1234",
     "cod": "Cash on delivery (COD)",
     "codAmount": "Amount to collect (HUF, gross)",
     "codAmountRequired": "COD requires the amount to collect.",

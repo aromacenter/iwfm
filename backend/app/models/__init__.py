@@ -13,6 +13,7 @@ from app.models.models import (  # noqa: F401
     DeliveryNoteLine,
     EmailSettings,
     EmailTemplate,
+    CourierSettings,
     Employee,
     EmployeeSkill,
     GlsParcel,

@@ -15,12 +15,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import record_audit, require_perm
 from app.db import get_db
 from app.models import GlsParcel, Partner, ProductOrder, User
-from app.services.wfm import gls_service
+from app.services.wfm import couriers, gls_service
+from app.services.wfm.license import effective_modules, get_license_row
 
 router = APIRouter()
 
 
+async def _require_carrier(db: AsyncSession, carrier: str) -> None:
+    """403, ha a futár modulja nincs bekapcsolva ezen a példányon."""
+    modules = effective_modules(await get_license_row(db))
+    if modules is not None and carrier not in modules:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "license.module_disabled", "module": carrier},
+        )
+
+
+async def _require_any_carrier(db: AsyncSession) -> None:
+    modules = effective_modules(await get_license_row(db))
+    if modules is not None and not any(c in modules for c in couriers.CARRIERS):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "license.module_disabled", "module": "gls"},
+        )
+
+
 class ParcelCreateBody(BaseModel):
+    carrier: str = Field(default="gls", pattern="^(gls|mpl|foxpost|dpd)$")
     order_id: str | None = None
     partner_id: str | None = None
     recipient_name: str = Field(min_length=2, max_length=256)
@@ -34,12 +55,17 @@ class ParcelCreateBody(BaseModel):
     count: int = Field(default=1, ge=1, le=20)
     cod_amount: float | None = Field(default=None, ge=0, le=5_000_000)
     cod_reference: str | None = Field(default=None, max_length=64)
-    # csomagcsere (XS): kézbesítéskor a futár csere-csomagot hoz el (pl. gépcsere)
+    # csomagcsere (XS): kézbesítéskor a futár csere-csomagot hoz el — csak GLS
     exchange: bool = False
+    # FoxPost: csomagautomata-kód (üresen házhozszállítás)
+    apm_id: str | None = Field(default=None, max_length=32)
+    # csomagsúly kg-ban (MPL-nél kötelező jellegű, másutt tájékoztató)
+    weight_kg: float | None = Field(default=None, gt=0, le=1000)
 
 
 class ParcelOut(BaseModel):
     id: str
+    carrier: str = "gls"
     parcel_number: str | None
     recipient_name: str
     recipient_city: str
@@ -76,7 +102,7 @@ async def _out(db: AsyncSession, rows: list[GlsParcel]) -> list[ParcelOut]:
     } if order_ids else {}
     return [
         ParcelOut(
-            id=str(p.id), parcel_number=p.parcel_number,
+            id=str(p.id), carrier=p.carrier or "gls", parcel_number=p.parcel_number,
             recipient_name=p.recipient_name, recipient_city=p.recipient_city,
             recipient_zip=p.recipient_zip, content=p.content, count=p.count,
             cod_amount=p.cod_amount, exchange=bool(p.exchange_service),
@@ -85,7 +111,11 @@ async def _out(db: AsyncSession, rows: list[GlsParcel]) -> list[ParcelOut]:
             last_status_at=p.last_status_at,
             history=p.status_history or [],
             can_delete=(p.status_key or "created") == "created"
-            and p.gls_parcel_id is not None,
+            and (
+                p.gls_parcel_id is not None
+                if (p.carrier or "gls") == "gls"
+                else bool(p.carrier_ref or p.parcel_number)
+            ),
             test_mode=p.test_mode,
             partner_name=partners.get(p.partner_id) if p.partner_id else None,
             order_no=orders.get(p.order_id) if p.order_id else None,
@@ -101,6 +131,7 @@ async def list_parcels(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("settlements")),
 ):
+    await _require_any_carrier(db)
     q = select(GlsParcel).order_by(GlsParcel.created_at.desc()).limit(100)
     if order_id:
         try:
@@ -118,7 +149,8 @@ async def create_parcel(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("settlements")),
 ):
-    """Címke készítése a MyGLS-nél; a PDF elmentődik (újranyomtatható)."""
+    """Címke készítése a választott futárnál; a PDF elmentődik."""
+    await _require_carrier(db, body.carrier)
     order = None
     if body.order_id:
         try:
@@ -136,34 +168,62 @@ async def create_parcel(
         except ValueError:
             partner_id = None
 
+    recipient = {
+        "name": body.recipient_name.strip(),
+        "zip": body.recipient_zip.strip(),
+        "city": body.recipient_city.strip(),
+        "street": body.recipient_street.strip(),
+        "house": (body.recipient_house or "").strip(),
+        "phone": (body.recipient_phone or "").strip(),
+        "email": (body.recipient_email or "").strip(),
+        "apm_id": (body.apm_id or "").strip() or None,
+    }
+    gls_parcel_id = None
+    carrier_ref = None
     try:
-        parcel_number, gls_parcel_id, label_pdf = await gls_service.create_label(
-            db,
-            recipient={
-                "name": body.recipient_name.strip(),
-                "zip": body.recipient_zip.strip(),
-                "city": body.recipient_city.strip(),
-                "street": body.recipient_street.strip(),
-                "house": (body.recipient_house or "").strip(),
-                "phone": (body.recipient_phone or "").strip(),
-                "email": (body.recipient_email or "").strip(),
-            },
-            content=body.content,
-            count=body.count,
-            cod_amount=body.cod_amount,
-            cod_reference=body.cod_reference,
-            client_reference=order.order_no if order else None,
-            exchange=body.exchange,
-        )
+        if body.carrier == "gls":
+            parcel_number, gls_parcel_id, label_pdf = await gls_service.create_label(
+                db,
+                recipient=recipient,
+                content=body.content,
+                count=body.count,
+                cod_amount=body.cod_amount,
+                cod_reference=body.cod_reference,
+                client_reference=order.order_no if order else None,
+                exchange=body.exchange,
+            )
+            cfg_test = (await gls_service.load_gls_config(db))["test_mode"]
+        else:
+            result = await couriers.create_label(
+                db, body.carrier,
+                recipient=recipient,
+                content=body.content,
+                count=body.count,
+                cod_amount=body.cod_amount,
+                cod_reference=body.cod_reference,
+                client_reference=order.order_no if order else None,
+                weight_g=int((body.weight_kg or 1.0) * 1000),
+            )
+            parcel_number = result["tracking_number"]
+            carrier_ref = result.get("carrier_ref")
+            label_pdf = result.get("label_pdf")
+            cfg_test = bool(result.get("test_mode"))
     except ValueError:
-        raise HTTPException(status_code=422, detail={"code": "gls.not_configured"})
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "gls.not_configured" if body.carrier == "gls"
+                else "courier.not_configured",
+                "carrier": body.carrier,
+            },
+        )
     except RuntimeError as exc:
         raise HTTPException(
             status_code=502, detail={"code": "gls.error", "message": str(exc)}
         )
-
-    cfg_test = (await gls_service.load_gls_config(db))["test_mode"]
     parcel = GlsParcel(
+        carrier=body.carrier,
+        carrier_ref=carrier_ref,
         order_id=order.id if order else None,
         partner_id=partner_id,
         recipient_name=body.recipient_name.strip(),
@@ -189,8 +249,9 @@ async def create_parcel(
     await record_audit(
         db, actor=actor, action="gls.create", entity_type="gls_parcel",
         entity_id=parcel_number,
-        detail={"to": body.recipient_name, "cod": body.cod_amount,
-                "count": body.count, "exchange": body.exchange},
+        detail={"carrier": body.carrier, "to": body.recipient_name,
+                "cod": body.cod_amount, "count": body.count,
+                "exchange": body.exchange},
         request=request,
     )
     await db.commit()
@@ -238,18 +299,31 @@ async def refresh_parcel_status(
 ):
     """A teljes GLS-idővonal lekérése + normalizált státusz frissítése."""
     p = await _parcel_or_404(db, parcel_id)
+    await _require_carrier(db, p.carrier or "gls")
     if not p.parcel_number:
         raise HTTPException(status_code=422, detail={"code": "gls.no_parcel_number"})
     try:
-        events = await gls_service.get_statuses(db, p.parcel_number)
+        if (p.carrier or "gls") == "gls":
+            events = await gls_service.get_statuses(db, p.parcel_number)
+        else:
+            events = await couriers.get_statuses(
+                db, p.carrier, p.parcel_number, p.carrier_ref
+            )
     except ValueError:
-        raise HTTPException(status_code=422, detail={"code": "gls.not_configured"})
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "gls.not_configured" if (p.carrier or "gls") == "gls"
+                else "courier.not_configured",
+                "carrier": p.carrier,
+            },
+        )
     except RuntimeError as exc:
         raise HTTPException(
             status_code=502, detail={"code": "gls.error", "message": str(exc)}
         )
     p.status_history = events
-    p.status_key = gls_service.normalize_status(events)
+    p.status_key = couriers.normalize_status(events)
     if events:
         p.last_status = events[0]["description"][:256]
     p.last_status_at = datetime.now(UTC)
@@ -267,17 +341,28 @@ async def delete_parcel(
     """A feladás törlése — CSAK amíg a futár nem vette át (created státusz).
     A címkét a MyGLS-nél is érvénytelenítjük."""
     p = await _parcel_or_404(db, parcel_id)
+    await _require_carrier(db, p.carrier or "gls")
     if (p.status_key or "created") != "created":
         raise HTTPException(status_code=422, detail={"code": "gls.already_handed_over"})
-    if p.gls_parcel_id:
-        try:
-            await gls_service.delete_label(db, p.gls_parcel_id)
-        except ValueError:
-            raise HTTPException(status_code=422, detail={"code": "gls.not_configured"})
-        except RuntimeError as exc:
-            raise HTTPException(
-                status_code=502, detail={"code": "gls.error", "message": str(exc)}
-            )
+    try:
+        if (p.carrier or "gls") == "gls":
+            if p.gls_parcel_id:
+                await gls_service.delete_label(db, p.gls_parcel_id)
+        elif p.parcel_number or p.carrier_ref:
+            await couriers.delete_parcel(db, p.carrier, p.parcel_number, p.carrier_ref)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "gls.not_configured" if (p.carrier or "gls") == "gls"
+                else "courier.not_configured",
+                "carrier": p.carrier,
+            },
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502, detail={"code": "gls.error", "message": str(exc)}
+        )
     await record_audit(
         db, actor=actor, action="gls.delete", entity_type="gls_parcel",
         entity_id=p.parcel_number or str(p.id),

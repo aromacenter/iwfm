@@ -36,8 +36,16 @@ interface OrderLite {
   contact_phone: string | null;
 }
 
+const CARRIER_LABEL: Record<string, string> = {
+  gls: "GLS",
+  mpl: "MPL",
+  foxpost: "FoxPost",
+  dpd: "DPD",
+};
+
 interface Parcel {
   id: string;
+  carrier: string;
   parcel_number: string | null;
   recipient_name: string;
   recipient_city: string;
@@ -66,6 +74,9 @@ const STATUS_BADGE: Record<Parcel["status_key"], string> = {
 };
 
 const EMPTY_FORM = {
+  carrier: "gls",
+  apm_id: "",
+  weight_kg: "1",
   partner_id: "",
   order_id: "",
   recipient_name: "",
@@ -94,6 +105,16 @@ export default function CsomagokPage() {
   const loadParcels = useCallback(() => {
     api.get<Parcel[]>("/api/gls").then(setParcels).catch(() => {});
   }, []);
+
+  // az elérhető futárok a licenc modul-listájából
+  const [modules, setModules] = useState<string[] | null>(null);
+  useEffect(() => {
+    api.get<{ modules: string[] | null }>("/api/settings/license/status")
+      .then((s) => setModules(s.modules))
+      .catch(() => {});
+  }, []);
+  const carrierOn = (c: string) => modules === null || modules.includes(c);
+  const carriers = ["gls", "mpl", "foxpost", "dpd"].filter(carrierOn);
 
   useEffect(() => {
     api.get<PartnerLite[]>("/api/partners").then(setPartners).catch(() => {});
@@ -176,7 +197,10 @@ export default function CsomagokPage() {
         content: form.content || null,
         count: Number(form.count) || 1,
         cod_amount: codAmount,
-        exchange: form.exchange,
+        exchange: form.carrier === "gls" ? form.exchange : false,
+        carrier: form.carrier,
+        apm_id: form.carrier === "foxpost" ? form.apm_id || null : null,
+        weight_kg: form.carrier !== "gls" ? Number(form.weight_kg) || 1 : null,
       });
       toast(t("gls.created", { number: parcel.parcel_number ?? "?" }), "success");
       setForm({ ...EMPTY_FORM });
@@ -280,6 +304,28 @@ export default function CsomagokPage() {
               <input type="number" min={1} max={20} value={form.count} onChange={(e) => setForm({ ...form, count: e.target.value })} className={inputCls} />
             </label>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              {t("gls.carrier")}
+              <select value={form.carrier} onChange={(e) => setForm({ ...form, carrier: e.target.value })} className={inputCls}>
+                {carriers.map((c) => (
+                  <option key={c} value={c}>{CARRIER_LABEL[c]}</option>
+                ))}
+              </select>
+            </label>
+            {form.carrier !== "gls" && (
+              <label className="block text-sm">
+                {t("gls.weight")}
+                <input type="number" min={0.1} step={0.1} value={form.weight_kg} onChange={(e) => setForm({ ...form, weight_kg: e.target.value })} className={inputCls} />
+              </label>
+            )}
+          </div>
+          {form.carrier === "foxpost" && (
+            <label className="block text-sm">
+              {t("gls.apmId")}
+              <input value={form.apm_id} onChange={(e) => setForm({ ...form, apm_id: e.target.value })} placeholder={t("gls.apmPh")} className={inputCls} />
+            </label>
+          )}
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
             <label className="flex items-center gap-2 text-sm font-medium">
               <input type="checkbox" checked={form.cod} onChange={(e) => setForm({ ...form, cod: e.target.checked })} className="h-4 w-4" />
@@ -292,13 +338,15 @@ export default function CsomagokPage() {
               </label>
             )}
           </div>
-          <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input type="checkbox" checked={form.exchange} onChange={(e) => setForm({ ...form, exchange: e.target.checked })} className="h-4 w-4" />
-              {t("gls.exchange")}
-            </label>
-            {form.exchange && <p className="mt-1 text-xs text-slate-500">{t("gls.exchangeHint")}</p>}
-          </div>
+          {form.carrier === "gls" && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={form.exchange} onChange={(e) => setForm({ ...form, exchange: e.target.checked })} className="h-4 w-4" />
+                {t("gls.exchange")}
+              </label>
+              {form.exchange && <p className="mt-1 text-xs text-slate-500">{t("gls.exchangeHint")}</p>}
+            </div>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
             {busy ? t("common.saving") : `🏷️ ${t("gls.create")}`}
@@ -314,6 +362,9 @@ export default function CsomagokPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-mono text-xs font-semibold">{p.parcel_number ?? "—"}</span>
                 <span className="flex gap-1.5">
+                  <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                    {CARRIER_LABEL[p.carrier] ?? p.carrier}
+                  </span>
                   <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE[p.status_key]}`}>
                     {t(`gls.status.${p.status_key}`)}
                   </span>

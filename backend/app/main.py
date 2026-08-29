@@ -247,10 +247,8 @@ def create_app() -> FastAPI:
         print_jobs_api.router, prefix="/api/print-jobs", tags=["print"],
         dependencies=[Depends(_mod("labels"))],
     )
-    app.include_router(
-        gls_api.router, prefix="/api/gls", tags=["gls"],
-        dependencies=[Depends(_mod("gls"))],
-    )
+    # a csomag-router modul-ellenőrzése futáronként, végpont-szinten történik
+    app.include_router(gls_api.router, prefix="/api/gls", tags=["gls"])
     app.include_router(
         print_jobs_api.agent_router, prefix="/api/print-agent", tags=["print"],
         dependencies=[Depends(_mod("labels"))],
