@@ -28,6 +28,7 @@ from app.api import (
     kiosk,
     knowledge,
     me,
+    operator as operator_api,
     orders,
     payroll,
     portal,
@@ -173,7 +174,9 @@ def create_app() -> FastAPI:
     # Lejárt licenc (türelmi időn is túl): csak-olvasás mód. Adat nem vész
     # el, a GET-ek és a belépés működnek — az írás áll meg, a licenc-oldal
     # kivételével, hogy a hosszabbítást be lehessen állítani.
-    _license_write_allow = ("/api/auth/", "/api/settings/license", "/api/health")
+    _license_write_allow = (
+        "/api/auth/", "/api/settings/license", "/api/health", "/api/operator",
+    )
 
     @app.middleware("http")
     async def license_guard(request, call_next):
@@ -211,6 +214,7 @@ def create_app() -> FastAPI:
     app.include_router(kiosk.router, prefix="/api/kiosk", tags=["kiosk"])
     app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
     app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
+    app.include_router(operator_api.router, prefix="/api/operator", tags=["operator"])
     app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
     app.include_router(tasks.me_router, prefix="/api/me/tasks", tags=["self-service"])
     app.include_router(

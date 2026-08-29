@@ -9,7 +9,7 @@ Mit mutat (manager+):
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -384,7 +384,9 @@ async def receivables_stats(
     A ki nem egyenlített elszámolásokból (bruttó − fizetett > 0) épül — a
     Billingó fizetés-szinkron (sync-payment) után ez a friss állapot.
     Korosítás a bizonylat kelte szerint: 0–30 / 31–60 / 61–90 / 90+ nap."""
-    today = date.today()
+    # UTC-dátum, mert a created_at is UTC — helyi dátummal éjfél körül a
+    # másodperces tartozás is "1 naposnak" látszana.
+    today = datetime.now(UTC).date()
     rows = (
         await db.execute(
             select(Settlement, Partner.name)

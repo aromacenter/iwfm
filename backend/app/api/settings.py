@@ -708,13 +708,11 @@ async def get_license_settings(
     return await _license_status_payload(db)
 
 
-@router.put("/license")
-async def update_license_settings(
-    body: LicenseBody,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_role("admin")),
-):
+async def apply_license_update(
+    db: AsyncSession, body: LicenseBody, *, actor: User | None, request: Request | None
+) -> dict:
+    """A licenc-sor frissítése — a Beállítások-oldal és az üzemeltetői
+    (Flotta) végpont közös magja."""
     from datetime import date as _date
 
     row = await license_service.get_license_row(db)
@@ -741,6 +739,16 @@ async def update_license_settings(
     await db.commit()
     license_service.invalidate_cache()
     return await _license_status_payload(db)
+
+
+@router.put("/license")
+async def update_license_settings(
+    body: LicenseBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    return await apply_license_update(db, body, actor=actor, request=request)
 
 
 @router.post("/gls/test")

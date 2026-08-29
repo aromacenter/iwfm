@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Ha be van állítva, az első-admin bootstrap CSAK ezzel a tokennel hívható
     # (megvédi a nyitott bootstrap-ablakot, ha a users tábla valaha kiürülne).
     bootstrap_token: str = ""
+    # Üzemeltetői (Flotta-pult) token: a licenc táv-kezeléséhez. Üresen a
+    # /api/operator végpontok zárva vannak.
+    operator_token: str = ""
 
     model_config = {"env_prefix": "WFM_", "env_file": ".env", "extra": "ignore"}
 
