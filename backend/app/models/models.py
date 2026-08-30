@@ -614,6 +614,39 @@ class GlsSettings(Base):
     sender_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
 
 
+class BugReport(Base):
+    """Hibabejelentés a tesztelőktől: oldal + leírás + képernyőkép +
+    súlyosság; a triázs és a javítás-visszajelzés státusz-mezőn fut."""
+
+    __tablename__ = "bug_reports"
+    __table_args__ = (Index("ix_bugs_status", "status", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    page_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    # blocker | major | minor | cosmetic
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="minor")
+    # new | confirmed | duplicate | rejected | resolved | closed | reopened
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="new")
+    user_agent: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    screenshot: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    screenshot_mime: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    reporter_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_bug_reporter"),
+        nullable=True,
+    )
+    reporter_name: Mapped[str] = mapped_column(String(128), nullable=False, default="?")
+    # összetartozó hibák kötegelése egy javítási feladatba
+    fix_group: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(UTC)
+    )
+
+
 class CourierSettings(Base):
     """Futár-hitelesítő adatok futáronként (mpl/foxpost/dpd) — a teljes
     konfiguráció Fernet-titkosított JSON, write-only."""

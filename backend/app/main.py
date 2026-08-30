@@ -14,6 +14,7 @@ from app.api import (
     assistant as assistant_api,
     audit,
     auth,
+    bugs as bugs_api,
     automation as automation_api,
     consignment,
     contracts as contracts_api,
@@ -272,6 +273,10 @@ def create_app() -> FastAPI:
     app.include_router(
         assistant_api.router, prefix="/api/assistant", tags=["assistant"],
         dependencies=[Depends(_mod("ai"))],
+    )
+    app.include_router(
+        bugs_api.router, prefix="/api/bugs", tags=["bugs"],
+        dependencies=[Depends(_mod("bugreport"))],
     )
     app.include_router(admin_tools.router, prefix="/api/admin", tags=["admin"])
     app.include_router(automation_api.router)

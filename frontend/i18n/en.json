@@ -146,6 +146,7 @@
     "service": "Service",
     "kb": "Knowledge base",
     "audit": "Audit log",
+    "bugs": "Bug reports",
     "groups": {
       "overview": "Overview",
       "operations": "Operations",
@@ -1702,6 +1703,45 @@
     "skip": "Skip",
     "next": "Next →",
     "finish": "Go to the calendar!"
+  },
+  "bugs": {
+    "buttonTitle": "Report a bug",
+    "tabReport": "Report",
+    "tabMine": "My reports",
+    "descriptionPh": "What happened? What did you expect instead? (min. 5 chars)",
+    "screenshotAdd": "📷 Screenshot (file or Ctrl+V here)",
+    "screenshotOk": "📷 Image attached ✓",
+    "autoNote": "The page URL and browser details are captured automatically.",
+    "send": "🐞 Send report",
+    "sent": "Thank you! Your report has arrived — follow it on the My reports tab.",
+    "mineEmpty": "No reports yet.",
+    "retestOk": "It works",
+    "reopen": "Still broken",
+    "closedToast": "Thanks for confirming — the bug is closed! 🎉",
+    "reopenedToast": "Reopened — the developers are notified.",
+    "sev": {
+      "blocker": "Blocker",
+      "major": "Major",
+      "minor": "Minor",
+      "cosmetic": "Cosmetic"
+    },
+    "status": {
+      "new": "New",
+      "confirmed": "Confirmed",
+      "duplicate": "Duplicate",
+      "rejected": "Rejected",
+      "resolved": "Fixed — please retest!",
+      "closed": "Closed",
+      "reopened": "Reopened"
+    },
+    "adminTitle": "Bug reports",
+    "adminEmpty": "No reports match the filter. 🎉",
+    "allStatuses": "All statuses",
+    "allSeverities": "All severities",
+    "viewShot": "Open screenshot",
+    "group": "Batch",
+    "groupPrompt": "Fix batch name (empty: remove from batch):",
+    "resolveNotePrompt": "Note to the reporter (what was fixed and how):"
   },
   "license": {
     "title": "Licence & subscription",

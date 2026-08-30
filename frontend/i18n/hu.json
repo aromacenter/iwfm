@@ -146,6 +146,7 @@
     "service": "Szerviz",
     "kb": "Tudásbázis",
     "audit": "Napló",
+    "bugs": "Hibabejelentések",
     "groups": {
       "overview": "Áttekintés",
       "operations": "Munkavégzés",
@@ -1702,6 +1703,45 @@
     "skip": "Kihagyom",
     "next": "Tovább →",
     "finish": "Irány a naptár!"
+  },
+  "bugs": {
+    "buttonTitle": "Hibabejelentés",
+    "tabReport": "Bejelentés",
+    "tabMine": "Bejelentéseim",
+    "descriptionPh": "Mi történt? Mit vártál helyette? (min. 5 karakter)",
+    "screenshotAdd": "📷 Képernyőkép (fájl vagy Ctrl+V ide)",
+    "screenshotOk": "📷 Kép csatolva ✓",
+    "autoNote": "Az oldal címe és a böngésző adatai automatikusan mentődnek.",
+    "send": "🐞 Hiba beküldése",
+    "sent": "Köszönjük! A bejelentés megérkezett — a Bejelentéseim fülön követheted.",
+    "mineEmpty": "Még nincs bejelentésed.",
+    "retestOk": "Működik",
+    "reopen": "Még hibás",
+    "closedToast": "Köszönjük a megerősítést — a hiba lezárva! 🎉",
+    "reopenedToast": "Újranyitva — a fejlesztők értesülnek róla.",
+    "sev": {
+      "blocker": "Blokkoló",
+      "major": "Súlyos",
+      "minor": "Kisebb",
+      "cosmetic": "Kozmetikai"
+    },
+    "status": {
+      "new": "Új",
+      "confirmed": "Megerősítve",
+      "duplicate": "Duplikátum",
+      "rejected": "Elutasítva",
+      "resolved": "Javítva — teszteld!",
+      "closed": "Lezárva",
+      "reopened": "Újranyitva"
+    },
+    "adminTitle": "Hibabejelentések",
+    "adminEmpty": "Nincs a szűrőnek megfelelő bejelentés. 🎉",
+    "allStatuses": "Minden státusz",
+    "allSeverities": "Minden súlyosság",
+    "viewShot": "Képernyőkép megnyitása",
+    "group": "Kötegelés",
+    "groupPrompt": "Javítási köteg neve (üresen: kivétel a kötegből):",
+    "resolveNotePrompt": "Megjegyzés a bejelentőnek (mi és hogyan javult):"
   },
   "license": {
     "title": "Licenc és előfizetés",

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import AssistantChat from "@/components/AssistantChat";
 import BrandLogo from "@/components/BrandLogo";
+import BugReporter from "@/components/BugReporter";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
@@ -72,6 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/import-export", key: "nav.importExport", perm: "import_export", icon: "🔄" },
       { href: "/automatizalasok", key: "nav.automation", perm: "admin-only", icon: "⚡" },
+      { href: "/hibak", key: "nav.bugs", perm: "admin-only", icon: "🐞", module: "bugreport" },
       { href: "/naplo", key: "nav.audit", perm: "admin-only", icon: "📋" },
       { href: "/beallitasok", key: "nav.settings", perm: "admin-only", icon: "⚙️" },
     ],
@@ -364,6 +366,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </main>
 
       {moduleOn("ai") && <AssistantChat />}
+      {moduleOn("bugreport") && <BugReporter />}
 
       {pwOpen && (
         <div
