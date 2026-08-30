@@ -91,6 +91,39 @@ async def test_bug_lifecycle(client, admin, manager):
     assert res.status_code == 403
 
 
+async def test_operator_bug_endpoints(client, admin, manager, monkeypatch):
+    """A Flotta-pult táv-kezelése: lista, módosítás, képernyőkép tokennel."""
+    _, mgr = manager
+    _arm_operator(monkeypatch)
+
+    await client.post(
+        "/api/bugs",
+        json={"description": "Operator-teszt hibabejelentés.", "severity": "blocker",
+              "page_url": "https://x/vezerlopult", "screenshot": PNG},
+        headers=mgr,
+    )
+
+    # token nélkül zárva
+    assert (await client.get("/api/operator/bugs")).status_code == 403
+
+    rows = (await client.get("/api/operator/bugs?severity=blocker", headers=OP)).json()
+    assert len(rows) == 1
+    bug_id = rows[0]["id"]
+
+    res = await client.patch(
+        f"/api/operator/bugs/{bug_id}",
+        json={"status": "resolved", "resolution_note": "Flotta-ból javítva."},
+        headers=OP,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "resolved"
+    assert res.json()["resolution_note"] == "Flotta-ból javítva."
+
+    res = await client.get(f"/api/operator/bugs/{bug_id}/screenshot", headers=OP)
+    assert res.status_code == 200
+    assert res.content.startswith(b"\x89PNG")
+
+
 async def test_bug_module_gate(client, admin, manager, monkeypatch):
     _, adm = admin
     _, mgr = manager

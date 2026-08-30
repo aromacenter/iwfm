@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import secrets as _secrets
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.settings import LicenseBody, _license_status_payload, apply_license_update
@@ -37,6 +38,77 @@ async def require_operator(
 async def operator_status(db: AsyncSession = Depends(get_db)):
     """Példány-állapot a Flotta-pultnak: licenc + kihasználtság."""
     return {"app": "iwfm", **(await _license_status_payload(db))}
+
+
+# ─── Hibajelentések táv-kezelése a Flotta-pultból ───────────────────────────
+
+
+@router.get("/bugs", dependencies=[Depends(require_operator)])
+async def operator_bugs(
+    status: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.api.bugs import _out
+    from app.models import BugReport
+
+    q = select(BugReport).order_by(BugReport.created_at.desc()).limit(300)
+    if status:
+        q = q.where(BugReport.status == status)
+    if severity:
+        q = q.where(BugReport.severity == severity)
+    rows = (await db.execute(q)).scalars().all()
+    return [_out(b) for b in rows]
+
+
+@router.patch("/bugs/{bug_id}", dependencies=[Depends(require_operator)])
+async def operator_bug_update(
+    bug_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    body: dict | None = None,
+):
+    from datetime import UTC as _UTC, datetime as _dt
+
+    from app.api.bugs import SEVERITIES, STATUSES, _bug_or_404, _out
+    from app.api.deps import record_audit
+
+    b = await _bug_or_404(db, bug_id)
+    body = body or {}
+    if body.get("status") is not None:
+        if body["status"] not in STATUSES:
+            raise HTTPException(status_code=422, detail={"code": "bugs.bad_status"})
+        b.status = body["status"]
+    if body.get("severity") is not None:
+        if body["severity"] not in SEVERITIES:
+            raise HTTPException(status_code=422, detail={"code": "bugs.bad_severity"})
+        b.severity = body["severity"]
+    if "fix_group" in body:
+        b.fix_group = (body.get("fix_group") or "").strip()[:64] or None
+    if "resolution_note" in body:
+        b.resolution_note = (body.get("resolution_note") or "").strip()[:512] or None
+    b.updated_at = _dt.now(_UTC)
+    await record_audit(
+        db, actor=None, action="bug.operator_update", entity_type="bug",
+        entity_id=str(b.id), detail={"status": body.get("status")}, request=request,
+    )
+    await db.commit()
+    return _out(b)
+
+
+@router.get("/bugs/{bug_id}/screenshot", dependencies=[Depends(require_operator)])
+async def operator_bug_screenshot(
+    bug_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.api.bugs import _bug_or_404
+
+    b = await _bug_or_404(db, bug_id)
+    if b.screenshot is None:
+        raise HTTPException(status_code=404, detail={"code": "bugs.no_screenshot"})
+    return Response(
+        content=bytes(b.screenshot), media_type=b.screenshot_mime or "image/png"
+    )
 
 
 class PlanCatalogBody(BaseModel):
