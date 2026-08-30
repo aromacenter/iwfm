@@ -5,7 +5,7 @@
  * böngésző magától rögzül. A "Bejelentéseim" fülön zárul a kör: a javított
  * (resolved) hibát a tesztelő megerősíti vagy újranyitja. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -56,11 +56,126 @@ export default function BugReporter() {
   // van-e újratesztelésre váró (resolved) bejelentésem? → pötty a gombon
   const needsRetest = mine.some((b) => b.status === "resolved");
 
+  // ─── kép-annotálás: nyilak rajzolása a képernyőképre ───
+  const [annotating, setAnnotating] = useState(false);
+  const [baseImg, setBaseImg] = useState<string | null>(null);
+  const [arrows, setArrows] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
+  const [draft, setDraft] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const [capturing, setCapturing] = useState(false);
+
+  function openAnnotator(dataUrl: string) {
+    const img = new Image();
+    img.onload = () => {
+      imgRef.current = img;
+      setBaseImg(dataUrl);
+      setArrows([]);
+      setDraft(null);
+      setAnnotating(true);
+    };
+    img.src = dataUrl;
+  }
+
   function pickFile(file: File | null) {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setScreenshot(String(reader.result));
+    reader.onload = () => openAnnotator(String(reader.result));
     reader.readAsDataURL(file);
+  }
+
+  // az aktuális oldal lefotózása (a bejelentő-panel kimarad a képből)
+  async function capturePage() {
+    setCapturing(true);
+    try {
+      const { toJpeg } = await import("html-to-image");
+      const dataUrl = await toJpeg(document.body, {
+        quality: 0.85,
+        pixelRatio: 1,
+        filter: (node) =>
+          !(node instanceof HTMLElement && node.dataset?.bugUi === "1"),
+      });
+      openAnnotator(dataUrl);
+    } catch {
+      toast(t("bugs.captureFailed"), "error");
+    } finally {
+      setCapturing(false);
+    }
+  }
+
+  function drawArrow(
+    ctx: CanvasRenderingContext2D,
+    a: { x1: number; y1: number; x2: number; y2: number },
+    width: number,
+  ) {
+    ctx.strokeStyle = "#ef4444";
+    ctx.fillStyle = "#ef4444";
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(a.x1, a.y1);
+    ctx.lineTo(a.x2, a.y2);
+    ctx.stroke();
+    const angle = Math.atan2(a.y2 - a.y1, a.x2 - a.x1);
+    const head = width * 4;
+    ctx.beginPath();
+    ctx.moveTo(a.x2, a.y2);
+    ctx.lineTo(a.x2 - head * Math.cos(angle - 0.45), a.y2 - head * Math.sin(angle - 0.45));
+    ctx.lineTo(a.x2 - head * Math.cos(angle + 0.45), a.y2 - head * Math.sin(angle + 0.45));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const redraw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    if (!canvas || !img) return;
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(img, 0, 0);
+    const w = Math.max(4, Math.round(canvas.width / 250));
+    arrows.forEach((a) => drawArrow(ctx, a, w));
+    if (draft) drawArrow(ctx, draft, w);
+  }, [arrows, draft]);
+
+  useEffect(() => {
+    if (annotating) redraw();
+  }, [annotating, redraw]);
+
+  function canvasPoint(e: React.PointerEvent): { x: number; y: number } {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((e.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  }
+
+  function onPointerDown(e: React.PointerEvent) {
+    e.preventDefault();
+    const p = canvasPoint(e);
+    setDraft({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    if (!draft) return;
+    const p = canvasPoint(e);
+    setDraft({ ...draft, x2: p.x, y2: p.y });
+  }
+  function onPointerUp() {
+    if (!draft) return;
+    const len = Math.hypot(draft.x2 - draft.x1, draft.y2 - draft.y1);
+    if (len > 15) setArrows((a) => [...a, draft]);
+    setDraft(null);
+  }
+
+  function finishAnnotation() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setScreenshot(canvas.toDataURL("image/jpeg", 0.8));
+    setAnnotating(false);
+    setBaseImg(null);
   }
 
   // képernyőkép beillesztése vágólapról (Ctrl+V a panelen)
@@ -111,6 +226,7 @@ export default function BugReporter() {
   return (
     <>
       <button
+        data-bug-ui="1"
         onClick={() => { setOpen(!open); if (!open) loadMine(); }}
         title={t("bugs.buttonTitle")}
         className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-rose-600 text-white shadow-lg hover:bg-rose-700"
@@ -135,6 +251,7 @@ export default function BugReporter() {
 
       {open && (
         <div
+          data-bug-ui="1"
           onPaste={onPaste}
           className="fixed bottom-40 right-5 z-40 w-[340px] max-w-[calc(100vw-40px)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
         >
@@ -174,6 +291,14 @@ export default function BugReporter() {
                 <option value="minor">🔵 {t("bugs.sev.minor")}</option>
                 <option value="cosmetic">⚪ {t("bugs.sev.cosmetic")}</option>
               </select>
+              <button
+                type="button"
+                onClick={capturePage}
+                disabled={capturing}
+                className="w-full rounded-lg border border-rose-300 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              >
+                {capturing ? t("bugs.capturing") : `📸 ${t("bugs.capturePage")}`}
+              </button>
               <div className="flex items-center gap-2 text-sm">
                 <label className="flex-1 cursor-pointer rounded-lg border border-dashed border-slate-300 px-3 py-2 text-center text-slate-500 hover:border-rose-400">
                   {screenshot ? t("bugs.screenshotOk") : t("bugs.screenshotAdd")}
@@ -185,7 +310,10 @@ export default function BugReporter() {
                   />
                 </label>
                 {screenshot && (
-                  <button type="button" onClick={() => setScreenshot(null)} className="text-slate-400 hover:text-rose-600">✕</button>
+                  <>
+                    <button type="button" title={t("bugs.editArrows")} onClick={() => openAnnotator(screenshot)} className="text-slate-400 hover:text-rose-600">✏️</button>
+                    <button type="button" onClick={() => setScreenshot(null)} className="text-slate-400 hover:text-rose-600">✕</button>
+                  </>
                 )}
               </div>
               <p className="text-[11px] text-slate-400">{t("bugs.autoNote")}</p>
@@ -235,6 +363,43 @@ export default function BugReporter() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Nyilazó: húzással piros nyilak a képernyőképre */}
+      {annotating && baseImg && (
+        <div data-bug-ui="1" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 p-4">
+          <p className="text-sm font-medium text-white">{t("bugs.annotateHint")}</p>
+          <canvas
+            ref={canvasRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerLeave={onPointerUp}
+            className="max-h-[75vh] max-w-[92vw] cursor-crosshair rounded-xl shadow-2xl"
+            style={{ touchAction: "none" }}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => setArrows((a) => a.slice(0, -1))}
+              disabled={arrows.length === 0}
+              className="rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white hover:bg-white/25 disabled:opacity-40"
+            >
+              ↩️ {t("bugs.undoArrow")}
+            </button>
+            <button
+              onClick={() => { setAnnotating(false); setBaseImg(null); }}
+              className="rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white hover:bg-white/25"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              onClick={finishAnnotation}
+              className="rounded-lg bg-rose-600 px-5 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+            >
+              ✓ {t("bugs.annotateDone")}
+            </button>
+          </div>
         </div>
       )}
     </>
