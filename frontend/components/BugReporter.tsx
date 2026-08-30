@@ -113,9 +113,21 @@ export default function BugReporter() {
       <button
         onClick={() => { setOpen(!open); if (!open) loadMine(); }}
         title={t("bugs.buttonTitle")}
-        className="fixed bottom-5 left-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-rose-600 text-xl text-white shadow-lg hover:bg-rose-700"
+        className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-rose-600 text-white shadow-lg hover:bg-rose-700"
       >
-        🐞
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m8 2 1.88 1.88" />
+          <path d="M14.12 3.88 16 2" />
+          <path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1" />
+          <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6" />
+          <path d="M12 20v-9" />
+          <path d="M6.53 9C4.6 8.8 3 7.1 3 5" />
+          <path d="M6 13H2" />
+          <path d="M3 21c0-2.1 1.7-3.9 3.8-4" />
+          <path d="M20.97 5c0 2.1-1.6 3.8-3.5 4" />
+          <path d="M22 13h-4" />
+          <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4" />
+        </svg>
         {needsRetest && (
           <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-amber-400" />
         )}
@@ -124,7 +136,7 @@ export default function BugReporter() {
       {open && (
         <div
           onPaste={onPaste}
-          className="fixed bottom-20 left-5 z-40 w-[340px] max-w-[calc(100vw-40px)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
+          className="fixed bottom-40 right-5 z-40 w-[340px] max-w-[calc(100vw-40px)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
         >
           <div className="mb-3 flex rounded-lg border border-slate-200 p-0.5 text-sm font-medium">
             <button
