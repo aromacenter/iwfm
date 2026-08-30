@@ -96,6 +96,28 @@ async def operator_bug_update(
     return _out(b)
 
 
+@router.delete("/bugs/{bug_id}", dependencies=[Depends(require_operator)])
+async def operator_bug_delete(
+    bug_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Hibajegy végleges törlése a Flotta-pultból — teszt-időszaki
+    takarításhoz."""
+    from app.api.bugs import _bug_or_404
+    from app.api.deps import record_audit
+
+    b = await _bug_or_404(db, bug_id)
+    await record_audit(
+        db, actor=None, action="bug.operator_delete", entity_type="bug",
+        entity_id=str(b.id), detail={"description": b.description[:80]},
+        request=request,
+    )
+    await db.delete(b)
+    await db.commit()
+    return {"ok": True}
+
+
 @router.get("/bugs/{bug_id}/screenshot", dependencies=[Depends(require_operator)])
 async def operator_bug_screenshot(
     bug_id: str,

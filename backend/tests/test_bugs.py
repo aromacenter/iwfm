@@ -123,6 +123,11 @@ async def test_operator_bug_endpoints(client, admin, manager, monkeypatch):
     assert res.status_code == 200
     assert res.content.startswith(b"\x89PNG")
 
+    # törlés a Flotta-ból: a jegy végleg eltűnik
+    res = await client.delete(f"/api/operator/bugs/{bug_id}", headers=OP)
+    assert res.status_code == 200, res.text
+    assert (await client.get("/api/operator/bugs", headers=OP)).json() == []
+
 
 async def test_bug_module_gate(client, admin, manager, monkeypatch):
     _, adm = admin
