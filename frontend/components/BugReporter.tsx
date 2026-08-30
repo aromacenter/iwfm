@@ -368,18 +368,28 @@ export default function BugReporter() {
 
       {/* Nyilazó: húzással piros nyilak a képernyőképre */}
       {annotating && baseImg && (
-        <div data-bug-ui="1" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 p-4">
-          <p className="text-sm font-medium text-white">{t("bugs.annotateHint")}</p>
-          <canvas
-            ref={canvasRef}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerLeave={onPointerUp}
-            className="max-h-[75vh] max-w-[92vw] cursor-crosshair rounded-xl shadow-2xl"
-            style={{ touchAction: "none" }}
-          />
-          <div className="flex gap-2">
+        <div data-bug-ui="1" className="fixed inset-0 z-50 flex flex-col bg-black/90">
+          <p className="shrink-0 py-1.5 text-center text-sm font-medium text-white">
+            {t("bugs.annotateHint")}
+          </p>
+          {/* akkora előnézet, amekkora csak lehet: teljes szélesség, görgethető magasság */}
+          <div className="w-full flex-1 overflow-auto">
+            <canvas
+              ref={canvasRef}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerLeave={onPointerUp}
+              className="cursor-crosshair"
+              style={{
+                touchAction: "none",
+                width: "100%",
+                height: "auto",
+                display: "block",
+              }}
+            />
+          </div>
+          <div className="flex shrink-0 justify-center gap-2 py-2">
             <button
               onClick={() => setArrows((a) => a.slice(0, -1))}
               disabled={arrows.length === 0}
