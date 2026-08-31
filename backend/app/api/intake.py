@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_perm
 from app.db import get_db
-from app.models import Asset, MachineIntake, Partner, User, WorksheetSettings
+from app.models import Asset, IntakePhoto, MachineIntake, Partner, User, WorksheetSettings
 from app.services.wfm.worksheet_pdf import DEFAULT_INTAKE_FOOTER, build_intake_pdf
 
 router = APIRouter()
@@ -35,6 +35,27 @@ class IntakeBody(BaseModel):
     accessories: str | None = Field(default=None, max_length=4000)
     faults: str | None = Field(default=None, max_length=8000)
     note: str | None = Field(default=None, max_length=4000)
+    # állapot-fotók a gépről (data-URL, a felület ~1600px-re kicsinyíti)
+    photos: list[str] = Field(default_factory=list, max_length=8)
+
+
+_PHOTO_MAX = 5 * 1024 * 1024  # 5 MB / kép
+
+
+def _decode_photo(data_url: str) -> tuple[bytes, str]:
+    import base64
+
+    if not data_url.startswith("data:image/"):
+        raise HTTPException(status_code=422, detail={"code": "intake.bad_photo"})
+    try:
+        header, payload = data_url.split(",", 1)
+        mime = header.split(";")[0].removeprefix("data:")
+        raw = base64.b64decode(payload)
+    except Exception:
+        raise HTTPException(status_code=422, detail={"code": "intake.bad_photo"})
+    if len(raw) > _PHOTO_MAX:
+        raise HTTPException(status_code=422, detail={"code": "intake.photo_too_large"})
+    return raw, mime[:32]
 
 
 class IntakeOut(BaseModel):
@@ -56,6 +77,7 @@ class IntakeOut(BaseModel):
     note: str | None
     received_by_name: str | None
     received_at: datetime
+    photo_count: int = 0
 
 
 async def _next_serial(db: AsyncSession) -> str:
@@ -91,6 +113,18 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
                 )
             ).all()
         }
+    photo_counts: dict[uuid.UUID, int] = {}
+    if rows:
+        photo_counts = {
+            iid: cnt
+            for iid, cnt in (
+                await db.execute(
+                    select(IntakePhoto.intake_id, sa_func.count())
+                    .where(IntakePhoto.intake_id.in_([r.id for r in rows]))
+                    .group_by(IntakePhoto.intake_id)
+                )
+            ).all()
+        }
     out = []
     for r in rows:
         a = assets.get(r.asset_id) if r.asset_id else None
@@ -113,6 +147,7 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
             note=r.note,
             received_by_name=r.received_by_name,
             received_at=r.received_at,
+            photo_count=photo_counts.get(r.id, 0),
         ))
     return out
 
@@ -171,9 +206,12 @@ async def create_intake(
     )
     db.add(row)
     await db.flush()
+    for data_url in body.photos[:8]:
+        raw, mime = _decode_photo(data_url)
+        db.add(IntakePhoto(intake_id=row.id, image=raw, mime=mime))
     await record_audit(
         db, actor=actor, action="intake.create", entity_type="intake",
-        entity_id=row.serial, request=request,
+        entity_id=row.serial, detail={"photos": len(body.photos)}, request=request,
     )
     await db.commit()
     out = (await _out_rows(db, [row]))[0]
@@ -244,6 +282,51 @@ async def intake_pdf(
     )
 
 
+@router.get("/{intake_id}/photos")
+async def intake_photos(
+    intake_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("service")),
+):
+    """Az átvételhez tartozó fotók azonosítói — a galéria ebből épül."""
+    try:
+        iid = uuid.UUID(intake_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "intake.not_found"})
+    rows = (
+        await db.execute(
+            select(IntakePhoto.id)
+            .where(IntakePhoto.intake_id == iid)
+            .order_by(IntakePhoto.created_at)
+        )
+    ).scalars().all()
+    return [{"id": str(pid)} for pid in rows]
+
+
+@router.get("/{intake_id}/photos/{photo_id}")
+async def intake_photo(
+    intake_id: str,
+    photo_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("service")),
+):
+    try:
+        iid = uuid.UUID(intake_id)
+        pid = uuid.UUID(photo_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "intake.not_found"})
+    p = (
+        await db.execute(
+            select(IntakePhoto).where(
+                IntakePhoto.id == pid, IntakePhoto.intake_id == iid
+            )
+        )
+    ).scalar_one_or_none()
+    if p is None:
+        raise HTTPException(status_code=404, detail={"code": "intake.not_found"})
+    return Response(content=bytes(p.image), media_type=p.mime or "image/jpeg")
+
+
 @router.delete("/{intake_id}", status_code=204)
 async def delete_intake(
     intake_id: str,
@@ -260,6 +343,10 @@ async def delete_intake(
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "intake.not_found"})
+    # fotók explicit takarítása (SQLite-on nincs FK-cascade garancia)
+    from sqlalchemy import delete as sa_delete
+
+    await db.execute(sa_delete(IntakePhoto).where(IntakePhoto.intake_id == row.id))
     await db.delete(row)
     await record_audit(
         db, actor=actor, action="intake.delete", entity_type="intake",

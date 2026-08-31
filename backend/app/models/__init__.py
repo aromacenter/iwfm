@@ -18,6 +18,7 @@ from app.models.models import (  # noqa: F401
     Employee,
     EmployeeSkill,
     GlsParcel,
+    IntakePhoto,
     GlsSettings,
     KnowledgeEntry,
     LicenseSettings,

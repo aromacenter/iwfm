@@ -41,6 +41,34 @@ async def test_intake_flow_and_clause(client, admin, manager):
     rows = (await client.get("/api/intakes", headers=sz)).json()
     assert any(r["serial"] == intake["serial"] for r in rows)
 
+    # állapot-fotós átvétel: tárolás + galéria + kép-visszakérés
+    import base64 as _b64
+
+    jpg = "data:image/jpeg;base64," + _b64.b64encode(b"\xff\xd8\xff fake-jpg").decode()
+    res = await client.post(
+        "/api/intakes",
+        json={"asset_id": asset["id"], "client_name": "Fotós Ügyfél",
+              "faults": "törött víztartály", "photos": [jpg, jpg]},
+        headers=sz,
+    )
+    assert res.status_code == 201, res.text
+    fotos = res.json()
+    assert fotos["photo_count"] == 2
+    ids = (await client.get(f"/api/intakes/{fotos['id']}/photos", headers=sz)).json()
+    assert len(ids) == 2
+    res = await client.get(
+        f"/api/intakes/{fotos['id']}/photos/{ids[0]['id']}", headers=sz
+    )
+    assert res.status_code == 200
+    assert res.content.startswith(b"\xff\xd8\xff")
+    # rossz formátum: érthető hiba
+    res = await client.post(
+        "/api/intakes",
+        json={"asset_id": asset["id"], "photos": ["data:text/html;base64,PGI+"]},
+        headers=sz,
+    )
+    assert res.status_code == 422
+
     res = await client.get(f"/api/intakes/{intake['id']}/pdf", headers=sz)
     assert res.status_code == 200 and res.content[:4] == b"%PDF"
 

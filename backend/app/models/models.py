@@ -523,6 +523,26 @@ class WorksheetSettings(Base):
     )
 
 
+class IntakePhoto(Base):
+    """A gépátvételkor készített/csatolt fotók — az átvételi jegyhez (és így
+    a belőle készülő munkalaphoz) kapcsolódó állapot-dokumentáció."""
+
+    __tablename__ = "intake_photos"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    intake_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("machine_intakes.id", ondelete="CASCADE", name="fk_photo_intake"),
+        nullable=False,
+        index=True,
+    )
+    image: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    mime: Mapped[str] = mapped_column(String(32), nullable=False, default="image/jpeg")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class MachineIntake(Base):
     """Gép-átvétel: az ügyfél behozott gépének rögzítése (tartozékok, hibák)
     + nyomtatható átvételi elismervény (AT-ÉÉÉÉ-NNNN)."""

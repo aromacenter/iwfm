@@ -43,6 +43,7 @@ interface Intake {
   note: string | null;
   received_by_name: string | null;
   received_at: string;
+  photo_count: number;
 }
 
 const EMPTY_FORM = {
@@ -97,6 +98,46 @@ export default function AtvetelPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Állapot-fotók a gépről (mobilon kamerával, PC-n fájlból); feltöltés
+  // előtt ~1600px-re kicsinyítjük, hogy gyors és kicsi legyen.
+  const [photos, setPhotos] = useState<string[]>([]);
+
+  function shrinkImage(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const maxSide = 1600;
+          const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return reject(new Error("canvas"));
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
+        };
+        img.onerror = reject;
+        img.src = String(reader.result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addPhotos(files: FileList | null) {
+    if (!files) return;
+    for (const f of Array.from(files).slice(0, 8 - photos.length)) {
+      try {
+        const dataUrl = await shrinkImage(f);
+        setPhotos((p) => [...p, dataUrl]);
+      } catch {
+        toast(t("intake.photoFailed"), "error");
+      }
+    }
+  }
 
   // Új (ügyfél-tulajdonú) gép felvétele helyben
   const [newAssetMode, setNewAssetMode] = useState(false);
@@ -211,9 +252,11 @@ export default function AtvetelPage() {
         accessories: form.accessories || null,
         faults: form.faults || null,
         note: form.note || null,
+        photos,
       });
       setShowForm(false);
       setForm(EMPTY_FORM);
+      setPhotos([]);
       setNewAssetMode(false);
       setNewAsset({ name: "", manufacturer: "", serial_number: "" });
       setNewPartnerMode(false);
@@ -244,6 +287,17 @@ export default function AtvetelPage() {
       setError(errorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // fotó-galéria egy átvételhez
+  const [gallery, setGallery] = useState<{ intakeId: string; ids: string[] } | null>(null);
+  async function openGallery(intakeId: string) {
+    try {
+      const rows = await api.get<{ id: string }[]>(`/api/intakes/${intakeId}/photos`);
+      setGallery({ intakeId, ids: rows.map((r) => r.id) });
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -304,6 +358,14 @@ export default function AtvetelPage() {
                 )}
               </div>
               <div className="flex shrink-0 gap-2">
+                {row.photo_count > 0 && (
+                  <button
+                    onClick={() => openGallery(row.id)}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+                  >
+                    📷 ×{row.photo_count}
+                  </button>
+                )}
                 <button
                   onClick={async () => {
                     try {
@@ -552,6 +614,40 @@ export default function AtvetelPage() {
               />
             </label>
 
+            {/* Állapot-fotók: mobilon egyből a kamera nyílik */}
+            <div className="rounded-xl border border-slate-200 p-3">
+              <p className="mb-2 text-sm font-medium">📷 {t("intake.photosTitle")}</p>
+              <div className="flex flex-wrap gap-2">
+                {photos.map((p, i) => (
+                  <div key={i} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p} alt="" className="h-20 w-28 rounded-lg border border-slate-200 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setPhotos((arr) => arr.filter((_, j) => j !== i))}
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-[11px] font-bold text-white"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {photos.length < 8 && (
+                  <label className="flex h-20 w-28 cursor-pointer items-center justify-center rounded-lg border border-dashed border-slate-300 text-center text-xs text-slate-500 hover:border-indigo-400">
+                    📸 {t("intake.photoAdd")}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }}
+                    />
+                  </label>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">{t("intake.photosHint")}</p>
+            </div>
+
             <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
               {t("intake.clauseInfo")}
             </p>
@@ -564,6 +660,24 @@ export default function AtvetelPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Fotó-galéria az átvételhez */}
+      {gallery && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center gap-3 overflow-y-auto bg-black/85 p-4"
+          onClick={() => setGallery(null)}
+        >
+          {gallery.ids.map((pid) => (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              key={pid}
+              src={`/api/intakes/${gallery.intakeId}/photos/${pid}`}
+              alt=""
+              className="max-w-[95vw] rounded-xl shadow-2xl"
+            />
+          ))}
         </div>
       )}
     </AppShell>
