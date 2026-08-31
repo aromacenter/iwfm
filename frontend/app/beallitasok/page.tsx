@@ -464,13 +464,17 @@ export default function BeallitasokPage() {
   const [permMsg, setPermMsg] = useState<string | null>(null);
   const [permBusy, setPermBusy] = useState(false);
 
-  // --- Billingó számlázó ---
+  // --- Számlázó (Billingó / Számlázz.hu) ---
   const [billingo, setBillingo] = useState({
-    enabled: false, api_key: "", block_id: "", test_mode: true,
+    enabled: false, provider: "billingo", api_key: "", block_id: "", test_mode: true,
+    szamlazz_agent_key: "", szamlazz_prefix: "",
     pc_api_key: "", pc_block_id: "", pc_test_mode: true,
+    pc_szamlazz_agent_key: "", pc_szamlazz_prefix: "",
   });
   const [billingoHasKey, setBillingoHasKey] = useState(false);
   const [billingoPcHasKey, setBillingoPcHasKey] = useState(false);
+  const [szamlazzHasKey, setSzamlazzHasKey] = useState(false);
+  const [szamlazzPcHasKey, setSzamlazzPcHasKey] = useState(false);
   const [wipeCounts, setWipeCounts] = useState<Record<string, number> | null>(null);
   const [wipeBusy, setWipeBusy] = useState(false);
   const [billingoMsg, setBillingoMsg] = useState<string | null>(null);
@@ -548,23 +552,32 @@ export default function BeallitasokPage() {
       .catch(() => {});
     api
       .get<{
-        enabled: boolean; has_api_key: boolean; block_id: number | null; test_mode: boolean;
+        enabled: boolean; provider: string; has_api_key: boolean; block_id: number | null; test_mode: boolean;
+        has_szamlazz_key: boolean; szamlazz_prefix: string | null;
         pc_has_api_key: boolean; pc_block_id: number | null; pc_test_mode: boolean;
+        pc_has_szamlazz_key: boolean; pc_szamlazz_prefix: string | null;
       }>(
         "/api/settings/billingo",
       )
       .then((s) => {
         setBillingo({
           enabled: s.enabled,
+          provider: s.provider || "billingo",
           api_key: "",
           block_id: s.block_id != null ? String(s.block_id) : "",
           test_mode: s.test_mode,
+          szamlazz_agent_key: "",
+          szamlazz_prefix: s.szamlazz_prefix ?? "",
           pc_api_key: "",
           pc_block_id: s.pc_block_id != null ? String(s.pc_block_id) : "",
           pc_test_mode: s.pc_test_mode,
+          pc_szamlazz_agent_key: "",
+          pc_szamlazz_prefix: s.pc_szamlazz_prefix ?? "",
         });
         setBillingoHasKey(s.has_api_key);
         setBillingoPcHasKey(s.pc_has_api_key);
+        setSzamlazzHasKey(s.has_szamlazz_key);
+        setSzamlazzPcHasKey(s.pc_has_szamlazz_key);
       })
       .catch(() => {});
     api
@@ -743,15 +756,20 @@ export default function BeallitasokPage() {
     try {
       await api.put("/api/settings/billingo", {
         enabled: billingo.enabled,
+        provider: billingo.provider,
         api_key: billingo.api_key || null,
         block_id: billingo.block_id ? Number(billingo.block_id) : null,
         test_mode: billingo.test_mode,
+        szamlazz_agent_key: billingo.szamlazz_agent_key || null,
+        szamlazz_prefix: billingo.szamlazz_prefix || null,
         pc_api_key: billingo.pc_api_key || null,
         pc_block_id: billingo.pc_block_id ? Number(billingo.pc_block_id) : null,
         pc_test_mode: billingo.pc_test_mode,
+        pc_szamlazz_agent_key: billingo.pc_szamlazz_agent_key || null,
+        pc_szamlazz_prefix: billingo.pc_szamlazz_prefix || null,
       });
       setBillingoMsg(t("common.saved"));
-      setBillingo((s) => ({ ...s, api_key: "", pc_api_key: "" }));
+      setBillingo((s) => ({ ...s, api_key: "", pc_api_key: "", szamlazz_agent_key: "", pc_szamlazz_agent_key: "" }));
       load();
     } catch (err) {
       setBillingoMsg(errorMessage(err));
@@ -1612,74 +1630,162 @@ export default function BeallitasokPage() {
             />
             {t("settings.billingoEnabled")}
           </label>
+          <label className="block max-w-xs text-sm">
+            {t("settings.invoiceProvider")}
+            <select
+              value={billingo.provider}
+              onChange={(e) => setBillingo({ ...billingo, provider: e.target.value })}
+              className={`${inputCls} bg-white`}
+            >
+              <option value="billingo">Billingó</option>
+              <option value="szamlazz">Számlázz.hu</option>
+            </select>
+          </label>
           <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
             <legend className="px-1 text-xs font-semibold uppercase text-slate-400">X-Presso Coffee Kft.</legend>
-            <label className="block text-sm">
-              {t("settings.billingoApiKey")} {billingoHasKey && <span className="text-emerald-600">✓</span>}
-              <input
-                type="password"
-                value={billingo.api_key}
-                onChange={(e) => setBillingo({ ...billingo, api_key: e.target.value })}
-                placeholder={billingoHasKey ? "••••••••" : ""}
-                className={inputCls}
-              />
-            </label>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block text-sm">
-                {t("settings.billingoBlock")}
-                <input
-                  type="number"
-                  min={1}
-                  value={billingo.block_id}
-                  onChange={(e) => setBillingo({ ...billingo, block_id: e.target.value })}
-                  className={inputCls}
-                />
-              </label>
-              <label className="flex items-center gap-2 text-sm sm:mt-6">
-                <input
-                  type="checkbox"
-                  checked={billingo.test_mode}
-                  onChange={(e) => setBillingo({ ...billingo, test_mode: e.target.checked })}
-                  className="h-4 w-4"
-                />
-                {t("settings.billingoTestMode")}
-              </label>
-            </div>
+            {billingo.provider === "billingo" ? (
+              <>
+                <label className="block text-sm">
+                  {t("settings.billingoApiKey")} {billingoHasKey && <span className="text-emerald-600">✓</span>}
+                  <input
+                    type="password"
+                    value={billingo.api_key}
+                    onChange={(e) => setBillingo({ ...billingo, api_key: e.target.value })}
+                    placeholder={billingoHasKey ? "••••••••" : ""}
+                    className={inputCls}
+                  />
+                </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    {t("settings.billingoBlock")}
+                    <input
+                      type="number"
+                      min={1}
+                      value={billingo.block_id}
+                      onChange={(e) => setBillingo({ ...billingo, block_id: e.target.value })}
+                      className={inputCls}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm sm:mt-6">
+                    <input
+                      type="checkbox"
+                      checked={billingo.test_mode}
+                      onChange={(e) => setBillingo({ ...billingo, test_mode: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    {t("settings.billingoTestMode")}
+                  </label>
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="block text-sm">
+                  {t("settings.szamlazzAgentKey")} {szamlazzHasKey && <span className="text-emerald-600">✓</span>}
+                  <input
+                    type="password"
+                    value={billingo.szamlazz_agent_key}
+                    onChange={(e) => setBillingo({ ...billingo, szamlazz_agent_key: e.target.value })}
+                    placeholder={szamlazzHasKey ? "••••••••" : ""}
+                    className={inputCls}
+                  />
+                </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    {t("settings.szamlazzPrefix")}
+                    <input
+                      value={billingo.szamlazz_prefix}
+                      onChange={(e) => setBillingo({ ...billingo, szamlazz_prefix: e.target.value })}
+                      placeholder="XP"
+                      className={inputCls}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm sm:mt-6">
+                    <input
+                      type="checkbox"
+                      checked={billingo.test_mode}
+                      onChange={(e) => setBillingo({ ...billingo, test_mode: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    {t("settings.billingoTestMode")}
+                  </label>
+                </div>
+              </>
+            )}
           </fieldset>
           <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
             <legend className="px-1 text-xs font-semibold uppercase text-slate-400">Premium Caffe Kft.</legend>
-            <label className="block text-sm">
-              {t("settings.billingoApiKey")} {billingoPcHasKey && <span className="text-emerald-600">✓</span>}
-              <input
-                type="password"
-                value={billingo.pc_api_key}
-                onChange={(e) => setBillingo({ ...billingo, pc_api_key: e.target.value })}
-                placeholder={billingoPcHasKey ? "••••••••" : ""}
-                className={inputCls}
-              />
-            </label>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block text-sm">
-                {t("settings.billingoBlock")}
-                <input
-                  type="number"
-                  min={1}
-                  value={billingo.pc_block_id}
-                  onChange={(e) => setBillingo({ ...billingo, pc_block_id: e.target.value })}
-                  className={inputCls}
-                />
-              </label>
-              <label className="flex items-center gap-2 text-sm sm:mt-6">
-                <input
-                  type="checkbox"
-                  checked={billingo.pc_test_mode}
-                  onChange={(e) => setBillingo({ ...billingo, pc_test_mode: e.target.checked })}
-                  className="h-4 w-4"
-                />
-                {t("settings.billingoTestMode")}
-              </label>
-            </div>
+            {billingo.provider === "billingo" ? (
+              <>
+                <label className="block text-sm">
+                  {t("settings.billingoApiKey")} {billingoPcHasKey && <span className="text-emerald-600">✓</span>}
+                  <input
+                    type="password"
+                    value={billingo.pc_api_key}
+                    onChange={(e) => setBillingo({ ...billingo, pc_api_key: e.target.value })}
+                    placeholder={billingoPcHasKey ? "••••••••" : ""}
+                    className={inputCls}
+                  />
+                </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    {t("settings.billingoBlock")}
+                    <input
+                      type="number"
+                      min={1}
+                      value={billingo.pc_block_id}
+                      onChange={(e) => setBillingo({ ...billingo, pc_block_id: e.target.value })}
+                      className={inputCls}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm sm:mt-6">
+                    <input
+                      type="checkbox"
+                      checked={billingo.pc_test_mode}
+                      onChange={(e) => setBillingo({ ...billingo, pc_test_mode: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    {t("settings.billingoTestMode")}
+                  </label>
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="block text-sm">
+                  {t("settings.szamlazzAgentKey")} {szamlazzPcHasKey && <span className="text-emerald-600">✓</span>}
+                  <input
+                    type="password"
+                    value={billingo.pc_szamlazz_agent_key}
+                    onChange={(e) => setBillingo({ ...billingo, pc_szamlazz_agent_key: e.target.value })}
+                    placeholder={szamlazzPcHasKey ? "••••••••" : ""}
+                    className={inputCls}
+                  />
+                </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    {t("settings.szamlazzPrefix")}
+                    <input
+                      value={billingo.pc_szamlazz_prefix}
+                      onChange={(e) => setBillingo({ ...billingo, pc_szamlazz_prefix: e.target.value })}
+                      placeholder="PC"
+                      className={inputCls}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm sm:mt-6">
+                    <input
+                      type="checkbox"
+                      checked={billingo.pc_test_mode}
+                      onChange={(e) => setBillingo({ ...billingo, pc_test_mode: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    {t("settings.billingoTestMode")}
+                  </label>
+                </div>
+              </>
+            )}
           </fieldset>
+          {billingo.provider === "szamlazz" && (
+            <p className="text-xs text-slate-500">{t("settings.szamlazzHint")}</p>
+          )}
           <p className="text-xs text-slate-500">{t("settings.billingoCompanyHint")}</p>
           {(!billingo.test_mode || !billingo.pc_test_mode) && (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -1697,12 +1803,16 @@ export default function BeallitasokPage() {
             <button type="button" onClick={() => testBillingo("pc")} disabled={billingoBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
               {t("settings.billingoTest")} (Premium)
             </button>
-            <button type="button" onClick={() => billingoPartnerSync(true)} disabled={syncBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
-              {syncBusy ? t("common.loading") : t("settings.billingoSyncDry")}
-            </button>
-            <button type="button" onClick={() => billingoPartnerSync(false)} disabled={syncBusy} className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">
-              {t("settings.billingoSyncApply")}
-            </button>
+            {billingo.provider === "billingo" && (
+              <>
+                <button type="button" onClick={() => billingoPartnerSync(true)} disabled={syncBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
+                  {syncBusy ? t("common.loading") : t("settings.billingoSyncDry")}
+                </button>
+                <button type="button" onClick={() => billingoPartnerSync(false)} disabled={syncBusy} className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">
+                  {t("settings.billingoSyncApply")}
+                </button>
+              </>
+            )}
           </div>
         </form>
 

@@ -128,6 +128,7 @@ interface CtxMachine {
   name: string;
   counter_count: number;
   counters: number[] | null;
+  counter_prices: (number | null)[] | null;
   prev_counter: number;
   last_settled_at: string | null;
   default_product_id: string | null;
@@ -559,13 +560,44 @@ export default function ElszamolasPage() {
         ? stockRow.price_per_portion
         : (pid ? products.find((x) => x.id === pid)?.price_per_portion ?? null : null);
       const manual = machinePrices[m.asset_id] ?? "";
-      const price = manual !== "" ? Number(manual) : autoPrice;
-      const amount = filled && price !== null ? billed * price : 0;
+      // Számlálónkénti bontás (több számlálós gép): előző állás → új állás,
+      // számlálónkénti szerződéses árral — "mintha külön gépek lennének".
+      const detail =
+        m.counter_count > 1 && inp
+          ? inp.newCounters.map((v, i) => {
+              const prev = m.counters?.[i] ?? 0;
+              const nv = v === "" ? null : Number(v);
+              const diff = nv !== null ? Math.max(nv - prev, 0) : 0;
+              const rowPrice =
+                manual !== ""
+                  ? Number(manual)
+                  : m.counter_prices?.[i] ?? autoPrice;
+              return {
+                prev, nv, diff,
+                price: rowPrice,
+                amount: rowPrice !== null ? diff * rowPrice : 0,
+              };
+            })
+          : null;
+      const hasCounterPrices =
+        m.counter_count > 1 && (m.counter_prices?.some((p) => p != null) ?? false);
+      let price = manual !== "" ? Number(manual) : autoPrice;
+      let amount = 0;
+      if (filled) {
+        if (manual !== "") amount = billed * Number(manual);
+        else if (hasCounterPrices && detail) {
+          const sumDetail = detail.reduce((a, d) => a + d.amount, 0);
+          amount = brewed > 0 ? sumDetail * (billed / brewed) : 0;
+          price = brewed > 0 ? sumDetail / brewed : price;
+        } else if (price !== null) {
+          amount = billed * price;
+        }
+      }
       if (filled && pid) {
         billedByProduct[pid] = (billedByProduct[pid] ?? 0) + billed;
         amountByProduct[pid] = (amountByProduct[pid] ?? 0) + amount;
       }
-      return { ...m, filled, newCounter, brewed, billed, price, autoPrice, amount, belowPrev };
+      return { ...m, filled, newCounter, brewed, billed, price, autoPrice, amount, belowPrev, detail };
     });
     return { rows, billedByProduct, amountByProduct };
   }, [ctx, machineInputs, machineProducts, machinePrices, stockRows, products]);
@@ -1532,26 +1564,40 @@ export default function ElszamolasPage() {
                   <td className="px-4 py-2.5 tabular-nums text-slate-600">{m.prev_counter}</td>
                   <td className="px-4 py-2.5">
                     {m.counter_count > 1 ? (
-                      <div className="flex gap-1">
-                        {machineInputs[m.asset_id]?.newCounters.map((v, i) => (
-                          <input
-                            key={i}
-                            type="number" min={0}
-                            data-counter-input={`${m.asset_id}-${i}`}
-                            value={v}
-                            onChange={(e) => {
-                              const inp = machineInputs[m.asset_id];
-                              const next = [...inp.newCounters];
-                              next[i] = e.target.value;
-                              setMachineInputs({ ...machineInputs, [m.asset_id]: { ...inp, newCounters: next } });
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") { e.preventDefault(); jumpToNextCounter(e.currentTarget); }
-                            }}
-                            placeholder={String(m.counters?.[i] ?? "")}
-                            className="w-20 rounded-lg border border-slate-300 px-2 py-1.5"
-                          />
-                        ))}
+                      <div className="space-y-1">
+                        {machineInputs[m.asset_id]?.newCounters.map((v, i) => {
+                          const d = m.detail?.[i];
+                          return (
+                            <div key={i} className="flex items-center gap-2">
+                              <span className="w-24 shrink-0 text-right text-xs tabular-nums text-slate-500">
+                                {i + 1}. · {m.counters?.[i] ?? 0} →
+                              </span>
+                              <input
+                                type="number" min={0}
+                                data-counter-input={`${m.asset_id}-${i}`}
+                                value={v}
+                                onChange={(e) => {
+                                  const inp = machineInputs[m.asset_id];
+                                  const next = [...inp.newCounters];
+                                  next[i] = e.target.value;
+                                  setMachineInputs({ ...machineInputs, [m.asset_id]: { ...inp, newCounters: next } });
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") { e.preventDefault(); jumpToNextCounter(e.currentTarget); }
+                                }}
+                                placeholder={String(m.counters?.[i] ?? "")}
+                                className="w-20 rounded-lg border border-slate-300 px-2 py-1.5"
+                              />
+                              <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">
+                                {d && d.nv !== null
+                                  ? d.price !== null
+                                    ? `${d.diff} × ${Math.round(d.price * 100) / 100} Ft = ${ft(Math.round(d.amount))}`
+                                    : `${d.diff} ${t("cons.portionsShort")}`
+                                  : ""}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <input

@@ -56,6 +56,14 @@ export default function BugReporter() {
   // van-e újratesztelésre váró (resolved) bejelentésem? → pötty a gombon
   const needsRetest = mine.some((b) => b.status === "resolved");
 
+  // ─── újranyitás indoklással: mi nem stimmel még + friss kép ───
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
+  const [reopenNote, setReopenNote] = useState("");
+  const [reopenShot, setReopenShot] = useState<string | null>(null);
+  // hová kerüljön az elkészült/annotált kép: az új bejelentésbe vagy az
+  // újranyitó űrlapba
+  const annotateTarget = useRef<"report" | "reopen">("report");
+
   // ─── kép-annotálás: nyilak rajzolása a képernyőképre ───
   const [annotating, setAnnotating] = useState(false);
   const [baseImg, setBaseImg] = useState<string | null>(null);
@@ -85,7 +93,8 @@ export default function BugReporter() {
   }
 
   // az aktuális oldal lefotózása (a bejelentő-panel kimarad a képből)
-  async function capturePage() {
+  async function capturePage(target: "report" | "reopen" = "report") {
+    annotateTarget.current = target;
     setCapturing(true);
     try {
       const { toJpeg } = await import("html-to-image");
@@ -173,19 +182,25 @@ export default function BugReporter() {
   function finishAnnotation() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    setScreenshot(canvas.toDataURL("image/jpeg", 0.8));
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+    if (annotateTarget.current === "reopen") setReopenShot(dataUrl);
+    else setScreenshot(dataUrl);
     setAnnotating(false);
     setBaseImg(null);
   }
 
-  // képernyőkép beillesztése vágólapról (Ctrl+V a panelen)
+  // képernyőkép beillesztése vágólapról (Ctrl+V a panelen) — nyitott
+  // újranyitó űrlapnál oda kerül a kép, egyébként az új bejelentésbe
   function onPaste(e: React.ClipboardEvent) {
     const item = Array.from(e.clipboardData.items).find((i) =>
       i.type.startsWith("image/"),
     );
     if (item) {
       const f = item.getAsFile();
-      if (f) pickFile(f);
+      if (f) {
+        annotateTarget.current = reopeningId ? "reopen" : "report";
+        pickFile(f);
+      }
     }
   }
 
@@ -213,10 +228,26 @@ export default function BugReporter() {
     }
   }
 
-  async function retest(id: string, ok: boolean) {
+  async function retestOk(id: string) {
     try {
-      await api.post(`/api/bugs/${id}/${ok ? "retest-ok" : "reopen"}`, {});
-      toast(t(ok ? "bugs.closedToast" : "bugs.reopenedToast"), "success");
+      await api.post(`/api/bugs/${id}/retest-ok`, {});
+      toast(t("bugs.closedToast"), "success");
+      loadMine();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function submitReopen(id: string) {
+    try {
+      await api.post(`/api/bugs/${id}/reopen`, {
+        note: reopenNote.trim() || null,
+        screenshot: reopenShot,
+      });
+      toast(t("bugs.reopenedToast"), "success");
+      setReopeningId(null);
+      setReopenNote("");
+      setReopenShot(null);
       loadMine();
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -293,7 +324,7 @@ export default function BugReporter() {
               </select>
               <button
                 type="button"
-                onClick={capturePage}
+                onClick={() => capturePage("report")}
                 disabled={capturing}
                 className="w-full rounded-lg border border-rose-300 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
               >
@@ -306,12 +337,15 @@ export default function BugReporter() {
                     type="file"
                     accept="image/png,image/jpeg"
                     className="hidden"
-                    onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) => {
+                      annotateTarget.current = "report";
+                      pickFile(e.target.files?.[0] ?? null);
+                    }}
                   />
                 </label>
                 {screenshot && (
                   <>
-                    <button type="button" title={t("bugs.editArrows")} onClick={() => openAnnotator(screenshot)} className="text-slate-400 hover:text-rose-600">✏️</button>
+                    <button type="button" title={t("bugs.editArrows")} onClick={() => { annotateTarget.current = "report"; openAnnotator(screenshot); }} className="text-slate-400 hover:text-rose-600">✏️</button>
                     <button type="button" onClick={() => setScreenshot(null)} className="text-slate-400 hover:text-rose-600">✕</button>
                   </>
                 )}
@@ -343,20 +377,70 @@ export default function BugReporter() {
                   {b.resolution_note && (
                     <p className="mt-1 text-xs text-emerald-700">💬 {b.resolution_note}</p>
                   )}
-                  {b.status === "resolved" && (
+                  {b.status === "resolved" && reopeningId !== b.id && (
                     <div className="mt-2 flex gap-2">
                       <button
-                        onClick={() => retest(b.id, true)}
+                        onClick={() => retestOk(b.id)}
                         className="flex-1 rounded-lg bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
                       >
                         ✔️ {t("bugs.retestOk")}
                       </button>
                       <button
-                        onClick={() => retest(b.id, false)}
+                        onClick={() => { setReopeningId(b.id); setReopenNote(""); setReopenShot(null); }}
                         className="flex-1 rounded-lg bg-rose-600 px-2 py-1 text-xs font-semibold text-white hover:bg-rose-700"
                       >
                         ↩️ {t("bugs.reopen")}
                       </button>
+                    </div>
+                  )}
+                  {b.status === "resolved" && reopeningId === b.id && (
+                    <div className="mt-2 space-y-1.5 rounded-lg border border-rose-200 bg-rose-50 p-2">
+                      <textarea
+                        value={reopenNote}
+                        onChange={(e) => setReopenNote(e.target.value)}
+                        placeholder={t("bugs.reopenNotePh")}
+                        rows={3}
+                        className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                      />
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => capturePage("reopen")}
+                          disabled={capturing}
+                          className="flex-1 rounded-lg border border-rose-300 bg-white px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                        >
+                          {capturing ? t("bugs.capturing") : `📸 ${reopenShot ? t("bugs.screenshotOk") : t("bugs.capturePage")}`}
+                        </button>
+                        <label className="cursor-pointer rounded-lg border border-dashed border-slate-300 bg-white px-2 py-1 text-xs text-slate-500 hover:border-rose-400">
+                          📎
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg"
+                            className="hidden"
+                            onChange={(e) => {
+                              annotateTarget.current = "reopen";
+                              pickFile(e.target.files?.[0] ?? null);
+                            }}
+                          />
+                        </label>
+                        {reopenShot && (
+                          <button type="button" onClick={() => setReopenShot(null)} className="text-slate-400 hover:text-rose-600">✕</button>
+                        )}
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => submitReopen(b.id)}
+                          className="flex-1 rounded-lg bg-rose-600 px-2 py-1 text-xs font-semibold text-white hover:bg-rose-700"
+                        >
+                          ↩️ {t("bugs.reopenSend")}
+                        </button>
+                        <button
+                          onClick={() => setReopeningId(null)}
+                          className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs hover:bg-slate-100"
+                        >
+                          {t("common.cancel")}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -482,3 +482,41 @@ async def test_counter_prices_roundtrip_and_swap(client, manager):
     )
     assert res3.status_code == 200, res3.text
     assert res3.json()["counter_prices"] is None
+
+
+async def test_counters_detail_snapshot(client, manager):
+    """A mentett elszamolas szamlalonkenti bontast tarol — mintha kulon
+    gepek lennenek: allasonkent elozo/uj/adag/ar/osszeg."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = await _partner(client, mgr, "Bontas Bolt")
+    product = await make_product(client, mgr, price_per_portion=100.0, grams_per_portion=7)
+    asset = await _machine(
+        client, mgr, partner, "GEP-DET", counter=30, counter_count=2,
+        counters=[10, 20], default_product_id=product["id"],
+        counter_prices=[200.0, None],
+    )
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 5.0},
+        headers=mgr,
+    )
+    res = await client.post(
+        "/api/settlements",
+        json={
+            "partner_id": partner["id"],
+            "payment_method": "cash",
+            "lines": [{"product_id": product["id"], "physical_qty": 4.5}],
+            "machines": [{"asset_id": asset["id"], "new_counters": [15, 40]}],
+        },
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    m = res.json()["machines"][0]
+    detail = m["counters_detail"]
+    assert detail is not None and len(detail) == 2
+    # 1. szamlalo: 10 -> 15 = 5 adag x 200 Ft; 2.: 20 -> 40 = 20 adag x 100 Ft
+    assert detail[0] == {"prev": 10, "new": 15, "portions": 5, "price": 200.0, "amount": 1000.0}
+    assert detail[1] == {"prev": 20, "new": 40, "portions": 20, "price": 100.0, "amount": 2000.0}
+    assert abs(m["amount_net"] - 3000) < 0.01

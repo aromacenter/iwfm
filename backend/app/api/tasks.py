@@ -476,7 +476,7 @@ async def _maybe_autoinvoice_maintenance(
         if partner is None:
             return
 
-        from app.services.wfm.billingo_service import create_maintenance_invoice
+        from app.services.wfm.invoicing import create_maintenance_invoice
 
         try:
             doc_id, mode, due = await create_maintenance_invoice(
@@ -1933,10 +1933,10 @@ async def do_handover(
             ).scalar_one_or_none()
         if partner is None:
             raise HTTPException(status_code=422, detail={"code": "handover.no_partner"})
-        from app.services.wfm import billingo_service
+        from app.services.wfm import invoicing
 
         try:
-            document_id, _mode = await billingo_service.create_handover_invoice(
+            document_id, _mode = await invoicing.create_handover_invoice(
                 db, partner, serial=ws.serial, items=items,
                 payment_method=body.payment_method,
             )

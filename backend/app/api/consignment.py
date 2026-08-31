@@ -694,6 +694,7 @@ class SettlementCtxMachine(BaseModel):
     name: str
     counter_count: int
     counters: list[int] | None  # több számlálós gép aktuális állásai
+    counter_prices: list[float | None] | None  # szerződéses adagár számlálónként
     prev_counter: int  # az utolsó elszámoláskori állás (vagy a gép aktuális)
     last_settled_at: datetime | None
     default_product_id: str | None
@@ -768,6 +769,7 @@ async def settlement_context(
             name=a.name,
             counter_count=a.counter_count,
             counters=a.counters,
+            counter_prices=a.counter_prices,
             prev_counter=prev,
             last_settled_at=last_at,
             default_product_id=str(a.default_product_id) if a.default_product_id else None,
@@ -1044,6 +1046,9 @@ class SettlementMachineOut(BaseModel):
     portions_billed: float
     price_per_portion: float
     amount_net: float
+    # Számlálónkénti bontás (több számlálós gép): [{prev, new, portions,
+    # price, amount}, …] — "mintha külön gépek lennének".
+    counters_detail: list[dict] | None = None
 
 
 class SettlementOut(BaseModel):
@@ -1132,6 +1137,7 @@ def _machine_out(m: SettlementMachine) -> SettlementMachineOut:
         portions_billed=m.portions_billed,
         price_per_portion=m.price_per_portion,
         amount_net=m.amount_net,
+        counters_detail=m.counters_detail,
     )
 
 
@@ -1462,7 +1468,8 @@ async def create_settlement(
             # Beállítás nélküli gép: a most választott terméket megjegyezzük
             if asset.default_product_id is None:
                 asset.default_product_id = product.id
-            unit_price = _effective_price(product, price_overrides)
+            base_price = _effective_price(product, price_overrides)
+            unit_price = base_price
             # Szerződéses adagár SZÁMLÁLÓNKÉNT: ha a gépen rögzítve van és a
             # számlálónkénti különbségek ismertek, az egységár a különbségekkel
             # súlyozott átlag (None elem = az adott számlálóra a termékár él).
@@ -1478,7 +1485,7 @@ async def create_settlement(
                 and brewed > 0
             ):
                 weighted = sum(
-                    diff * (cps[i] if i < len(cps) and cps[i] is not None else unit_price)
+                    diff * (cps[i] if i < len(cps) and cps[i] is not None else base_price)
                     for i, diff in enumerate(per_counter_diffs)
                 )
                 unit_price = weighted / brewed
@@ -1496,6 +1503,31 @@ async def create_settlement(
                     "product": product.name, "from": 0, "to": m_in.service_portions,
                 })
             amount = _money(billed * unit_price * (1 - m_in.discount_pct / 100.0))
+            # Számlálónkénti bontás pillanatképe — a bizonylaton és az
+            # előzményben soronként látszik, "mintha külön gépek lennének".
+            counters_detail = None
+            if per_counter_diffs is not None and m_in.new_counters:
+                prevs = (
+                    asset.counters
+                    if isinstance(asset.counters, list)
+                    and len(asset.counters) == len(m_in.new_counters)
+                    else [None] * len(m_in.new_counters)
+                )
+                counters_detail = []
+                for i, diff in enumerate(per_counter_diffs):
+                    if m_in.price_per_portion is not None:
+                        row_price = unit_price  # kézi felülírás minden számlálóra
+                    elif cps and i < len(cps) and cps[i] is not None:
+                        row_price = float(cps[i])
+                    else:
+                        row_price = base_price
+                    counters_detail.append({
+                        "prev": prevs[i] or 0,
+                        "new": m_in.new_counters[i],
+                        "portions": diff,
+                        "price": _money(row_price),
+                        "amount": _money(diff * row_price * (1 - m_in.discount_pct / 100.0)),
+                    })
             db.add(SettlementMachine(
                 settlement_id=settlement.id,
                 asset_id=asset.id,
@@ -1510,6 +1542,7 @@ async def create_settlement(
                 portions_billed=billed,
                 price_per_portion=unit_price,
                 amount_net=amount,
+                counters_detail=counters_detail,
             ))
             # Kg-keresztellenőrzés: számlálónkénti normával súlyozva. A norma
             # jelentése ADAG/KG (hány adag készül 1 kg kávéból — az Xpresso-
@@ -2541,7 +2574,7 @@ async def sync_settlement_payment(
 ):
     """Fizetési státusz frissítése a Billingóból. Ha ott már fizetve, itt is
     fizetettre áll."""
-    from app.services.wfm.billingo_service import fetch_payment_status
+    from app.services.wfm.invoicing import fetch_payment_status
 
     s = await _get_settlement_or_404(db, settlement_id)
     if not s.invoiced or not s.billingo_document_id:
@@ -2609,7 +2642,7 @@ async def invoice_settlement(
 ):
     """„Kiszámlázott” gomb: a fogyás kiszámlázása a Billingón keresztül.
     Teszt-módban díjbekérő (proforma) készül, éles módban számla."""
-    from app.services.wfm.billingo_service import create_invoice_for_settlement
+    from app.services.wfm.invoicing import create_invoice_for_settlement
 
     s = await _get_settlement_or_404(db, settlement_id)
     if s.no_vat:
@@ -2745,6 +2778,7 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes,
                     "discount_pct": m.discount_pct,
                     "portions_billed": m.portions_billed,
                     "amount_net": m.amount_net,
+                    "counters_detail": m.counters_detail,
                 }
                 for m in machines
             ],

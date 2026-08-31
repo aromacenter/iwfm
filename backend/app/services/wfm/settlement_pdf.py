@@ -167,6 +167,18 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
             c.drawString(left + 132 * mm, y, f"{m.get('portions_billed', 0):.0f}")
             c.drawRightString(right, y, _fmt_money(m.get("amount_net", 0)))
             y -= 4.5 * mm
+            # Számlálónkénti bontás — soronként, mintha külön gépek lennének
+            for idx, d in enumerate((m.get("counters_detail") or [])[:8]):
+                c.setFont(FONT, 7.5)
+                c.drawString(
+                    left + 30 * mm, y,
+                    f"{idx + 1}. számláló: {d.get('prev', 0)} → {d.get('new', 0)}",
+                )
+                c.drawString(left + 116 * mm, y, f"{d.get('price', 0):g} Ft/adag")
+                c.drawString(left + 132 * mm, y, f"{d.get('portions', 0):.0f}")
+                c.drawRightString(right, y, _fmt_money(d.get("amount", 0)))
+                y -= 4 * mm
+            c.setFont(FONT, 8.5)
 
     # ─── Tételek ───
     section("Tételek")

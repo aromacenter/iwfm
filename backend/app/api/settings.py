@@ -492,24 +492,35 @@ async def update_worksheet_settings(
 
 class BillingoSettingsBody(BaseModel):
     enabled: bool = False
+    # Szolgáltató: billingo | szamlazz — a bizonylatok ezzel a fiókkal mennek.
+    provider: str = Field(default="billingo", pattern="^(billingo|szamlazz)$")
     # 1. fiók — X-Presso Coffee Kft.
     api_key: str | None = Field(default=None, max_length=256)  # üresen: marad a régi
     block_id: int | None = Field(default=None, ge=1)
     test_mode: bool = True
+    szamlazz_agent_key: str | None = Field(default=None, max_length=256)  # "-" = törlés
+    szamlazz_prefix: str | None = Field(default=None, max_length=32)
     # 2. fiók — Premium Caffe Kft.
     pc_api_key: str | None = Field(default=None, max_length=256)
     pc_block_id: int | None = Field(default=None, ge=1)
     pc_test_mode: bool = True
+    pc_szamlazz_agent_key: str | None = Field(default=None, max_length=256)
+    pc_szamlazz_prefix: str | None = Field(default=None, max_length=32)
 
 
 class BillingoSettingsOut(BaseModel):
     enabled: bool
+    provider: str = "billingo"
     has_api_key: bool
     block_id: int | None
     test_mode: bool
+    has_szamlazz_key: bool = False
+    szamlazz_prefix: str | None = None
     pc_has_api_key: bool = False
     pc_block_id: int | None = None
     pc_test_mode: bool = True
+    pc_has_szamlazz_key: bool = False
+    pc_szamlazz_prefix: str | None = None
 
 
 async def _get_or_create_billingo(db: AsyncSession) -> BillingoSettings:
@@ -526,12 +537,17 @@ async def _get_or_create_billingo(db: AsyncSession) -> BillingoSettings:
 def _billingo_out(row: BillingoSettings) -> BillingoSettingsOut:
     return BillingoSettingsOut(
         enabled=row.enabled,
+        provider=row.provider or "billingo",
         has_api_key=row.api_key_encrypted is not None,
         block_id=row.block_id,
         test_mode=row.test_mode,
+        has_szamlazz_key=row.szamlazz_agent_key_encrypted is not None,
+        szamlazz_prefix=row.szamlazz_prefix,
         pc_has_api_key=row.pc_api_key_encrypted is not None,
         pc_block_id=row.pc_block_id,
         pc_test_mode=row.pc_test_mode,
+        pc_has_szamlazz_key=row.pc_szamlazz_agent_key_encrypted is not None,
+        pc_szamlazz_prefix=row.pc_szamlazz_prefix,
     )
 
 
@@ -558,17 +574,35 @@ async def update_billingo_settings(
 ):
     row = await _get_or_create_billingo(db)
     row.enabled = body.enabled
+    row.provider = body.provider
     row.block_id = body.block_id
     row.test_mode = body.test_mode
-    if body.api_key:  # üres = nem változik
-        row.api_key_encrypted = encrypt_pii(body.api_key.strip())
+    if body.api_key:  # üres = nem változik; "-" = törlés
+        row.api_key_encrypted = (
+            None if body.api_key.strip() == "-" else encrypt_pii(body.api_key.strip())
+        )
+    if body.szamlazz_agent_key:
+        row.szamlazz_agent_key_encrypted = (
+            None if body.szamlazz_agent_key.strip() == "-"
+            else encrypt_pii(body.szamlazz_agent_key.strip())
+        )
+    row.szamlazz_prefix = (body.szamlazz_prefix or "").strip() or None
     row.pc_block_id = body.pc_block_id
     row.pc_test_mode = body.pc_test_mode
     if body.pc_api_key:  # üres = nem változik
-        row.pc_api_key_encrypted = encrypt_pii(body.pc_api_key.strip())
+        row.pc_api_key_encrypted = (
+            None if body.pc_api_key.strip() == "-" else encrypt_pii(body.pc_api_key.strip())
+        )
+    if body.pc_szamlazz_agent_key:
+        row.pc_szamlazz_agent_key_encrypted = (
+            None if body.pc_szamlazz_agent_key.strip() == "-"
+            else encrypt_pii(body.pc_szamlazz_agent_key.strip())
+        )
+    row.pc_szamlazz_prefix = (body.pc_szamlazz_prefix or "").strip() or None
     await record_audit(
         db, actor=actor, action="settings.billingo_update", entity_type="settings",
-        entity_id="billingo", detail={"test_mode": body.test_mode}, request=request,
+        entity_id="billingo",
+        detail={"test_mode": body.test_mode, "provider": body.provider}, request=request,
     )
     await db.commit()
     return _billingo_out(row)
@@ -1360,7 +1394,7 @@ async def test_billingo(
     _: User = Depends(require_role("admin")),
 ):
     """Kapcsolat-teszt: számlatömbök lekérése (block_id kiválasztásához is)."""
-    from app.services.wfm.billingo_service import test_connection
+    from app.services.wfm.invoicing import test_connection
 
     try:
         return await test_connection(db, company)

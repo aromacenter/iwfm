@@ -993,23 +993,30 @@ class PermissionSettings(Base):
 
 
 class BillingoSettings(Base):
-    """Billingó számlázó integráció — egyetlen sor (id=1). Az API-kulcs
-    Fernet-titkosítva; test_mode=True esetén díjbekérő (proforma) készül,
-    éles módban számla (NAV-jelentett!)."""
+    """Számlázó integráció — egyetlen sor (id=1). A provider dönti el, melyik
+    szolgáltató megy: 'billingo' (v3 API-kulcs) vagy 'szamlazz' (Számla Agent
+    kulcs). Minden kulcs Fernet-titkosítva; test_mode=True esetén díjbekérő
+    (proforma) készül, éles módban számla (NAV-jelentett!)."""
 
     __tablename__ = "billingo_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Szolgáltató: billingo | szamlazz — közös kapcsoló, fiókonkénti kulcsokkal.
+    provider: Mapped[str] = mapped_column(String(16), nullable=False, default="billingo")
     # 1. fiók — X-Presso Coffee Kft. (xp)
     api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     block_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # számlatömb
     test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    szamlazz_agent_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    szamlazz_prefix: Mapped[str | None] = mapped_column(String(32), nullable=True)  # számlaszám-előtag
     # 2. fiók — Premium Caffe Kft. (pc); a partner szerződött cége dönti el,
     # melyik fiókkal állítjuk ki a számlát.
     pc_api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     pc_block_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pc_test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    pc_szamlazz_agent_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    pc_szamlazz_prefix: Mapped[str | None] = mapped_column(String(32), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -1232,6 +1239,10 @@ class SettlementMachine(Base):
     portions_billed: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     price_per_portion: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     amount_net: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    # Számlálónkénti bontás pillanatképe (több számlálós gép, "mintha külön
+    # gépek lennének"): [{prev, new, portions, price, amount}, …] — a bizonylat
+    # és az előzmény ebből mutatja soronként az elszámolást.
+    counters_detail: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

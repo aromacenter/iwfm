@@ -152,20 +152,39 @@ async def retest_ok(
     return _out(b)
 
 
+class ReopenBody(BaseModel):
+    """Újranyitás indoklással: mi nem stimmel még + friss képernyőkép."""
+
+    note: str | None = Field(default=None, max_length=4000)
+    screenshot: str | None = None  # data-URL — megadva LECSERÉLI a régit
+
+
 @router.post("/{bug_id}/reopen")
 async def reopen(
     bug_id: str,
     request: Request,
+    body: ReopenBody | None = None,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    """A bejelentő szerint még mindig hibás → újranyitva."""
+    """A bejelentő szerint még mindig hibás → újranyitva, opcionális
+    indoklással és friss képernyőképpel (a kép a régit lecseréli)."""
     b = await _bug_or_404(db, bug_id)
     if b.reporter_id != actor.id and actor.role != "admin":
         raise HTTPException(status_code=403, detail={"code": "bugs.not_yours"})
     if b.status != "resolved":
         raise HTTPException(status_code=422, detail={"code": "bugs.not_resolved"})
     b.status = "reopened"
+    if body and body.note and body.note.strip():
+        stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
+        b.description = (
+            f"{b.description}\n\n--- Újranyitva ({stamp}) ---\n{body.note.strip()}"
+        )[:4000]
+    if body and body.screenshot:
+        raw, mime = _decode_screenshot(body.screenshot)
+        if raw is not None:
+            b.screenshot = raw
+            b.screenshot_mime = mime
     await record_audit(
         db, actor=actor, action="bug.reopen", entity_type="bug",
         entity_id=str(b.id), request=request,

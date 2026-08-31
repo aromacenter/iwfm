@@ -151,3 +151,35 @@ async def test_bug_module_gate(client, admin, manager, monkeypatch):
         json={"plan": "xl", "valid_until": None, "enabled_modules": None},
         headers=OP,
     )
+
+
+async def test_reopen_with_note_and_screenshot(client, admin, manager):
+    """Ujranyitas indoklassal: a leiras kiegeszul, a kep lecserelodik."""
+    _, adm = admin
+    _, mgr = manager
+    bug = (
+        await client.post(
+            "/api/bugs",
+            json={"description": "Az elszamolas osszeadja a szamlalokat.",
+                  "severity": "blocker", "page_url": "https://x/elszamolas",
+                  "screenshot": PNG},
+            headers=mgr,
+        )
+    ).json()
+    await client.patch(f"/api/bugs/{bug['id']}", json={"status": "resolved"}, headers=adm)
+
+    new_png = "data:image/png;base64," + base64.b64encode(b"\x89PNG second-image").decode()
+    res = await client.post(
+        f"/api/bugs/{bug['id']}/reopen",
+        json={"note": "Meg mindig osszeadja, itt az uj kep.", "screenshot": new_png},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    out = res.json()
+    assert out["status"] == "reopened"
+    assert "Meg mindig osszeadja" in out["description"]
+    assert "Ujranyitva" in out["description"] or "jranyitva" in out["description"]
+
+    img = await client.get(f"/api/bugs/{bug['id']}/screenshot", headers=adm)
+    assert img.status_code == 200
+    assert img.content == b"\x89PNG second-image"
