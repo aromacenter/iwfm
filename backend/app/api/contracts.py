@@ -316,6 +316,8 @@ async def contracts_overview(
             "product_name": prod.name if prod else None,
             "price_per_portion": price,
             "rent_fee": a.rent_fee,
+            "counter_count": a.counter_count or 1,
+            "counter_prices": a.counter_prices,
         }
 
     machines_by_partner: dict = {}

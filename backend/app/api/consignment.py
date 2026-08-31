@@ -1463,6 +1463,25 @@ async def create_settlement(
             if asset.default_product_id is None:
                 asset.default_product_id = product.id
             unit_price = _effective_price(product, price_overrides)
+            # Szerződéses adagár SZÁMLÁLÓNKÉNT: ha a gépen rögzítve van és a
+            # számlálónkénti különbségek ismertek, az egységár a különbségekkel
+            # súlyozott átlag (None elem = az adott számlálóra a termékár él).
+            cps = (
+                asset.counter_prices
+                if isinstance(asset.counter_prices, list)
+                else None
+            )
+            if (
+                per_counter_diffs is not None
+                and cps
+                and any(p is not None for p in cps)
+                and brewed > 0
+            ):
+                weighted = sum(
+                    diff * (cps[i] if i < len(cps) and cps[i] is not None else unit_price)
+                    for i, diff in enumerate(per_counter_diffs)
+                )
+                unit_price = weighted / brewed
             if m_in.price_per_portion is not None:
                 if abs(m_in.price_per_portion - unit_price) > 1e-9:
                     manual_overrides.append({

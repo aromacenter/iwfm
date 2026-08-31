@@ -285,6 +285,19 @@ export default function PartnerekPage() {
   const [cError, setCError] = useState<string | null>(null);
   const [cBusy, setCBusy] = useState(false);
 
+  // Kihelyezett gépek számlálónkénti szerződéses adagárai (nettó Ft/adag) —
+  // a szerződés-ablakban rögzíthetők, az elszámolás ezekkel súlyoz.
+  interface ContractMachine {
+    id: string;
+    barcode: string;
+    name: string;
+    counter_count: number;
+    counter_prices: (number | null)[] | null;
+  }
+  const [cMachines, setCMachines] = useState<ContractMachine[]>([]);
+  const [machinePrices, setMachinePrices] = useState<Record<string, string[]>>({});
+  const [mpBusy, setMpBusy] = useState<string | null>(null);
+
   async function openContracts(p: { id: string; name: string }) {
     setContractsFor(p);
     setCForm(null);
@@ -293,6 +306,38 @@ export default function PartnerekPage() {
       setContracts(await api.get<Contract[]>(`/api/partners/${p.id}/contracts`));
     } catch {
       setContracts([]);
+    }
+    try {
+      const machines = await api.get<ContractMachine[]>(
+        `/api/assets?partner_id=${p.id}&status=deployed`,
+      );
+      setCMachines(machines);
+      const prices: Record<string, string[]> = {};
+      for (const m of machines) {
+        prices[m.id] = Array.from({ length: m.counter_count || 1 }, (_, i) =>
+          m.counter_prices?.[i] != null ? String(m.counter_prices[i]) : "",
+        );
+      }
+      setMachinePrices(prices);
+    } catch {
+      setCMachines([]);
+    }
+  }
+
+  async function saveMachinePrices(m: ContractMachine) {
+    const arr = machinePrices[m.id] ?? [];
+    setMpBusy(m.id);
+    try {
+      await api.patch(`/api/assets/${m.id}`, {
+        counter_prices: arr.some((p) => p.trim())
+          ? arr.map((p) => (p.trim() ? Number(p) : null))
+          : null,
+      });
+      toast(t("contracts.counterPricesSaved", { barcode: m.barcode }), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setMpBusy(null);
     }
   }
 
@@ -839,6 +884,55 @@ export default function PartnerekPage() {
                     </p>
                   )}
                 </div>
+
+                {cMachines.length > 0 && (
+                  <fieldset className="rounded-xl border border-slate-200 p-3">
+                    <legend className="px-1 text-xs font-semibold uppercase text-slate-400">
+                      ☕ {t("contracts.machinePrices")}
+                    </legend>
+                    <p className="mb-2 text-xs text-slate-400">{t("contracts.machinePricesHint")}</p>
+                    <div className="space-y-3">
+                      {cMachines.map((m) => (
+                        <div key={m.id} className="rounded-lg border border-slate-200 p-2.5">
+                          <p className="text-sm font-medium text-slate-700">
+                            {m.name} · <span className="font-mono">{m.barcode}</span>
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-end gap-2">
+                            {(machinePrices[m.id] ?? []).map((p, i) => (
+                              <label key={i} className="block text-xs text-slate-600">
+                                {t("inv.counterN", { n: i + 1 })}
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  value={p}
+                                  onChange={(e) =>
+                                    setMachinePrices((mp) => ({
+                                      ...mp,
+                                      [m.id]: (mp[m.id] ?? []).map((v, j) =>
+                                        j === i ? e.target.value : v,
+                                      ),
+                                    }))
+                                  }
+                                  placeholder={t("inv.counterPricePh")}
+                                  className="mt-0.5 block w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                                />
+                              </label>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => saveMachinePrices(m)}
+                              disabled={mpBusy === m.id}
+                              className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
+                            >
+                              {mpBusy === m.id ? t("common.saving") : t("common.save")}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
               </>
             )}
 

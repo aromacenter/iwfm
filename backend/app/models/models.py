@@ -922,6 +922,10 @@ class Asset(Base):
     default_product_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("products.id", ondelete="SET NULL"), nullable=True
     )
+    # Szerződéses adagár SZÁMLÁLÓNKÉNT (nettó Ft/adag) — None elem = az adott
+    # számlálóra a termék-/partnerár érvényes. Az elszámolás a számlálónkénti
+    # különbségeket ezekkel súlyozza; gépcserénél öröklődik.
+    counter_prices: Mapped[list | None] = mapped_column(JSON, nullable=True)
     tangible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # tárgyi eszköz
     # Az ügyfél SAJÁT gépe (mi csak szervizeljük) — nem "kihelyezett" saját eszköz.
     customer_owned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

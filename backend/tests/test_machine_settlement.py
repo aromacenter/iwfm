@@ -367,3 +367,118 @@ async def test_asset_default_product_crud(client, manager):
     )
     assert upd.status_code == 200, upd.text
     assert upd.json()["default_product_id"] is None
+
+
+async def test_counter_prices_weighted_settlement(client, manager):
+    """Szerzodeses adagar szamlalonkent: az elszamolas a szamlalonkenti
+    kulonbsegekkel sulyozott atlagarat hasznalja (None elem = termekar)."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = await _partner(client, mgr, "Sulyozott Bolt")
+    product = await make_product(client, mgr, price_per_portion=100.0, grams_per_portion=7)
+    asset = await _machine(
+        client, mgr, partner, "GEP-CPS", counter=0,
+        counter_count=3, counters=[0, 0, 0],
+        default_product_id=product["id"],
+        counter_prices=[200.0, 300.0, None],
+    )
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 10.0},
+        headers=mgr,
+    )
+
+    # allasok: 10 + 20 + 30 = 60 adag; ertek: 10*200 + 20*300 + 30*100(termekar)
+    # = 2000 + 6000 + 3000 = 11000 -> atlag 183.33 Ft/adag
+    res = await client.post(
+        "/api/settlements",
+        json={
+            "partner_id": partner["id"],
+            "payment_method": "cash",
+            "lines": [{"product_id": product["id"], "physical_qty": 9.5}],
+            "machines": [{"asset_id": asset["id"], "new_counters": [10, 20, 30]}],
+        },
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    m = res.json()["machines"][0]
+    assert m["portions_billed"] == 60
+    assert abs(m["amount_net"] - 11000) < 0.01
+    assert abs(m["price_per_portion"] - 11000 / 60) < 0.01
+
+
+async def test_counter_prices_roundtrip_and_swap(client, manager):
+    """Adagarak mentese a gepre + gepcsere: egyezo kiosztasnal oroklodik,
+    elteronel a kezzel megadott arak ervenyesek."""
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Csere Aruhaz"}, headers=mgr)
+    ).json()
+    old = (
+        await client.post(
+            "/api/assets",
+            json={"barcode": "CPS-REGI", "name": "Necta", "counter_count": 2,
+                  "counters": [5, 5], "rent_fee": 4000},
+            headers=mgr,
+        )
+    ).json()
+    await client.post(
+        f"/api/assets/{old['id']}/deploy", json={"partner_id": partner["id"]}, headers=mgr
+    )
+    # arak rogzitese utolag (a szerzodes-ablak PATCH-e)
+    upd = await client.patch(
+        f"/api/assets/{old['id']}", json={"counter_prices": [150.0, 250.0]}, headers=mgr
+    )
+    assert upd.status_code == 200, upd.text
+    assert upd.json()["counter_prices"] == [150.0, 250.0]
+
+    # 1) egyezo kiosztasu cseregep: orokles
+    same = (
+        await client.post(
+            "/api/assets",
+            json={"barcode": "CPS-UJ1", "name": "Necta", "counter_count": 2},
+            headers=mgr,
+        )
+    ).json()
+    res = await client.post(
+        f"/api/assets/{old['id']}/swap",
+        json={"replacement_asset_id": same["id"]},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["counter_prices"] == [150.0, 250.0]
+    assert res.json()["rent_fee"] == 4000
+
+    # 2) eltero kiosztasu cseregep: kezi arak a csere-folyamatbol
+    diff = (
+        await client.post(
+            "/api/assets",
+            json={"barcode": "CPS-UJ2", "name": "Jura", "counter_count": 3},
+            headers=mgr,
+        )
+    ).json()
+    res2 = await client.post(
+        f"/api/assets/{same['id']}/swap",
+        json={"replacement_asset_id": diff["id"],
+              "counter_prices": [100.0, 200.0, 300.0]},
+        headers=mgr,
+    )
+    assert res2.status_code == 200, res2.text
+    assert res2.json()["counter_prices"] == [100.0, 200.0, 300.0]
+
+    # 3) eltero kiosztas kezi arak nelkul: nem oroklodik vakon
+    third = (
+        await client.post(
+            "/api/assets",
+            json={"barcode": "CPS-UJ3", "name": "Melitta", "counter_count": 1},
+            headers=mgr,
+        )
+    ).json()
+    res3 = await client.post(
+        f"/api/assets/{diff['id']}/swap",
+        json={"replacement_asset_id": third["id"]},
+        headers=mgr,
+    )
+    assert res3.status_code == 200, res3.text
+    assert res3.json()["counter_prices"] is None

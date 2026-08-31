@@ -52,6 +52,7 @@ interface Asset {
   norm: number | null;
   norms: number[] | null;
   default_product_id: string | null;
+  counter_prices: (number | null)[] | null;
   tangible: boolean;
   customer_owned: boolean;
   contract_min_portions: number | null;
@@ -350,18 +351,42 @@ export default function GepekPage() {
   const [swapFor, setSwapFor] = useState<Asset | null>(null);
   const [swapCode, setSwapCode] = useState("");
   const [inStock, setInStock] = useState<Asset[]>([]);
+  // Számlálónkénti adagárak a cseregépre — eltérő kiosztásnál kézzel adandók.
+  const [swapPrices, setSwapPrices] = useState<string[]>([]);
 
   useEffect(() => {
     if (!swapFor) return;
     api.get<Asset[]>("/api/assets?status=in_stock").then(setInStock).catch(() => {});
   }, [swapFor]);
 
+  const swapReplacement = swapFor
+    ? inStock.find(
+        (x) => x.barcode === swapCode.trim() || `${x.name} (${x.barcode})` === swapCode.trim(),
+      ) ?? null
+    : null;
+
+  // A kiválasztott cseregéphez előtöltjük az árakat: egyező számláló-kiosztásnál
+  // a régi gép szerződéses adagárai jönnek, eltérőnél üres mezők.
+  useEffect(() => {
+    if (!swapFor || !swapReplacement) {
+      setSwapPrices([]);
+      return;
+    }
+    const n = swapReplacement.counter_count || 1;
+    const inherited =
+      n === (swapFor.counter_count || 1) ? swapFor.counter_prices ?? [] : [];
+    setSwapPrices(
+      Array.from({ length: n }, (_, i) =>
+        inherited[i] != null ? String(inherited[i]) : "",
+      ),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [swapFor?.id, swapReplacement?.id]);
+
   async function doSwap(e: React.FormEvent) {
     e.preventDefault();
     if (!swapFor) return;
-    const replacement = inStock.find(
-      (x) => x.barcode === swapCode.trim() || `${x.name} (${x.barcode})` === swapCode.trim(),
-    );
+    const replacement = swapReplacement;
     if (!replacement) {
       setError(t("inv.swapNotFound"));
       return;
@@ -371,6 +396,9 @@ export default function GepekPage() {
     try {
       await api.post(`/api/assets/${swapFor.id}/swap`, {
         replacement_asset_id: replacement.id,
+        counter_prices: swapPrices.some((p) => p.trim())
+          ? swapPrices.map((p) => (p.trim() ? Number(p) : null))
+          : null,
       });
       toast(t("inv.swapDone", { old: swapFor.barcode, new: replacement.barcode }), "success");
       setSwapFor(null);
@@ -963,6 +991,39 @@ export default function GepekPage() {
                 ))}
               </datalist>
             </label>
+            {swapReplacement && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-medium text-slate-700">
+                  {swapReplacement.name} · <span className="font-mono">{swapReplacement.barcode}</span>
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {(swapReplacement.counter_count || 1) === (swapFor.counter_count || 1)
+                    ? t("inv.swapPricesInherit")
+                    : t("inv.swapPricesDiffer", {
+                        old: swapFor.counter_count || 1,
+                        new: swapReplacement.counter_count || 1,
+                      })}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {swapPrices.map((p, i) => (
+                    <label key={i} className="block text-xs text-slate-600">
+                      {t("inv.counterN", { n: i + 1 })}
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={p}
+                        onChange={(e) =>
+                          setSwapPrices((arr) => arr.map((v, j) => (j === i ? e.target.value : v)))
+                        }
+                        placeholder={t("inv.counterPricePh")}
+                        className="mt-0.5 block w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setSwapFor(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>

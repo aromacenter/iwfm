@@ -572,6 +572,8 @@ class AssetBody(BaseModel):
     # Számlálónkénti norma (g kávé/adag) több számlálós gépnél; 0 = nem használ kávét.
     norms: list[float] | None = Field(default=None, max_length=8)
     default_product_id: str | None = None  # melyik terméket (kávét) főzi
+    # Szerződéses adagár számlálónként (nettó Ft/adag) — None elem: termékár.
+    counter_prices: list[float | None] | None = Field(default=None, max_length=8)
     tangible: bool = False
     customer_owned: bool = False  # az ügyfél saját gépe
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
@@ -597,6 +599,7 @@ class AssetPatch(BaseModel):
     norm: float | None = Field(default=None, ge=0)
     norms: list[float] | None = Field(default=None, max_length=8)
     default_product_id: str | None = None  # "" → törlés
+    counter_prices: list[float | None] | None = Field(default=None, max_length=8)
     tangible: bool | None = None
     customer_owned: bool | None = None
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
@@ -648,6 +651,7 @@ class AssetOut(BaseModel):
     norm: float | None
     norms: list[float] | None = None
     default_product_id: str | None = None
+    counter_prices: list[float | None] | None = None
     tangible: bool
     customer_owned: bool
     contract_min_portions: int | None
@@ -692,6 +696,7 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         norm=a.norm,
         norms=a.norms,
         default_product_id=str(a.default_product_id) if a.default_product_id else None,
+        counter_prices=a.counter_prices,
         tangible=a.tangible,
         customer_owned=a.customer_owned,
         contract_min_portions=a.contract_min_portions,
@@ -1048,6 +1053,7 @@ async def create_asset(
         norm=body.norm,
         norms=body.norms,
         default_product_id=await _parse_default_product(db, body.default_product_id),
+        counter_prices=body.counter_prices,
         tangible=body.tangible,
         customer_owned=body.customer_owned,
         contract_min_portions=body.contract_min_portions,
@@ -1192,6 +1198,9 @@ async def deploy_asset(
 class SwapBody(BaseModel):
     replacement_asset_id: str
     note: str | None = Field(default=None, max_length=512)
+    # Számlálónkénti adagárak a cseregépre — ha a két gép számláló-kiosztása
+    # eltér, itt adhatók meg egyesével; None = öröklés (egyező kiosztásnál).
+    counter_prices: list[float | None] | None = Field(default=None, max_length=8)
 
 
 @assets_router.post("/{asset_id}/swap", response_model=AssetOut)
@@ -1216,7 +1225,7 @@ async def swap_asset(
         await db.execute(select(Partner).where(Partner.id == old.partner_id))
     ).scalar_one_or_none()
 
-    # cseregép: kihelyezés + szerződéses feltételek öröklése
+    # cseregép: kihelyezés + az ÖSSZES szerződéses feltétel öröklése
     new.status = "deployed"
     new.partner_id = old.partner_id
     new.deployed_at = datetime.now(UTC)
@@ -1224,6 +1233,14 @@ async def swap_asset(
     new.contract_below_min_price = old.contract_below_min_price
     new.rent_fee = old.rent_fee
     new.maintenance_fee = old.maintenance_fee
+    if new.default_product_id is None:
+        new.default_product_id = old.default_product_id
+    # Számlálónkénti adagárak: kézi megadás nyer; enélkül egyező
+    # számláló-kiosztásnál a régi gép árai öröklődnek változatlanul.
+    if body.counter_prices is not None:
+        new.counter_prices = list(body.counter_prices)[: new.counter_count or 1]
+    elif (new.counter_count or 1) == (old.counter_count or 1):
+        new.counter_prices = old.counter_prices
     # régi gép: szervizre, kihelyezés lezárva
     prev_partner = old.partner_id
     old.status = "maintenance"

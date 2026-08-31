@@ -229,7 +229,7 @@ export default function BugReporter() {
         data-bug-ui="1"
         onClick={() => { setOpen(!open); if (!open) loadMine(); }}
         title={t("bugs.buttonTitle")}
-        className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-rose-600 text-white shadow-lg hover:bg-rose-700"
+        className="fixed bottom-24 right-5 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-rose-600 text-white shadow-lg hover:bg-rose-700"
       >
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="m8 2 1.88 1.88" />
@@ -253,7 +253,7 @@ export default function BugReporter() {
         <div
           data-bug-ui="1"
           onPaste={onPaste}
-          className="fixed bottom-40 right-5 z-40 w-[340px] max-w-[calc(100vw-40px)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
+          className="fixed bottom-40 right-5 z-[60] w-[340px] max-w-[calc(100vw-40px)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
         >
           <div className="mb-3 flex rounded-lg border border-slate-200 p-0.5 text-sm font-medium">
             <button
@@ -368,7 +368,7 @@ export default function BugReporter() {
 
       {/* Nyilazó: húzással piros nyilak a képernyőképre */}
       {annotating && baseImg && (
-        <div data-bug-ui="1" className="fixed inset-0 z-50 flex flex-col bg-black/90">
+        <div data-bug-ui="1" className="fixed inset-0 z-[70] flex flex-col bg-black/90">
           <p className="shrink-0 py-1.5 text-center text-sm font-medium text-white">
             {t("bugs.annotateHint")}
           </p>
