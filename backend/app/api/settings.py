@@ -552,9 +552,24 @@ def _billingo_out(row: BillingoSettings) -> BillingoSettingsOut:
     )
 
 
+async def _require_any_invoicer(db: AsyncSession = Depends(get_db)) -> None:
+    """A Számlázás beállítás-fül kapuja: elég, ha a Billingó (billing) VAGY a
+    Számlázz.hu (szamlazz) modul be van kapcsolva — külön-külön kapcsolhatók."""
+    modules = license_service.effective_modules(await license_service.get_license_row(db))
+    if modules is not None and "billing" not in modules and "szamlazz" not in modules:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "license.module_disabled", "module": "billing"},
+        )
+
+
+def _provider_module(provider: str) -> str:
+    return "szamlazz" if provider == "szamlazz" else "billing"
+
+
 @router.get(
     "/billingo", response_model=BillingoSettingsOut,
-    dependencies=[Depends(license_service.require_module("billing"))],
+    dependencies=[Depends(_require_any_invoicer)],
 )
 async def get_billingo_settings(
     db: AsyncSession = Depends(get_db),
@@ -565,7 +580,7 @@ async def get_billingo_settings(
 
 @router.put(
     "/billingo", response_model=BillingoSettingsOut,
-    dependencies=[Depends(license_service.require_module("billing"))],
+    dependencies=[Depends(_require_any_invoicer)],
 )
 async def update_billingo_settings(
     body: BillingoSettingsBody,
@@ -573,6 +588,14 @@ async def update_billingo_settings(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_role("admin")),
 ):
+    # A kiválasztott szolgáltató saját modulja is legyen bekapcsolva.
+    modules = license_service.effective_modules(await license_service.get_license_row(db))
+    needed = _provider_module(body.provider)
+    if modules is not None and needed not in modules:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "license.module_disabled", "module": needed},
+        )
     row = await _get_or_create_billingo(db)
     row.enabled = body.enabled
     row.provider = body.provider
@@ -1501,7 +1524,7 @@ async def send_test_digest(
 
 @router.post(
     "/billingo/test",
-    dependencies=[Depends(license_service.require_module("billing"))],
+    dependencies=[Depends(_require_any_invoicer)],
 )
 async def test_billingo(
     company: str | None = Query(default=None),  # xp (alap) | pc

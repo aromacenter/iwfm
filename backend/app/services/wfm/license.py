@@ -22,7 +22,7 @@ from app.models import Employee, LicenseSettings, User
 # NULL enabled_modules = MINDEN modul megy (saját/X-Presso példány).
 MODULES = (
     "billing", "gls", "labels", "ai", "portal", "support",
-    "mpl", "foxpost", "dpd", "bugreport", "cashbook",
+    "mpl", "foxpost", "dpd", "bugreport", "cashbook", "szamlazz",
 )
 
 

@@ -13,8 +13,17 @@ from app.services.wfm import billingo_service, szamlazz_service
 
 
 async def _provider(db: AsyncSession) -> str:
+    """A beállított szolgáltató — csak ha a hozzá tartozó licenc-modul él
+    (billing = Billingó, szamlazz = Számlázz.hu; külön-külön kapcsolhatók)."""
     settings = await billingo_service.get_or_create_settings(db)
-    return settings.provider or "billingo"
+    provider = settings.provider or "billingo"
+    from app.services.wfm import license as license_service
+
+    modules = license_service.effective_modules(await license_service.get_license_row(db))
+    needed = "szamlazz" if provider == "szamlazz" else "billing"
+    if modules is not None and needed not in modules:
+        raise ValueError("billingo_not_configured")
+    return provider
 
 
 async def create_invoice_for_settlement(

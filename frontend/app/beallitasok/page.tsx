@@ -74,8 +74,9 @@ const SETTINGS_TABS = [
 ] as const;
 
 // beállítás-fül → kapcsolható modul (kikapcsolva a fül eltűnik)
+// Egy fülhöz több modul is tartozhat ("|" elválasztóval) — bármelyik elég.
 const TAB_MODULE: Record<string, string> = {
-  billing: "billing",
+  billing: "billing|szamlazz",
   cashbook: "cashbook",
   gls: "gls",
   mpl: "mpl",
@@ -1207,7 +1208,7 @@ export default function BeallitasokPage() {
                 !TAB_MODULE[k] ||
                 !lic ||
                 lic.modules === null ||
-                lic.modules.includes(TAB_MODULE[k])
+                TAB_MODULE[k].split("|").some((m) => lic.modules!.includes(m))
               );
             });
           if (visible.length === 0) return null;
@@ -1711,13 +1712,19 @@ export default function BeallitasokPage() {
           </label>
           <label className="block max-w-xs text-sm">
             {t("settings.invoiceProvider")}
+            {/* Csak a licencben bekapcsolt szolgáltatók választhatók —
+                a Billingó (billing) és a Számlázz.hu (szamlazz) külön modul. */}
             <select
               value={billingo.provider}
               onChange={(e) => setBillingo({ ...billingo, provider: e.target.value })}
               className={`${inputCls} bg-white`}
             >
-              <option value="billingo">Billingó</option>
-              <option value="szamlazz">Számlázz.hu</option>
+              {(!lic || lic.modules === null || lic.modules.includes("billing")) && (
+                <option value="billingo">Billingó</option>
+              )}
+              {(!lic || lic.modules === null || lic.modules.includes("szamlazz")) && (
+                <option value="szamlazz">Számlázz.hu</option>
+              )}
             </select>
           </label>
           <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">

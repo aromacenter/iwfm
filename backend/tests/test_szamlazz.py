@@ -134,3 +134,56 @@ async def test_szamlazz_not_configured(client, admin, manager):
     res = await client.post(f"/api/settlements/{settlement['id']}/invoice", headers=mgr)
     assert res.status_code == 422
     assert res.json()["detail"]["code"] == "settings.billingo_not_configured"
+
+
+async def test_billingo_szamlazz_separate_modules(client, admin, monkeypatch):
+    """A Billingo (billing) es a Szamlazz.hu (szamlazz) kulon modul: a
+    Szamlazas ful barmelyikkel el, de csak a bekapcsolt szolgaltato valaszthato."""
+    from tests.test_license import OP, _arm_operator
+
+    _, adm = admin
+    _arm_operator(monkeypatch)
+
+    # csak szamlazz modul
+    res = await client.put(
+        "/api/operator/license",
+        json={"plan": "m", "enabled_modules": ["szamlazz"]},
+        headers=OP,
+    )
+    assert res.status_code == 200, res.text
+    assert (await client.get("/api/settings/billingo", headers=adm)).status_code == 200
+    ok = await client.put(
+        "/api/settings/billingo",
+        json={"enabled": True, "provider": "szamlazz", "szamlazz_agent_key": "k1"},
+        headers=adm,
+    )
+    assert ok.status_code == 200, ok.text
+    denied = await client.put(
+        "/api/settings/billingo",
+        json={"enabled": True, "provider": "billingo"},
+        headers=adm,
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["module"] == "billing"
+
+    # csak billing modul → szamlazz provider tiltva
+    await client.put(
+        "/api/operator/license",
+        json={"plan": "m", "enabled_modules": ["billing"]},
+        headers=OP,
+    )
+    denied2 = await client.put(
+        "/api/settings/billingo",
+        json={"enabled": True, "provider": "szamlazz"},
+        headers=adm,
+    )
+    assert denied2.status_code == 403
+    assert denied2.json()["detail"]["module"] == "szamlazz"
+
+    # egyik sem → a ful (GET) is zarva
+    await client.put(
+        "/api/operator/license",
+        json={"plan": "m", "enabled_modules": ["gls"]},
+        headers=OP,
+    )
+    assert (await client.get("/api/settings/billingo", headers=adm)).status_code == 403
