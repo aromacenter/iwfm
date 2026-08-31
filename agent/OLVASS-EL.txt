@@ -13,6 +13,11 @@ Telepítés (egyszer, az üzleti PC-n):
    - agent_key: a kimásolt kulcs
    - printer_ip: a Godex IP-címe (a nyomtató tesztoldala/kijelzője mutatja)
 4. Futtasd a telepites.bat-ot (jobb klikk → Futtatás rendszergazdaként).
+   Ez KÉT ütemezett feladatot hoz létre:
+   - bejelentkezéskor automatikusan elindul az ügynök,
+   - és egy őrszem 5 percenként ellenőrzi: ha az ügynök kihalt (lefagyás,
+     Windows-frissítés utáni újraindulás stb.), magától újraindítja.
+   Kézzel többé nem kell indítgatni.
 
 Ellenőrzés: a Beállításokban a Címkenyomtató-kártyán 1 percen belül
 "ügynök online" jelenik meg; a print_agent.log fájlban látszik minden
