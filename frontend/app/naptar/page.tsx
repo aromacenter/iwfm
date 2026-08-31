@@ -106,7 +106,7 @@ export default function NaptarPage() {
                 onClick={() => setOpenDay(key)}
                 className={`min-h-28 cursor-pointer rounded-2xl border p-2 shadow-sm transition hover:ring-2 hover:ring-indigo-200 ${
                   isToday
-                    ? "border-indigo-400 bg-indigo-50/60 ring-2 ring-indigo-300"
+                    ? "border-indigo-400 bg-indigo-50 ring-2 ring-indigo-300"
                     : "border-slate-200 bg-white"
                 }`}
               >

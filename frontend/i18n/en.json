@@ -1204,6 +1204,7 @@
     "done": "✓ Done",
     "needsMoreWork": "Needs more work",
     "fillWorksheet": "📝 Fill in worksheet",
+    "ticketImage": "Service ticket attachment — click to enlarge",
     "fillWorksheetSerial": "📝 Fill in worksheet ({serial})",
     "worksheetDone": "📝 Worksheet completed ({serial}) — edit",
     "wsTitle": "📝 Worksheet — {title}",

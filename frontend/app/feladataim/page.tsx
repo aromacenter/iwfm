@@ -50,6 +50,7 @@ interface TaskOut {
     counter: number | null;
     maintenance_fee: number | null;
   } | null;
+  ticket_images: string[]; // szervizjegyből jött feladat csatolt képei (id-k)
 }
 
 interface MaterialRow {
@@ -529,6 +530,24 @@ export default function FeladataimPage() {
             )}
             {task.description && (
               <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{task.description}</p>
+            )}
+            {(task.ticket_images ?? []).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {task.ticket_images.map((imgId) => {
+                  const src = `/api/me/tasks/${task.id}/ticket-image/${imgId}`;
+                  return (
+                    <button
+                      key={imgId}
+                      onClick={() => window.open(src, "_blank")}
+                      className="overflow-hidden rounded-xl border border-slate-200 shadow-sm transition hover:ring-2 hover:ring-indigo-300"
+                      title={t("myTasks.ticketImage")}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt="" className="h-20 w-20 object-cover" loading="lazy" />
+                    </button>
+                  );
+                })}
+              </div>
             )}
 
             {task.comments.length > 0 && (

@@ -1204,6 +1204,7 @@
     "done": "✓ Befejezett",
     "needsMoreWork": "További munkát igényel",
     "fillWorksheet": "📝 Munkalap kitöltése",
+    "ticketImage": "Szervizjegy csatolt képe — kattints a nagyításhoz",
     "fillWorksheetSerial": "📝 Munkalap kitöltése ({serial})",
     "worksheetDone": "📝 Munkalap kész ({serial}) — szerkesztés",
     "wsTitle": "📝 Munkalap — {title}",

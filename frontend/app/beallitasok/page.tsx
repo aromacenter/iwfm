@@ -1120,7 +1120,7 @@ export default function BeallitasokPage() {
               key={group.labelKey}
               className={`flex flex-col gap-1 rounded-2xl border px-2 pb-1.5 pt-1.5 transition-colors ${
                 groupActive
-                  ? "border-indigo-300 bg-indigo-50/60 shadow-sm"
+                  ? "border-indigo-300 bg-indigo-50 shadow-sm"
                   : "border-slate-200 bg-white"
               }`}
             >

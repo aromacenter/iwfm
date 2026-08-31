@@ -145,3 +145,125 @@ async def test_assignees_list(client, manager, admin):
     roles = {r["role"] for r in rows}
     assert roles <= {"szervizes", "manager", "admin"}
     assert len(rows) >= 2  # a manager és az admin fixtúra-user
+
+
+# --- Szervizjegy → dedikált feladat a felelősnek ---------------------------
+
+
+async def _make_assignee(email: str, role: str = "szervizes"):
+    from tests.conftest import make_employee_record, make_user
+
+    user, headers = await make_user(email=email, role=role)
+    emp = await make_employee_record(user)
+    return user, headers, emp
+
+
+async def _add_attachment(ticket_id: str) -> str:
+    """Csatolt kép közvetlen beszúrása (élesben az ügyfélportálról érkezik)."""
+    import uuid as _uuid
+
+    import app.db as app_db
+    from app.models import TicketAttachment
+
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        att = TicketAttachment(
+            ticket_id=_uuid.UUID(ticket_id), filename="hiba.png",
+            mime="image/png", data=b"\x89PNG-teszt",
+        )
+        session.add(att)
+        await session.commit()
+        return str(att.id)
+
+
+async def test_assignment_creates_dedicated_task(client, manager):
+    """Felelős kijelölésekor a kolléga Feladataim nézetébe kerül a jegy —
+    kitöltetlen KSZ-munkalappal (szervizes szerepkör) és a jegy képeivel."""
+    _, mgr = manager
+    szerv_user, szerv_headers, _ = await _make_assignee("szaki@example.com")
+    asset = await make_asset(client, mgr, barcode="GEP-TASK", counter=10)
+
+    tk = (
+        await client.post(
+            "/api/service",
+            json={"title": "Nem fűt a bojler", "kind": "repair", "priority": "high",
+                  "description": "Reggel óta hideg a víz.",
+                  "asset_id": asset["id"],
+                  "assigned_to_user_id": str(szerv_user.id)},
+            headers=mgr,
+        )
+    ).json()
+    att_id = await _add_attachment(tk["id"])
+
+    my = (await client.get("/api/me/tasks", headers=szerv_headers)).json()
+    assert len(my) == 1
+    task = my[0]
+    assert tk["ticket_no"] in task["title"]
+    assert "Reggel óta hideg a víz." in task["description"]
+    assert "SÜRGŐS" in task["description"]
+    assert task["worksheet_serial"].startswith("KSZ-")
+    assert task["worksheet_completed"] is False
+    assert task["asset"]["barcode"] == "GEP-TASK"
+    assert task["ticket_images"] == [att_id]
+
+    # a képet a feladat gazdája szerviz-jogosultság nélkül is eléri
+    img = await client.get(
+        f"/api/me/tasks/{task['id']}/ticket-image/{att_id}", headers=szerv_headers
+    )
+    assert img.status_code == 200
+    assert img.headers["content-type"].startswith("image/png")
+    assert img.content == b"\x89PNG-teszt"
+
+    # idegen dolgozó nem éri el sem a feladatot, sem a képet
+    _, other_headers, _ = await _make_assignee("masik@example.com", role="employee")
+    assert (await client.get("/api/me/tasks", headers=other_headers)).json() == []
+    denied = await client.get(
+        f"/api/me/tasks/{task['id']}/ticket-image/{att_id}", headers=other_headers
+    )
+    assert denied.status_code == 404
+
+
+async def test_reassignment_moves_task(client, manager):
+    """Átosztáskor nem duplikálódik a feladat — az új felelőshöz vándorol."""
+    _, mgr = manager
+    first_user, first_headers, _ = await _make_assignee("elso@example.com")
+    second_user, second_headers, _ = await _make_assignee(
+        "masodik@example.com", role="manager"
+    )
+
+    tk = (
+        await client.post(
+            "/api/service",
+            json={"title": "Szivárgó szelep",
+                  "assigned_to_user_id": str(first_user.id)},
+            headers=mgr,
+        )
+    ).json()
+    assert len((await client.get("/api/me/tasks", headers=first_headers)).json()) == 1
+
+    res = await client.patch(
+        f"/api/service/{tk['id']}",
+        json={"assigned_to_user_id": str(second_user.id)},
+        headers=mgr,
+    )
+    assert res.status_code == 200
+    assert (await client.get("/api/me/tasks", headers=first_headers)).json() == []
+    moved = (await client.get("/api/me/tasks", headers=second_headers)).json()
+    assert len(moved) == 1 and tk["ticket_no"] in moved[0]["title"]
+
+
+async def test_assignee_without_employee_record(client, manager, admin):
+    """Ha a felelősnek nincs dolgozói törzsadata (pl. tiszta admin-fiók),
+    a jegy létrejön, feladat viszont nem — és nincs hiba sem."""
+    _, mgr = manager
+    adm_user, _adm = admin
+
+    res = await client.post(
+        "/api/service",
+        json={"title": "Adminra osztott jegy",
+              "assigned_to_user_id": str(adm_user.id)},
+        headers=mgr,
+    )
+    assert res.status_code == 201
+    listed = (await client.get("/api/tasks", headers=mgr)).json()
+    assert all("Adminra osztott" not in t["title"] for t in listed)

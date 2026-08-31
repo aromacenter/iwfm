@@ -306,6 +306,13 @@ class Task(Base):
     required_skill_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("skills.id", ondelete="SET NULL"), nullable=True
     )
+    # Szervizjegyből kiosztott feladat: a jegy adatai (képekkel) a felelős
+    # Feladataim nézetében is elérhetők — szerviz-jogosultság nélkül is.
+    service_ticket_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("service_tickets.id", ondelete="SET NULL", name="fk_task_ticket"),
+        nullable=True,
+    )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True

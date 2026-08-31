@@ -115,6 +115,7 @@ class TaskOut(BaseModel):
     worksheet_external: bool = False  # külső szerviznek átadott gép munkalapja
     asset: dict | None = None  # a munkalaphoz kötött gép adatai (KSZ)
     ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
+    ticket_images: list[str] = []  # szervizjegyből jött feladat csatolt képei (id-k)
 
 
 MAX_SIGNATURE_BYTES = 300_000  # ~300KB data URL-enként
@@ -608,6 +609,26 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
         task_assets = {
             tid: by_id[aid] for tid, aid in ws_asset_ids.items() if aid in by_id
         }
+    # Szervizjegyből kiosztott feladatoknál a jegy képei is átjönnek — a
+    # kolléga jogosultság nélkül is látja őket a saját feladat-nézetében.
+    ticket_imgs: dict[uuid.UUID, list[str]] = {}
+    ticket_map = {t.id: t.service_ticket_id for t in tasks if t.service_ticket_id}
+    if ticket_map:
+        from app.models import TicketAttachment
+
+        att_rows = (
+            await db.execute(
+                select(TicketAttachment.id, TicketAttachment.ticket_id)
+                .where(TicketAttachment.ticket_id.in_(set(ticket_map.values())))
+                .order_by(TicketAttachment.created_at)
+            )
+        ).all()
+        by_ticket: dict[uuid.UUID, list[str]] = {}
+        for aid, tkid in att_rows:
+            by_ticket.setdefault(tkid, []).append(str(aid))
+        ticket_imgs = {
+            tid: by_ticket.get(tkid, []) for tid, tkid in ticket_map.items()
+        }
     return [
         TaskOut(
             id=str(t.id),
@@ -628,6 +649,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             worksheet_completed=worksheet_done.get(t.id, False),
             worksheet_external=worksheet_external.get(t.id, False),
             asset=task_assets.get(t.id),
+            ticket_images=ticket_imgs.get(t.id, []),
         )
         for t in tasks
     ]
@@ -1293,6 +1315,37 @@ async def _own_task_or_404(db: AsyncSession, emp: Employee, task_id: str) -> Tas
     if task.employee_id != emp.id:  # idegen feladat: nem látható, 404
         raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
     return task
+
+
+@me_router.get("/{task_id}/ticket-image/{attachment_id}")
+async def my_ticket_image(
+    task_id: str,
+    attachment_id: str,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+):
+    """Szervizjegyből kiosztott feladat csatolt képe — csak a feladat gazdája
+    éri el, szerviz-jogosultság nélkül is (ezért nem a /api/service útvonalon)."""
+    task = await _own_task_or_404(db, emp, task_id)
+    if task.service_ticket_id is None:
+        raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
+    from app.models import TicketAttachment
+
+    try:
+        aid = uuid.UUID(attachment_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
+    att = (
+        await db.execute(
+            select(TicketAttachment).where(
+                TicketAttachment.id == aid,
+                TicketAttachment.ticket_id == task.service_ticket_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if att is None:
+        raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
+    return Response(content=att.data, media_type=att.mime)
 
 
 @me_router.post("/{task_id}/comment", response_model=TaskOut)

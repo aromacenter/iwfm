@@ -423,6 +423,7 @@ async def create_ticket(
     )
     db.add(tk)
     await db.flush()
+    await _sync_assignee_task(db, tk, actor)
     await record_audit(
         db, actor=actor, action="service.create", entity_type="service_ticket",
         entity_id=tk.ticket_no, detail={"title": body.title}, request=request,
@@ -443,6 +444,69 @@ async def create_ticket(
     })
     await _notify_ticket_assignee(db, tk)
     return _out(tk)
+
+
+async def _sync_assignee_task(db: AsyncSession, tk: ServiceTicket, actor: User) -> None:
+    """A felelősnek dedikált feladat (+munkalap) a jegyből: a kijelölt kolléga
+    a Feladataim nézetben látja a jegy minden adatát és képét — akkor is, ha
+    a Szerviz menühöz nincs jogosultsága. Átosztásnál a feladat is átszáll."""
+    if tk.assigned_to_user_id is None:
+        return
+    from datetime import date as _date
+
+    from app.models import Employee, Task, Worksheet
+
+    emp = (
+        await db.execute(
+            select(Employee).where(Employee.user_id == tk.assigned_to_user_id)
+        )
+    ).scalar_one_or_none()
+    if emp is None:
+        return  # nincs dolgozói törzsadata (pl. tiszta admin-fiók)
+    existing = (
+        await db.execute(select(Task).where(Task.service_ticket_id == tk.id))
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.employee_id != emp.id:
+            existing.employee_id = emp.id
+            if existing.status == "done":
+                existing.status = "open"
+        return
+    parts = [tk.description or ""]
+    extra = []
+    if tk.asset_label:
+        extra.append(f"Gép: {tk.asset_label}")
+    if tk.partner_label:
+        extra.append(f"Partner: {tk.partner_label}")
+    if tk.priority == "high":
+        extra.append("⚠️ SÜRGŐS")
+    if extra:
+        parts.append("\n".join(extra))
+    task = Task(
+        title=f"🔧 {tk.ticket_no} — {tk.title}"[:256],
+        description="\n\n".join(p for p in parts if p).strip() or None,
+        employee_id=emp.id,
+        due_date=_date.today(),
+        status="open",
+        created_by=actor.id,
+        service_ticket_id=tk.id,
+    )
+    db.add(task)
+    await db.flush()
+    # a munkalap is azonnal kiáll a jegy gépével — a kolléga csak kitölti
+    assignee = (
+        await db.execute(select(User).where(User.id == tk.assigned_to_user_id))
+    ).scalar_one_or_none()
+    external = bool(assignee and assignee.role == "szervizes")
+    from app.api.tasks import _next_worksheet_serial
+
+    db.add(Worksheet(
+        task_id=task.id,
+        serial=await _next_worksheet_serial(db, external=external),
+        external_service=external,
+        asset_id=tk.asset_id,
+        work_description="",
+    ))
 
 
 async def _notify_ticket_assignee(db: AsyncSession, tk: ServiceTicket) -> None:
@@ -526,6 +590,7 @@ async def update_ticket(
         tk.status = body.status
         tk.resolved_at = datetime.now(UTC) if body.status in ("done", "cancelled") else None
 
+    await _sync_assignee_task(db, tk, actor)
     await record_audit(
         db, actor=actor, action="service.update", entity_type="service_ticket",
         entity_id=tk.ticket_no, request=request,
