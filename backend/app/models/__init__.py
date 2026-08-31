@@ -9,6 +9,7 @@ from app.models.models import (  # noqa: F401
     Base,
     BillingoSettings,
     CalendarOverride,
+    CashbookSettings,
     DeliveryNote,
     DeliveryNoteLine,
     EmailSettings,

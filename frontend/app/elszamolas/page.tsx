@@ -73,6 +73,8 @@ interface Settlement {
   paid_amount: number | null;
   previous_at: string | null;
   created_at: string;
+  cashbook_status: string | null; // sent | paid_sent | error
+  cashbook_sent_at: string | null;
 }
 
 interface PartnerPrice {
@@ -914,6 +916,28 @@ export default function ElszamolasPage() {
     try {
       const res = await api.post<Settlement>(`/api/settlements/${s.id}/invoice`);
       toast(t("cons.invoiceOk", { mode: res.billingo_status ?? "?" }), "success");
+      loadHistory();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  // CashBook modul-kapcsoló: csak akkor látszik a 📚 gomb, ha a licenc engedi
+  const [cashbookOn, setCashbookOn] = useState(false);
+  useEffect(() => {
+    api
+      .get<{ modules: string[] | null }>("/api/settings/license/status")
+      .then((s) => setCashbookOn(s.modules === null || s.modules.includes("cashbook")))
+      .catch(() => {});
+  }, []);
+
+  async function pushCashbook(s: Settlement) {
+    try {
+      const res = await api.post<Settlement>(`/api/settlements/${s.id}/cashbook`);
+      toast(
+        t(res.cashbook_status === "paid_sent" ? "cons.cashbookPaidSent" : "cons.cashbookSent"),
+        "success",
+      );
       loadHistory();
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -2066,6 +2090,25 @@ export default function ElszamolasPage() {
                     >
                       ✉{s.receipt_sent_at ? "✓" : ""}
                     </button>
+                    {cashbookOn && !s.no_vat && (
+                      <button
+                        onClick={() => pushCashbook(s)}
+                        title={
+                          s.cashbook_sent_at
+                            ? t("cons.cashbookSentAt", { at: fmt(s.cashbook_sent_at) })
+                            : t("cons.cashbookBtn")
+                        }
+                        className={`rounded border px-2 py-1 text-sm leading-none hover:bg-slate-100 ${
+                          s.cashbook_status === "error"
+                            ? "border-rose-300 text-rose-700"
+                            : s.cashbook_sent_at
+                              ? "border-emerald-300 text-emerald-700"
+                              : "border-slate-300"
+                        }`}
+                      >
+                        📚{s.cashbook_status === "error" ? "!" : s.cashbook_sent_at ? "✓" : ""}
+                      </button>
+                    )}
                     {s.no_vat ? (
                       <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
                         {t("cons.noVatBadge")}

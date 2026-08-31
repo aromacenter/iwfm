@@ -8,6 +8,7 @@ Az elszámolás (settlements.py-ben) a fizikai leltár alapján számolja a fogy
 
 from __future__ import annotations
 
+import logging
 import math
 import uuid
 from datetime import UTC, date, datetime, timedelta
@@ -26,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_perm
 from app.db import get_db
+from app.services.wfm import license as license_service
 from app.models import (
     Asset,
     AssetMovement,
@@ -40,6 +42,8 @@ from app.models import (
     StockMovement,
     User,
 )
+
+logger = logging.getLogger(__name__)
 
 products_router = APIRouter()  # /api/products
 stock_router = APIRouter()  # /api/partners (kiegészíti az inventory partner-útvonalait)
@@ -1074,6 +1078,8 @@ class SettlementOut(BaseModel):
     previous_at: datetime | None = None  # a partner ELŐZŐ elszámolása (időszak-kezdet)
     note: str | None
     created_at: datetime
+    cashbook_status: str | None = None  # sent | paid_sent | error
+    cashbook_sent_at: datetime | None = None
     lines: list[SettlementLineOut] | None = None
     machines: list[SettlementMachineOut] | None = None
 
@@ -1121,6 +1127,8 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         paid_amount=s.paid_amount,
         note=s.note,
         created_at=s.created_at,
+        cashbook_status=s.cashbook_status,
+        cashbook_sent_at=s.cashbook_sent_at,
     )
 
 
@@ -2539,6 +2547,72 @@ async def list_receivables(
     return out
 
 
+async def _cashbook_autopush(db: AsyncSession, s: Settlement) -> None:
+    """Best-effort feladás a CashBooknak (számla-kiállításkor és fizetéskor).
+    Hiba esetén csak a státusz jelzi — a fő folyamatot sosem akasztja meg."""
+    from app.services.wfm.cashbook_service import get_or_create_settings, send_settlement
+
+    try:
+        modules = license_service.effective_modules(await license_service.get_license_row(db))
+        if modules is not None and "cashbook" not in modules:
+            return
+        settings = await get_or_create_settings(db)
+        if not settings.enabled or not settings.api_key_encrypted:
+            return
+        pool_hash, status = await send_settlement(db, s)
+        s.cashbook_hash = pool_hash or s.cashbook_hash
+        s.cashbook_status = status
+        s.cashbook_sent_at = datetime.now(UTC)
+        await db.commit()
+    except Exception:
+        logger.warning("CashBook autopush hiba (settlement %s)", s.id, exc_info=True)
+        try:
+            s.cashbook_status = "error"
+            await db.commit()
+        except Exception:
+            pass
+
+
+@settlements_router.post(
+    "/{settlement_id}/cashbook", response_model=SettlementOut,
+    dependencies=[Depends(license_service.require_module("cashbook"))],
+)
+async def push_settlement_to_cashbook(
+    settlement_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    """Kézi feladás/újraküldés a CashBooknak — fizetett számlánál a
+    kiegyenlítés-blokkal együtt megy az XML."""
+    from app.services.wfm.cashbook_service import send_settlement
+
+    s = await _get_settlement_or_404(db, settlement_id)
+    try:
+        pool_hash, status = await send_settlement(db, s)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "cashbook_no_items":
+            raise HTTPException(status_code=422, detail={"code": "settlement.no_items"})
+        raise HTTPException(status_code=422, detail={"code": "settings.cashbook_not_configured"})
+    except Exception:
+        s.cashbook_status = "error"
+        await db.commit()
+        raise HTTPException(status_code=502, detail={"code": "settlement.cashbook_failed"})
+    s.cashbook_hash = pool_hash or s.cashbook_hash
+    s.cashbook_status = status
+    s.cashbook_sent_at = datetime.now(UTC)
+    partner_name = (
+        await db.execute(select(Partner.name).where(Partner.id == s.partner_id))
+    ).scalar_one_or_none()
+    await record_audit(
+        db, actor=actor, action="settlement.cashbook_push", entity_type="settlement",
+        entity_id=str(s.id), detail={"status": status}, request=request,
+    )
+    await db.commit()
+    return _settlement_out(s, partner_name)
+
+
 @settlements_router.post("/{settlement_id}/mark-paid", response_model=SettlementOut)
 async def mark_settlement_paid(
     settlement_id: str,
@@ -2562,6 +2636,7 @@ async def mark_settlement_paid(
         entity_id=str(s.id), request=request,
     )
     await db.commit()
+    await _cashbook_autopush(db, s)  # kiegyenlítés feladása (best-effort)
     return _settlement_out(s, partner_name)
 
 
@@ -2597,6 +2672,7 @@ async def sync_settlement_payment(
             entity_id=str(s.id), detail={"billingo_status": status}, request=request,
         )
         await db.commit()
+        await _cashbook_autopush(db, s)  # kiegyenlítés feladása (best-effort)
     return {"billingo_payment_status": status, "payment_status": s.payment_status}
 
 
@@ -2685,6 +2761,7 @@ async def invoice_settlement(
         entity_id=str(s.id), detail={"billingo_id": document_id, "mode": mode}, request=request,
     )
     await db.commit()
+    await _cashbook_autopush(db, s)  # könyvelési feladás (best-effort)
     return _settlement_out(s, partner.name)
 
 

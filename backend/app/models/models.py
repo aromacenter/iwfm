@@ -1022,6 +1022,31 @@ class BillingoSettings(Base):
     )
 
 
+class CashbookSettings(Base):
+    """CashBook könyvelési feladás — egyetlen sor (id=1). A Bearer API-kulcs
+    Fernet-titkosítva; test_mode=True esetén a sandbox (cashbook.io) kapja az
+    adatokat, élesben a cashbook.hu. A szállító (számlakibocsájtó) adatai a
+    kimenő OSA-XML supplierInfo blokkjába kerülnek."""
+
+    __tablename__ = "cashbook_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    supplier_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    supplier_tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)  # 12345678-2-42
+    supplier_zip: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    supplier_city: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    supplier_street: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Kifizetés-helyek főkönyvi számai a kiegyenlítés-blokkhoz.
+    ledger_cash: Mapped[str] = mapped_column(String(50), nullable=False, default="381")
+    ledger_bank: Mapped[str] = mapped_column(String(50), nullable=False, default="384")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class ProductPriceLog(Base):
     """Termék-árváltozások naplója: mikor mennyi volt az eladási (adag-) és a
     beszerzési ár — visszakereshető, évek alatt statisztika lesz belőle."""
@@ -1195,6 +1220,11 @@ class Settlement(Base):
     # Az aláíráshoz KÖTELEZŐEN begépelt név (ki írta alá a partnernél).
     signer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     receipt_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # CashBook könyvelési feladás állapota: a beküldéskor kapott hash + mikor.
+    # status: sent (számla feladva) | paid_sent (kiegyenlítéssel újraküldve) | error
+    cashbook_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cashbook_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    cashbook_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Tartozás-görgetés: a partner nyitott egyenlege az elszámolás ELŐTT
     # (pillanatkép) + a helyszínen ténylegesen fizetett összeg (bruttó Ft).
     # paid_amount=None → "nem rögzített" = a saját bruttója rendezettnek számít

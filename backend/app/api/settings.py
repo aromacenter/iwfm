@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import delete, select
@@ -606,6 +607,120 @@ async def update_billingo_settings(
     )
     await db.commit()
     return _billingo_out(row)
+
+
+# ─── CashBook könyvelési feladás ────────────────────────────────────────────
+
+
+class CashbookSettingsBody(BaseModel):
+    enabled: bool = False
+    api_key: str | None = Field(default=None, max_length=256)  # üres: marad; "-": törlés
+    test_mode: bool = True  # True: sandbox (cashbook.io), False: éles (cashbook.hu)
+    supplier_name: str | None = Field(default=None, max_length=256)
+    supplier_tax_number: str | None = Field(default=None, max_length=32)
+    supplier_zip: str | None = Field(default=None, max_length=16)
+    supplier_city: str | None = Field(default=None, max_length=128)
+    supplier_street: str | None = Field(default=None, max_length=256)
+    ledger_cash: str = Field(default="381", max_length=50)
+    ledger_bank: str = Field(default="384", max_length=50)
+
+
+class CashbookSettingsOut(BaseModel):
+    enabled: bool
+    has_api_key: bool
+    test_mode: bool
+    supplier_name: str | None
+    supplier_tax_number: str | None
+    supplier_zip: str | None
+    supplier_city: str | None
+    supplier_street: str | None
+    ledger_cash: str
+    ledger_bank: str
+
+
+def _cashbook_out(row) -> CashbookSettingsOut:
+    return CashbookSettingsOut(
+        enabled=row.enabled,
+        has_api_key=row.api_key_encrypted is not None,
+        test_mode=row.test_mode,
+        supplier_name=row.supplier_name,
+        supplier_tax_number=row.supplier_tax_number,
+        supplier_zip=row.supplier_zip,
+        supplier_city=row.supplier_city,
+        supplier_street=row.supplier_street,
+        ledger_cash=row.ledger_cash,
+        ledger_bank=row.ledger_bank,
+    )
+
+
+@router.get(
+    "/cashbook", response_model=CashbookSettingsOut,
+    dependencies=[Depends(license_service.require_module("cashbook"))],
+)
+async def get_cashbook_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    from app.services.wfm.cashbook_service import get_or_create_settings
+
+    return _cashbook_out(await get_or_create_settings(db))
+
+
+@router.put(
+    "/cashbook", response_model=CashbookSettingsOut,
+    dependencies=[Depends(license_service.require_module("cashbook"))],
+)
+async def update_cashbook_settings(
+    body: CashbookSettingsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    from app.services.wfm.cashbook_service import get_or_create_settings
+
+    row = await get_or_create_settings(db)
+    row.enabled = body.enabled
+    row.test_mode = body.test_mode
+    if body.api_key:  # üres = nem változik; "-" = törlés
+        row.api_key_encrypted = (
+            None if body.api_key.strip() == "-" else encrypt_pii(body.api_key.strip())
+        )
+    row.supplier_name = (body.supplier_name or "").strip() or None
+    row.supplier_tax_number = (body.supplier_tax_number or "").strip() or None
+    row.supplier_zip = (body.supplier_zip or "").strip() or None
+    row.supplier_city = (body.supplier_city or "").strip() or None
+    row.supplier_street = (body.supplier_street or "").strip() or None
+    row.ledger_cash = body.ledger_cash.strip() or "381"
+    row.ledger_bank = body.ledger_bank.strip() or "384"
+    await record_audit(
+        db, actor=actor, action="settings.cashbook_update", entity_type="settings",
+        entity_id="cashbook", detail={"test_mode": body.test_mode}, request=request,
+    )
+    await db.commit()
+    return _cashbook_out(row)
+
+
+@router.post(
+    "/cashbook/test",
+    dependencies=[Depends(license_service.require_module("cashbook"))],
+)
+async def test_cashbook(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    from app.services.wfm.cashbook_service import test_connection
+
+    try:
+        return await test_connection(db)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settings.cashbook_not_configured"})
+    except httpx.HTTPStatusError as exc:
+        detail = {"code": "settings.cashbook_test_failed"}
+        if exc.response.status_code == 403:
+            detail = {"code": "settings.cashbook_not_default_user"}
+        raise HTTPException(status_code=502, detail=detail)
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "settings.cashbook_test_failed"})
 
 
 # ─── GLS (MyGLS) csomagfeladás ──────────────────────────────────────────────

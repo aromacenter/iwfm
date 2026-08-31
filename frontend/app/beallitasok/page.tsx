@@ -58,6 +58,7 @@ const SETTINGS_TABS = [
   ["worksheet", "🧾"],
   ["printer", "🖨️"],
   ["billing", "💳"],
+  ["cashbook", "📚"],
   ["gls", "📦"],
   ["mpl", "📮"],
   ["foxpost", "🦊"],
@@ -75,6 +76,7 @@ const SETTINGS_TABS = [
 // beállítás-fül → kapcsolható modul (kikapcsolva a fül eltűnik)
 const TAB_MODULE: Record<string, string> = {
   billing: "billing",
+  cashbook: "cashbook",
   gls: "gls",
   mpl: "mpl",
   foxpost: "foxpost",
@@ -89,7 +91,7 @@ const TAB_MODULE: Record<string, string> = {
 const TAB_GROUPS: { labelKey: string; tabs: string[] }[] = [
   { labelKey: "company", tabs: ["worksheet", "printer"] },
   { labelKey: "couriers", tabs: ["gls", "mpl", "foxpost", "dpd"] },
-  { labelKey: "finance", tabs: ["billing"] },
+  { labelKey: "finance", tabs: ["billing", "cashbook"] },
   { labelKey: "comms", tabs: ["email", "notifications"] },
   { labelKey: "customer", tabs: ["support", "ai"] },
   { labelKey: "team", tabs: ["skills", "permissions"] },
@@ -475,6 +477,17 @@ export default function BeallitasokPage() {
   const [billingoPcHasKey, setBillingoPcHasKey] = useState(false);
   const [szamlazzHasKey, setSzamlazzHasKey] = useState(false);
   const [szamlazzPcHasKey, setSzamlazzPcHasKey] = useState(false);
+
+  // --- CashBook könyvelési feladás ---
+  const [cashbook, setCashbook] = useState({
+    enabled: false, api_key: "", test_mode: true,
+    supplier_name: "", supplier_tax_number: "",
+    supplier_zip: "", supplier_city: "", supplier_street: "",
+    ledger_cash: "381", ledger_bank: "384",
+  });
+  const [cashbookHasKey, setCashbookHasKey] = useState(false);
+  const [cashbookMsg, setCashbookMsg] = useState<string | null>(null);
+  const [cashbookBusy, setCashbookBusy] = useState(false);
   const [wipeCounts, setWipeCounts] = useState<Record<string, number> | null>(null);
   const [wipeBusy, setWipeBusy] = useState(false);
   const [billingoMsg, setBillingoMsg] = useState<string | null>(null);
@@ -580,6 +593,29 @@ export default function BeallitasokPage() {
         setSzamlazzPcHasKey(s.pc_has_szamlazz_key);
       })
       .catch(() => {});
+    api
+      .get<{
+        enabled: boolean; has_api_key: boolean; test_mode: boolean;
+        supplier_name: string | null; supplier_tax_number: string | null;
+        supplier_zip: string | null; supplier_city: string | null;
+        supplier_street: string | null; ledger_cash: string; ledger_bank: string;
+      }>("/api/settings/cashbook")
+      .then((s) => {
+        setCashbook({
+          enabled: s.enabled,
+          api_key: "",
+          test_mode: s.test_mode,
+          supplier_name: s.supplier_name ?? "",
+          supplier_tax_number: s.supplier_tax_number ?? "",
+          supplier_zip: s.supplier_zip ?? "",
+          supplier_city: s.supplier_city ?? "",
+          supplier_street: s.supplier_street ?? "",
+          ledger_cash: s.ledger_cash,
+          ledger_bank: s.ledger_bank,
+        });
+        setCashbookHasKey(s.has_api_key);
+      })
+      .catch(() => {}); // modul kikapcsolva → a fül sem látszik
     api
       .get<{ knowledge_base: string | null; auto_kb: boolean }>("/api/settings/support")
       .then((s) => {
@@ -746,6 +782,49 @@ export default function BeallitasokPage() {
       toast(errorMessage(err), "error");
     } finally {
       setKbBusy(false);
+    }
+  }
+
+  async function saveCashbook(e: React.FormEvent) {
+    e.preventDefault();
+    setCashbookBusy(true);
+    setCashbookMsg(null);
+    try {
+      await api.put("/api/settings/cashbook", {
+        enabled: cashbook.enabled,
+        api_key: cashbook.api_key || null,
+        test_mode: cashbook.test_mode,
+        supplier_name: cashbook.supplier_name || null,
+        supplier_tax_number: cashbook.supplier_tax_number || null,
+        supplier_zip: cashbook.supplier_zip || null,
+        supplier_city: cashbook.supplier_city || null,
+        supplier_street: cashbook.supplier_street || null,
+        ledger_cash: cashbook.ledger_cash || "381",
+        ledger_bank: cashbook.ledger_bank || "384",
+      });
+      setCashbookMsg(t("common.saved"));
+      setCashbook((s) => ({ ...s, api_key: "" }));
+      if (cashbook.api_key && cashbook.api_key.trim() !== "-") setCashbookHasKey(true);
+      if (cashbook.api_key.trim() === "-") setCashbookHasKey(false);
+    } catch (err) {
+      setCashbookMsg(errorMessage(err));
+    } finally {
+      setCashbookBusy(false);
+    }
+  }
+
+  async function testCashbook() {
+    setCashbookBusy(true);
+    setCashbookMsg(null);
+    try {
+      const res = await api.post<{ ok: boolean; response: string }>(
+        "/api/settings/cashbook/test", {},
+      );
+      setCashbookMsg(`✅ ${t("settings.cashbookTestOk")} ${res.response}`);
+    } catch (err) {
+      setCashbookMsg(errorMessage(err));
+    } finally {
+      setCashbookBusy(false);
     }
   }
 
@@ -1813,6 +1892,90 @@ export default function BeallitasokPage() {
                 </button>
               </>
             )}
+          </div>
+        </form>
+
+        {/* CashBook könyvelési feladás */}
+        <form
+          onSubmit={saveCashbook}
+          className={cardCls("cashbook", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
+        >
+          <h2 className="font-semibold">📚 {t("settings.cashbookTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.cashbookHint")}</p>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={cashbook.enabled}
+              onChange={(e) => setCashbook({ ...cashbook, enabled: e.target.checked })}
+              className="h-4 w-4"
+            />
+            {t("settings.cashbookEnabled")}
+          </label>
+          <label className="block text-sm">
+            {t("settings.cashbookApiKey")} {cashbookHasKey && <span className="text-emerald-600">✓</span>}
+            <input
+              type="password"
+              value={cashbook.api_key}
+              onChange={(e) => setCashbook({ ...cashbook, api_key: e.target.value })}
+              placeholder={cashbookHasKey ? "••••••••" : ""}
+              className={inputCls}
+            />
+            <span className="mt-0.5 block text-xs text-slate-400">{t("settings.cashbookKeyHint")}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cashbook.test_mode}
+              onChange={(e) => setCashbook({ ...cashbook, test_mode: e.target.checked })}
+              className="h-4 w-4"
+            />
+            {t("settings.cashbookTestMode")}
+          </label>
+          <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
+            <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("settings.cashbookSupplier")}</legend>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                {t("settings.cashbookSupplierName")}
+                <input value={cashbook.supplier_name} onChange={(e) => setCashbook({ ...cashbook, supplier_name: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("settings.cashbookSupplierTax")}
+                <input value={cashbook.supplier_tax_number} onChange={(e) => setCashbook({ ...cashbook, supplier_tax_number: e.target.value })} placeholder="12345678-2-42" className={inputCls} />
+              </label>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="block text-sm">
+                {t("settings.cashbookZip")}
+                <input value={cashbook.supplier_zip} onChange={(e) => setCashbook({ ...cashbook, supplier_zip: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("settings.cashbookCity")}
+                <input value={cashbook.supplier_city} onChange={(e) => setCashbook({ ...cashbook, supplier_city: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("settings.cashbookStreet")}
+                <input value={cashbook.supplier_street} onChange={(e) => setCashbook({ ...cashbook, supplier_street: e.target.value })} className={inputCls} />
+              </label>
+            </div>
+          </fieldset>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              {t("settings.cashbookLedgerCash")}
+              <input value={cashbook.ledger_cash} onChange={(e) => setCashbook({ ...cashbook, ledger_cash: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              {t("settings.cashbookLedgerBank")}
+              <input value={cashbook.ledger_bank} onChange={(e) => setCashbook({ ...cashbook, ledger_bank: e.target.value })} className={inputCls} />
+            </label>
+          </div>
+          {cashbookMsg && <p className="whitespace-pre-wrap text-sm text-slate-600">{cashbookMsg}</p>}
+          <div className="flex gap-2">
+            <button disabled={cashbookBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {cashbookBusy ? t("common.saving") : t("common.save")}
+            </button>
+            <button type="button" onClick={testCashbook} disabled={cashbookBusy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">
+              {t("settings.cashbookTest")}
+            </button>
           </div>
         </form>
 
