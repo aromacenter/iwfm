@@ -45,6 +45,9 @@ interface Intake {
   received_by_name: string | null;
   received_at: string;
   photo_count: number;
+  task_id: string | null;
+  worksheet_serial: string | null;
+  worksheet_completed: boolean;
 }
 
 const EMPTY_FORM = {
@@ -421,12 +424,35 @@ export default function AtvetelPage() {
                 >
                   🖨️ {t("intake.officePrint")}
                 </button>
-                {canTasks && (
+                {/* Már kiadott munkalap: nem adható ki még egyszer — helyette a
+                    kész munkalap / aláírt átadási papír nyitható meg. */}
+                {canTasks && !row.task_id && (
                   <button
                     onClick={() => router.push(`/feladatok?intake=${row.id}`)}
                     className="rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50"
                   >
                     📝 {t("intake.worksheet")}
+                  </button>
+                )}
+                {canTasks && row.task_id && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await printFile(
+                          `/api/tasks/${row.task_id}/worksheet/pdf?variant=customer`,
+                        );
+                      } catch (err) {
+                        toast(errorMessage(err), "error");
+                      }
+                    }}
+                    title={t("intake.handoverPaperHint", { serial: row.worksheet_serial ?? "" })}
+                    className={`rounded-lg border px-3 py-1.5 text-sm ${
+                      row.worksheet_completed
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                        : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    📄 {t("intake.handoverPaper")}{row.worksheet_completed ? " ✓" : ""}
                   </button>
                 )}
                 {canDelete && (

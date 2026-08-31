@@ -78,6 +78,11 @@ class IntakeOut(BaseModel):
     received_by_name: str | None
     received_at: datetime
     photo_count: int = 0
+    # Már kiadott munkalap: az átvétel-listán a "Munkalap" gomb helyett a kész
+    # munkalap (átadási papír) nyílik — nem adható ki még egyszer.
+    task_id: str | None = None
+    worksheet_serial: str | None = None
+    worksheet_completed: bool = False
 
 
 async def _next_serial(db: AsyncSession) -> str:
@@ -125,6 +130,21 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
                 )
             ).all()
         }
+    # Az átvételből már kiadott munkalap-feladatok (a legutóbbi számít)
+    tasks_by_intake: dict[uuid.UUID, tuple[uuid.UUID, str | None, bool]] = {}
+    if rows:
+        from app.models import Task, Worksheet
+
+        task_rows = (
+            await db.execute(
+                select(Task.id, Task.intake_id, Worksheet.serial, Worksheet.work_description)
+                .outerjoin(Worksheet, Worksheet.task_id == Task.id)
+                .where(Task.intake_id.in_([r.id for r in rows]))
+                .order_by(Task.created_at)
+            )
+        ).all()
+        for tid, iid, ws_serial, ws_desc in task_rows:
+            tasks_by_intake[iid] = (tid, ws_serial, bool((ws_desc or "").strip()))
     out = []
     for r in rows:
         a = assets.get(r.asset_id) if r.asset_id else None
@@ -148,6 +168,9 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
             received_by_name=r.received_by_name,
             received_at=r.received_at,
             photo_count=photo_counts.get(r.id, 0),
+            task_id=str(tasks_by_intake[r.id][0]) if r.id in tasks_by_intake else None,
+            worksheet_serial=tasks_by_intake[r.id][1] if r.id in tasks_by_intake else None,
+            worksheet_completed=tasks_by_intake[r.id][2] if r.id in tasks_by_intake else False,
         ))
     return out
 

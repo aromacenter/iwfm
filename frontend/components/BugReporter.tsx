@@ -377,14 +377,16 @@ export default function BugReporter() {
                   {b.resolution_note && (
                     <p className="mt-1 text-xs text-emerald-700">💬 {b.resolution_note}</p>
                   )}
-                  {b.status === "resolved" && reopeningId !== b.id && (
+                  {(b.status === "resolved" || b.status === "closed") && reopeningId !== b.id && (
                     <div className="mt-2 flex gap-2">
-                      <button
-                        onClick={() => retestOk(b.id)}
-                        className="flex-1 rounded-lg bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
-                      >
-                        ✔️ {t("bugs.retestOk")}
-                      </button>
+                      {b.status === "resolved" && (
+                        <button
+                          onClick={() => retestOk(b.id)}
+                          className="flex-1 rounded-lg bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                        >
+                          ✔️ {t("bugs.retestOk")}
+                        </button>
+                      )}
                       <button
                         onClick={() => { setReopeningId(b.id); setReopenNote(""); setReopenShot(null); }}
                         className="flex-1 rounded-lg bg-rose-600 px-2 py-1 text-xs font-semibold text-white hover:bg-rose-700"
@@ -393,7 +395,7 @@ export default function BugReporter() {
                       </button>
                     </div>
                   )}
-                  {b.status === "resolved" && reopeningId === b.id && (
+                  {(b.status === "resolved" || b.status === "closed") && reopeningId === b.id && (
                     <div className="mt-2 space-y-1.5 rounded-lg border border-rose-200 bg-rose-50 p-2">
                       <textarea
                         value={reopenNote}

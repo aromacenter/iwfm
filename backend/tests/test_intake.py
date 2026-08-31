@@ -137,3 +137,41 @@ async def test_customer_worksheet_pdf_still_builds_with_warranty(client, admin, 
         f"/api/tasks/{task_id}/worksheet/pdf?variant=customer", headers=mgr
     )
     assert res.status_code == 200 and res.content[:4] == b"%PDF"
+
+
+async def test_intake_task_link(client, manager):
+    """Atvetelbol kiadott munkalap: a kapcsolat tarolodik, az atvetel-lista
+    jelzi (task_id) — a felulet igy nem engedi ujra kiadni."""
+    from tests.conftest import make_employee_record, make_user
+    from tests.test_service import make_asset
+
+    _, mgr = manager
+    asset = await make_asset(client, mgr, barcode="AT-LINK-1")
+    intake = (
+        await client.post(
+            "/api/intakes",
+            json={"asset_id": asset["id"], "client_name": "Linkes Lajos",
+                  "faults": "csopog"},
+            headers=mgr,
+        )
+    ).json()
+    listed = (await client.get("/api/intakes", headers=mgr)).json()
+    row = next(r for r in listed if r["id"] == intake["id"])
+    assert row["task_id"] is None
+
+    emp_user, _h = await make_user(email="linkes@example.com", role="employee")
+    emp = await make_employee_record(emp_user)
+    task = (
+        await client.post(
+            "/api/tasks",
+            json={"title": "Javitas — csopogo gep", "employee_id": str(emp.id),
+                  "due_date": "2026-09-02", "external_service": True,
+                  "asset_id": asset["id"], "intake_id": intake["id"]},
+            headers=mgr,
+        )
+    ).json()
+    listed2 = (await client.get("/api/intakes", headers=mgr)).json()
+    row2 = next(r for r in listed2 if r["id"] == intake["id"])
+    assert row2["task_id"] == task["id"]
+    assert row2["worksheet_serial"] == task["worksheet_serial"]
+    assert row2["worksheet_completed"] is False

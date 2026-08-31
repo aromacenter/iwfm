@@ -113,9 +113,14 @@ export default function FeladatokPage() {
   // Átvételből érkező előtöltés (?intake=<id>): minden adat megvan az
   // elismervényből — cím, gép, hibaleírás — csak dolgozót és határidőt kell
   // választani.
+  // Az átvétel azonosítója, amiből a feladat készül — a mentéskor a
+  // kapcsolat is tárolódik (az átvétel-lista így tudja: már van munkalap).
+  const [intakeIdForTask, setIntakeIdForTask] = useState<string | null>(null);
+
   useEffect(() => {
     const intakeId = new URLSearchParams(window.location.search).get("intake");
     if (!intakeId) return;
+    setIntakeIdForTask(intakeId);
     api
       .get<{
         id: string; asset_id: string | null; asset_name: string | null;
@@ -232,9 +237,11 @@ export default function FeladatokPage() {
         client_location: form.client_location || null,
         external_service: externalService,
         asset_id: externalService && assetIdForTask ? assetIdForTask : null,
+        intake_id: intakeIdForTask,
       });
       setShowForm(false);
       setExternalService(false);
+      setIntakeIdForTask(null);
       setTaskAssetId("");
       setNewAssetMode(false);
       setNewAsset({ name: "", manufacturer: "", serial_number: "", partner_id: "" });

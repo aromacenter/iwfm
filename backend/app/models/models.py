@@ -313,6 +313,13 @@ class Task(Base):
         ForeignKey("service_tickets.id", ondelete="SET NULL", name="fk_task_ticket"),
         nullable=True,
     )
+    # Átvételből (elismervényből) kiadott munkalap-feladat — az átvétel-lista
+    # ebből tudja, hogy a géphez MÁR van munkalap (nem adható ki még egyszer).
+    intake_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("machine_intakes.id", ondelete="SET NULL", name="fk_task_intake"),
+        nullable=True,
+    )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True

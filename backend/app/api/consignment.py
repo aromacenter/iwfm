@@ -384,6 +384,7 @@ class StockOut(BaseModel):
     has_price_override: bool = False
     portions_available: int  # hány adag készíthető (lefelé kerekítve)
     min_quantity: float | None = None  # partnerenkénti riasztási küszöb (kg)
+    is_consignment: bool = True  # False: nem kávé — darabra megy, nem adagra
 
 
 class ReplenishBody(BaseModel):
@@ -441,6 +442,7 @@ def _stock_out(
         has_price_override=product.id in overrides,
         portions_available=int(math.floor(portions_from(stock.quantity, product.grams_per_portion))),
         min_quantity=stock.min_quantity,
+        is_consignment=product.is_consignment,
     )
 
 
@@ -780,9 +782,14 @@ async def settlement_context(
             product_name=product_names.get(a.default_product_id),
         ))
 
+    # A gép termék-tartaléka csak KÁVÉ (bizományos) lehet — a darabra menő
+    # egyéb termék (pl. tejszín) árát sosem húzhatja be a gép-sor.
     stock_pids = (
         await db.execute(
-            select(PartnerStock.product_id).where(PartnerStock.partner_id == partner.id)
+            select(PartnerStock.product_id)
+            .join(Product, Product.id == PartnerStock.product_id)
+            .where(PartnerStock.partner_id == partner.id,
+                   Product.is_consignment.is_(True))
         )
     ).scalars().all()
     single_pid = str(stock_pids[0]) if len(stock_pids) == 1 else None
@@ -1411,9 +1418,14 @@ async def create_settlement(
     machine_brewed: dict[uuid.UUID, float] = {}   # termék → lefőzött adag (kg-ellenőrzés)
     machine_amount: dict[uuid.UUID, float] = {}   # termék → nettó összeg (kedvezménnyel)
     if body.machines:
+        # A gép termék-tartaléka csak KÁVÉ (bizományos) lehet — a darabra menő
+        # egyéb termék (pl. tejszín) sosem lehet a gép adagára.
         stock_pids = (
             await db.execute(
-                select(PartnerStock.product_id).where(PartnerStock.partner_id == partner.id)
+                select(PartnerStock.product_id)
+                .join(Product, Product.id == PartnerStock.product_id)
+                .where(PartnerStock.partner_id == partner.id,
+                       Product.is_consignment.is_(True))
             )
         ).scalars().all()
         fallback_pid = stock_pids[0] if len(stock_pids) == 1 else None
@@ -1454,6 +1466,23 @@ async def create_settlement(
                     max(new_c - (asset.counters[i] or 0), 0)
                     for i, new_c in enumerate(m_in.new_counters)
                 ]
+            # ÖSSZESÍTŐ számláló: 0 Ft-os szerződéses adagár = a gép összes
+            # főzését számoló kontroll-számláló. A fogyásba NEM számít bele
+            # (dupla számolás lenne), csak ellenőrzésre való: a különbségének
+            # meg kell egyeznie a többi számláló összegével.
+            cps_early = (
+                asset.counter_prices if isinstance(asset.counter_prices, list) else None
+            )
+            control_idx: set[int] = set()
+            if per_counter_diffs is not None and cps_early:
+                control_idx = {
+                    i for i, p in enumerate(cps_early)
+                    if i < len(per_counter_diffs) and p == 0
+                }
+            if control_idx:
+                brewed = sum(
+                    d for i, d in enumerate(per_counter_diffs) if i not in control_idx
+                )
             billed = max(brewed - m_in.service_portions, 0)
             # Termék (erősorrend): kérésbeli felülírás → a gép beállítása →
             # a partner egyetlen készlet-terméke.
@@ -1495,6 +1524,7 @@ async def create_settlement(
                 weighted = sum(
                     diff * (cps[i] if i < len(cps) and cps[i] is not None else base_price)
                     for i, diff in enumerate(per_counter_diffs)
+                    if i not in control_idx  # az összesítő nem fogyás
                 )
                 unit_price = weighted / brewed
             if m_in.price_per_portion is not None:
@@ -1523,6 +1553,18 @@ async def create_settlement(
                 )
                 counters_detail = []
                 for i, diff in enumerate(per_counter_diffs):
+                    if i in control_idx:
+                        # összesítő (kontroll) sor: nem fogyás, 0 Ft
+                        counters_detail.append({
+                            "prev": prevs[i] or 0,
+                            "new": m_in.new_counters[i],
+                            "portions": diff,
+                            "price": 0.0,
+                            "amount": 0.0,
+                            "control": True,
+                            "control_ok": abs(diff - brewed) < 0.5,
+                        })
+                        continue
                     if m_in.price_per_portion is not None:
                         row_price = unit_price  # kézi felülírás minden számlálóra
                     elif cps and i < len(cps) and cps[i] is not None:
@@ -1565,6 +1607,8 @@ async def create_settlement(
             ):
                 grams = 0.0
                 for i, diff in enumerate(per_counter_diffs):
+                    if i in control_idx:
+                        continue  # összesítő számláló: nem fogyaszt, csak számol
                     n = norms[i] if i < len(norms) and norms[i] is not None else None
                     if n is None:
                         g_per_portion = product.grams_per_portion  # nincs norma → termék-alap
@@ -1617,10 +1661,16 @@ async def create_settlement(
                     "from": unit_price, "to": line_in.price_per_portion,
                 })
             unit_price = line_in.price_per_portion
-        if product.id in machine_billed:
+        if not product.is_consignment:
+            # NEM kávé (pl. tejszín): darabra megy — fogyás × egységár, az
+            # adag-logika és a gép-számlálók nem érintik.
+            portions = consumed
+            amount_net = _money(consumed * unit_price)
+            cross_portions: float | None = None
+        elif product.id in machine_billed:
             portions = machine_billed[product.id]
             amount_net = _money(machine_amount[product.id])
-            cross_portions: float | None = machine_brewed[product.id]
+            cross_portions = machine_brewed[product.id]
         elif line_in.counter_portions is not None:
             portions = line_in.counter_portions
             amount_net = _money(portions * unit_price)

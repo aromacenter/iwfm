@@ -602,3 +602,38 @@ async def test_agent_summary(client, manager):
     assert abs(summary["by_payment"]["cash"]["net"] - 5000.0) < 0.01
     assert summary["by_payment"]["card"]["count"] == 0
     assert abs(summary["total_gross"] - 6350.0) < 0.01  # 5000 * 1.27
+
+
+async def test_non_consignment_settles_per_piece(client, manager):
+    """Nem kave termek (pl. tejszin): darabra megy — fogyas × egysegar, es a
+    gep termek-tartaleka nem eshet ra (csak kave lehet)."""
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Darabos Bolt"}, headers=mgr)
+    ).json()
+    zott = await make_product(
+        client, mgr, name="Zott tejszin", price_per_portion=226.0,
+        unit="db", is_consignment=False,
+    )
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": zott["id"], "quantity": 3.0},
+        headers=mgr,
+    )
+    # a settlement-context single_product_id NEM lehet a darabos termek
+    ctx = (
+        await client.get(f"/api/partners/{partner['id']}/settlement-context", headers=mgr)
+    ).json()
+    assert ctx["single_product_id"] is None
+
+    # leltar: 3 db-bol 1 maradt → 2 db fogyas × 226 Ft = 452 Ft
+    res = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [{"product_id": zott["id"], "physical_qty": 1.0}]},
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    line = res.json()["lines"][0]
+    assert line["portions"] == 2  # darab, nem adag
+    assert abs(line["amount_net"] - 452) < 0.01

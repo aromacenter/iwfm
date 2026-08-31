@@ -71,6 +71,9 @@ class TaskCreateBody(BaseModel):
     # A munkalap tárgy-gépe: ebből jön a karbantartási díj alapértéke és az
     # aláírás utáni auto-számlázás partnere.
     asset_id: str | None = None
+    # Átvételből (elismervényből) kiadott munkalap — az átvétel-lista ebből
+    # tudja, hogy a géphez már van munkalap.
+    intake_id: str | None = None
 
 
 class TaskPatchBody(BaseModel):
@@ -737,12 +740,19 @@ async def create_task(
     if emp is None:
         raise HTTPException(status_code=422, detail={"code": "tasks.bad_employee"})
 
+    intake_uuid: uuid.UUID | None = None
+    if body.intake_id:
+        try:
+            intake_uuid = uuid.UUID(body.intake_id)
+        except ValueError:
+            intake_uuid = None
     task = Task(
         title=body.title.strip(),
         description=body.description,
         employee_id=emp_id,
         due_date=body.due_date,
         required_skill_id=body.required_skill_id,
+        intake_id=intake_uuid,
         created_by=actor.id,
     )
     db.add(task)

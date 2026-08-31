@@ -520,3 +520,43 @@ async def test_counters_detail_snapshot(client, manager):
     assert detail[0] == {"prev": 10, "new": 15, "portions": 5, "price": 200.0, "amount": 1000.0}
     assert detail[1] == {"prev": 20, "new": 40, "portions": 20, "price": 100.0, "amount": 2000.0}
     assert abs(m["amount_net"] - 3000) < 0.01
+
+
+async def test_totalizer_counter_excluded(client, manager):
+    """0 Ft-os szerzodeses aru szamlalo = OSSZESITO (kontroll): a fogyasba
+    nem szamit bele, a bontasban kontroll-sorkent jelenik meg."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = await _partner(client, mgr, "Kontroll Bolt")
+    product = await make_product(client, mgr, price_per_portion=100.0, grams_per_portion=7)
+    asset = await _machine(
+        client, mgr, partner, "GEP-CTRL", counter=0,
+        counter_count=3, counters=[0, 0, 0],
+        default_product_id=product["id"],
+        counter_prices=[0.0, 120.0, 120.0],  # 1. = osszesito
+    )
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 5.0},
+        headers=mgr,
+    )
+    # osszesito: 64; fogyasztok: 60 + 4 = 64 → lefozott 64 (NEM 128)
+    res = await client.post(
+        "/api/settlements",
+        json={
+            "partner_id": partner["id"],
+            "payment_method": "cash",
+            "lines": [{"product_id": product["id"], "physical_qty": 4.5}],
+            "machines": [{"asset_id": asset["id"], "new_counters": [64, 60, 4]}],
+        },
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    m = res.json()["machines"][0]
+    assert m["portions_billed"] == 64  # az osszesito nem duplaz
+    assert abs(m["amount_net"] - 64 * 120) < 0.01
+    detail = m["counters_detail"]
+    assert detail[0]["control"] is True and detail[0]["control_ok"] is True
+    assert detail[0]["portions"] == 64 and detail[0]["amount"] == 0.0
+    assert detail[1]["price"] == 120.0

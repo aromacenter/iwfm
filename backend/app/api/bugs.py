@@ -172,7 +172,8 @@ async def reopen(
     b = await _bug_or_404(db, bug_id)
     if b.reporter_id != actor.id and actor.role != "admin":
         raise HTTPException(status_code=403, detail={"code": "bugs.not_yours"})
-    if b.status != "resolved":
+    # lezárt (closed) jegy is újranyitható — "mégsem jó" eset
+    if b.status not in ("resolved", "closed"):
         raise HTTPException(status_code=422, detail={"code": "bugs.not_resolved"})
     b.status = "reopened"
     if body and body.note and body.note.strip():

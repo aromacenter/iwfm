@@ -183,3 +183,29 @@ async def test_reopen_with_note_and_screenshot(client, admin, manager):
     img = await client.get(f"/api/bugs/{bug['id']}/screenshot", headers=adm)
     assert img.status_code == 200
     assert img.content == b"\x89PNG second-image"
+
+
+async def test_reopen_from_closed(client, admin, manager):
+    """Lezart (closed) jegy is ujranyithato — 'megsem jo' eset."""
+    _, adm = admin
+    _, mgr = manager
+    bug = (
+        await client.post(
+            "/api/bugs",
+            json={"description": "Megse lett jo a javitas.", "severity": "minor",
+                  "page_url": "https://x/atvetel"},
+            headers=mgr,
+        )
+    ).json()
+    await client.patch(f"/api/bugs/{bug['id']}", json={"status": "resolved"}, headers=adm)
+    closed = await client.post(f"/api/bugs/{bug['id']}/retest-ok", headers=mgr)
+    assert closed.json()["status"] == "closed"
+
+    res = await client.post(
+        f"/api/bugs/{bug['id']}/reopen",
+        json={"note": "Megis rossz."},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "reopened"
+    assert "Megis rossz." in res.json()["description"]

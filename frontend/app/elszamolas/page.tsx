@@ -4,7 +4,7 @@
  *  fizikai leltár rögzítése → fogyás/összeg számítás → elszámolás mentése →
  *  „Kiszámlázott” gomb (Billingó). Az elszámoló a bejelentkezett user. */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
@@ -41,6 +41,7 @@ interface Stock {
   has_price_override: boolean;
   portions_available: number;
   min_quantity: number | null;
+  is_consignment: boolean; // false: nem kávé — darabra megy, nem adagra
 }
 
 interface Product {
@@ -553,9 +554,9 @@ export default function ElszamolasPage() {
       }
       const filled = newCounter !== null && Number.isFinite(newCounter);
       const belowPrev = filled && (newCounter as number) < m.prev_counter;
-      const brewed = filled ? Math.max((newCounter as number) - m.prev_counter, 0) : 0;
+      let brewed = filled ? Math.max((newCounter as number) - m.prev_counter, 0) : 0;
       const service = Number(inp?.service) || 0;
-      const billed = Math.max(brewed - service, 0);
+      let billed = Math.max(brewed - service, 0);
       const pid = machineProducts[m.asset_id] || m.default_product_id || ctx.single_product_id;
       const stockRow = pid ? stockRows.find((x) => x.product_id === pid) : undefined;
       const autoPrice = stockRow
@@ -564,23 +565,38 @@ export default function ElszamolasPage() {
       const manual = machinePrices[m.asset_id] ?? "";
       // Számlálónkénti bontás (több számlálós gép): előző állás → új állás,
       // számlálónkénti szerződéses árral — "mintha külön gépek lennének".
+      // 0 Ft-os szerződéses ár = ÖSSZESÍTŐ (kontroll) számláló: a fogyásba
+      // nem számít bele, csak ellenőrzésre való.
       const detail =
         m.counter_count > 1 && inp
           ? inp.newCounters.map((v, i) => {
               const prev = m.counters?.[i] ?? 0;
               const nv = v === "" ? null : Number(v);
               const diff = nv !== null ? Math.max(nv - prev, 0) : 0;
-              const rowPrice =
-                manual !== ""
+              const control = m.counter_prices?.[i] === 0;
+              const rowPrice = control
+                ? 0
+                : manual !== ""
                   ? Number(manual)
                   : m.counter_prices?.[i] ?? autoPrice;
               return {
-                prev, nv, diff,
+                prev, nv, diff, control,
                 price: rowPrice,
-                amount: rowPrice !== null ? diff * rowPrice : 0,
+                amount: !control && rowPrice !== null ? diff * rowPrice : 0,
               };
             })
           : null;
+      const hasControl = detail?.some((d) => d.control) ?? false;
+      if (hasControl && detail) {
+        // az összesítő számláló nem fogyás — a lefőzött adag a többi összege
+        brewed = filled
+          ? detail.filter((d) => !d.control).reduce((a, d) => a + d.diff, 0)
+          : 0;
+        billed = Math.max(brewed - service, 0);
+      }
+      const controlDiff = hasControl && detail
+        ? detail.filter((d) => d.control).reduce((a, d) => a + d.diff, 0)
+        : null;
       const hasCounterPrices =
         m.counter_count > 1 && (m.counter_prices?.some((p) => p != null) ?? false);
       let price = manual !== "" ? Number(manual) : autoPrice;
@@ -599,7 +615,7 @@ export default function ElszamolasPage() {
         billedByProduct[pid] = (billedByProduct[pid] ?? 0) + billed;
         amountByProduct[pid] = (amountByProduct[pid] ?? 0) + amount;
       }
-      return { ...m, filled, newCounter, brewed, billed, price, autoPrice, amount, belowPrev, detail };
+      return { ...m, filled, newCounter, brewed, billed, price, autoPrice, amount, belowPrev, detail, controlDiff };
     });
     return { rows, billedByProduct, amountByProduct };
   }, [ctx, machineInputs, machineProducts, machinePrices, stockRows, products]);
@@ -644,7 +660,11 @@ export default function ElszamolasPage() {
       const unitPrice = manual !== "" ? Number(manual) : s.price_per_portion;
       let portions: number;
       let amount: number;
-      if (machineBilled !== undefined) {
+      if (!s.is_consignment) {
+        // NEM kávé: darabra megy — fogyás × egységár, adag-logika nélkül
+        portions = consumed;
+        amount = consumed * unitPrice;
+      } else if (machineBilled !== undefined) {
         portions = machineBilled;
         amount = machinePreview.amountByProduct[s.product_id] ?? 0;
       } else if (counterNum !== null) {
@@ -1566,12 +1586,14 @@ export default function ElszamolasPage() {
                     <div className="font-medium">{m.name}</div>
                     <SearchSelect
                       items={[
-                        ...stock.map((s) => ({
+                        // a gép csak KÁVÉT (bizományos terméket) főzhet — a
+                        // darabra menő egyéb termék (pl. tejszín) nem opció
+                        ...stock.filter((s) => s.is_consignment).map((s) => ({
                           id: s.product_id, label: s.product_name,
                           sublabel: t("cons.partnerStockGroup"),
                         })),
                         ...activeProducts
-                          .filter((p) => !stock.some((s) => s.product_id === p.id))
+                          .filter((p) => p.is_consignment && !stock.some((s) => s.product_id === p.id))
                           .map((p) => ({ id: p.id, label: p.name, sublabel: p.category })),
                       ]}
                       value={machineProducts[m.asset_id] ?? ""}
@@ -1614,9 +1636,13 @@ export default function ElszamolasPage() {
                               />
                               <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">
                                 {d && d.nv !== null
-                                  ? d.price !== null
-                                    ? `${d.diff} × ${Math.round(d.price * 100) / 100} Ft = ${ft(Math.round(d.amount))}`
-                                    : `${d.diff} ${t("cons.portionsShort")}`
+                                  ? d.control
+                                    ? m.filled && Math.abs(d.diff - m.brewed) < 0.5
+                                      ? `${d.diff} · ${t("cons.controlCounter")} ✓`
+                                      : `${d.diff} · ${t("cons.controlCounter")} ⚠️ (${m.brewed})`
+                                    : d.price !== null
+                                      ? `${d.diff} × ${Math.round(d.price * 100) / 100} Ft = ${ft(Math.round(d.amount))}`
+                                      : `${d.diff} ${t("cons.portionsShort")}`
                                   : ""}
                               </span>
                             </div>
@@ -1703,8 +1729,20 @@ export default function ElszamolasPage() {
               </tr>
             </thead>
             <tbody>
-              {preview.rows.map((s) => (
-                <tr key={s.product_id} className="border-b border-slate-100 last:border-0">
+              {/* Kávé (adagra) elöl; alatta elkülönítve az egyéb, darabra menő
+                  termékek — ezek fogyás × egységár alapon számolódnak el. */}
+              {[...preview.rows]
+                .sort((a, b) => Number(b.is_consignment) - Number(a.is_consignment))
+                .map((s, idx, arr) => (
+                <Fragment key={s.product_id}>
+                {!s.is_consignment && (idx === 0 || arr[idx - 1].is_consignment) && (
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <td colSpan={10} className="px-4 py-2 text-xs font-semibold uppercase text-slate-500">
+                      🧃 {t("cons.otherProducts")}
+                    </td>
+                  </tr>
+                )}
+                <tr className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3 font-medium">
                     {s.product_name}
                     <button
@@ -1753,7 +1791,7 @@ export default function ElszamolasPage() {
                       ⚠ {s.min_quantity != null ? `${s.min_quantity} ${s.unit}` : "—"}
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{s.portions_available}</td>
+                  <td className="px-4 py-3 text-slate-500">{s.is_consignment ? s.portions_available : "—"}</td>
                   <td className="px-4 py-3">
                     <input
                       type="number"
@@ -1766,7 +1804,9 @@ export default function ElszamolasPage() {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    {s.fromMachines ? (
+                    {!s.is_consignment ? (
+                      <span className="text-slate-300">—</span>
+                    ) : s.fromMachines ? (
                       <span
                         title={t("cons.fromMachinesHint")}
                         className="rounded bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700"
@@ -1839,6 +1879,7 @@ export default function ElszamolasPage() {
                     })()}
                   </td>
                 </tr>
+                </Fragment>
               ))}
               {stockRows.length === 0 && (
                 <tr><td colSpan={10} className="px-4 py-6 text-center text-slate-400">{t("cons.noStockAddBelow")}</td></tr>
