@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
+import CameraScanner, { cameraScanSupported } from "@/components/CameraScanner";
 import SearchSelect from "@/components/SearchSelect";
 import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -142,6 +143,34 @@ export default function AtvetelPage() {
   // Új (ügyfél-tulajdonú) gép felvétele helyben
   const [newAssetMode, setNewAssetMode] = useState(false);
   const [newAsset, setNewAsset] = useState({ name: "", manufacturer: "", serial_number: "" });
+
+  // Kamerás beolvasás: a gép vonalkódja VAGY a ráragasztott QR-címke (a QR a
+  // támogatási URL-t kódolja — az utolsó szakasza a gép qr_tokenje).
+  const [scanOpen, setScanOpen] = useState(false);
+
+  async function onScanDetect(value: string) {
+    setScanOpen(false);
+    const raw = value.trim();
+    const token = raw.includes("/") ? (raw.split("/").filter(Boolean).pop() ?? raw) : raw;
+    const local = assets.find((a) => a.barcode === raw || a.barcode === token);
+    if (local) {
+      setNewAssetMode(false);
+      setForm((f) => ({ ...f, asset_id: local.id }));
+      toast(t("intake.scanFound", { name: local.name, barcode: local.barcode }), "success");
+      return;
+    }
+    try {
+      const a = await api.get<AssetOption>(
+        `/api/assets/by-barcode/${encodeURIComponent(token)}`,
+      );
+      setAssets((list) => (list.some((x) => x.id === a.id) ? list : [a, ...list]));
+      setNewAssetMode(false);
+      setForm((f) => ({ ...f, asset_id: a.id }));
+      toast(t("intake.scanFound", { name: a.name, barcode: a.barcode }), "success");
+    } catch {
+      toast(t("intake.scanNotFound", { code: raw.slice(0, 40) }), "error");
+    }
+  }
   // Új ügyfél (partner) felvétele minden adatával
   const [newPartnerMode, setNewPartnerMode] = useState(false);
   const [newPartner, setNewPartner] = useState(EMPTY_PARTNER);
@@ -378,6 +407,20 @@ export default function AtvetelPage() {
                 >
                   🖨 {t("intake.print")}
                 </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.post(`/api/intakes/${row.id}/print`, {});
+                      toast(t("intake.officeQueued"), "success");
+                    } catch (err) {
+                      toast(errorMessage(err), "error");
+                    }
+                  }}
+                  title={t("intake.officePrintHint")}
+                  className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm text-indigo-800 hover:bg-indigo-100"
+                >
+                  🖨️ {t("intake.officePrint")}
+                </button>
                 {canTasks && (
                   <button
                     onClick={() => router.push(`/feladatok?intake=${row.id}`)}
@@ -400,6 +443,13 @@ export default function AtvetelPage() {
         ))}
       </div>
 
+      {scanOpen && (
+        <CameraScanner
+          onDetect={(code) => { void onScanDetect(code); }}
+          onClose={() => setScanOpen(false)}
+        />
+      )}
+
       {showForm && (
         <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowForm(false); }} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
           <form onSubmit={submit} className="my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
@@ -409,19 +459,31 @@ export default function AtvetelPage() {
             <div className="block text-sm">
               {t("intake.machine")}
               {!newAssetMode && (
-                <SearchSelect
-                  items={assets.map((a) => ({
-                    id: a.id,
-                    label: a.manufacturer ? `${a.name} — ${a.manufacturer}` : a.name,
-                    sublabel: [a.category, a.partner_name].filter(Boolean).join(" · ") || null,
-                    badge: a.barcode,
-                    keywords: [a.article_number, a.serial_number].filter(Boolean).join(" ") || null,
-                  }))}
-                  value={form.asset_id}
-                  onChange={(id) => setForm({ ...form, asset_id: id })}
-                  placeholder={t("service.machineSearchPh")}
-                  className="mt-1 w-full"
-                />
+                <div className="mt-1 flex items-start gap-1.5">
+                  <SearchSelect
+                    items={assets.map((a) => ({
+                      id: a.id,
+                      label: a.manufacturer ? `${a.name} — ${a.manufacturer}` : a.name,
+                      sublabel: [a.category, a.partner_name].filter(Boolean).join(" · ") || null,
+                      badge: a.barcode,
+                      keywords: [a.article_number, a.serial_number].filter(Boolean).join(" ") || null,
+                    }))}
+                    value={form.asset_id}
+                    onChange={(id) => setForm({ ...form, asset_id: id })}
+                    placeholder={t("service.machineSearchPh")}
+                    className="w-full"
+                  />
+                  {cameraScanSupported() && (
+                    <button
+                      type="button"
+                      onClick={() => setScanOpen(true)}
+                      title={t("scanner.title")}
+                      className="shrink-0 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-base hover:bg-slate-100"
+                    >
+                      📷
+                    </button>
+                  )}
+                </div>
               )}
               <button
                 type="button"

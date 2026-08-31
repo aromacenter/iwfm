@@ -232,12 +232,7 @@ async def create_intake(
     return out
 
 
-@router.get("/{intake_id}/pdf")
-async def intake_pdf(
-    intake_id: str,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("service")),
-):
+async def _get_intake_or_404(db: AsyncSession, intake_id: str) -> MachineIntake:
     try:
         iid = uuid.UUID(intake_id)
     except ValueError:
@@ -247,13 +242,19 @@ async def intake_pdf(
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "intake.not_found"})
+    return row
+
+
+async def _build_intake_pdf(db: AsyncSession, row: MachineIntake) -> bytes:
+    """Az átvételi elismervény PDF-je — a letöltés és az irodai nyomtatási
+    sor (nyomtató-ügynök) közös építője."""
     out = (await _out_rows(db, [row]))[0]
 
     from app.api.tasks import _worksheet_pdf_settings
 
     settings = await _worksheet_pdf_settings(db)
     clause = (settings or {}).get("intake_footer_text") or DEFAULT_INTAKE_FOOTER
-    pdf = build_intake_pdf(
+    return build_intake_pdf(
         {
             "serial": row.serial,
             "received_at": f"{row.received_at:%Y-%m-%d %H:%M}",
@@ -275,11 +276,51 @@ async def intake_pdf(
         },
         settings,
     )
+
+
+@router.get("/{intake_id}/pdf")
+async def intake_pdf(
+    intake_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("service")),
+):
+    row = await _get_intake_or_404(db, intake_id)
+    pdf = await _build_intake_pdf(db, row)
     return Response(
         content=pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{row.serial}.pdf"'},
     )
+
+
+@router.post("/{intake_id}/print")
+async def intake_print(
+    intake_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("service")),
+):
+    """Elismervény az irodai nyomtatóra: PDF a nyomtatási sorba — a helyi
+    nyomtató-ügynök kinyomtatja, így TELEFONRÓL is megy a nyomtatás."""
+    import base64
+
+    from app.models import PrintJob
+
+    row = await _get_intake_or_404(db, intake_id)
+    pdf = await _build_intake_pdf(db, row)
+    job = PrintJob(
+        kind="pdf",
+        label=f"Elismervény {row.serial}",
+        payload=base64.b64encode(pdf).decode("ascii"),
+        created_by=actor.id,
+    )
+    db.add(job)
+    await record_audit(
+        db, actor=actor, action="intake.print", entity_type="intake",
+        entity_id=row.serial, request=request,
+    )
+    await db.commit()
+    return {"ok": True, "job_id": str(job.id)}
 
 
 @router.get("/{intake_id}/photos")

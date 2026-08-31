@@ -294,6 +294,19 @@ export default function FeladatokPage() {
     }
   }
 
+  // Munkalap az irodai nyomtatóra a nyomtató-ügynökön át — telefonról is megy.
+  async function printWorksheetOffice(task: TaskOut) {
+    try {
+      await api.post(
+        `/api/tasks/${task.id}/worksheet/print${task.worksheet_external ? "?variant=customer" : ""}`,
+        {},
+      );
+      toast(t("tasks.officeQueued"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function downloadWorksheet(task: TaskOut) {
     try {
       await downloadFile(
@@ -586,6 +599,13 @@ export default function FeladatokPage() {
                         {t("tasks.worksheetPdf")}
                       </button>
                     )}
+                    <button
+                      onClick={() => printWorksheetOffice(task)}
+                      title={t("tasks.officePrintHint")}
+                      className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-800 hover:bg-indigo-100"
+                    >
+                      🖨️ {t("tasks.officePrint")}
+                    </button>
                     <button
                       onClick={() => emailWorksheet(task)}
                       className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"

@@ -188,7 +188,10 @@ async def agent_poll(
             .limit(10)
         )
     ).scalars().all()
-    out = [{"id": str(j.id), "label": j.label, "payload": j.payload} for j in jobs]
+    out = [
+        {"id": str(j.id), "kind": j.kind, "label": j.label, "payload": j.payload}
+        for j in jobs
+    ]
     await db.commit()
     return {"jobs": out}
 

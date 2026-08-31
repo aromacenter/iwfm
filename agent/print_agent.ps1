@@ -1,11 +1,19 @@
-# Iwfm nyomtato-ugynok - Godex cimkenyomtatas
+# Iwfm nyomtato-ugynok - Godex cimkenyomtatas + irodai PDF-nyomtatas
 #
-# 3 masodpercenkent lekeri a szerverrol a varakozo cimkeket, es raw modban
-# a Godex nyomtato 9100-as portjara kuldi oket. A beallitasok a szkript
-# melletti print_agent.json-bol jonnek:
+# 3 masodpercenkent lekeri a szerverrol a varakozo feladatokat:
+#  - cimke (EZPL): raw modban a Godex nyomtato 9100-as portjara megy
+#  - PDF (pl. elismerveny, munkalap): a Windows-on beallitott nyomtatora megy
+#    (igy TELEFONROL inditott nyomtatas is az irodai nyomtaton landol)
+# A beallitasok a szkript melletti print_agent.json-bol jonnek:
 #   { "server": "https://backend-....railway.app",
 #     "agent_key": "A BEALLITASOKBAN GENERALT KULCS",
-#     "printer_ip": "192.168.1.30", "printer_port": 9100 }
+#     "printer_ip": "192.168.1.30", "printer_port": 9100,
+#     "pdf_printer": "Samsung ML-3310 Series",   <- ures/hianyzo = alapertelmezett nyomtato
+#     "sumatra_path": "" }                       <- opcionalis: SumatraPDF.exe teljes utja
+#
+# PDF-nyomtatashoz a legmegbizhatobb a SumatraPDF (ingyenes, hordozhato is jo):
+# ha telepitve van (vagy a sumatra_path meg van adva), azzal nyomtatunk;
+# kulonben az Adobe Reader "PrintTo" muveletevel probalkozunk.
 #
 # Inditas kezzel:  powershell -ExecutionPolicy Bypass -File print_agent.ps1
 # Automatikus inditashoz futtasd egyszer a telepites.bat-ot.
@@ -41,6 +49,45 @@ $port = if ($cfg.printer_port) { [int]$cfg.printer_port } else { 9100 }
 
 Log ("Ugynok elindult - szerver: {0}, nyomtato: {1}:{2}" -f $cfg.server, $cfg.printer_ip, $port)
 
+# SumatraPDF keresese: config-utvonal, majd a szokasos telepitesi helyek
+function Find-Sumatra {
+    if ($cfg.sumatra_path -and (Test-Path $cfg.sumatra_path)) { return $cfg.sumatra_path }
+    $candidates = @(
+        (Join-Path $dir "SumatraPDF.exe"),
+        "$env:ProgramFiles\SumatraPDF\SumatraPDF.exe",
+        "${env:ProgramFiles(x86)}\SumatraPDF\SumatraPDF.exe",
+        "$env:LocalAppData\SumatraPDF\SumatraPDF.exe"
+    )
+    foreach ($p in $candidates) { if ($p -and (Test-Path $p)) { return $p } }
+    return $null
+}
+
+function Print-Pdf([string]$payloadB64, [string]$label) {
+    $tmp = Join-Path $env:TEMP ("iwfm-print-" + [guid]::NewGuid().ToString("N") + ".pdf")
+    [IO.File]::WriteAllBytes($tmp, [Convert]::FromBase64String($payloadB64))
+    try {
+        $sumatra = Find-Sumatra
+        if ($sumatra) {
+            if ($cfg.pdf_printer) {
+                & $sumatra -print-to $cfg.pdf_printer -silent -exit-when-done $tmp
+            } else {
+                & $sumatra -print-to-default -silent -exit-when-done $tmp
+            }
+            Start-Sleep -Seconds 3
+        } else {
+            # tartalek: a .pdf-hez tarsitott program PrintTo/Print muvelete
+            if ($cfg.pdf_printer) {
+                Start-Process -FilePath $tmp -Verb PrintTo -ArgumentList ('"{0}"' -f $cfg.pdf_printer) -WindowStyle Hidden
+            } else {
+                Start-Process -FilePath $tmp -Verb Print -WindowStyle Hidden
+            }
+            Start-Sleep -Seconds 10
+        }
+    } finally {
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Send-ToPrinter([string]$payload) {
     $client = New-Object System.Net.Sockets.TcpClient
     $async = $client.BeginConnect($cfg.printer_ip, $port, $null, $null)
@@ -67,7 +114,11 @@ while ($true) {
         foreach ($job in $resp.jobs) {
             $ok = $true; $err = $null
             try {
-                Send-ToPrinter $job.payload
+                if ($job.kind -eq "pdf") {
+                    Print-Pdf $job.payload $job.label
+                } else {
+                    Send-ToPrinter $job.payload
+                }
                 Log ("Nyomtatva: {0} ({1})" -f $job.label, $job.id)
             } catch {
                 $err = $_.Exception.Message

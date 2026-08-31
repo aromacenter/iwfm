@@ -584,6 +584,21 @@ export default function FeladataimPage() {
                   📤 {t("myTasks.wsShareCard", { serial: task.worksheet_serial })}
                 </button>
               )}
+              {task.worksheet_serial && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.post(`/api/me/tasks/${task.id}/worksheet/print`, {});
+                      toast(t("myTasks.officeQueued"), "success");
+                    } catch (err) {
+                      toast(errorMessage(err), "error");
+                    }
+                  }}
+                  className="w-full rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-100"
+                >
+                  🖨️ {t("myTasks.officePrint")}
+                </button>
+              )}
               <div className="flex gap-2">
                 <input
                   value={comments[task.id] ?? ""}

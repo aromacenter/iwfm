@@ -118,3 +118,76 @@ async def test_customer_owned_label_has_no_owner_text(client, admin, manager):
     # minden szövegsor a gépnév betűjével (AB-font, 1×) megy ki
     assert ",1,1,0,0,Kod:" in cust_payload
     assert "\nAA," not in cust_payload
+
+
+async def test_pdf_print_jobs_and_qr_lookup(client, admin, manager):
+    """PDF-nyomtatas a soron at (elismerveny + munkalap) + QR-token felodas."""
+    import base64
+
+    _, adm = admin
+    _, mgr = manager
+
+    # elismerveny sorba allitasa
+    asset = await _make_asset(client, mgr, "PRN-PDF")
+    intake = (
+        await client.post(
+            "/api/intakes",
+            json={"asset_id": asset["id"], "client_name": "Nyomtat Elek",
+                  "faults": "nem kapcsol be"},
+            headers=mgr,
+        )
+    ).json()
+    res = await client.post(f"/api/intakes/{intake['id']}/print", headers=mgr)
+    assert res.status_code == 200, res.text
+
+    key = (await client.post("/api/print-jobs/agent-key", headers=adm)).json()["key"]
+    agent = {"X-Agent-Key": key}
+    jobs = (await client.get("/api/print-agent/jobs", headers=agent)).json()["jobs"]
+    pdf_jobs = [j for j in jobs if j["kind"] == "pdf"]
+    assert len(pdf_jobs) == 1
+    assert intake["serial"] in pdf_jobs[0]["label"]
+    raw = base64.b64decode(pdf_jobs[0]["payload"])
+    assert raw.startswith(b"%PDF")  # valodi PDF megy az ugynoknek
+
+    # munkalap sorba allitasa (feladat + kitoltetlen ML is nyomtathato? — a
+    # PDF-hez munkalap kell, ezert elobb keszitunk egyet a feladathoz)
+    from tests.conftest import make_employee_record, make_user
+
+    emp_user, emp_headers = await make_user(email="nyomtato@example.com", role="employee")
+    emp = await make_employee_record(emp_user)
+    task = (
+        await client.post(
+            "/api/tasks",
+            json={"title": "Nyomtatos feladat", "employee_id": str(emp.id),
+                  "due_date": "2026-09-01"},
+            headers=mgr,
+        )
+    ).json()
+    ws = await client.put(
+        f"/api/me/tasks/{task['id']}/worksheet",
+        json={"work_description": "Tisztitas, proba"},
+        headers=emp_headers,
+    )
+    assert ws.status_code == 200, ws.text
+    res2 = await client.post(f"/api/me/tasks/{task['id']}/worksheet/print", headers=emp_headers)
+    assert res2.status_code == 200, res2.text
+    res3 = await client.post(f"/api/tasks/{task['id']}/worksheet/print", headers=mgr)
+    assert res3.status_code == 200, res3.text
+
+    jobs2 = (await client.get("/api/print-agent/jobs", headers=agent)).json()["jobs"]
+    assert len([j for j in jobs2 if j["kind"] == "pdf"]) == 3
+
+    # QR-token felodas: cimke-sorba tetel general qr_tokent, az by-barcode-dal
+    # (szerviz-joggal is) feloldhato
+    await client.post("/api/print-jobs", json={"ids": [asset["id"]]}, headers=mgr)
+    import app.db as app_db
+    from app.models import Asset as AssetModel
+
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        row = await session.get(AssetModel, __import__("uuid").UUID(asset["id"]))
+        token = row.qr_token
+    assert token
+    found = await client.get(f"/api/assets/by-barcode/{token}", headers=mgr)
+    assert found.status_code == 200
+    assert found.json()["id"] == asset["id"]

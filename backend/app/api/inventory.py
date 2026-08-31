@@ -844,11 +844,19 @@ async def asset_type_defaults(
 async def asset_by_barcode(
     barcode: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("machines")),
+    # az átvétel-űrlap kamerás beolvasójának a szerviz-jog is elég
+    _: User = Depends(require_any_perm("machines", "service")),
 ):
+    """Gép keresése vonalkód VAGY QR-token alapján — a gépre ragasztott QR a
+    támogatási URL-t kódolja, aminek az utolsó szakasza a qr_token."""
+    code = barcode.strip()
     a = (
-        await db.execute(select(Asset).where(Asset.barcode == barcode.strip()))
+        await db.execute(select(Asset).where(Asset.barcode == code))
     ).scalar_one_or_none()
+    if a is None and code:
+        a = (
+            await db.execute(select(Asset).where(Asset.qr_token == code))
+        ).scalar_one_or_none()
     if a is None:
         raise HTTPException(status_code=404, detail={"code": "asset.barcode_not_found"})
     names = await _partner_names(db, {a.partner_id})

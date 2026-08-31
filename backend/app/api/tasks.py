@@ -1128,6 +1128,68 @@ async def worksheet_pdf(
     return _pdf_response(pdf, serial)
 
 
+async def _enqueue_pdf_print(
+    db: AsyncSession, *, label: str, pdf: bytes, actor: User
+) -> str:
+    """PDF a nyomtatási sorba — a helyi nyomtató-ügynök az irodai nyomtatón
+    kinyomtatja, így telefonról is lehet nyomtatni."""
+    import base64
+
+    from app.models import PrintJob
+
+    job = PrintJob(
+        kind="pdf",
+        label=label,
+        payload=base64.b64encode(pdf).decode("ascii"),
+        created_by=actor.id,
+    )
+    db.add(job)
+    await db.flush()
+    return str(job.id)
+
+
+@router.post("/{task_id}/worksheet/print")
+async def print_worksheet(
+    task_id: str,
+    request: Request,
+    variant: str = "internal",  # internal | customer
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """Munkalap az irodai nyomtatóra (nyomtató-ügynökön át)."""
+    task = await _get_task_or_404(db, task_id)
+    pdf, serial = await _build_worksheet_pdf(
+        db, task, "customer" if variant == "customer" else "internal"
+    )
+    job_id = await _enqueue_pdf_print(db, label=f"Munkalap {serial}", pdf=pdf, actor=actor)
+    await record_audit(
+        db, actor=actor, action="worksheet.print", entity_type="worksheet",
+        entity_id=serial, request=request,
+    )
+    await db.commit()
+    return {"ok": True, "job_id": job_id}
+
+
+@me_router.post("/{task_id}/worksheet/print")
+async def my_print_worksheet(
+    task_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """A dolgozó a saját munkalapját az irodai nyomtatóra küldi telefonról."""
+    task = await _own_task_or_404(db, emp, task_id)
+    pdf, serial = await _build_worksheet_pdf(db, task, "internal")
+    job_id = await _enqueue_pdf_print(db, label=f"Munkalap {serial}", pdf=pdf, actor=user)
+    await record_audit(
+        db, actor=user, action="worksheet.print_self", entity_type="worksheet",
+        entity_id=serial, request=request,
+    )
+    await db.commit()
+    return {"ok": True, "job_id": job_id}
+
+
 @router.post("/{task_id}/worksheet/email")
 async def email_worksheet(
     task_id: str,
