@@ -16,7 +16,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_perm
+from app.api.deps import record_audit, require_any_perm, require_perm
 from app.db import get_db
 from app.models import Asset, IntakePhoto, MachineIntake, Partner, User, WorksheetSettings
 from app.services.wfm.worksheet_pdf import DEFAULT_INTAKE_FOOTER, build_intake_pdf
@@ -178,7 +178,7 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
 @router.get("", response_model=list[IntakeOut])
 async def list_intakes(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("service")),
+    _: User = Depends(require_any_perm("service", "intake")),
 ):
     rows = list(
         (
@@ -195,7 +195,7 @@ async def create_intake(
     body: IntakeBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("service")),
+    actor: User = Depends(require_any_perm("service", "intake")),
 ):
     try:
         aid = uuid.UUID(body.asset_id)
@@ -305,7 +305,7 @@ async def _build_intake_pdf(db: AsyncSession, row: MachineIntake) -> bytes:
 async def intake_pdf(
     intake_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("service")),
+    _: User = Depends(require_any_perm("service", "intake")),
 ):
     row = await _get_intake_or_404(db, intake_id)
     pdf = await _build_intake_pdf(db, row)
@@ -321,7 +321,7 @@ async def intake_print(
     intake_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("service")),
+    actor: User = Depends(require_any_perm("service", "intake")),
 ):
     """Elismervény az irodai nyomtatóra: PDF a nyomtatási sorba — a helyi
     nyomtató-ügynök kinyomtatja, így TELEFONRÓL is megy a nyomtatás."""
@@ -350,7 +350,7 @@ async def intake_print(
 async def intake_photos(
     intake_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("service")),
+    _: User = Depends(require_any_perm("service", "intake")),
 ):
     """Az átvételhez tartozó fotók azonosítói — a galéria ebből épül."""
     try:
@@ -372,7 +372,7 @@ async def intake_photo(
     intake_id: str,
     photo_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("service")),
+    _: User = Depends(require_any_perm("service", "intake")),
 ):
     try:
         iid = uuid.UUID(intake_id)

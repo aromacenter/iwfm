@@ -90,3 +90,30 @@ async def test_employee_create_with_role(client, admin):
         headers=adm,
     )
     assert bad.status_code == 422
+
+
+async def test_szervizes_no_service_but_intake_knowledge(client, manager):
+    """Alvallalkozo szervizes: szervizjegy-lista tiltva, DE atvetel es
+    tudasbazis mukodik; a SAJAT, ra kiosztott jegyeit lekerdezheti."""
+    _, mgr = manager
+    sz_user, sz = await make_user(email="alvall@example.com", role="szervizes")
+
+    # szervizjegyek: mas jegyeit nem lathatja
+    assert (await client.get("/api/service", headers=sz)).status_code == 403
+    # a sajat jegyei mehetnek (feladataim-blokk)
+    own = await client.get(f"/api/service?assigned_to={sz_user.id}", headers=sz)
+    assert own.status_code == 200 and own.json() == []
+    # atvetel + tudasbazis: mukodik
+    assert (await client.get("/api/intakes", headers=sz)).status_code == 200
+    assert (await client.get("/api/knowledge", headers=sz)).status_code == 200
+    # gep-lista a gep-valasztohoz tovabbra is eleheto
+    assert (await client.get("/api/assets", headers=sz)).status_code == 200
+
+
+async def test_service_perm_includes_intake_knowledge(client, manager):
+    """A "service" jog visszafele kompatibilisen magaban foglalja az atvetelt
+    es a tudasbazist (regen egy jog volt mindharom)."""
+    _, mgr = manager  # manager alapbol service-t kap
+    assert (await client.get("/api/intakes", headers=mgr)).status_code == 200
+    assert (await client.get("/api/knowledge", headers=mgr)).status_code == 200
+    assert (await client.get("/api/service", headers=mgr)).status_code == 200

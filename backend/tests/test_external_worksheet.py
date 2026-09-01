@@ -88,3 +88,105 @@ async def test_external_worksheet_flow(client, manager):
         headers=mgr,
     )
     assert res.json()["worksheet_serial"].endswith("-0002")
+
+
+async def test_total_loss_quote_two_options(client, manager, admin):
+    """Gazdasagi totalkar: a publikus ajanlaton csak ket opcio — bevizsgalasi
+    dij VAGY tulajdonjog-lemondas (dijmentes)."""
+    from tests.conftest import make_employee_record, make_user
+
+    _, mgr = manager
+    emp_user, emp_hdr = await make_user(email="totalos@example.com", role="szervizes")
+    emp = await make_employee_record(emp_user)
+    task = (
+        await client.post(
+            "/api/tasks",
+            json={"title": "Totalkaros gep", "employee_id": str(emp.id),
+                  "due_date": "2026-09-05", "external_service": True},
+            headers=mgr,
+        )
+    ).json()
+    # a szervizes megjeloli: totalkar
+    ws = await client.put(
+        f"/api/me/tasks/{task['id']}/worksheet",
+        json={"work_description": "Bevizsgalva: gazdasagi totalkar.",
+              "total_loss": True},
+        headers=emp_hdr,
+    )
+    assert ws.status_code == 200, ws.text
+    assert ws.json()["total_loss"] is True
+
+    # ajanlat kikuldese (token-generalas) — a kikuldo vegpont? kozvetlen token:
+    import app.db as app_db
+    from app.models import Worksheet
+    import uuid as _uuid
+
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        row = (
+            await session.execute(
+                __import__("sqlalchemy").select(Worksheet).where(
+                    Worksheet.task_id == _uuid.UUID(task["id"])
+                )
+            )
+        ).scalar_one()
+        row.quote_token = "totalkar-token-1"
+        row.quote_status = "sent"
+        await session.commit()
+
+    info = (await client.get("/api/public/worksheet-quote/totalkar-token-1")).json()
+    assert info["total_loss"] is True
+
+    # lemondas: dijmentes, a jegy lezarul, 0 Ft-os sor kerul a munkalapra
+    res = await client.post(
+        "/api/public/worksheet-quote/totalkar-token-1/accept",
+        json={"renounce": True, "accepted_by": "Kovacs Anna"},
+    )
+    assert res.status_code == 200, res.text
+    info2 = (await client.get("/api/public/worksheet-quote/totalkar-token-1")).json()
+    assert info2["status"] == "declined"
+    assert "tulajdonjog" in (info2["selected_name"] or "")
+
+
+async def test_renounce_requires_total_loss(client, manager):
+    """Tulajdonjog-lemondas csak totalkaros gepnel valaszthato."""
+    from tests.conftest import make_employee_record, make_user
+
+    _, mgr = manager
+    emp_user, emp_hdr = await make_user(email="nemtotal@example.com", role="szervizes")
+    emp = await make_employee_record(emp_user)
+    task = (
+        await client.post(
+            "/api/tasks",
+            json={"title": "Sima javitas", "employee_id": str(emp.id),
+                  "due_date": "2026-09-05", "external_service": True},
+            headers=mgr,
+        )
+    ).json()
+    await client.put(
+        f"/api/me/tasks/{task['id']}/worksheet",
+        json={"work_description": "Javithato."},
+        headers=emp_hdr,
+    )
+    import app.db as app_db
+    from app.models import Worksheet
+    import uuid as _uuid
+
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        row = (
+            await session.execute(
+                __import__("sqlalchemy").select(Worksheet).where(
+                    Worksheet.task_id == _uuid.UUID(task["id"])
+                )
+            )
+        ).scalar_one()
+        row.quote_token = "nem-total-token-1234"
+        row.quote_status = "sent"
+        await session.commit()
+
+    res = await client.post(
+        "/api/public/worksheet-quote/nem-total-token-1234/accept",
+        json={"renounce": True, "accepted_by": "Kovacs Anna"},
+    )
+    assert res.status_code == 422

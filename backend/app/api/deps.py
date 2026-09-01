@@ -40,7 +40,9 @@ FEATURES = (
     "settlements",    # elszámolás (készlet-feltöltés is)
     "invoicing",      # kiszámlázás (Billingó)
     "agent_report",   # üzletkötő-elszámolás
-    "service",        # szerviz (hibajegyek, karbantartás)
+    "service",        # szerviz (hibajegyek, karbantartás) — magában foglalja az átvételt+tudásbázist
+    "intake",         # gép-átvétel (elismervény) — önállóan is adható (pl. alvállalkozó)
+    "knowledge",      # tudásbázis — önállóan is adható
     "import_export",  # import/export
     "payroll",        # bérexport
     "my_schedule",    # saját beosztás (önkiszolgáló)
@@ -58,9 +60,9 @@ DEFAULT_MATRIX: dict[str, list[str]] = {
         "dashboard", "partners", "machines", "products", "settlements",
         "invoicing", "agent_report",
     ],
-    # Külsős szervizes: munkaidőt nem tartunk nyilván róla — belépve csak a
-    # szerviz-funkciókat látja (jegyek + saját KSZ-munkalapok).
-    "szervizes": ["service", "my_tasks"],
+    # Külsős szervizes (alvállalkozó): a szervizJEGYEKET nem látja — átvétel,
+    # tudásbázis és a saját KSZ-munkalapjai kellenek neki.
+    "szervizes": ["intake", "knowledge", "my_tasks"],
     "employee": ["my_schedule", "my_tasks"],
 }
 
@@ -78,6 +80,12 @@ async def get_permission_matrix(db: AsyncSession) -> dict[str, list[str]]:
             out[role] = [f for f in value if f in FEATURES]
         else:
             out[role] = list(DEFAULT_MATRIX.get(role, []))
+        # Visszafelé kompatibilitás: a "service" jog magában foglalja az
+        # átvételt és a tudásbázist (régebben egy jog volt mindhárom).
+        if "service" in out[role]:
+            for extra in ("intake", "knowledge"):
+                if extra not in out[role]:
+                    out[role].append(extra)
     return out
 
 

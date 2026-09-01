@@ -775,8 +775,9 @@ async def list_assets(
     status: str | None = Query(default=None),
     partner_id: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    # A szervizes szerepkörnek is kell a gép-választóhoz (gépek menü nélkül).
-    _: User = Depends(require_any_perm("machines", "service")),
+    # A szervizes/átvételi szerepkörnek is kell a gép-választóhoz (gépek menü
+    # nélkül).
+    _: User = Depends(require_any_perm("machines", "service", "intake")),
 ):
     query = select(Asset).order_by(Asset.created_at.desc())
     if q:
@@ -844,8 +845,8 @@ async def asset_type_defaults(
 async def asset_by_barcode(
     barcode: str,
     db: AsyncSession = Depends(get_db),
-    # az átvétel-űrlap kamerás beolvasójának a szerviz-jog is elég
-    _: User = Depends(require_any_perm("machines", "service")),
+    # az átvétel-űrlap kamerás beolvasójának a szerviz-/átvétel-jog is elég
+    _: User = Depends(require_any_perm("machines", "service", "intake")),
 ):
     """Gép keresése vonalkód VAGY QR-token alapján — a gépre ragasztott QR a
     támogatási URL-t kódolja, aminek az utolsó szakasza a qr_token."""

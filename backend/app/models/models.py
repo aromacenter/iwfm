@@ -394,6 +394,9 @@ class Worksheet(Base):
     # price_net}] — a szervizes a saját díjával viszi fel, az ügyfél-példányra
     # a képviselő által beállított ár kerül.
     repair_options: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Gazdasági totálkár: a szervizes jelöli — az ajánlaton az ügyfél CSAK két
+    # opció közül választhat: bevizsgálási díj VAGY lemond a gép tulajdonjogáról.
+    total_loss: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Ügyfél-árajánlat a konstrukciókból: publikus link (token), állapot
     # (none → sent → accepted), és az ügyfél által kiválasztott opció neve.
     quote_token: Mapped[str | None] = mapped_column(String(64), nullable=True)

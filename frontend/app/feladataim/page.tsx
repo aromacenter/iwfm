@@ -81,6 +81,7 @@ interface WorksheetForm {
   client_signer_name: string;
   maintenance_fee: string;
   fee_discount: boolean;
+  total_loss: boolean; // gazdasági totálkár — az ajánlaton csak 2 opció lesz
 }
 
 const EMPTY_WS: WorksheetForm = {
@@ -96,6 +97,7 @@ const EMPTY_WS: WorksheetForm = {
   client_signer_name: "",
   maintenance_fee: "",
   fee_discount: false,
+  total_loss: false,
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -234,6 +236,7 @@ export default function FeladataimPage() {
           client_signer_name: string | null;
           maintenance_fee: number | null;
           fee_discount: boolean;
+          total_loss: boolean;
           quote_status: string;
           quote_selected_name: string | null;
         }>(`/api/me/tasks/${task.id}/worksheet`);
@@ -261,6 +264,7 @@ export default function FeladataimPage() {
           client_signer_name: existing.client_signer_name ?? "",
           maintenance_fee: existing.maintenance_fee != null ? String(existing.maintenance_fee) : "",
           fee_discount: existing.fee_discount,
+          total_loss: existing.total_loss,
         });
         setWsSaved({
           emp: existing.employee_signature ?? null,
@@ -393,6 +397,7 @@ export default function FeladataimPage() {
             ? Number(ws.maintenance_fee)
             : null,
         fee_discount: wsTask.worksheet_external ? null : ws.fee_discount,
+        total_loss: ws.total_loss,
       });
       setWsTask(null);
       load();
@@ -770,6 +775,21 @@ export default function FeladataimPage() {
                 <p className="text-xs text-slate-400">{t("myTasks.wsRepairsHint")}</p>
               )}
             </div>
+
+            {/* Gazdasági totálkár: az ajánlaton az ügyfél csak a bevizsgálási
+                díj vagy a tulajdonjog-lemondás közül választhat */}
+            <label className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={ws.total_loss}
+                onChange={(e) => setWs({ ...ws, total_loss: e.target.checked })}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                ⚠️ {t("myTasks.wsTotalLoss")}
+                <span className="block text-xs text-amber-800">{t("myTasks.wsTotalLossHint")}</span>
+              </span>
+            </label>
 
             <label className="block text-sm">
               {t("myTasks.wsWork")}

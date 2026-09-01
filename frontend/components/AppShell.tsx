@@ -40,9 +40,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/feladatok", key: "nav.tasks", perm: "tasks", icon: "🗂️" },
       { href: "/szerviz", key: "nav.service", perm: "service", icon: "🔧" },
-      { href: "/atvetel", key: "nav.intake", perm: "service", icon: "📥" },
+      { href: "/atvetel", key: "nav.intake", perm: "intake", icon: "📥" },
       { href: "/atadas", key: "nav.handover", perm: "invoicing", icon: "🤝" },
-      { href: "/tudasbazis", key: "nav.kb", perm: "service", icon: "📚", module: "support" },
+      { href: "/tudasbazis", key: "nav.kb", perm: "knowledge", icon: "📚", module: "support" },
       { href: "/beosztas", key: "nav.schedule", perm: "schedule", icon: "🗓️" },
       { href: "/jelenlet", key: "nav.attendance", perm: "attendance", icon: "⏱️" },
       { href: "/tavollet", key: "nav.timeOff", perm: "timeoff", icon: "🏖️" },

@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_perm
+from app.api.deps import record_audit, require_any_perm, require_perm
 from app.db import get_db
 from app.models import Asset, KnowledgeEntry, User
 
@@ -71,7 +71,7 @@ async def list_entries(
     q: str | None = Query(default=None),
     machine: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("service")),
+    _: User = Depends(require_any_perm("service", "knowledge")),
 ):
     query = select(KnowledgeEntry).order_by(KnowledgeEntry.updated_at.desc())
     if machine:
@@ -90,7 +90,7 @@ async def list_entries(
 @router.get("/machines")
 async def list_machines(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("service")),
+    _: User = Depends(require_any_perm("service", "knowledge")),
 ):
     """Géptípus-javaslatok a legördülőhöz: a géptörzs gyártó+típus kombinációi
     és a már használt bejegyzés-címkék."""
@@ -112,7 +112,7 @@ async def create_entry(
     body: EntryBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("service")),
+    actor: User = Depends(require_any_perm("service", "knowledge")),
 ):
     e = KnowledgeEntry(
         machine_label=body.machine_label.strip(),
@@ -139,7 +139,7 @@ async def update_entry(
     body: EntryBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("service")),
+    actor: User = Depends(require_any_perm("service", "knowledge")),
 ):
     e = await _get_or_404(db, entry_id)
     e.machine_label = body.machine_label.strip()

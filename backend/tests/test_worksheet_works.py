@@ -209,9 +209,13 @@ async def test_szervizes_scoped_permissions(client, admin, manager):
         "/api/assets", json={"barcode": "PERM-2", "name": "Tiltott"}, headers=sz_headers
     )
     assert res.status_code == 403
-    # beosztás-funkciók sem járnak az alapértelmezett mátrix szerint
+    # beosztás-funkciók sem járnak az alapértelmezett mátrix szerint;
+    # az alvállalkozó szervizes alapból NEM látja a szervizjegyeket, de az
+    # átvétel + tudásbázis jár neki
     me = (await client.get("/api/auth/me", headers=sz_headers)).json()
-    assert "service" in me["permissions"]
+    assert "service" not in me["permissions"]
+    assert "intake" in me["permissions"]
+    assert "knowledge" in me["permissions"]
     assert "my_tasks" in me["permissions"]
     assert "my_schedule" not in me["permissions"]
     assert "machines" not in me["permissions"]

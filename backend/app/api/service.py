@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_perm
+from app.api.deps import get_current_user, record_audit, require_perm
 from app.db import get_db
 from app.models import Asset, Partner, ServiceTicket, TicketAttachment, User
 
@@ -188,8 +188,15 @@ async def list_tickets(
     asset_id: str | None = Query(default=None),
     q: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("service")),
+    actor: User = Depends(get_current_user),
 ):
+    # Szerviz-jog nélkül (pl. alvállalkozó szervizes) KIZÁRÓLAG a saját, rá
+    # kiosztott jegyeit kérdezheti le — mások jegyeit soha.
+    from app.api.deps import get_permission_matrix, permissions_for
+
+    perms = permissions_for(actor.role, await get_permission_matrix(db))
+    if "service" not in perms and assigned_to != str(actor.id):
+        raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
     query = select(ServiceTicket).order_by(ServiceTicket.created_at.desc())
     if status:
         if status not in STATUSES:

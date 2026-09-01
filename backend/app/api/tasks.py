@@ -161,6 +161,9 @@ class WorksheetBody(BaseModel):
     # kedvezmény-pipa (elengedve → nem készül automatikus számla).
     maintenance_fee: float | None = Field(default=None, ge=0)
     fee_discount: bool | None = None  # None = nem nyúlunk hozzá
+    # Gazdasági totálkár: az ajánlaton az ügyfél csak a bevizsgálási díj VAGY
+    # a tulajdonjog-lemondás közül választhat. None = nem nyúlunk hozzá.
+    total_loss: bool | None = None
     # Az ügyfél-példány (−1) megjegyzése — None = nem nyúlunk hozzá.
     customer_note: str | None = Field(default=None, max_length=8000)
 
@@ -184,6 +187,7 @@ class WorksheetOut(BaseModel):
     client_signature: str | None
     maintenance_fee: float | None = None
     fee_discount: bool = False
+    total_loss: bool = False  # gazdasági totálkáros gép
     invoiced: bool = False  # az auto-számla már kiment
     customer_note: str | None = None
     # Ügyfél-árajánlat állapota (none → sent → accepted)
@@ -244,6 +248,7 @@ def _worksheet_out(
         # láthatja és nem is állíthatja (csak a képviselő, az ár-szerkesztőben).
         maintenance_fee=None if hide else ws.maintenance_fee,
         fee_discount=False if hide else ws.fee_discount,
+        total_loss=ws.total_loss,
         invoiced=ws.billingo_document_id is not None,
         customer_note=None if hide else ws.customer_note,
         quote_status=ws.quote_status or "none",
@@ -385,6 +390,8 @@ async def _upsert_worksheet(
         ws.maintenance_fee = body.maintenance_fee
     if body.fee_discount is not None and not worker_on_external:
         ws.fee_discount = body.fee_discount
+    if body.total_loss is not None:
+        ws.total_loss = body.total_loss
     if body.customer_note is not None:
         ws.customer_note = body.customer_note.strip() or None
     # Csak KITÖLTÖTT aláírás ír felül — üres/None sosem törli a mentettet,
@@ -1665,6 +1672,8 @@ async def public_worksheet_quote(token: str, db: AsyncSession = Depends(get_db))
         "company_name": row.company_name if row else None,
         "selected_name": ws.quote_selected_name,
         "accepted_at": ws.quote_accepted_at,
+        # Gazdasági totálkár: csak két opció — bevizsgálási díj VAGY lemondás.
+        "total_loss": ws.total_loss,
         # Mindig felkínált opció: "nem kérem a javítást" — felmérési díjjal.
         "survey_fee_net": survey_fee,
         "survey_fee_gross": round(survey_fee * 1.27, 0),
@@ -1682,9 +1691,11 @@ async def public_worksheet_quote(token: str, db: AsyncSession = Depends(get_db))
 
 class QuoteAcceptBody(BaseModel):
     # decline=True: az ügyfél NEM kéri a javítást — a felmérési díjat vállalja.
+    # renounce=True (csak totálkárnál): lemond a gép tulajdonjogáról — díjmentes.
     option_name: str | None = Field(default=None, max_length=256)
     accepted_by: str = Field(min_length=2, max_length=256)
     decline: bool = False
+    renounce: bool = False
 
 
 @quote_public_router.post("/{token}/accept")
@@ -1702,7 +1713,20 @@ async def public_worksheet_quote_accept(
         raise HTTPException(status_code=422, detail={"code": "quote.already_accepted"})
     all_options = list(ws.repair_options or [])
 
-    if body.decline:
+    if body.renounce:
+        # Csak totálkáros gépnél: az ügyfél lemond a gép tulajdonjogáról —
+        # díjmentes, semmilyen tétel nem kerül a munkalapra.
+        if not ws.total_loss:
+            raise HTTPException(status_code=422, detail={"code": "quote.bad_option"})
+        selected_label = "Lemondott a gép tulajdonjogáról (díjmentes)"
+        ws.repair_options = []
+        ws.works = list(ws.works or []) + [
+            {"name": "Az ügyfél lemondott a gép tulajdonjogáról — díjmentes",
+             "cost_net": None, "price_net": 0}
+        ]
+        ws.quote_status = "declined"
+        ws.quote_selected_name = selected_label
+    elif body.decline:
         # "Nem kérem a javítást" — a felmérési díj fizetendő.
         from app.services.wfm.worksheet_pdf import DEFAULT_SURVEY_FEE
 
@@ -1742,7 +1766,7 @@ async def public_worksheet_quote_accept(
         await db.execute(select(Task).where(Task.id == ws.task_id))
     ).scalar_one_or_none()
     db.add(AuditEvent(
-        action="worksheet.quote_declined" if body.decline else "worksheet.quote_accepted",
+        action="worksheet.quote_declined" if (body.decline or body.renounce) else "worksheet.quote_accepted",
         entity_type="worksheet",
         entity_id=ws.serial,
         detail={
@@ -1764,7 +1788,12 @@ async def public_worksheet_quote_accept(
                 await db.execute(select(Employee).where(Employee.id == task.employee_id))
             ).scalar_one_or_none()
             if emp is not None:
-                if body.decline:
+                if body.renounce:
+                    msg = (
+                        f"⚫ Az ügyfél LEMONDOTT a gép tulajdonjogáról: {ws.serial}.\n"
+                        "A gép nálunk marad — javítani nem kell."
+                    )
+                elif body.decline:
                     msg = (
                         f"🔴 Az ügyfél NEM kéri a javítást: {ws.serial}.\n"
                         "A gépet ne javítsd — összeszerelés után visszaadandó."
