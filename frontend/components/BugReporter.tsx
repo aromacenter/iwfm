@@ -92,15 +92,27 @@ export default function BugReporter() {
     reader.readAsDataURL(file);
   }
 
-  // az aktuális oldal lefotózása (a bejelentő-panel kimarad a képből)
+  // az aktuális KÉPERNYŐ lefotózása (a bejelentő-panel kimarad a képből).
+  // Szándékosan csak a látható területet rajzoljuk ki (nem a teljes görgetési
+  // magasságot) és a betűtípus-beágyazást is kihagyjuk — nagy listáknál a
+  // teljes-oldalas fotózás másodpercekre befagyasztotta a böngészőt.
   async function capturePage(target: "report" | "reopen" = "report") {
     annotateTarget.current = target;
     setCapturing(true);
+    // hadd fesse ki a böngésző a "Fotózás…" állapotot, mielőtt dolgozunk
+    await new Promise((r) => setTimeout(r, 30));
     try {
       const { toJpeg } = await import("html-to-image");
       const dataUrl = await toJpeg(document.body, {
         quality: 0.85,
         pixelRatio: 1,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        skipFonts: true,
+        style: {
+          transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
+          transformOrigin: "top left",
+        },
         filter: (node) =>
           !(node instanceof HTMLElement && node.dataset?.bugUi === "1"),
       });
