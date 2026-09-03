@@ -6,6 +6,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
 import PartnerInfo from "@/components/PartnerInfo";
@@ -47,6 +48,7 @@ interface Stock {
 interface Product {
   id: string;
   name: string;
+  code: string | null; // cikkszám — a keresők erre is szűrnek
   category: string | null;
   is_active: boolean;
   purchase_price: number | null;
@@ -157,6 +159,10 @@ interface SettlementContext {
   single_product_id: string | null;
   open_deliveries: number;
   open_deliveries_net: number;
+  open_delivery_items: {
+    product_name: string; quantity: number; unit_price: number;
+    amount_net: number; serial: string;
+  }[];
   default_payment_method: "cash" | "card" | "transfer" | "cod" | null;
   payment_terms_days: number | null;
   settlement_weeks: number | null;
@@ -217,6 +223,7 @@ function writeQueue(items: QueuedSettlement[]) {
 export default function ElszamolasPage() {
   const { t, lang } = useT();
   const { toast, confirm, prompt } = useUI();
+  const router = useRouter();
   const { can } = usePerms();
   const canDelete = can("delete");
   const canPrices = can("products");
@@ -343,6 +350,33 @@ export default function ElszamolasPage() {
       .filter(Boolean) as Stock[];
     return [...stock, ...extras];
   }, [stock, extraProducts, products]);
+
+  // A gépek SZERZŐDÖTT kávéja mindig kapjon sort (0 készlettel is) — így az
+  // átadott kávé és a fogyás akkor is rögzíthető, ha a partnernél még nincs
+  // készlet-sor; a képviselő bármilyen más kávét is felvehet mellé.
+  useEffect(() => {
+    if (!ctx) return;
+    const machinePids = ctx.machines
+      .map((m) => m.default_product_id)
+      .filter(Boolean) as string[];
+    setExtraProducts((xs) => {
+      const missing = machinePids.filter(
+        (pid) => !xs.includes(pid) && !stock.some((s) => s.product_id === pid),
+      );
+      return missing.length ? [...xs, ...missing] : xs;
+    });
+  }, [ctx, stock]);
+
+  // A gépek szerződéses kávéi — a listában "szerződött kávé" jelölést kapnak.
+  const contractedIds = useMemo(
+    () =>
+      new Set(
+        (ctx?.machines ?? [])
+          .map((m) => m.default_product_id)
+          .filter(Boolean) as string[],
+      ),
+    [ctx],
+  );
 
   const loadHistory = useCallback(() => {
     const params = new URLSearchParams();
@@ -620,10 +654,14 @@ export default function ElszamolasPage() {
     return { rows, billedByProduct, amountByProduct };
   }, [ctx, machineInputs, machineProducts, machinePrices, stockRows, products]);
 
-  // Kedvezményes elszámolás: mindent-vagy-semmit kapcsoló — az egész
-  // elszámolás ÁFA és Billingó-számla nélkül megy (a nettó a fizetendő).
+  // Kedvezményes elszámolás: a KÁVÉ ÁFA és számla nélkül megy (a nettó a
+  // fizetendő), a többi termék bruttó marad — és CSAK készpénzben mehet.
   const [discountAll, setDiscountAll] = useState(false);
   const noVat = discountAll;
+  useEffect(() => {
+    if (discountAll) setPayment("cash");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discountAll]);
 
   // A következő kitöltendő számláló-mezőre ugrás (gomb + Enter a mezőkben).
   function jumpToNextCounter(fromEl?: HTMLElement | null) {
@@ -661,9 +699,10 @@ export default function ElszamolasPage() {
       let portions: number;
       let amount: number;
       if (!s.is_consignment) {
-        // NEM kávé: darabra megy — fogyás × egységár, adag-logika nélkül
-        portions = consumed;
-        amount = consumed * unitPrice;
+        // NEM kávé: nem leltározzuk — csak a szállítóleveles és a most
+        // átadott (azonnal fizetendő) tételek számítanak.
+        portions = 0;
+        amount = 0;
       } else if (machineBilled !== undefined) {
         portions = machineBilled;
         amount = machinePreview.amountByProduct[s.product_id] ?? 0;
@@ -705,10 +744,11 @@ export default function ElszamolasPage() {
     return { net, items };
   }, [stockRows, handovers, products]);
 
-  // Becsült fizetendő: nettó × ÁFA + korábbi tartozás (a szerződéses tételeket
-  // — bérleti díj, minimum — a mentés számolja hozzá). Az átadott eladási
-  // áruk azonnal fizetendők, ezért az összesítőbe beleszámítanak.
-  const grossEstimate = Math.round((preview.net + handoverSale.net) * (noVat ? 1 : 1.27));
+  // Becsült fizetendő: a kávé nettó × ÁFA (kedvezménynél ÁFA nélkül), az
+  // átadott eladási áruk MINDIG bruttón (kedvezmény rájuk nem vonatkozik).
+  const grossEstimate = Math.round(
+    preview.net * (noVat ? 1 : 1.27) + handoverSale.net * 1.27,
+  );
   const totalPayable = grossEstimate + Math.round(ctx?.debt ?? 0);
 
   // Partnerenkénti minimum készlet (riasztási küszöb) beállítása egy termékre.
@@ -774,6 +814,13 @@ export default function ElszamolasPage() {
       toast(t("delivery.created", { serial: res.serial }), "success");
       setDelivery(null);
       loadCtx();
+      // GLS-feladás egy lépésben: a csomagok oldal előtöltve nyílik, a címke
+      // azonnal generálható.
+      if (await confirm(t("delivery.glsOffer", { serial: res.serial }))) {
+        router.push(
+          `/csomagok?partner=${partnerId}&content=${encodeURIComponent(res.serial)}`,
+        );
+      }
     } catch (err) {
       setDeliveryError(errorMessage(err));
     } finally {
@@ -805,8 +852,10 @@ export default function ElszamolasPage() {
 
   async function createSettlement() {
     if (!partnerId) return;
+    // Csak a KÁVÉT leltározzuk — a nem kávé termékek nem kerülnek leltár-sorba
+    // (azok szállítólevélen vagy azonnali átadásként számolódnak el).
     const lines = stockRows
-      .filter((s) => (physical[s.product_id] ?? "") !== "")
+      .filter((s) => s.is_consignment && (physical[s.product_id] ?? "") !== "")
       .map((s) => ({
         product_id: s.product_id,
         physical_qty: Number(physical[s.product_id]),
@@ -843,7 +892,7 @@ export default function ElszamolasPage() {
         unit_cost: handovers[s.product_id].cost === "" ? null : Number(handovers[s.product_id].cost),
         price: (handovers[s.product_id].price ?? "") === "" ? null : Number(handovers[s.product_id].price),
       }));
-    if (lines.length === 0 && machines.length === 0) return;
+    if (lines.length === 0 && machines.length === 0 && handoverList.length === 0) return;
     const paid = paidAmount.trim() === "" ? null : Number(paidAmount);
     const payload = {
       partner_id: partnerId,
@@ -1590,11 +1639,18 @@ export default function ElszamolasPage() {
                         // darabra menő egyéb termék (pl. tejszín) nem opció
                         ...stock.filter((s) => s.is_consignment).map((s) => ({
                           id: s.product_id, label: s.product_name,
-                          sublabel: t("cons.partnerStockGroup"),
+                          sublabel: contractedIds.has(s.product_id)
+                            ? `☕ ${t("cons.contractedCoffee")}`
+                            : t("cons.partnerStockGroup"),
+                          keywords: products.find((x) => x.id === s.product_id)?.code ?? null,
                         })),
                         ...activeProducts
                           .filter((p) => p.is_consignment && !stock.some((s) => s.product_id === p.id))
-                          .map((p) => ({ id: p.id, label: p.name, sublabel: p.category })),
+                          .map((p) => ({
+                            id: p.id, label: p.name,
+                            sublabel: contractedIds.has(p.id) ? `☕ ${t("cons.contractedCoffee")}` : p.category,
+                            keywords: p.code,
+                          })),
                       ]}
                       value={machineProducts[m.asset_id] ?? ""}
                       onChange={(id) =>
@@ -1745,6 +1801,14 @@ export default function ElszamolasPage() {
                 <tr className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3 font-medium">
                     {s.product_name}
+                    {contractedIds.has(s.product_id) && (
+                      <span
+                        title={t("cons.contractedCoffeeHint")}
+                        className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold text-indigo-800"
+                      >
+                        ☕ {t("cons.contractedCoffee")}
+                      </span>
+                    )}
                     <button
                       onClick={() =>
                         extraProducts.includes(s.product_id)
@@ -1793,15 +1857,19 @@ export default function ElszamolasPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-500">{s.is_consignment ? s.portions_available : "—"}</td>
                   <td className="px-4 py-3">
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={physical[s.product_id] ?? ""}
-                      onChange={(e) => setPhysical({ ...physical, [s.product_id]: e.target.value })}
-                      placeholder={`${s.quantity} ${s.unit}`}
-                      className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
-                    />
+                    {s.is_consignment ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={physical[s.product_id] ?? ""}
+                        onChange={(e) => setPhysical({ ...physical, [s.product_id]: e.target.value })}
+                        placeholder={`${s.quantity} ${s.unit}`}
+                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
+                      />
+                    ) : (
+                      <span title={t("cons.noInventoryHint")} className="text-slate-300">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {!s.is_consignment ? (
@@ -1826,9 +1894,13 @@ export default function ElszamolasPage() {
                       />
                     )}
                   </td>
-                  <td className="px-4 py-3">{(physical[s.product_id] ?? "") !== "" ? `${s.consumed.toFixed(2)} ${s.unit}` : "—"}</td>
-                  <td className="px-4 py-3">{s.filled ? s.portions.toFixed(0) : "—"}</td>
-                  <td className="px-4 py-3 font-medium">{s.filled ? ft(Math.round(s.amount)) : "—"}</td>
+                  <td className="px-4 py-3">
+                    {s.is_consignment && (physical[s.product_id] ?? "") !== ""
+                      ? `${s.consumed.toFixed(2)} ${s.unit}`
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3">{s.is_consignment && s.filled ? s.portions.toFixed(0) : "—"}</td>
+                  <td className="px-4 py-3 font-medium">{s.is_consignment && s.filled ? ft(Math.round(s.amount)) : "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <input
@@ -1886,12 +1958,34 @@ export default function ElszamolasPage() {
               )}
             </tbody>
           </table>
+          {/* Az előző elszámolás óta szállítólevélen átadott áru — az
+              elszámolás automatikusan kiszámlázza, itt csak látszik. */}
+          {(ctx?.open_delivery_items?.length ?? 0) > 0 && (
+            <div className="border-t border-slate-100 px-4 py-2.5">
+              <p className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                🚚 {t("cons.deliveredSinceLast")}
+              </p>
+              <div className="space-y-0.5 text-sm">
+                {ctx!.open_delivery_items.map((it, i) => (
+                  <p key={i} className="text-slate-600">
+                    {it.product_name} — {it.quantity} × {ft(Math.round(it.unit_price))} ={" "}
+                    <span className="font-medium">{ft(Math.round(it.amount_net))}</span>
+                    <span className="ml-2 text-xs text-slate-400">({it.serial})</span>
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Termék felvétele a leltárba — készlet-sor nélküli partnernél is */}
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2.5">
             <SearchSelect
               items={activeProducts
                 .filter((p) => !stockRows.some((s) => s.product_id === p.id))
-                .map((p) => ({ id: p.id, label: p.name, sublabel: p.category, badge: p.unit }))}
+                .map((p) => ({
+                  id: p.id, label: p.name, sublabel: p.category,
+                  badge: p.code || p.unit, keywords: p.code,
+                }))}
               value={addProductId}
               onChange={setAddProductId}
               placeholder={t("cons.addProductChoose")}
@@ -1961,7 +2055,9 @@ export default function ElszamolasPage() {
                 <select
                   value={payment}
                   onChange={(e) => setPayment(e.target.value as (typeof PAYMENTS)[number])}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  disabled={discountAll}
+                  title={discountAll ? t("cons.noVatCashOnly") : undefined}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-60"
                 >
                   {PAYMENTS.map((m) => (
                     <option key={m} value={m}>{t(`cons.payments.${m}`)}</option>

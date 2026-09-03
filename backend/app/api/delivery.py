@@ -153,6 +153,14 @@ async def create_delivery(
 
         src = await _get_warehouse_or_404(db, body.source_warehouse_id)
 
+    # Mindenki csak a SAJÁT raktárából tehet árut szállítólevélre — kivéve az
+    # admin/manager, aki bármelyik raktárból (vagy raktár nélkül) küldhet.
+    if actor.role not in ("admin", "manager"):
+        if src is None or src.user_id != actor.id:
+            raise HTTPException(
+                status_code=403, detail={"code": "delivery.own_warehouse_only"}
+            )
+
     dn = DeliveryNote(
         serial=await _next_serial(db), partner_id=partner.id,
         source_warehouse_id=src.id if src else None, note=body.note,

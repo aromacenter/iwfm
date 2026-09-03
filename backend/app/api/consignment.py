@@ -57,6 +57,8 @@ PAYMENT_METHODS = ("cash", "card", "transfer", "cod")
 
 class ProductBody(BaseModel):
     name: str = Field(min_length=1, max_length=256)
+    # Cikkszám — minden termék-keresőben szűrhető rá.
+    code: str | None = Field(default=None, max_length=32)
     # Csoport (pl. Kávék, Kávégépek, Alkatrészek, Kellékek) — szabad szöveg.
     category: str | None = Field(default=None, max_length=64)
     unit: str = Field(default="kg", max_length=16)
@@ -75,6 +77,7 @@ class ProductBody(BaseModel):
 class ProductOut(BaseModel):
     id: str
     name: str
+    code: str | None = None
     category: str | None
     unit: str
     grams_per_portion: int
@@ -91,6 +94,7 @@ def _product_out(p: Product) -> ProductOut:
     return ProductOut(
         id=str(p.id),
         name=p.name,
+        code=p.code,
         category=p.category,
         unit=p.unit,
         grams_per_portion=p.grams_per_portion,
@@ -727,9 +731,11 @@ class SettlementContextOut(BaseModel):
     last_visit: datetime | None
     single_product_id: str | None  # ha a partnernek pontosan 1 készlet-terméke van
     # Nyitott szállítólevelek — a következő elszámoláson automatikusan
-    # kiszámlázódnak.
+    # kiszámlázódnak. A tételes lista az "Egyéb termékek" blokkban jelenik meg
+    # (a nem kávé termékeket nem leltározzuk, csak az átadottak számítanak).
     open_deliveries: int = 0
     open_deliveries_net: float = 0.0
+    open_delivery_items: list[dict] = []
     # Szerződéses alapértelmezések: az elszámoló-űrlap előtölti, ott csak
     # felülírni lehet.
     default_payment_method: str | None = None
@@ -820,6 +826,7 @@ async def settlement_context(
         )
     ).scalars().all()
     open_net = 0.0
+    open_items: list[dict] = []
     if open_notes:
         open_net = (
             await db.execute(
@@ -831,6 +838,26 @@ async def settlement_context(
                 ).where(DeliveryNoteLine.delivery_note_id.in_(open_notes))
             )
         ).scalar_one()
+        # Tételes lista: az előző elszámolás óta szállítólevélen átadott áru —
+        # az elszámolás automatikusan kiszámlázza, a felület csak megmutatja.
+        item_rows = (
+            await db.execute(
+                select(DeliveryNoteLine, DeliveryNote.serial)
+                .join(DeliveryNote, DeliveryNote.id == DeliveryNoteLine.delivery_note_id)
+                .where(DeliveryNoteLine.delivery_note_id.in_(open_notes))
+                .order_by(DeliveryNote.created_at)
+            )
+        ).all()
+        open_items = [
+            {
+                "product_name": ln.product_name,
+                "quantity": ln.quantity,
+                "unit_price": ln.unit_price,
+                "amount_net": _money(ln.quantity * ln.unit_price),
+                "serial": serial,
+            }
+            for ln, serial in item_rows
+        ]
 
     # Tartozás tételesen: mely elszámolásokból áll, dátummal és határidővel —
     # a képviselő a helyszínen látja, mit kell behajtania.
@@ -861,6 +888,7 @@ async def settlement_context(
         single_product_id=single_pid,
         open_deliveries=len(open_notes),
         open_deliveries_net=_money(open_net),
+        open_delivery_items=open_items,
         default_payment_method=partner.contract_payment_method,
         payment_terms_days=(
             partner.contract_payment_terms_days
@@ -1370,11 +1398,14 @@ async def create_settlement(
     A számlázás külön lépés (POST /{id}/invoice)."""
     if body.payment_method not in PAYMENT_METHODS:
         raise HTTPException(status_code=422, detail={"code": "settlement.bad_payment"})
+    # Kedvezményes (ÁFA/számla nélküli) elszámolás KIZÁRÓLAG készpénzben mehet.
+    if body.no_vat and body.payment_method != "cash":
+        raise HTTPException(status_code=422, detail={"code": "settlement.no_vat_cash_only"})
     partner = await _get_partner_or_404(db, body.partner_id)
 
-    if not body.lines and not body.machines:
+    if not body.lines and not body.machines and not body.handovers:
         # Üres leltár/gép-lista is elfogadható, ha van betöltendő nyitott
-        # szállítólevél — az elszámolás csak azokat számlázza ki.
+        # szállítólevél VAGY most átadott áru — az elszámolás azokat számlázza.
         from app.models import DeliveryNote as _DN
 
         has_open = (
@@ -1679,7 +1710,7 @@ async def create_settlement(
             portions = portions_from(consumed, product.grams_per_portion)
             amount_net = _money(portions * unit_price)
             cross_portions = None
-        line_vat = 0 if body.no_vat else product.vat_percent
+        line_vat = 0 if (body.no_vat and product.is_consignment) else product.vat_percent
         amount_gross = _money(amount_net * (1 + line_vat / 100))
         total_net += amount_net
         total_gross += amount_gross
@@ -1755,7 +1786,7 @@ async def create_settlement(
             continue
         product = await _get_product_or_404(db, str(pid))
         unit_price = _effective_price(product, price_overrides)
-        line_vat = 0 if body.no_vat else product.vat_percent
+        line_vat = 0 if (body.no_vat and product.is_consignment) else product.vat_percent
         amount_net = _money(machine_amount[pid])
         db.add(SettlementLine(
             settlement_id=settlement.id,
@@ -1806,7 +1837,7 @@ async def create_settlement(
                         "from": unit_price, "to": h.price,
                     })
                 unit_price = h.price
-            line_vat = 0 if body.no_vat else product.vat_percent
+            line_vat = 0 if (body.no_vat and product.is_consignment) else product.vat_percent
             amount_net = _money(h.quantity * unit_price)
             db.add(SettlementLine(
                 settlement_id=settlement.id,
@@ -1849,7 +1880,9 @@ async def create_settlement(
             )
         ).scalars().all()
         for ln in dn_lines:
-            line_vat = 0 if body.no_vat else ln.vat_percent
+            # kedvezmény (no_vat) csak a kávéra jár — a szállítóleveles áru
+            # a saját ÁFA-jával megy
+            line_vat = ln.vat_percent
             amount_net = _money(ln.quantity * ln.unit_price)
             db.add(SettlementLine(
                 settlement_id=settlement.id,

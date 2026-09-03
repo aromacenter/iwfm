@@ -14,6 +14,7 @@ import { useUI } from "@/lib/ui";
 interface Product {
   id: string;
   name: string;
+  code: string | null; // cikkszám — a keresők erre is szűrnek
   category: string | null;
   unit: string;
   grams_per_portion: number;
@@ -37,6 +38,7 @@ const DEFAULT_CATEGORIES = ["Kávék", "Kávégépek", "Alkatrészek", "Kelléke
 const EMPTY = {
   id: "",
   name: "",
+  code: "",
   category: "",
   unit: "kg",
   grams_per_portion: "7",
@@ -97,6 +99,7 @@ export default function TermekekPage() {
     setForm({
       id: p.id,
       name: p.name,
+      code: p.code ?? "",
       category: p.category ?? "",
       unit: p.unit,
       grams_per_portion: String(p.grams_per_portion),
@@ -149,6 +152,7 @@ export default function TermekekPage() {
     try {
       const body = {
         name: form.name,
+        code: form.code.trim() || null,
         category: form.category.trim() || null,
         unit: form.unit || "kg",
         grams_per_portion: Number(form.grams_per_portion) || 7,
@@ -280,6 +284,9 @@ export default function TermekekPage() {
                 <td className="px-4 py-3">
                   <div className="font-medium">
                     {p.name}
+                    {p.code && (
+                      <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-normal text-slate-600">{p.code}</span>
+                    )}
                     {!p.is_active && (
                       <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-normal">{t("partners.inactive")}</span>
                     )}
@@ -338,6 +345,11 @@ export default function TermekekPage() {
             <label className="block text-sm">
               {t("cons.name")} *
               <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="block text-sm">
+              {t("cons.productCode")}
+              <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="pl. 103" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono" />
+              <span className="mt-0.5 block text-xs text-slate-400">{t("cons.productCodeHint")}</span>
             </label>
             <label className="block text-sm">
               {t("cons.category")}

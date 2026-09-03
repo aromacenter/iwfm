@@ -140,6 +140,24 @@ export default function CsomagokPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Szállítólevélből érkező előtöltés (?partner=<id>&content=<szöveg>) — a
+  // partner címadatai betöltődnek, a tartalom az SZL-sorszám.
+  const [partnerPrefillDone, setPartnerPrefillDone] = useState(false);
+  useEffect(() => {
+    if (partnerPrefillDone || partners.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get("partner");
+    if (!pid) {
+      setPartnerPrefillDone(true);
+      return;
+    }
+    setPartnerPrefillDone(true);
+    selectPartner(pid);
+    const content = params.get("content");
+    if (content) setForm((f) => ({ ...f, content: content.slice(0, 250) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partners, partnerPrefillDone]);
+
   // Partner kiválasztásakor a cím/elérhetőség automatikusan kitöltődik
   function selectPartner(id: string) {
     const p = partners.find((x) => x.id === id);

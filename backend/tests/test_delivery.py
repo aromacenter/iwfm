@@ -156,3 +156,73 @@ async def test_delivery_cancel_restores_stock(client, manager):
         headers=mgr,
     )
     assert res.status_code == 422
+
+async def test_delivery_own_warehouse_only(client, admin, manager):
+    """Nem vezetok (pl. uzletkoto) csak a SAJAT raktarukbol tehetnek arut
+    szallitolevelre; admin/manager barmelyikbol."""
+    from tests.conftest import make_user
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Sajat Raktaras Bolt"}, headers=mgr)
+    ).json()
+    product = await make_product(client, mgr, name="SZL Kave 2")
+    uk_user, uk = await make_user(email="futo-uk@example.com", role="uzletkoto")
+
+    # idegen (senkihez nem rendelt) raktar
+    other_wh = (
+        await client.post("/api/warehouses", json={"name": "Kozponti T", "kind": "site"}, headers=mgr)
+    ).json()
+    await client.post(
+        f"/api/warehouses/{other_wh['id']}/receive",
+        json={"product_id": product["id"], "quantity": 10.0},
+        headers=mgr,
+    )
+    # az uzletkoto sajat autoja
+    own_wh = (
+        await client.post(
+            "/api/warehouses",
+            json={"name": "UK Auto", "kind": "van", "user_id": str(uk_user.id)},
+            headers=mgr,
+        )
+    ).json()
+    await client.post(
+        f"/api/warehouses/{own_wh['id']}/receive",
+        json={"product_id": product["id"], "quantity": 5.0},
+        headers=mgr,
+    )
+
+    line = {"product_id": product["id"], "quantity": 1, "unit_price": 100.0}
+    # raktar nelkul: tiltott
+    denied = await client.post(
+        "/api/deliveries",
+        json={"partner_id": partner["id"], "lines": [line]},
+        headers=uk,
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["code"] == "delivery.own_warehouse_only"
+    # idegen raktarbol: tiltott
+    denied2 = await client.post(
+        "/api/deliveries",
+        json={"partner_id": partner["id"], "source_warehouse_id": other_wh["id"],
+              "lines": [line]},
+        headers=uk,
+    )
+    assert denied2.status_code == 403
+    # sajat autobol: mehet
+    ok = await client.post(
+        "/api/deliveries",
+        json={"partner_id": partner["id"], "source_warehouse_id": own_wh["id"],
+              "lines": [line]},
+        headers=uk,
+    )
+    assert ok.status_code == 201, ok.text
+    # manager idegen raktarbol is kuldhet
+    ok2 = await client.post(
+        "/api/deliveries",
+        json={"partner_id": partner["id"], "source_warehouse_id": other_wh["id"],
+              "lines": [line]},
+        headers=mgr,
+    )
+    assert ok2.status_code == 201, ok2.text

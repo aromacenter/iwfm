@@ -1088,6 +1088,8 @@ class Product(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # Cikkszám (pl. 3 jegyű kód) — minden termék-keresőben szűrhető rá.
+    code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Csoportosítás (pl. Kávék, Kávégépek, Alkatrészek, Kellékek) — szabad
     # szöveg, a felület a meglévő értékekből ajánl.
     category: Mapped[str | None] = mapped_column(String(64), nullable=True)
