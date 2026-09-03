@@ -54,6 +54,7 @@ interface Product {
   purchase_price: number | null;
   price_per_portion: number;
   grams_per_portion: number;
+  vat_percent: number;
   unit: string;
   is_consignment: boolean;
 }
@@ -161,7 +162,7 @@ interface SettlementContext {
   open_deliveries_net: number;
   open_delivery_items: {
     product_name: string; quantity: number; unit_price: number;
-    amount_net: number; serial: string;
+    amount_net: number; amount_gross: number; serial: string;
   }[];
   default_payment_method: "cash" | "card" | "transfer" | "cod" | null;
   payment_terms_days: number | null;
@@ -728,26 +729,49 @@ export default function ElszamolasPage() {
   }, [stockRows, physical, counters, machinePreview]);
 
   // Átadott NEM-bizományos áruk: azonnal fizetendők — csak a kávé bizomány.
+  // A képviselő BRUTTÓ árat lát és ír be; a mentés nettósítja a termék ÁFA-ja
+  // szerint (a számla nettó alapon készül).
   const handoverSale = useMemo(() => {
     let net = 0;
-    const items: { product_id: string; name: string; qty: number; unit: string; unitPrice: number; amount: number }[] = [];
+    let gross = 0;
+    const items: {
+      product_id: string; name: string; qty: number; unit: string;
+      unitGross: number; unitNet: number; amount: number; amountGross: number;
+    }[] = [];
     for (const s of stockRows) {
       const h = handovers[s.product_id];
       if (!h || h.qty === "" || Number(h.qty) <= 0) continue;
       const p = products.find((x) => x.id === s.product_id);
       if (!p || p.is_consignment) continue;
-      const unitPrice = (h.price ?? "") !== "" ? Number(h.price) : s.price_per_portion;
-      const amount = Number(h.qty) * unitPrice;
+      const vatMul = 1 + (p.vat_percent ?? 27) / 100;
+      const unitGross =
+        (h.price ?? "") !== "" ? Number(h.price) : Math.round(s.price_per_portion * vatMul);
+      const unitNet = unitGross / vatMul;
+      const amount = Number(h.qty) * unitNet;
+      const amountGross = Number(h.qty) * unitGross;
       net += amount;
-      items.push({ product_id: s.product_id, name: s.product_name, qty: Number(h.qty), unit: s.unit, unitPrice, amount });
+      gross += amountGross;
+      items.push({
+        product_id: s.product_id, name: s.product_name, qty: Number(h.qty),
+        unit: s.unit, unitGross, unitNet, amount, amountGross,
+      });
     }
-    return { net, items };
+    return { net, gross, items };
   }, [stockRows, handovers, products]);
 
+  // Az előző elszámolás óta SZL-en átadott áru bruttója — a fizetendőbe már
+  // az űrlapon beleszámít, hogy a képviselő lássa, mennyit kell beszednie.
+  const openDeliveryGross = useMemo(
+    () =>
+      (ctx?.open_delivery_items ?? []).reduce((a, it) => a + (it.amount_gross ?? it.amount_net), 0),
+    [ctx],
+  );
+
   // Becsült fizetendő: a kávé nettó × ÁFA (kedvezménynél ÁFA nélkül), az
-  // átadott eladási áruk MINDIG bruttón (kedvezmény rájuk nem vonatkozik).
+  // átadott eladási áruk és az SZL-tételek MINDIG bruttón (kedvezmény rájuk
+  // nem vonatkozik) — így már az űrlapon a beszedendő összeg látszik.
   const grossEstimate = Math.round(
-    preview.net * (noVat ? 1 : 1.27) + handoverSale.net * 1.27,
+    preview.net * (noVat ? 1 : 1.27) + handoverSale.gross + openDeliveryGross,
   );
   const totalPayable = grossEstimate + Math.round(ctx?.debt ?? 0);
 
@@ -776,16 +800,111 @@ export default function ElszamolasPage() {
   const [delivery, setDelivery] = useState<{
     source_warehouse_id: string;
     note: string;
+    ship_gls: boolean; // mentés után egyből a GLS-címkéhez visz
     lines: { product_id: string; quantity: string; unit_price: string }[];
   } | null>(null);
   const [deliveryBusy, setDeliveryBusy] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
+
+  // ── 💰 Azonnali értékesítés: leltártól és géptől független eladás — a
+  // tételek azonnal fizetendők (bruttó áron), opcionális azonnali számlával
+  // és GLS-feladással. Kávét NEM itt adunk el (az bizományba megy).
+  const [instantSale, setInstantSale] = useState<{
+    rows: { product_id: string; quantity: string; gross_price: string }[];
+    payment: (typeof PAYMENTS)[number];
+    invoiceNow: boolean;
+    shipGls: boolean;
+  } | null>(null);
+  const [instantBusy, setInstantBusy] = useState(false);
+  const [instantError, setInstantError] = useState<string | null>(null);
+
+  function openInstantSale() {
+    setInstantError(null);
+    setInstantSale({
+      rows: [{ product_id: "", quantity: "", gross_price: "" }],
+      payment: "cash",
+      invoiceNow: true,
+      shipGls: false,
+    });
+  }
+
+  function instantRowGross(r: { product_id: string; quantity: string; gross_price: string }): number {
+    const p = products.find((x) => x.id === r.product_id);
+    if (!p || r.quantity === "") return 0;
+    const vatMul = 1 + (p.vat_percent ?? 27) / 100;
+    const gross = r.gross_price !== "" ? Number(r.gross_price) : Math.round(p.price_per_portion * vatMul);
+    return Number(r.quantity) * gross;
+  }
+
+  async function saveInstantSale() {
+    if (!instantSale || !partnerId) return;
+    const rows = instantSale.rows.filter((r) => r.product_id && Number(r.quantity) > 0);
+    if (!rows.length) {
+      setInstantError(t("instant.needLine"));
+      return;
+    }
+    setInstantBusy(true);
+    setInstantError(null);
+    try {
+      const created = await api.post<Settlement>("/api/settlements", {
+        partner_id: partnerId,
+        payment_method: instantSale.payment,
+        no_vat: false,
+        lines: [],
+        machines: [],
+        handovers: rows.map((r) => {
+          const p = products.find((x) => x.id === r.product_id)!;
+          const vatMul = 1 + (p.vat_percent ?? 27) / 100;
+          const gross = r.gross_price !== "" ? Number(r.gross_price) : Math.round(p.price_per_portion * vatMul);
+          return {
+            product_id: r.product_id,
+            quantity: Number(r.quantity),
+            unit_cost: null,
+            price: gross / vatMul, // a rendszer nettón könyvel
+          };
+        }),
+        paid_amount: null,
+        note: t("instant.noteTag"),
+      });
+      let invoiced = false;
+      if (instantSale.invoiceNow) {
+        try {
+          await api.post(`/api/settlements/${created.id}/invoice`);
+          invoiced = true;
+        } catch (err) {
+          toast(errorMessage(err), "error");
+        }
+      }
+      toast(t(invoiced ? "instant.doneInvoiced" : "instant.done"), "success");
+      const wantGls = instantSale.shipGls;
+      setInstantSale(null);
+      loadHistory();
+      loadStock();
+      loadDue();
+      if (wantGls) {
+        const content = rows
+          .map((r) => {
+            const p = products.find((x) => x.id === r.product_id);
+            return p ? `${p.name} ×${r.quantity}` : "";
+          })
+          .filter(Boolean)
+          .join(", ")
+          .slice(0, 200);
+        router.push(`/csomagok?partner=${partnerId}&content=${encodeURIComponent(content)}`);
+      }
+    } catch (err) {
+      setInstantError(errorMessage(err));
+    } finally {
+      setInstantBusy(false);
+    }
+  }
 
   function openDelivery() {
     setDeliveryError(null);
     setDelivery({
       source_warehouse_id: defaultVanId(),
       note: "",
+      ship_gls: false,
       lines: [{ product_id: "", quantity: "", unit_price: "" }],
     });
   }
@@ -812,11 +931,12 @@ export default function ElszamolasPage() {
         })),
       });
       toast(t("delivery.created", { serial: res.serial }), "success");
+      const wantGls = delivery.ship_gls;
       setDelivery(null);
       loadCtx();
-      // GLS-feladás egy lépésben: a csomagok oldal előtöltve nyílik, a címke
-      // azonnal generálható.
-      if (await confirm(t("delivery.glsOffer", { serial: res.serial }))) {
+      // GLS-feladás egy lépésben: ha a modalban be volt pipálva, a csomagok
+      // oldal előtöltve nyílik, a címke azonnal generálható.
+      if (wantGls) {
         router.push(
           `/csomagok?partner=${partnerId}&content=${encodeURIComponent(res.serial)}`,
         );
@@ -886,12 +1006,21 @@ export default function ElszamolasPage() {
       }));
     const handoverList: HandoverPayload[] = stockRows
       .filter((s) => (handovers[s.product_id]?.qty ?? "") !== "" && Number(handovers[s.product_id].qty) > 0)
-      .map((s) => ({
-        product_id: s.product_id,
-        quantity: Number(handovers[s.product_id].qty),
-        unit_cost: handovers[s.product_id].cost === "" ? null : Number(handovers[s.product_id].cost),
-        price: (handovers[s.product_id].price ?? "") === "" ? null : Number(handovers[s.product_id].price),
-      }));
+      .map((s) => {
+        // Nem kávé terméknél a beírt ár BRUTTÓ — a mentés nettósítja.
+        const raw = handovers[s.product_id].price ?? "";
+        const p = products.find((x) => x.id === s.product_id);
+        let price: number | null = raw === "" ? null : Number(raw);
+        if (price !== null && p && !p.is_consignment) {
+          price = price / (1 + (p.vat_percent ?? 27) / 100);
+        }
+        return {
+          product_id: s.product_id,
+          quantity: Number(handovers[s.product_id].qty),
+          unit_cost: handovers[s.product_id].cost === "" ? null : Number(handovers[s.product_id].cost),
+          price,
+        };
+      });
     if (lines.length === 0 && machines.length === 0 && handoverList.length === 0) return;
     const paid = paidAmount.trim() === "" ? null : Number(paidAmount);
     const payload = {
@@ -1211,6 +1340,14 @@ export default function ElszamolasPage() {
             className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100"
           >
             🚚 {t("delivery.new")}
+          </button>
+        )}
+        {partnerId && (
+          <button
+            onClick={openInstantSale}
+            className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
+          >
+            💰 {t("instant.btn")}
           </button>
         )}
         {partnerId && stock.length > 0 && (
@@ -1907,6 +2044,7 @@ export default function ElszamolasPage() {
                         type="number"
                         min={0}
                         step="0.01"
+                        data-handover-input={s.product_id}
                         value={handovers[s.product_id]?.qty ?? ""}
                         onChange={(e) =>
                           setHandovers({
@@ -1926,14 +2064,16 @@ export default function ElszamolasPage() {
                       const p = products.find((x) => x.id === s.product_id);
                       const h = handovers[s.product_id];
                       if (!p || p.is_consignment || !h || h.qty === "" || Number(h.qty) <= 0) return null;
-                      const unitPrice = (h.price ?? "") !== "" ? Number(h.price) : s.price_per_portion;
+                      const vatMul = 1 + (p.vat_percent ?? 27) / 100;
+                      const defGross = Math.round(s.price_per_portion * vatMul);
+                      const unitGross = (h.price ?? "") !== "" ? Number(h.price) : defGross;
                       return (
                         <div className="mt-1 flex items-center gap-1 text-xs">
-                          <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">💰 {t("cons.handoverPayable")}</span>
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">💰 {t("cons.handoverPayableGross")}</span>
                           <input
                             type="number"
                             min={0}
-                            step="0.01"
+                            step="1"
                             value={h.price ?? ""}
                             onChange={(e) =>
                               setHandovers({
@@ -1941,11 +2081,11 @@ export default function ElszamolasPage() {
                                 [s.product_id]: { ...h, price: e.target.value },
                               })
                             }
-                            placeholder={String(s.price_per_portion)}
-                            title={t("cons.handoverPriceHint")}
+                            placeholder={String(defGross)}
+                            title={t("cons.handoverPriceGrossHint")}
                             className="w-20 rounded border border-amber-300 px-1.5 py-1"
                           />
-                          <span className="font-semibold text-amber-900">= {ft(Math.round(Number(h.qty) * unitPrice))}</span>
+                          <span className="font-semibold text-amber-900">= {ft(Math.round(Number(h.qty) * unitGross))}</span>
                         </div>
                       );
                     })()}
@@ -1996,8 +2136,15 @@ export default function ElszamolasPage() {
               disabled={!addProductId}
               onClick={() => {
                 if (!addProductId) return;
-                setExtraProducts((xs) => [...xs, addProductId]);
+                const pid = addProductId;
+                setExtraProducts((xs) => [...xs, pid]);
                 setAddProductId("");
+                // a kurzor egyből az új sor ÁTADOTT mennyiség-mezőjére ugrik
+                setTimeout(() => {
+                  document
+                    .querySelector<HTMLInputElement>(`input[data-handover-input="${pid}"]`)
+                    ?.focus();
+                }, 60);
               }}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-40"
             >
@@ -2013,9 +2160,15 @@ export default function ElszamolasPage() {
                   <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">💰 {t("cons.handoverSaleTitle")}</span>
                   {handoverSale.items.map((it) => (
                     <span key={it.product_id} className="text-amber-800">
-                      {it.name}: {it.qty} {it.unit} × {ft(Math.round(it.unitPrice))} = <span className="font-semibold">{ft(Math.round(it.amount))}</span>
+                      {it.name}: {it.qty} {it.unit} × {ft(Math.round(it.unitGross))} = <span className="font-semibold">{ft(Math.round(it.amountGross))}</span>
                     </span>
                   ))}
+                </div>
+              )}
+              {openDeliveryGross > 0 && (
+                <div className="flex flex-wrap items-center justify-end gap-x-3 text-sm">
+                  <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">🚚 {t("cons.openDeliveriesGross")}</span>
+                  <span className="font-semibold text-sky-900">{ft(Math.round(openDeliveryGross))}</span>
                 </div>
               )}
               <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
@@ -2470,12 +2623,167 @@ export default function ElszamolasPage() {
               {t("cons.notes")}
               <input value={delivery.note} onChange={(e) => setDelivery({ ...delivery, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
+            {/* GLS előre pipával — nincs utólagos felugró kérdés */}
+            <label className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={delivery.ship_gls}
+                onChange={(e) => setDelivery({ ...delivery, ship_gls: e.target.checked })}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                📦 {t("delivery.shipGls")}
+                <span className="block text-xs text-sky-800">{t("delivery.shipGlsHint")}</span>
+              </span>
+            </label>
             {deliveryError && <p className="text-sm text-red-600">{deliveryError}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setDelivery(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
               <button disabled={deliveryBusy} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50">{deliveryBusy ? t("common.saving") : t("delivery.save")}</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* 💰 Azonnali értékesítés: bármilyen nem-kávé áru eladása egy lépésben —
+          bruttó áron, azonnali számlával és opcionális GLS-feladással. */}
+      {instantSale && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setInstantSale(null); }}
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+        >
+          <div className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">💰 {t("instant.title")}</h2>
+            <p className="text-xs text-slate-500">{t("instant.hint")}</p>
+            <div className="space-y-2">
+              {instantSale.rows.map((r, i) => {
+                const p = products.find((x) => x.id === r.product_id);
+                const vatMul = p ? 1 + (p.vat_percent ?? 27) / 100 : 1.27;
+                return (
+                  <div key={i} className="flex items-start gap-1.5">
+                    <SearchSelect
+                      items={activeProducts
+                        .filter((x) => !x.is_consignment)
+                        .map((x) => ({
+                          id: x.id, label: x.name, sublabel: x.category,
+                          badge: x.code || x.unit, keywords: x.code,
+                        }))}
+                      value={r.product_id}
+                      onChange={(id) => {
+                        setInstantSale((s) => s && ({
+                          ...s,
+                          rows: s.rows.map((row, j) => (j === i ? { ...row, product_id: id } : row)),
+                        }));
+                        // a kurzor egyből a mennyiségre ugrik
+                        setTimeout(() => {
+                          document
+                            .querySelector<HTMLInputElement>(`input[data-instant-qty="${i}"]`)
+                            ?.focus();
+                        }, 60);
+                      }}
+                      placeholder={t("cons.addProductChoose")}
+                      className="min-w-0 flex-1 text-sm"
+                    />
+                    <input
+                      type="number" min={0} step="1"
+                      data-instant-qty={i}
+                      value={r.quantity}
+                      onChange={(e) =>
+                        setInstantSale((s) => s && ({
+                          ...s,
+                          rows: s.rows.map((row, j) => (j === i ? { ...row, quantity: e.target.value } : row)),
+                        }))
+                      }
+                      placeholder={t("instant.qtyPh")}
+                      className="w-16 rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                    />
+                    <input
+                      type="number" min={0} step="1"
+                      value={r.gross_price}
+                      onChange={(e) =>
+                        setInstantSale((s) => s && ({
+                          ...s,
+                          rows: s.rows.map((row, j) => (j === i ? { ...row, gross_price: e.target.value } : row)),
+                        }))
+                      }
+                      placeholder={p ? String(Math.round(p.price_per_portion * vatMul)) : t("instant.grossPh")}
+                      title={t("instant.grossHint")}
+                      className="w-24 rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setInstantSale((s) => s && ({ ...s, rows: s.rows.filter((_, j) => j !== i) }))
+                      }
+                      className="px-1 py-2 text-slate-400 hover:text-rose-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() =>
+                  setInstantSale((s) => s && ({
+                    ...s,
+                    rows: [...s.rows, { product_id: "", quantity: "", gross_price: "" }],
+                  }))
+                }
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+              >
+                + {t("instant.addRow")}
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 px-3 py-2">
+              <span className="text-sm font-medium text-amber-900">{t("instant.totalGross")}</span>
+              <span className="text-lg font-bold text-amber-900">
+                {ft(Math.round(instantSale.rows.reduce((a, r) => a + instantRowGross(r), 0)))}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={instantSale.payment}
+                onChange={(e) =>
+                  setInstantSale((s) => s && ({ ...s, payment: e.target.value as (typeof PAYMENTS)[number] }))
+                }
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                {PAYMENTS.map((m) => (
+                  <option key={m} value={m}>{t(`cons.payments.${m}`)}</option>
+                ))}
+              </select>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={instantSale.invoiceNow}
+                  onChange={(e) => setInstantSale((s) => s && ({ ...s, invoiceNow: e.target.checked }))}
+                  className="h-4 w-4"
+                />
+                🧾 {t("instant.invoiceNow")}
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={instantSale.shipGls}
+                  onChange={(e) => setInstantSale((s) => s && ({ ...s, shipGls: e.target.checked }))}
+                  className="h-4 w-4"
+                />
+                📦 {t("instant.shipGls")}
+              </label>
+            </div>
+            {instantError && <p className="text-sm text-red-600">{instantError}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setInstantSale(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button
+                onClick={() => void saveInstantSale()}
+                disabled={instantBusy}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {instantBusy ? t("common.saving") : `💰 ${t("instant.save")}`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

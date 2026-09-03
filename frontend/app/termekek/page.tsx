@@ -113,6 +113,16 @@ export default function TermekekPage() {
     });
   }
 
+  // Következő szabad cikkszám: kávé 101–299, minden más termék 301-től.
+  function nextFreeCode(isConsignment: boolean): string {
+    const used = new Set(
+      products.map((p) => Number(p.code)).filter((n) => Number.isFinite(n) && n > 0),
+    );
+    const [from, to] = isConsignment ? [101, 299] : [301, 999];
+    for (let n = from; n <= to; n++) if (!used.has(n)) return String(n);
+    return "";
+  }
+
   function toggleSelect(id: string) {
     setSelected((s) => {
       const next = new Set(s);
@@ -206,7 +216,22 @@ export default function TermekekPage() {
           🪄 {t("cons.backfillBtn")}
         </button>
         <button
-          onClick={() => { setError(null); setNewCat(false); setPriceHistory(null); setForm({ ...EMPTY }); }}
+          onClick={async () => {
+            try {
+              const res = await api.post<{ updated: number }>("/api/products/backfill-codes", {});
+              toast(t("cons.backfillCodesDone", { count: res.updated }), "success");
+              load();
+            } catch (err) {
+              toast(errorMessage(err), "error");
+            }
+          }}
+          title={t("cons.backfillCodesHint")}
+          className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+        >
+          🔢 {t("cons.backfillCodesBtn")}
+        </button>
+        <button
+          onClick={() => { setError(null); setNewCat(false); setPriceHistory(null); setForm({ ...EMPTY, code: nextFreeCode(false) }); }}
           className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
         >
           {t("cons.newProduct")}
@@ -417,7 +442,24 @@ export default function TermekekPage() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
             <label className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
-              <input type="checkbox" checked={form.is_consignment} onChange={(e) => setForm({ ...form, is_consignment: e.target.checked })} className="mt-0.5 h-4 w-4" />
+              <input
+                type="checkbox"
+                checked={form.is_consignment}
+                onChange={(e) => {
+                  const isCons = e.target.checked;
+                  // új terméknél a cikkszám-ajánlás követi a sávot
+                  // (kávé 101–299, más 301+) — kézzel beírt kódot nem bántjuk
+                  const auto =
+                    !form.id &&
+                    (form.code === "" || form.code === nextFreeCode(form.is_consignment));
+                  setForm({
+                    ...form,
+                    is_consignment: isCons,
+                    code: auto ? nextFreeCode(isCons) : form.code,
+                  });
+                }}
+                className="mt-0.5 h-4 w-4"
+              />
               <span>
                 ☕ {t("cons.consignmentFlag")}
                 <span className="block text-xs text-amber-700">{t("cons.consignmentFlagHint")}</span>

@@ -359,6 +359,9 @@
     "notInvoiced": "Not invoiced",
     "invoiceOk": "Invoice created in Billingó ({mode}).",
     "controlCounter": "totalizer (control)",
+    "handoverPayableGross": "payable now (gross)",
+    "handoverPriceGrossHint": "Gross sale price per unit — the system converts it to net for the invoice automatically.",
+    "openDeliveriesGross": "Delivered on delivery notes since last settlement (gross, payable now)",
     "otherProducts": "Other products (per piece — not inventoried; only handed-over/delivery-note items count)",
     "contractedCoffee": "contracted coffee",
     "contractedCoffeeHint": "The partner's contracted coffee (the machine's configured product) — other coffees can be handed over too, but this is the reference.",
@@ -455,7 +458,10 @@
     "consignmentFlagHint": "Settled by consumption at the partner. If UNCHECKED, the product is a sale: payable immediately on handover / delivery.",
     "consignmentBadge": "consignment",
     "signerName": "Signer's name (required)",
-    "signerNameRequired": "The signature requires the signer's typed name."
+    "signerNameRequired": "The signature requires the signer's typed name.",
+    "backfillCodesBtn": "Load product codes",
+    "backfillCodesHint": "Lifts the 3-digit “Xpresso code” stored in imported notes into the Code field (empty codes only).",
+    "backfillCodesDone": "Codes loaded for {count} products."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1846,7 +1852,7 @@
     "locationType": "Location type",
     "counter": "Counter",
     "counterCount": "Number of counters",
-    "counterN": "Counter {n} reading",
+    "counterN": "Counter {n}",
     "norm": "Norm",
     "defaultProduct": "Brews product",
     "defaultProductNone": "— not set —",
@@ -1865,7 +1871,6 @@
     "swapPh": "Type or scan a barcode…",
     "swapPricesInherit": "Counter layout matches — contract portion prices are inherited automatically, but you can override them here.",
     "swapPricesDiffer": "Different counter layout ({old} → {new}) — set the replacement's net portion price per counter.",
-    "counterN": "Counter {n}",
     "counterPricePh": "HUF/portion",
     "swapNotFound": "No in-stock machine with that barcode.",
     "swapDone": "Swap done: {old} → {new}",
@@ -2086,6 +2091,8 @@
     "needLine": "Add at least one line (product + quantity).",
     "created": "Delivery note saved: {serial} — it will be invoiced at the next settlement.",
     "glsOffer": "Ship it with GLS? ({serial}) — the packages page opens prefilled; the label can be generated right away.",
+    "shipGls": "Ship with GLS",
+    "shipGlsHint": "After saving, the Packages page opens prefilled with the partner's address and the delivery-note number — the label can be generated right away. Unchecked = own delivery.",
     "save": "Save delivery note",
     "openBanner": "{count} open delivery note(s) ({net} Ft net) — this settlement will invoice them automatically."
   },
@@ -2355,5 +2362,21 @@
       "delivered": "Delivered",
       "returned": "Returned"
     }
+  },
+  "instant": {
+    "btn": "Instant sale",
+    "title": "Instant sale",
+    "hint": "Sale independent of inventory and machines, to the selected partner: items are payable immediately, at gross prices. Do NOT sell coffee here — coffee goes on consignment (Replenish).",
+    "needLine": "Add at least one line (product + quantity).",
+    "qtyPh": "pcs",
+    "grossPh": "gross HUF",
+    "grossHint": "Gross sale price per unit — empty uses the product's base price with VAT.",
+    "addRow": "Add line",
+    "totalGross": "Total payable (gross)",
+    "invoiceNow": "invoice now",
+    "shipGls": "ship with GLS",
+    "noteTag": "Instant sale",
+    "done": "Instant sale recorded.",
+    "doneInvoiced": "Instant sale recorded and invoiced."
   }
 }

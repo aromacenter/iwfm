@@ -109,3 +109,23 @@ async def test_product_code_roundtrip(client, manager):
     assert p["code"] == "103"
     listed = (await client.get("/api/products", headers=mgr)).json()
     assert any(x["code"] == "103" for x in listed)
+
+
+async def test_backfill_codes_from_notes(client, manager):
+    """Az importban a notes-ba kerult 'Xpresso kod' 3 jegyu szamok a code
+    mezobe emelhetok — a mar kodolt termekek erintetlenek."""
+    _, mgr = manager
+    p1 = await make_product(client, mgr, name="Jegyzetes kave", notes="Xpresso kód: 105")
+    p2 = await make_product(client, mgr, name="Csak szam", notes="342")
+    p3 = await make_product(client, mgr, name="Kodos", code="777", notes="Xpresso kód: 999")
+    p4 = await make_product(client, mgr, name="Semmi", notes="valami szoveg")
+
+    res = await client.post("/api/products/backfill-codes", headers=mgr)
+    assert res.status_code == 200, res.text
+    assert res.json()["updated"] == 2
+
+    listed = {x["name"]: x["code"] for x in (await client.get("/api/products", headers=mgr)).json()}
+    assert listed["Jegyzetes kave"] == "105"
+    assert listed["Csak szam"] == "342"
+    assert listed["Kodos"] == "777"  # meglevo kod nem valtozik
+    assert listed["Semmi"] is None

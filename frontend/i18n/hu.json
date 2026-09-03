@@ -359,6 +359,9 @@
     "notInvoiced": "Nincs számlázva",
     "invoiceOk": "Számla létrehozva a Billingóban ({mode}).",
     "controlCounter": "összesítő (kontroll)",
+    "handoverPayableGross": "azonnal fizetendő (bruttó)",
+    "handoverPriceGrossHint": "Bruttó eladási ár darabonként — a rendszer a számlához automatikusan nettósítja.",
+    "openDeliveriesGross": "SZL-en átadva az előző elszámolás óta (bruttó, most fizetendő)",
     "otherProducts": "Egyéb termékek (darabra — nem leltározzuk, csak az átadott/szállítóleveles tételek számítanak)",
     "contractedCoffee": "szerződött kávé",
     "contractedCoffeeHint": "A partner erre a kávéra szerződött (a gép beállított terméke) — más kávé is átadható, de ez a viszonyítási alap.",
@@ -455,7 +458,10 @@
     "consignmentFlagHint": "Fogyás alapján számoljuk el a partnernél. Ha NINCS bepipálva, a termék eladás: átadáskor / kiszállításkor azonnal fizetendő.",
     "consignmentBadge": "bizomány",
     "signerName": "Aláíró neve (kötelező)",
-    "signerNameRequired": "Az aláíráshoz kötelező begépelni az aláíró nevét."
+    "signerNameRequired": "Az aláíráshoz kötelező begépelni az aláíró nevét.",
+    "backfillCodesBtn": "Cikkszámok betöltése",
+    "backfillCodesHint": "Az importált jegyzetekben tárolt „Xpresso kód” 3 jegyű számokat a Cikkszám mezőbe emeli (csak az üreseknél).",
+    "backfillCodesDone": "Cikkszám betöltve {count} terméknél."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1846,7 +1852,7 @@
     "locationType": "Hely típus",
     "counter": "Számláló",
     "counterCount": "Számlálók száma",
-    "counterN": "{n}. számláló állása",
+    "counterN": "{n}. számláló",
     "norm": "Norma",
     "defaultProduct": "Ebből főz (termék)",
     "defaultProductNone": "— nincs beállítva —",
@@ -1865,7 +1871,6 @@
     "swapPh": "Vonalkód beírása vagy beolvasása…",
     "swapPricesInherit": "A számláló-kiosztás egyezik — a szerződéses adagárak automatikusan öröklődnek, de itt felül is írhatod őket.",
     "swapPricesDiffer": "Eltérő számláló-kiosztás ({old} → {new}) — add meg a cseregép számlálónkénti nettó adagárait.",
-    "counterN": "{n}. számláló",
     "counterPricePh": "Ft/adag",
     "swapNotFound": "Nincs ilyen vonalkódú raktári gép.",
     "swapDone": "Csere kész: {old} → {new}",
@@ -2086,6 +2091,8 @@
     "needLine": "Vegyél fel legalább egy tételt (termék + mennyiség).",
     "created": "Szállítólevél rögzítve: {serial} — a következő elszámoláskor számlázódik.",
     "glsOffer": "Küldjük GLS-sel? ({serial}) — a csomagok oldal előtöltve nyílik, a címke azonnal generálható.",
+    "shipGls": "GLS-sel küldjük",
+    "shipGlsHint": "Mentés után a Csomagok oldal a partner címével és az SZL-sorszámmal előtöltve nyílik — a címke azonnal generálható. Pipa nélkül saját kiszállítás.",
     "save": "Szállítólevél mentése",
     "openBanner": "{count} nyitott szállítólevél ({net} Ft nettó) — ez az elszámolás automatikusan kiszámlázza."
   },
@@ -2355,5 +2362,21 @@
       "delivered": "Kiszállítva",
       "returned": "Visszáru"
     }
+  },
+  "instant": {
+    "btn": "Azonnali értékesítés",
+    "title": "Azonnali értékesítés",
+    "hint": "Leltártól és géptől független eladás a kiválasztott partnernek: a tételek azonnal fizetendők, bruttó áron. Kávét ITT NE adj el — az bizományba megy (Feltöltés).",
+    "needLine": "Vegyél fel legalább egy tételt (termék + mennyiség).",
+    "qtyPh": "db",
+    "grossPh": "bruttó Ft",
+    "grossHint": "Bruttó eladási ár darabonként — üresen a termék alapára ÁFÁ-val.",
+    "addRow": "Új tétel",
+    "totalGross": "Fizetendő összesen (bruttó)",
+    "invoiceNow": "azonnali számla",
+    "shipGls": "GLS-sel küldjük",
+    "noteTag": "Azonnali értékesítés",
+    "done": "Azonnali értékesítés rögzítve.",
+    "doneInvoiced": "Azonnali értékesítés rögzítve és kiszámlázva."
   }
 }

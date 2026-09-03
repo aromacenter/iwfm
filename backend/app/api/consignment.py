@@ -235,6 +235,41 @@ async def update_product(
     return _product_out(p)
 
 
+@products_router.post("/backfill-codes")
+async def backfill_product_codes(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("products")),
+):
+    """Cikkszám-betöltés az importált jegyzetekből: az „Xpresso kód” néven a
+    notes-ba került 3 jegyű számot a code mezőbe emeli (csak üres code-nál)."""
+    import re
+
+    rows = (
+        await db.execute(select(Product).where(Product.code.is_(None)))
+    ).scalars().all()
+    updated = 0
+    for p in rows:
+        notes = (p.notes or "").strip()
+        if not notes:
+            continue
+        m = re.search(r"(?i)xpresso[^0-9]{0,20}(\d{3})", notes)
+        if m is None and re.fullmatch(r"\d{3}", notes):
+            code = notes
+        elif m is not None:
+            code = m.group(1)
+        else:
+            continue
+        p.code = code
+        updated += 1
+    await record_audit(
+        db, actor=actor, action="product.backfill_codes", entity_type="product",
+        detail={"updated": updated}, request=request,
+    )
+    await db.commit()
+    return {"updated": updated, "checked": len(rows)}
+
+
 class BulkDeleteBody(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=1000)
 
@@ -854,6 +889,9 @@ async def settlement_context(
                 "quantity": ln.quantity,
                 "unit_price": ln.unit_price,
                 "amount_net": _money(ln.quantity * ln.unit_price),
+                "amount_gross": _money(
+                    ln.quantity * ln.unit_price * (1 + (ln.vat_percent or 0) / 100)
+                ),
                 "serial": serial,
             }
             for ln, serial in item_rows
