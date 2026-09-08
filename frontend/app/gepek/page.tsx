@@ -502,6 +502,24 @@ export default function GepekPage() {
             onClose={() => setCameraOpen(false)}
           />
         )}
+        <button
+          onClick={async () => {
+            if (!(await confirm(t("inv.backfillOwnedConfirm")))) return;
+            try {
+              const res = await api.post<{ updated: number }>(
+                "/api/assets/backfill-customer-owned", {},
+              );
+              toast(t("inv.backfillOwnedDone", { count: res.updated }), "success");
+              loadAssets();
+            } catch (err) {
+              toast(errorMessage(err), "error");
+            }
+          }}
+          title={t("inv.backfillOwnedHint")}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100"
+        >
+          🏷️ {t("inv.backfillOwnedBtn")}
+        </button>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}

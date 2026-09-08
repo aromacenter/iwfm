@@ -350,3 +350,40 @@ async def test_tax_lookup_vies(client, manager, monkeypatch):
     assert body["address_zip"] == "1073"
     assert body["address_city"] == "Budapest"
     assert "ERZSÉBET" in body["address_street"]
+
+
+async def test_backfill_customer_owned(client, manager):
+    """Egyszeri atjeloles: a NEM targyi gepek ugyfelgepek lesznek — a targyi
+    es a mar jelolt gepekhez nem nyulunk."""
+    _, mgr = manager
+    plain = (
+        await client.post(
+            "/api/assets", json={"barcode": "BF-1", "name": "Sima gep"}, headers=mgr
+        )
+    ).json()
+    tangible = (
+        await client.post(
+            "/api/assets",
+            json={"barcode": "BF-2", "name": "Targyi gep", "tangible": True},
+            headers=mgr,
+        )
+    ).json()
+    owned = (
+        await client.post(
+            "/api/assets",
+            json={"barcode": "BF-3", "name": "Mar ugyfele", "customer_owned": True},
+            headers=mgr,
+        )
+    ).json()
+
+    res = await client.post("/api/assets/backfill-customer-owned", headers=mgr)
+    assert res.status_code == 200, res.text
+    assert res.json()["updated"] == 1  # csak a sima gep
+
+    flags = {
+        a["barcode"]: (a["tangible"], a["customer_owned"])
+        for a in (await client.get("/api/assets", headers=mgr)).json()
+    }
+    assert flags["BF-1"] == (False, True)
+    assert flags["BF-2"] == (True, False)
+    assert flags["BF-3"] == (False, True)

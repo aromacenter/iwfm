@@ -841,6 +841,33 @@ async def asset_type_defaults(
     )
 
 
+@assets_router.post("/backfill-customer-owned")
+async def backfill_customer_owned(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("machines")),
+):
+    """Egyszeri átjelölés az importált állományra: minden NEM tárgyi eszköz
+    gép „az ügyfél gépe, csak javítjuk” jelölést kap — így a QR-címkéjükre
+    nem kerül tulajdon-felirat. A már jelölt gépekhez nem nyúl; tévedés
+    esetén a gép-szerkesztőben egyesével visszavehető a pipa."""
+    rows = (
+        await db.execute(
+            select(Asset).where(
+                Asset.tangible.is_(False), Asset.customer_owned.is_(False)
+            )
+        )
+    ).scalars().all()
+    for a in rows:
+        a.customer_owned = True
+    await record_audit(
+        db, actor=actor, action="asset.backfill_customer_owned", entity_type="asset",
+        detail={"updated": len(rows)}, request=request,
+    )
+    await db.commit()
+    return {"updated": len(rows)}
+
+
 @assets_router.get("/by-barcode/{barcode}", response_model=AssetOut)
 async def asset_by_barcode(
     barcode: str,

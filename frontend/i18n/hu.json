@@ -1945,7 +1945,11 @@
     "godexPrint": "Godex nyomtatás",
     "godexHint": "A címkék a nyomtatási sorba kerülnek, és az üzleti gépen futó nyomtató-ügynök azonnal kiküldi őket a Godex címkenyomtatóra.",
     "godexConfirm": "{count} gép QR-címkéje kerül a Godex nyomtatási sorába. Mehet?",
-    "godexQueued": "{count} címke a nyomtatási sorban — a nyomtató hamarosan kiadja."
+    "godexQueued": "{count} címke a nyomtatási sorban — a nyomtató hamarosan kiadja.",
+    "backfillOwnedBtn": "Ügyfélgép-átjelölés",
+    "backfillOwnedHint": "Egyszeri művelet az importált állományra: minden NEM tárgyi eszköz gép „az ügyfél gépe, csak javítjuk” jelölést kap — a QR-címkéjükre így nem kerül tulajdon-felirat.",
+    "backfillOwnedConfirm": "Minden tárgyi eszközként NEM jelölt gép megkapja „az ügyfél gépe, csak javítjuk” pipát — a QR-címkéjükön nem lesz tulajdon-felirat. A már jelölt gépekhez nem nyúlunk; tévedésnél a gép szerkesztőjében egyesével visszavehető. Mehet?",
+    "backfillOwnedDone": "Átjelölve: {count} gép mostantól ügyfélgép."
   },
   "wh": {
     "title": "Raktár",

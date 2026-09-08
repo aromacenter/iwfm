@@ -1945,7 +1945,11 @@
     "godexPrint": "Print on Godex",
     "godexHint": "Labels are queued and the print agent running on the shop PC sends them straight to the Godex label printer.",
     "godexConfirm": "QR labels for {count} machines will be queued for the Godex printer. Continue?",
-    "godexQueued": "{count} labels queued — the printer will produce them shortly."
+    "godexQueued": "{count} labels queued — the printer will produce them shortly.",
+    "backfillOwnedBtn": "Mark customer machines",
+    "backfillOwnedHint": "One-time pass over the imported stock: every machine NOT marked as a tangible asset gets the “customer's machine, we only service it” flag — their QR labels then carry no ownership text.",
+    "backfillOwnedConfirm": "Every machine NOT marked as a tangible asset will get the “customer's machine, we only service it” flag — their QR labels will carry no ownership text. Already-flagged machines are untouched; mistakes can be reverted one by one in the machine editor. Proceed?",
+    "backfillOwnedDone": "Re-flagged: {count} machines are now customer-owned."
   },
   "wh": {
     "title": "Warehouse",
