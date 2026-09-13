@@ -167,6 +167,8 @@ interface SettlementContext {
   default_payment_method: "cash" | "card" | "transfer" | "cod" | null;
   payment_terms_days: number | null;
   settlement_weeks: number | null;
+  contract_product_id: string | null; // a szerződésben rögzített alap-kávé
+  contract_product_name: string | null;
 }
 
 interface MachineInput {
@@ -357,9 +359,10 @@ export default function ElszamolasPage() {
   // készlet-sor; a képviselő bármilyen más kávét is felvehet mellé.
   useEffect(() => {
     if (!ctx) return;
-    const machinePids = ctx.machines
-      .map((m) => m.default_product_id)
-      .filter(Boolean) as string[];
+    const machinePids = [
+      ...ctx.machines.map((m) => m.default_product_id),
+      ctx.contract_product_id, // a szerződésben rögzített alap-kávé is
+    ].filter(Boolean) as string[];
     setExtraProducts((xs) => {
       const missing = machinePids.filter(
         (pid) => !xs.includes(pid) && !stock.some((s) => s.product_id === pid),
@@ -368,13 +371,14 @@ export default function ElszamolasPage() {
     });
   }, [ctx, stock]);
 
-  // A gépek szerződéses kávéi — a listában "szerződött kávé" jelölést kapnak.
+  // A gépek + a szerződés kávéi — a listában "szerződött kávé" jelölést kapnak.
   const contractedIds = useMemo(
     () =>
       new Set(
-        (ctx?.machines ?? [])
-          .map((m) => m.default_product_id)
-          .filter(Boolean) as string[],
+        [
+          ...(ctx?.machines ?? []).map((m) => m.default_product_id),
+          ctx?.contract_product_id ?? null,
+        ].filter(Boolean) as string[],
       ),
     [ctx],
   );
@@ -602,6 +606,10 @@ export default function ElszamolasPage() {
       // számlálónkénti szerződéses árral — "mintha külön gépek lennének".
       // 0 Ft-os szerződéses ár = ÖSSZESÍTŐ (kontroll) számláló: a fogyásba
       // nem számít bele, csak ellenőrzésre való.
+      // A kitöltetlen számláló tartaléka a gép ELSŐ (nem kontroll) szerződéses
+      // ára — a partner erre szerződött, nem a termék alapárára.
+      const contractDefault =
+        m.counter_prices?.find((p, i) => p != null && p !== 0 && m.counter_prices?.[i] !== 0) ?? null;
       const detail =
         m.counter_count > 1 && inp
           ? inp.newCounters.map((v, i) => {
@@ -613,7 +621,7 @@ export default function ElszamolasPage() {
                 ? 0
                 : manual !== ""
                   ? Number(manual)
-                  : m.counter_prices?.[i] ?? autoPrice;
+                  : m.counter_prices?.[i] ?? contractDefault ?? autoPrice;
               return {
                 prev, nv, diff, control,
                 price: rowPrice,
@@ -650,7 +658,15 @@ export default function ElszamolasPage() {
         billedByProduct[pid] = (billedByProduct[pid] ?? 0) + billed;
         amountByProduct[pid] = (amountByProduct[pid] ?? 0) + amount;
       }
-      return { ...m, filled, newCounter, brewed, billed, price, autoPrice, amount, belowPrev, detail, controlDiff };
+      // Kontrollos gépnél az "előző számláló" az ÖSSZESÍTŐ állása, nem a
+      // számlálók összege (az duplázna a kijelzésen).
+      const controlIdx = m.counter_prices?.findIndex((p) => p === 0) ?? -1;
+      const displayPrev =
+        controlIdx >= 0 ? m.counters?.[controlIdx] ?? m.prev_counter : m.prev_counter;
+      return {
+        ...m, filled, newCounter, brewed, billed, price, autoPrice, amount,
+        belowPrev, detail, controlDiff, contractDefault, displayPrev,
+      };
     });
     return { rows, billedByProduct, amountByProduct };
   }, [ctx, machineInputs, machineProducts, machinePrices, stockRows, products]);
@@ -1800,7 +1816,7 @@ export default function ElszamolasPage() {
                   <td className="px-4 py-2.5 text-xs text-slate-500">
                     {m.last_settled_at ? fmt(m.last_settled_at) : "—"}
                   </td>
-                  <td className="px-4 py-2.5 tabular-nums text-slate-600">{m.prev_counter}</td>
+                  <td className="px-4 py-2.5 tabular-nums text-slate-600">{m.displayPrev}</td>
                   <td className="px-4 py-2.5">
                     {m.counter_count > 1 ? (
                       <div className="space-y-1">
@@ -1889,7 +1905,13 @@ export default function ElszamolasPage() {
                       onChange={(e) =>
                         setMachinePrices({ ...machinePrices, [m.asset_id]: e.target.value })
                       }
-                      placeholder={m.autoPrice !== null ? String(m.autoPrice) : "?"}
+                      placeholder={
+                        m.contractDefault != null
+                          ? String(m.contractDefault)
+                          : m.autoPrice !== null
+                            ? String(m.autoPrice)
+                            : "?"
+                      }
                       title={t("cons.priceOverrideHint")}
                       className={`w-20 rounded-lg border px-2 py-1.5 text-right tabular-nums ${(machinePrices[m.asset_id] ?? "") !== "" ? "border-amber-400 bg-amber-50" : "border-slate-300"}`}
                     />

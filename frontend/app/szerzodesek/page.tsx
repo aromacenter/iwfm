@@ -47,6 +47,9 @@ interface NoContractRow {
   partner_id: string;
   partner_name: string;
   partner_active: boolean;
+  // a gépeken vannak szerződéses feltételek (bérleti díj / minimum /
+  // számlálónkénti adagár) — csak a partner-szintű szerződés-rekord hiányzik
+  has_machine_terms: boolean;
   machines: MachineRow[];
 }
 
@@ -244,7 +247,17 @@ export default function SzerzodesekPage() {
             <tbody>
               {orphans.map((r) => (
                 <tr key={r.partner_id} className="border-b border-slate-100 align-top last:border-0">
-                  <td className="px-4 py-2.5">{partnerBtn(r.partner_id, r.partner_name, r.partner_active)}</td>
+                  <td className="px-4 py-2.5">
+                    {partnerBtn(r.partner_id, r.partner_name, r.partner_active)}
+                    {r.has_machine_terms && (
+                      <span
+                        title={t("contracts.machineTermsHint")}
+                        className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800"
+                      >
+                        ⚙ {t("contracts.machineTerms")}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5">{machineCell(r.machines)}</td>
                 </tr>
               ))}

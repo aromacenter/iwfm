@@ -129,3 +129,61 @@ async def test_backfill_codes_from_notes(client, manager):
     assert listed["Csak szam"] == "342"
     assert listed["Kodos"] == "777"  # meglevo kod nem valtozik
     assert listed["Semmi"] is None
+
+
+async def test_contract_default_coffee(client, manager):
+    """A szerzodesben rogzitett alap-kave megjelenik a settlement-contextben
+    es a szerzodes-listaban is (nevvel)."""
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Kaves Szerzodeses"}, headers=mgr)
+    ).json()
+    coffee = await make_product(client, mgr, name="Szerzodeses Blend", code="102")
+    res = await client.post(
+        f"/api/partners/{partner['id']}/contracts",
+        json={"valid_from": "2026-01-01", "default_product_id": coffee["id"]},
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["default_product_name"] == "Szerzodeses Blend"
+
+    ctx = (
+        await client.get(f"/api/partners/{partner['id']}/settlement-context", headers=mgr)
+    ).json()
+    assert ctx["contract_product_id"] == coffee["id"]
+    assert ctx["contract_product_name"] == "Szerzodeses Blend"
+
+
+async def test_null_counter_price_falls_back_to_contract(client, manager):
+    """Kitoltetlen szamlalo-ar: a gep ELSO (nem kontroll) szerzodeses arara
+    esik vissza, nem a termek alaparara."""
+    from tests.test_machine_settlement import _machine, _partner
+
+    _, mgr = manager
+    partner = await _partner(client, mgr, "Tartalek Ar Bolt")
+    product = await make_product(client, mgr, name="Alap 90-es", price_per_portion=90.0,
+                                 grams_per_portion=7)
+    asset = await _machine(
+        client, mgr, partner, "GEP-FALLBACK", counter=0,
+        counter_count=3, counters=[0, 0, 0],
+        default_product_id=product["id"],
+        counter_prices=[0.0, 120.0, None],  # 1=kontroll, 2=120, 3=kitoltetlen
+    )
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": product["id"], "quantity": 5.0},
+        headers=mgr,
+    )
+    # kontroll 30; fogyasztok: 10×120 + 20×120(tartalek=szerzodeses, NEM 90)
+    res = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [{"product_id": product["id"], "physical_qty": 4.5}],
+              "machines": [{"asset_id": asset["id"], "new_counters": [30, 10, 20]}]},
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    m = res.json()["machines"][0]
+    assert m["portions_billed"] == 30
+    assert abs(m["amount_net"] - 30 * 120) < 0.01
+    assert m["counters_detail"][2]["price"] == 120.0

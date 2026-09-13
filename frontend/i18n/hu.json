@@ -2085,7 +2085,12 @@
     "sumTerms": "{days} nap határidő",
     "noMinimum": "Nincs minimum-elvárás",
     "noMinimumHint": "A partner mindig pontosan a lefőzöttet fizeti — a szerződéses ÉS a gép-szintű minimumok sem élnek (korlátlan türelmi időszak).",
-    "sumNoMinimum": "nincs minimum"
+    "sumNoMinimum": "nincs minimum",
+    "defaultCoffee": "Alapértelmezett kávé (ezzel látjuk el a partnert)",
+    "defaultCoffeePh": "— kávé keresése névre vagy cikkszámra —",
+    "defaultCoffeeHint": "Az elszámolásban az átadott kávé sora ezt ajánlja fel — a képviselő helyben mást is adhat.",
+    "machineTerms": "gép-szintű feltételekkel",
+    "machineTermsHint": "A partner gépein vannak szerződéses feltételek (bérleti díj / minimum / számlálónkénti adagár) — az elszámolás jól számol, csak a partner-szintű szerződés-rekord (érvényesség, ütemezés, alap-kávé) hiányzik. Vedd fel a szerződést a Partnerek → 📜 gombbal."
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",

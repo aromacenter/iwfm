@@ -103,18 +103,30 @@ export default function BugReporter() {
     await new Promise((r) => setTimeout(r, 30));
     try {
       const { toJpeg } = await import("html-to-image");
+      const vh = window.innerHeight;
       const dataUrl = await toJpeg(document.body, {
         quality: 0.85,
         pixelRatio: 1,
         width: window.innerWidth,
-        height: window.innerHeight,
+        height: vh,
         skipFonts: true,
         style: {
           transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
           transformOrigin: "top left",
         },
-        filter: (node) =>
-          !(node instanceof HTMLElement && node.dataset?.bugUi === "1"),
+        filter: (node) => {
+          if (!(node instanceof HTMLElement)) return true;
+          if (node.dataset?.bugUi === "1") return false;
+          // A fagyás fő oka a hosszú listák TELJES klónozása volt (a könyvtár
+          // minden csomópont stílusát bemásolja): a képernyőn kívüli
+          // táblázat-/lista-sorokat teljes részfával kihagyjuk.
+          const tag = node.tagName;
+          if (tag === "TR" || tag === "LI") {
+            const r = node.getBoundingClientRect();
+            if (r.bottom < -100 || r.top > vh + 100) return false;
+          }
+          return true;
+        },
       });
       openAnnotator(dataUrl);
     } catch {

@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import PartnerInfo from "@/components/PartnerInfo";
+import SearchSelect from "@/components/SearchSelect";
 import IconLegend from "@/components/IconLegend";
 import { api, errorMessage } from "@/lib/api";
 import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT, type CompanyKey } from "@/lib/companies";
@@ -270,9 +271,24 @@ export default function PartnerekPage() {
     payment_method: string | null;
     payment_terms_days: number | null;
     no_minimum: boolean;
+    default_product_id: string | null;
+    default_product_name: string | null;
     note: string | null;
     status: "active" | "future" | "expired";
   }
+
+  // Kávé-termékek a szerződés alap-kávé választójához (lustán töltve).
+  const [coffeeProducts, setCoffeeProducts] = useState<
+    { id: string; name: string; code: string | null; is_consignment: boolean; is_active: boolean }[]
+  >([]);
+  useEffect(() => {
+    api
+      .get<{ id: string; name: string; code: string | null; is_consignment: boolean; is_active: boolean }[]>(
+        "/api/products",
+      )
+      .then((rows) => setCoffeeProducts(rows.filter((p) => p.is_consignment && p.is_active)))
+      .catch(() => {});
+  }, []);
   const [contractsFor, setContractsFor] = useState<{ id: string; name: string } | null>(null);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [cForm, setCForm] = useState<{
@@ -280,7 +296,7 @@ export default function PartnerekPage() {
     below_min_price: string; min_kg: string; below_min_price_kg: string;
     rent_if_below_min: boolean; settlement_weeks: string;
     payment_method: string; payment_terms_days: string;
-    no_minimum: boolean; note: string;
+    no_minimum: boolean; default_product_id: string; note: string;
   } | null>(null);
   const [cError, setCError] = useState<string | null>(null);
   const [cBusy, setCBusy] = useState(false);
@@ -348,7 +364,7 @@ export default function PartnerekPage() {
       min_portions: "", below_min_price: "", min_kg: "", below_min_price_kg: "",
       rent_if_below_min: false, settlement_weeks: "4",
       payment_method: "", payment_terms_days: "",
-      no_minimum: false, note: "",
+      no_minimum: false, default_product_id: "", note: "",
     });
   }
 
@@ -365,6 +381,7 @@ export default function PartnerekPage() {
       payment_method: c.payment_method ?? "",
       payment_terms_days: c.payment_terms_days != null ? String(c.payment_terms_days) : "",
       no_minimum: c.no_minimum,
+      default_product_id: c.default_product_id ?? "",
       note: c.note ?? "",
     });
   }
@@ -387,6 +404,7 @@ export default function PartnerekPage() {
         payment_method: cForm.payment_method || null,
         payment_terms_days: cForm.payment_terms_days ? Number(cForm.payment_terms_days) : null,
         no_minimum: cForm.no_minimum,
+        default_product_id: cForm.default_product_id || null,
         note: cForm.note || null,
       };
       if (cForm.id) await api.patch(`/api/partners/${contractsFor.id}/contracts/${cForm.id}`, body);
@@ -873,6 +891,7 @@ export default function PartnerekPage() {
                           !c.no_minimum && c.min_portions != null ? t("contracts.sumMinPortions", { n: c.min_portions, price: c.below_min_price ?? "—" }) : null,
                           !c.no_minimum && c.min_kg != null ? t("contracts.sumMinKg", { n: c.min_kg, price: c.below_min_price_kg ?? "—" }) : null,
                           c.rent_if_below_min ? t("contracts.sumRent") : null,
+                          c.default_product_name ? `☕ ${c.default_product_name}` : null,
                           c.note,
                         ].filter(Boolean).join(" · ") || t("contracts.noTerms")}
                       </div>
@@ -983,6 +1002,19 @@ export default function PartnerekPage() {
                     <span className="block text-xs text-emerald-700">{t("contracts.noMinimumHint")}</span>
                   </span>
                 </label>
+                <div className="block text-sm">
+                  ☕ {t("contracts.defaultCoffee")}
+                  <SearchSelect
+                    items={coffeeProducts.map((p) => ({
+                      id: p.id, label: p.name, badge: p.code ?? undefined, keywords: p.code,
+                    }))}
+                    value={cForm.default_product_id}
+                    onChange={(id) => setCForm({ ...cForm, default_product_id: id })}
+                    placeholder={t("contracts.defaultCoffeePh")}
+                    className="mt-1 w-full"
+                  />
+                  <span className="mt-0.5 block text-xs text-slate-400">{t("contracts.defaultCoffeeHint")}</span>
+                </div>
                 <fieldset className="rounded-xl border border-slate-200 p-3">
                   <legend className="px-1 text-xs font-semibold uppercase text-slate-400">{t("contracts.scheduleSection")}</legend>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

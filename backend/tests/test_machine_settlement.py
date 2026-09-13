@@ -371,7 +371,8 @@ async def test_asset_default_product_crud(client, manager):
 
 async def test_counter_prices_weighted_settlement(client, manager):
     """Szerzodeses adagar szamlalonkent: az elszamolas a szamlalonkenti
-    kulonbsegekkel sulyozott atlagarat hasznalja (None elem = termekar)."""
+    kulonbsegekkel sulyozott atlagarat hasznalja (None elem = az elso
+    szerzodeses ar a tartalek, nem a termekar)."""
     from tests.test_consignment import make_product
 
     _, mgr = manager
@@ -389,8 +390,9 @@ async def test_counter_prices_weighted_settlement(client, manager):
         headers=mgr,
     )
 
-    # allasok: 10 + 20 + 30 = 60 adag; ertek: 10*200 + 20*300 + 30*100(termekar)
-    # = 2000 + 6000 + 3000 = 11000 -> atlag 183.33 Ft/adag
+    # allasok: 10 + 20 + 30 = 60 adag; ertek: 10*200 + 20*300 + 30*200
+    # (a kitoltetlen szamlalo az ELSO szerzodeses arra esik vissza)
+    # = 2000 + 6000 + 6000 = 14000 -> atlag 233.33 Ft/adag
     res = await client.post(
         "/api/settlements",
         json={
@@ -404,8 +406,8 @@ async def test_counter_prices_weighted_settlement(client, manager):
     assert res.status_code == 201, res.text
     m = res.json()["machines"][0]
     assert m["portions_billed"] == 60
-    assert abs(m["amount_net"] - 11000) < 0.01
-    assert abs(m["price_per_portion"] - 11000 / 60) < 0.01
+    assert abs(m["amount_net"] - 14000) < 0.01
+    assert abs(m["price_per_portion"] - 14000 / 60) < 0.01
 
 
 async def test_counter_prices_roundtrip_and_swap(client, manager):
@@ -516,10 +518,11 @@ async def test_counters_detail_snapshot(client, manager):
     m = res.json()["machines"][0]
     detail = m["counters_detail"]
     assert detail is not None and len(detail) == 2
-    # 1. szamlalo: 10 -> 15 = 5 adag x 200 Ft; 2.: 20 -> 40 = 20 adag x 100 Ft
+    # 1. szamlalo: 10 -> 15 = 5 adag x 200 Ft; 2.: 20 -> 40 = 20 adag x 200 Ft
+    # (a kitoltetlen szamlalo az elso szerzodeses arra esik vissza)
     assert detail[0] == {"prev": 10, "new": 15, "portions": 5, "price": 200.0, "amount": 1000.0}
-    assert detail[1] == {"prev": 20, "new": 40, "portions": 20, "price": 100.0, "amount": 2000.0}
-    assert abs(m["amount_net"] - 3000) < 0.01
+    assert detail[1] == {"prev": 20, "new": 40, "portions": 20, "price": 200.0, "amount": 4000.0}
+    assert abs(m["amount_net"] - 5000) < 0.01
 
 
 async def test_totalizer_counter_excluded(client, manager):

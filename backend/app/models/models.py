@@ -1696,6 +1696,13 @@ class PartnerContract(Base):
     # Nincs minimum-elvárás: a partner mindig pontosan a lefőzöttet fizeti
     # (korlátlan türelmi időszak — a gép-szintű minimumokat is kikapcsolja).
     no_minimum: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Alapértelmezett kávéfajta, amivel a partnert ellátjuk — az elszámolás
+    # átadott-kávé sora ezt ajánlja fel, de a képviselő mást is adhat.
+    default_product_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("products.id", ondelete="SET NULL", name="fk_partner_contracts_product"),
+        nullable=True,
+    )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_partner_contracts_user"),

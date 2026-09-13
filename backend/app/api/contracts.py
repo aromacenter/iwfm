@@ -72,6 +72,9 @@ class ContractBody(BaseModel):
     # Nincs minimum: a partner mindig pontosan a lefőzöttet fizeti (a
     # gép-szintű minimumokat is kikapcsolja — korlátlan türelmi időszak).
     no_minimum: bool = False
+    # Alapértelmezett kávéfajta a partnernek — az elszámolás átadott-kávé
+    # sora ezt ajánlja, de a képviselő helyben mást is adhat.
+    default_product_id: str | None = None
     note: str | None = None
 
     @field_validator("settlement_weeks")
@@ -102,9 +105,30 @@ class ContractOut(BaseModel):
     payment_method: str | None
     payment_terms_days: int | None
     no_minimum: bool
+    default_product_id: str | None = None
+    default_product_name: str | None = None
     note: str | None
     status: str  # active | future | expired
     created_at: datetime
+
+
+def _parse_product_id(raw) -> uuid.UUID | None:
+    if not raw:
+        return None
+    try:
+        return uuid.UUID(str(raw))
+    except ValueError:
+        return None
+
+
+async def _product_name(db: AsyncSession, pid: uuid.UUID | None) -> str | None:
+    if pid is None:
+        return None
+    from app.models import Product
+
+    return (
+        await db.execute(select(Product.name).where(Product.id == pid))
+    ).scalar_one_or_none()
 
 
 def _status(c: PartnerContract, today: date) -> str:
@@ -115,7 +139,7 @@ def _status(c: PartnerContract, today: date) -> str:
     return "active"
 
 
-def _out(c: PartnerContract) -> ContractOut:
+def _out(c: PartnerContract, product_name: str | None = None) -> ContractOut:
     return ContractOut(
         id=str(c.id), valid_from=c.valid_from, valid_to=c.valid_to,
         min_portions=c.min_portions, below_min_price=c.below_min_price,
@@ -124,7 +148,10 @@ def _out(c: PartnerContract) -> ContractOut:
         settlement_weeks=c.settlement_weeks,
         payment_method=c.payment_method,
         payment_terms_days=c.payment_terms_days,
-        no_minimum=c.no_minimum, note=c.note,
+        no_minimum=c.no_minimum,
+        default_product_id=str(c.default_product_id) if c.default_product_id else None,
+        default_product_name=product_name,
+        note=c.note,
         status=_status(c, date.today()), created_at=c.created_at,
     )
 
@@ -148,7 +175,8 @@ async def list_contracts(
             .order_by(PartnerContract.valid_from.desc())
         )
     ).scalars().all()
-    return [_out(c) for c in rows]
+    names = {c.id: await _product_name(db, c.default_product_id) for c in rows}
+    return [_out(c, names.get(c.id)) for c in rows]
 
 
 @router.post("/{partner_id}/contracts", response_model=ContractOut, status_code=201)
@@ -161,7 +189,9 @@ async def create_contract(
 ):
     partner = await _get_partner_or_404(db, partner_id)
     _check_dates(body)
-    c = PartnerContract(partner_id=partner.id, created_by=actor.id, **body.model_dump())
+    values = body.model_dump()
+    values["default_product_id"] = _parse_product_id(values.get("default_product_id"))
+    c = PartnerContract(partner_id=partner.id, created_by=actor.id, **values)
     db.add(c)
     await db.flush()
     await apply_active_contract(db, partner)
@@ -171,7 +201,7 @@ async def create_contract(
         request=request,
     )
     await db.commit()
-    return _out(c)
+    return _out(c, await _product_name(db, c.default_product_id))
 
 
 @router.patch("/{partner_id}/contracts/{contract_id}", response_model=ContractOut)
@@ -186,7 +216,9 @@ async def update_contract(
     partner = await _get_partner_or_404(db, partner_id)
     c = await _get_contract_or_404(db, partner, contract_id)
     _check_dates(body)
-    for key, value in body.model_dump().items():
+    values = body.model_dump()
+    values["default_product_id"] = _parse_product_id(values.get("default_product_id"))
+    for key, value in values.items():
         setattr(c, key, value)
     await apply_active_contract(db, partner)
     await record_audit(
@@ -194,7 +226,7 @@ async def update_contract(
         entity_id=str(c.id), detail={"partner": partner.name}, request=request,
     )
     await db.commit()
-    return _out(c)
+    return _out(c, await _product_name(db, c.default_product_id))
 
 
 @router.delete("/{partner_id}/contracts/{contract_id}")
@@ -244,11 +276,17 @@ class ContractRowOut(BaseModel):
 
 
 class NoContractRowOut(BaseModel):
-    """Partner kihelyezett géppel, de szerződés nélkül — behajtandó hiányosság."""
+    """Partner kihelyezett géppel, de partner-szerződés REKORD nélkül.
+
+    has_machine_terms: a gépeken vannak szerződéses feltételek (bérleti díj,
+    minimum, számlálónkénti adagár) — az elszámolás így is jól számol, csak a
+    partner-szintű szerződés-rekord (érvényesség, ütemezés) hiányzik. Az
+    importált állomány tipikusan ilyen."""
 
     partner_id: str
     partner_name: str
     partner_active: bool
+    has_machine_terms: bool = False
     machines: list[dict]
 
 
@@ -344,6 +382,17 @@ async def contracts_overview(
 
     contracted_ids = {c.partner_id for c, _p in contracts}
     orphan_ids = [pid for pid in machines_by_partner if pid not in contracted_ids]
+    # Gép-szintű szerződéses feltételek (bérleti díj / minimum / számlálónkénti
+    # adagár) — ilyenkor az elszámolás rendben számol partner-szerződés nélkül is.
+    terms_by_partner: set = set()
+    for a in assets:
+        if a.partner_id is None:
+            continue
+        has_cps = isinstance(a.counter_prices, list) and any(
+            p is not None for p in a.counter_prices
+        )
+        if a.rent_fee or a.contract_min_portions or has_cps:
+            terms_by_partner.add(a.partner_id)
     orphans = []
     if orphan_ids:
         orphan_partners = (
@@ -354,6 +403,7 @@ async def contracts_overview(
         orphans = [
             NoContractRowOut(
                 partner_id=str(p.id), partner_name=p.name, partner_active=p.is_active,
+                has_machine_terms=p.id in terms_by_partner,
                 machines=machines_by_partner[p.id],
             )
             for p in orphan_partners

@@ -2085,7 +2085,12 @@
     "sumTerms": "{days}-day terms",
     "noMinimum": "No minimum requirement",
     "noMinimumHint": "The partner always pays exactly what was brewed — contract AND machine-level minimums are disabled (unlimited grace period).",
-    "sumNoMinimum": "no minimum"
+    "sumNoMinimum": "no minimum",
+    "defaultCoffee": "Default coffee (what we supply the partner with)",
+    "defaultCoffeePh": "— search coffee by name or code —",
+    "defaultCoffeeHint": "The settlement's handed-over coffee row suggests this — the rep can still hand over a different one on site.",
+    "machineTerms": "machine-level terms",
+    "machineTermsHint": "The partner's machines carry contract terms (rent / minimum / per-counter prices) — settlements compute fine; only the partner-level contract record (validity, schedule, default coffee) is missing. Add it via Partners → 📜."
   },
   "delivery": {
     "title": "Delivery (delivery note)",

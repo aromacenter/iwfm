@@ -776,6 +776,10 @@ class SettlementContextOut(BaseModel):
     default_payment_method: str | None = None
     payment_terms_days: int | None = None
     settlement_weeks: int | None = None
+    # A szerződésben rögzített alapértelmezett kávé — az átadott-kávé sor
+    # ezt ajánlja fel, de a képviselő helyben mást is adhat.
+    contract_product_id: str | None = None
+    contract_product_name: str | None = None
 
 
 @stock_router.get("/{partner_id}/settlement-context", response_model=SettlementContextOut)
@@ -917,6 +921,34 @@ async def settlement_context(
                 remaining=remaining, due_date=s.due_date, invoiced=s.invoiced,
             ))
 
+    # A ma érvényes szerződés alapértelmezett kávéja (ha be van állítva)
+    from app.models import PartnerContract
+
+    today_ = date.today()
+    active_contract = (
+        await db.execute(
+            select(PartnerContract)
+            .where(
+                PartnerContract.partner_id == partner.id,
+                PartnerContract.valid_from <= today_,
+            )
+            .order_by(PartnerContract.valid_from.desc())
+        )
+    ).scalars().first()
+    contract_pid = None
+    contract_pname = None
+    if (
+        active_contract is not None
+        and (active_contract.valid_to is None or active_contract.valid_to >= today_)
+        and active_contract.default_product_id is not None
+    ):
+        contract_pid = str(active_contract.default_product_id)
+        contract_pname = (
+            await db.execute(
+                select(Product.name).where(Product.id == active_contract.default_product_id)
+            )
+        ).scalar_one_or_none()
+
     return SettlementContextOut(
         machines=machines,
         debt=await _partner_debt(db, partner.id),
@@ -934,6 +966,8 @@ async def settlement_context(
             else partner.payment_terms_days
         ),
         settlement_weeks=partner.contract_settlement_weeks,
+        contract_product_id=contract_pid,
+        contract_product_name=contract_pname,
     )
 
 
@@ -1584,6 +1618,16 @@ async def create_settlement(
                 if isinstance(asset.counter_prices, list)
                 else None
             )
+            # Kitöltetlen számláló tartaléka: a gép ELSŐ (nem kontroll)
+            # szerződéses ára — a partner erre az árra szerződött, nem a
+            # termék alapárára; annak híján a termék-/partnerár.
+            cps_default = next(
+                (
+                    p for i, p in enumerate(cps or [])
+                    if p is not None and i not in control_idx
+                ),
+                None,
+            )
             if (
                 per_counter_diffs is not None
                 and cps
@@ -1591,7 +1635,10 @@ async def create_settlement(
                 and brewed > 0
             ):
                 weighted = sum(
-                    diff * (cps[i] if i < len(cps) and cps[i] is not None else base_price)
+                    diff * (
+                        cps[i] if i < len(cps) and cps[i] is not None
+                        else (cps_default if cps_default is not None else base_price)
+                    )
                     for i, diff in enumerate(per_counter_diffs)
                     if i not in control_idx  # az összesítő nem fogyás
                 )
@@ -1638,6 +1685,8 @@ async def create_settlement(
                         row_price = unit_price  # kézi felülírás minden számlálóra
                     elif cps and i < len(cps) and cps[i] is not None:
                         row_price = float(cps[i])
+                    elif cps_default is not None:
+                        row_price = float(cps_default)  # szerződéses ár a tartalék
                     else:
                         row_price = base_price
                     counters_detail.append({
