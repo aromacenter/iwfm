@@ -9,6 +9,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import { getAssistantContext } from "@/lib/assistantContext";
 import { useT } from "@/lib/i18n";
 
 interface ChatEvent {
@@ -98,14 +99,39 @@ export default function AssistantChat() {
     if (!rec) return;
     baseTextRef.current = input ? input.trim() + " " : "";
     rec.lang = lang === "hu" ? "hu-HU" : "en-US";
-    rec.continuous = true;
+    // Mobil Chrome-on a continuous mód ismételgeti a végleges részeket
+    // (klasszikus Android-hiba) — ott mondatonként olvasunk, és a
+    // felismerés végén automatikusan újraindítjuk, amíg a mikrofon aktív.
+    const mobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    rec.continuous = !mobile;
     rec.interimResults = true;
     rec.onresult = (e: any) => {
-      let text = "";
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      setInput(baseTextRef.current + text);
+      // Csak a VÉGLEGES részeket rögzítjük tartósan; az éppen alakuló
+      // (interim) szöveg a végére kerül, de nem halmozódik duplán.
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) {
+          const finalText = String(r[0].transcript).trim();
+          if (finalText) baseTextRef.current += finalText + " ";
+        } else {
+          interim += r[0].transcript;
+        }
+      }
+      setInput((baseTextRef.current + interim).trimStart());
     };
-    rec.onend = () => setListening(false);
+    rec.onend = () => {
+      // Mobil: mondat vége → újraindítás, amíg a felhasználó le nem állítja.
+      if (mobile && recRef.current === rec) {
+        try {
+          rec.start();
+          return;
+        } catch {
+          /* nem indítható újra — leállunk */
+        }
+      }
+      setListening(false);
+    };
     rec.onerror = () => setListening(false);
     recRef.current = rec;
     setListening(true);
@@ -125,6 +151,7 @@ export default function AssistantChat() {
         "/api/assistant/chat",
         {
           messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })),
+          context: getAssistantContext(),
         },
       );
       setMessages((ms) => [

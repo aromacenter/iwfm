@@ -52,6 +52,7 @@ interface Partner {
   notes: string | null;
   is_active: boolean;
   asset_count: number;
+  placed_machine_count: number;
 }
 
 const EMPTY = {
@@ -100,6 +101,9 @@ export default function PartnerekPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [companyFilter, setCompanyFilter] = useState("");
+  // Partner (kihelyezett tárgyi-eszköz géppel — velük van elszámolás) vagy
+  // ügyfél (csak vásárol / a saját gépét javíttatja) szerinti szűrés.
+  const [kindFilter, setKindFilter] = useState<"" | "partner" | "customer">("");
   const [form, setForm] = useState<typeof EMPTY | null>(null);
   const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +121,8 @@ export default function PartnerekPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return partners.filter((p) => {
+      if (kindFilter === "partner" && (p.placed_machine_count ?? 0) === 0) return false;
+      if (kindFilter === "customer" && (p.placed_machine_count ?? 0) > 0) return false;
       if (typeFilter && p.partner_type !== typeFilter) return false;
       if (companyFilter === "none" && p.invoicing_company) return false;
       if (companyFilter && companyFilter !== "none" && p.invoicing_company !== companyFilter) return false;
@@ -130,7 +136,7 @@ export default function PartnerekPage() {
         (p.contact_email ?? "").toLowerCase().includes(q)
       );
     });
-  }, [partners, search, typeFilter, companyFilter]);
+  }, [partners, search, typeFilter, companyFilter, kindFilter]);
 
   async function copyPortalLink(p: Partner) {
     try {
@@ -523,6 +529,22 @@ export default function PartnerekPage() {
           placeholder={t("partners.search")}
           className="min-w-48 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
+        <div className="flex gap-1.5">
+          {([["", t("partners.kindAll")], ["partner", `🤝 ${t("partners.kindPartner")}`], ["customer", `👤 ${t("partners.kindCustomer")}`]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setKindFilter(key as "" | "partner" | "customer")}
+              title={key === "partner" ? t("partners.kindPartnerHint") : key === "customer" ? t("partners.kindCustomerHint") : undefined}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                kindFilter === key
+                  ? "bg-indigo-600 text-white"
+                  : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
@@ -614,6 +636,21 @@ export default function PartnerekPage() {
                   )}
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-mono text-xs font-semibold text-indigo-700">{p.partner_code ?? "—"}</span>
+                    {(p.placed_machine_count ?? 0) > 0 ? (
+                      <span
+                        title={t("partners.kindPartnerHint")}
+                        className="rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold text-indigo-800"
+                      >
+                        🤝 {t("partners.kindPartner")}
+                      </span>
+                    ) : (
+                      <span
+                        title={t("partners.kindCustomerHint")}
+                        className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"
+                      >
+                        👤 {t("partners.kindCustomer")}
+                      </span>
+                    )}
                     <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${TYPE_COLORS[p.partner_type]}`}>
                       {t(`partners.types.${p.partner_type}`)}
                     </span>

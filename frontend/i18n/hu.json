@@ -461,7 +461,29 @@
     "signerNameRequired": "Az aláíráshoz kötelező begépelni az aláíró nevét.",
     "backfillCodesBtn": "Cikkszámok betöltése",
     "backfillCodesHint": "Az importált jegyzetekben tárolt „Xpresso kód” 3 jegyű számokat a Cikkszám mezőbe emeli (csak az üreseknél).",
-    "backfillCodesDone": "Cikkszám betöltve {count} terméknél."
+    "backfillCodesDone": "Cikkszám betöltve {count} terméknél.",
+    "invoiceConfirm": "Biztosan kiszámlázod? {partner} — {gross} Ft bruttó (elszámolás: {date}). Teszt-módban díjbekérő készül.",
+    "invoicePdfBtn": "Számlakép letöltése (PDF)",
+    "invoiceResendBtn": "Számla újraküldése emailben",
+    "invoiceResendConfirm": "Újraküldöd a számlát emailben? ({partner})",
+    "invoiceResent": "Számla elküldve emailben.",
+    "dueDaysLabel": "Fiz. határidő",
+    "dueDaysUnit": "nap",
+    "dueDaysHint": "Eseti fizetési határidő átutalásnál — üresen a szerződés / partner / 8 nap érvényes.",
+    "shipGls": "GLS-sel küldjük",
+    "shipGlsHint": "Mentés után a Csomagok oldal nyílik előtöltve — utánvétes fizetésnél a fizetendő összeg automatikusan az utánvét összege a címkén.",
+    "glsContentTag": "Elszámolás — áru",
+    "stockDiff": "Eltérés",
+    "consumedByCounterHint": "Fogyás a számlálók alapján (adag × norma, kg-ban).",
+    "expectedStock": "Várt készlet",
+    "expectedStockHint": "Ennyi kávénak kellene lennie a helyszínen: könyv szerinti készlet − számláló szerinti fogyás.",
+    "stockDiffOkHint": "A készlet stimmel.",
+    "stockDiffPlusHint": "Többlet a várt készlethez képest.",
+    "stockDiffMinusHint": "Hiány — kg-áron számlázódik, az ár átírható.",
+    "shortageKgPriceHint": "A hiány kg-ára (nettó Ft/kg) — átírható; üresen a beszerzési ár, annak híján az adagár kg-egyenértéke.",
+    "shortageTotal": "Készlethiány (kg-áron)",
+    "shortageTotalHint": "A számláló szerint vártnál kevesebb a fizikai készlet — a mentés külön sorban számlázza, és beleszámít a fizetendőbe.",
+    "netSuffix": "nettó"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -824,7 +846,12 @@
       "both": "Vevő és szállító"
     },
     "agent": "Felelős képviselő",
-    "agentHint": "Az ő dolga a partner igényeinek kezelése; az automatizálások „képviselő” címzettje hozzá — távollétekor a helyetteséhez — irányít."
+    "agentHint": "Az ő dolga a partner igényeinek kezelése; az automatizálások „képviselő” címzettje hozzá — távollétekor a helyetteséhez — irányít.",
+    "kindAll": "Mind",
+    "kindPartner": "Partner",
+    "kindCustomer": "Ügyfél",
+    "kindPartnerHint": "Kihelyezett tárgyi-eszköz gépünk van nála — velük van elszámolás.",
+    "kindCustomerHint": "Nincs kihelyezett gépünk nála — vásárol, vagy a saját gépét javíttatja."
   },
   "account": {
     "password": "Jelszó módosítása",
@@ -1214,7 +1241,9 @@
     "pickupHint": "Megjelöljük, hogy a kész gépet elhoztuk; az ügyfél e-mailt kap, hogy a javítás elkészült és a gép átvehető.",
     "pickupConfirm": "A gép elhozását rögzítjük, és értesítő e-mail megy ide: {to}. Mehet?",
     "pickupDone": "Rögzítve — az ügyfél értesítve: a gép átvehető.",
-    "pickedUpAt": "Gép elhozva a szerelőtől ({date}) — az ügyfél értesítve, a gép átvehető."
+    "pickedUpAt": "Gép elhozva a szerelőtől ({date}) — az ügyfél értesítve, a gép átvehető.",
+    "totalLossBadge": "Gazdasági totálkár",
+    "totalLossBadgeHint": "A szervizes totálkárosnak jelölte a gépet — az árajánlaton az ügyfél csak a bevizsgálási díj vállalása vagy a tulajdonjog-lemondás közül választhat."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1621,7 +1650,7 @@
     "settlement.no_items": "Nincs számlázható tétel (nulla fogyás).",
     "settlement.no_email": "Nincs email-cím — add meg a címzettet, vagy rögzíts kapcsolattartói emailt a partnernél.",
     "settlement.bad_signature": "Érvénytelen aláírás-adat — próbáld újra.",
-    "settlement.not_invoiced": "Ez az elszámolás még nincs kiszámlázva.",
+    "settlement.not_invoiced": "Ehhez az elszámoláshoz még nincs kiállított számla.",
     "settlement.already_paid": "Ez az elszámolás már fizetettnek van jelölve.",
     "settlement.sync_failed": "A Billingó fizetési státusz lekérése nem sikerült.",
     "service.not_found": "A szervizjegy nem található.",
@@ -1722,7 +1751,8 @@
       "no_label": "Ehhez a csomaghoz nincs mentett címke.",
       "no_parcel_number": "Ehhez a csomaghoz nincs csomagszám.",
       "already_handed_over": "A csomagot a futár már átvette — innentől nem törölhető."
-    }
+    },
+    "settlement.invoice_pdf_unavailable": "A számlakép / újraküldés a beállított számlázó szolgáltatónál nem érhető el."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2370,7 +2400,10 @@
       "in_transit": "Szállítás alatt",
       "delivered": "Kiszállítva",
       "returned": "Visszáru"
-    }
+    },
+    "officePrint": "Irodai nyomtatás",
+    "officePrintHint": "A címke a központi gép címke-nyomtatójára megy a nyomtató-ügynökön át (gls_printer beállítás) — telefonról is működik.",
+    "officePrintQueued": "Címke a nyomtatási sorban — a központi gépen nyomtatódik."
   },
   "instant": {
     "btn": "Azonnali értékesítés",

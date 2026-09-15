@@ -134,7 +134,7 @@ def _invoice_xml(
         f"<fizmod>{PAYMENT_METHOD_MAP.get(payment_method, 'Készpénz')}</fizmod>"
         "<penznem>HUF</penznem>"
         "<szamlaNyelve>hu</szamlaNyelve>"
-        "<megjegyzes></megjegyzes>"
+        "<megjegyzes>A bizonylat aláírás és bélyegző nélkül is érvényes!</megjegyzes>"
         + (f"<szamlaszamElotag>{escape(prefix)}</szamlaszamElotag>" if prefix else "")
         + f"<dijbekero>{'true' if test_mode else 'false'}</dijbekero>"
         "</fejlec>"
@@ -183,27 +183,20 @@ async def create_invoice_for_settlement(
     if not settings.enabled or not agent_key:
         raise ValueError("billingo_not_configured")
 
-    lines = (
-        (
-            await db.execute(
-                select(SettlementLine).where(SettlementLine.settlement_id == settlement.id)
-            )
-        )
-        .scalars()
-        .all()
+    from app.services.wfm.billingo_service import (
+        settlement_due_date, settlement_invoice_items,
     )
+
+    items = await settlement_invoice_items(db, settlement)
     tetelek = [
-        _tetel_xml(
-            f"{line.product_name} — fogyás ({line.consumed_qty:g} kg / {line.portions:.0f} adag)",
-            round(line.portions, 2), "adag", line.price_per_portion, line.vat_percent,
-        )
-        for line in lines
-        if line.portions > 0
+        _tetel_xml(it["name"], it["quantity"], it["unit"], it["unit_price"],
+                   int(it["vat"].rstrip("%")) if it["vat"].endswith("%") else 27)
+        for it in items
     ]
     if not tetelek:
         raise ValueError("billingo_no_items")
 
-    due = date.today() + timedelta(days=_terms_days(partner))
+    due = settlement_due_date(settlement, partner)
     xml = _invoice_xml(
         agent_key, prefix, test_mode=test_mode,
         payment_method=settlement.payment_method, due=due,

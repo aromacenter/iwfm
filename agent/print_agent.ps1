@@ -65,19 +65,23 @@ function Find-Sumatra {
 function Print-Pdf([string]$payloadB64, [string]$label) {
     $tmp = Join-Path $env:TEMP ("iwfm-print-" + [guid]::NewGuid().ToString("N") + ".pdf")
     [IO.File]::WriteAllBytes($tmp, [Convert]::FromBase64String($payloadB64))
+    # GLS-cimke kulon nyomtatora mehet (pl. Brother cimkezo): "gls_printer" a
+    # print_agent.json-ban; uresen a szokasos pdf_printer / alapertelmezett.
+    $target = $cfg.pdf_printer
+    if ($label -like "GLS*" -and $cfg.gls_printer) { $target = $cfg.gls_printer }
     try {
         $sumatra = Find-Sumatra
         if ($sumatra) {
-            if ($cfg.pdf_printer) {
-                & $sumatra -print-to $cfg.pdf_printer -silent -exit-when-done $tmp
+            if ($target) {
+                & $sumatra -print-to $target -silent -exit-when-done $tmp
             } else {
                 & $sumatra -print-to-default -silent -exit-when-done $tmp
             }
             Start-Sleep -Seconds 3
         } else {
             # tartalek: a .pdf-hez tarsitott program PrintTo/Print muvelete
-            if ($cfg.pdf_printer) {
-                Start-Process -FilePath $tmp -Verb PrintTo -ArgumentList ('"{0}"' -f $cfg.pdf_printer) -WindowStyle Hidden
+            if ($target) {
+                Start-Process -FilePath $tmp -Verb PrintTo -ArgumentList ('"{0}"' -f $target) -WindowStyle Hidden
             } else {
                 Start-Process -FilePath $tmp -Verb Print -WindowStyle Hidden
             }

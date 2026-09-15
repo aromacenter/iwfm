@@ -461,7 +461,29 @@
     "signerNameRequired": "The signature requires the signer's typed name.",
     "backfillCodesBtn": "Load product codes",
     "backfillCodesHint": "Lifts the 3-digit “Xpresso code” stored in imported notes into the Code field (empty codes only).",
-    "backfillCodesDone": "Codes loaded for {count} products."
+    "backfillCodesDone": "Codes loaded for {count} products.",
+    "invoiceConfirm": "Invoice this settlement? {partner} — {gross} Ft gross (settlement: {date}). Test mode creates a proforma.",
+    "invoicePdfBtn": "Download invoice image (PDF)",
+    "invoiceResendBtn": "Resend invoice by email",
+    "invoiceResendConfirm": "Resend the invoice by email? ({partner})",
+    "invoiceResent": "Invoice sent by email.",
+    "dueDaysLabel": "Due in",
+    "dueDaysUnit": "days",
+    "dueDaysHint": "Per-case payment terms for transfer — empty uses contract / partner / 8 days.",
+    "shipGls": "Ship via GLS",
+    "shipGlsHint": "After saving, the Parcels page opens prefilled — with COD payment the payable amount becomes the COD amount on the label.",
+    "glsContentTag": "Settlement — goods",
+    "stockDiff": "Difference",
+    "consumedByCounterHint": "Consumption from counters (portions × grams, in kg).",
+    "expectedStock": "Expected stock",
+    "expectedStockHint": "Coffee expected on site: book stock − counter-based consumption.",
+    "stockDiffOkHint": "Stock matches.",
+    "stockDiffPlusHint": "Surplus versus expected stock.",
+    "stockDiffMinusHint": "Shortage — billed at per-kg price, editable.",
+    "shortageKgPriceHint": "Shortage price (net Ft/kg) — editable; empty uses purchase price, else per-portion equivalent.",
+    "shortageTotal": "Stock shortage (per kg)",
+    "shortageTotalHint": "Physical stock below counter-expected — saved as a separate billed line, included in the payable total.",
+    "netSuffix": "net"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -824,7 +846,12 @@
       "both": "Customer & supplier"
     },
     "agent": "Responsible agent",
-    "agentHint": "They handle this partner's needs; the automations' \"agent\" recipient routes to them — or their substitute while absent."
+    "agentHint": "They handle this partner's needs; the automations' \"agent\" recipient routes to them — or their substitute while absent.",
+    "kindAll": "All",
+    "kindPartner": "Partner",
+    "kindCustomer": "Customer",
+    "kindPartnerHint": "Has our placed tangible-asset machine — settlements happen with them.",
+    "kindCustomerHint": "No placed machine — buys products or has their own machine serviced."
   },
   "account": {
     "password": "Change password",
@@ -1214,7 +1241,9 @@
     "pickupHint": "Marks that we collected the finished machine; the customer gets an email that the repair is done and the machine is ready for pickup.",
     "pickupConfirm": "Pickup will be recorded and a notification email sent to {to}. Proceed?",
     "pickupDone": "Recorded — the customer was notified: machine ready for pickup.",
-    "pickedUpAt": "Machine picked up ({date}) — customer notified, ready for pickup."
+    "pickedUpAt": "Machine picked up ({date}) — customer notified, ready for pickup.",
+    "totalLossBadge": "Economic total loss",
+    "totalLossBadgeHint": "Marked as total loss by the technician — the quote offers only the inspection fee or renouncing ownership."
   },
   "myTasks": {
     "title": "My tasks",
@@ -1621,7 +1650,7 @@
     "settlement.no_items": "Nothing to invoice (zero consumption).",
     "settlement.no_email": "No email address — enter a recipient or add a contact email to the partner.",
     "settlement.bad_signature": "Invalid signature data — please try again.",
-    "settlement.not_invoiced": "This settlement has not been invoiced yet.",
+    "settlement.not_invoiced": "No invoice has been issued for this settlement yet.",
     "settlement.already_paid": "This settlement is already marked as paid.",
     "settlement.sync_failed": "Fetching the Billingó payment status failed.",
     "service.not_found": "Service ticket not found.",
@@ -1722,7 +1751,8 @@
       "no_label": "No stored label for this parcel.",
       "no_parcel_number": "This parcel has no parcel number.",
       "already_handed_over": "The courier already picked up this parcel — it can no longer be deleted."
-    }
+    },
+    "settlement.invoice_pdf_unavailable": "Invoice image / resend is not available with the configured provider."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2370,7 +2400,10 @@
       "in_transit": "In transit",
       "delivered": "Delivered",
       "returned": "Returned"
-    }
+    },
+    "officePrint": "Office print",
+    "officePrintHint": "The label goes to the central PC's label printer via the print agent (gls_printer setting) — works from a phone too.",
+    "officePrintQueued": "Label queued — printing on the central PC."
   },
   "instant": {
     "btn": "Instant sale",

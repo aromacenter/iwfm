@@ -900,7 +900,20 @@ async def _execute_tool(
 # ─── Szolgáltató-réteg ───────────────────────────────────────────────────────
 
 
-def _system_prompt(actor: User) -> str:
+def _system_prompt(actor: User, context: dict | None = None) -> str:
+    ctx_lines = ""
+    if context:
+        parts = []
+        if context.get("page"):
+            parts.append(f"A felhasználó éppen ezen az oldalon áll: {context['page']}.")
+        machines = context.get("selected_machines") or []
+        if machines:
+            parts.append(
+                "A felületen PIPÁVAL KIJELÖLT gépek (a »kijelölt gép« ezekre "
+                "utal — vonalkód szerint): " + "; ".join(machines[:50])
+            )
+        if parts:
+            ctx_lines = "\nAktuális képernyő-kontextus:\n- " + "\n- ".join(parts) + "\n"
     return (
         "Az Iwfm (kávégép-bizomány és munkaerő-kezelő rendszer) beépített "
         "asszisztense vagy. A felhasználó admin felületen vagy telefonon, "
@@ -915,6 +928,7 @@ def _system_prompt(actor: User) -> str:
         "- Tömören, magyarul válaszolj (vagy a felhasználó nyelvén). "
         "A végrehajtott műveletet erősítsd meg egy mondatban.\n"
         "- Ha a felhasználó egy oldalt akar látni, használd a navigate eszközt."
+        + ctx_lines
     )
 
 
@@ -981,7 +995,8 @@ async def _gemini_step(
 
 
 async def run_chat(
-    db: AsyncSession, actor: User, history: list[dict]
+    db: AsyncSession, actor: User, history: list[dict],
+    context: dict | None = None,
 ) -> dict:
     """A teljes asszisztens-hurok. history: [{role: user|assistant, content: str}].
 
@@ -1001,7 +1016,7 @@ async def run_chat(
 
     matrix = await get_permission_matrix(db)
     tools = _available_tools(actor, matrix)
-    system = _system_prompt(actor)
+    system = _system_prompt(actor, context)
     events: list[dict] = []
 
     if provider == "anthropic":

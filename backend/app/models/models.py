@@ -1226,6 +1226,9 @@ class Settlement(Base):
     # Kintlévőség: none (nincs számlázva) | paid | outstanding
     payment_status: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # fizetési határidő
+    # Eseti fizetési határidő-felülírás (nap) — átutalásnál a képviselő adja
+    # meg; None = a szerződés/partner/8 nap erősorrend érvényes.
+    due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # A partner képernyős aláírása a bizonylaton (PNG data URL)
     partner_signature: Mapped[str | None] = mapped_column(Text, nullable=True)

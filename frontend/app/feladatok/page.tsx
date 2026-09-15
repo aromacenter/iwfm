@@ -37,6 +37,7 @@ interface TaskOut {
   worksheet_serial: string | null;
   worksheet_completed: boolean;
   worksheet_external: boolean;
+  worksheet_total_loss: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -56,7 +57,8 @@ export default function FeladatokPage() {
   const [tasks, setTasks] = useState<TaskOut[]>([]);
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
-  const [statusFilter, setStatusFilter] = useState("");
+  // Alapból a NYITOTT feladatok látszanak — a „Minden státusz" választható.
+  const [statusFilter, setStatusFilter] = useState("open");
   const [kindFilter, setKindFilter] = useState<"all" | "normal" | "external">("all");
   const [externalService, setExternalService] = useState(false);
   // KSZ-munkalap tárgy-gépe: ebből jön a karbantartási díj és a számlázási partner
@@ -562,6 +564,14 @@ export default function FeladatokPage() {
                   {task.worksheet_external && (
                     <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">
                       🔧 {t("tasks.externalBadge")}
+                    </span>
+                  )}
+                  {task.worksheet_total_loss && (
+                    <span
+                      title={t("tasks.totalLossBadgeHint")}
+                      className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700"
+                    >
+                      ⚠ {t("tasks.totalLossBadge")}
                     </span>
                   )}
                 </div>

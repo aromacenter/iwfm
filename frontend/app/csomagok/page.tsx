@@ -155,6 +155,12 @@ export default function CsomagokPage() {
     selectPartner(pid);
     const content = params.get("content");
     if (content) setForm((f) => ({ ...f, content: content.slice(0, 250) }));
+    // Elszámolásból érkező utánvét-előtöltés: a fizetendő összeg a címkén
+    // automatikusan az utánvét összege.
+    const cod = params.get("cod");
+    if (cod && Number(cod) > 0) {
+      setForm((f) => ({ ...f, cod: true, cod_amount: cod }));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partners, partnerPrefillDone]);
 
@@ -236,6 +242,17 @@ export default function CsomagokPage() {
   }
 
   const [openTimeline, setOpenTimeline] = useState<string | null>(null);
+
+  // Címke a KÖZPONTI gép nyomtatójára (nyomtató-ügynökön át) — telefonról
+  // is működik, és a korábbi címkék is újranyomtathatók.
+  async function officePrint(p: Parcel) {
+    try {
+      await api.post(`/api/gls/${p.id}/print`, {});
+      toast(t("gls.officePrintQueued"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   async function refreshStatus(p: Parcel) {
     try {
@@ -416,6 +433,13 @@ export default function CsomagokPage() {
                   className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
                 >
                   🖨 {t("gls.printLabel")}
+                </button>
+                <button
+                  onClick={() => officePrint(p)}
+                  title={t("gls.officePrintHint")}
+                  className="rounded border border-indigo-300 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-50"
+                >
+                  🖨️ {t("gls.officePrint")}
                 </button>
                 <button
                   onClick={() => refreshStatus(p)}

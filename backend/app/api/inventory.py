@@ -163,9 +163,12 @@ class PartnerOut(BaseModel):
     notes: str | None
     is_active: bool
     asset_count: int = 0
+    # Kihelyezett TÁRGYI ESZKÖZ gépeink száma — 0 = ügyfél (csak vásárol /
+    # javíttat), >0 = elszámolós partner. A megkülönböztetés ebből származik.
+    placed_machine_count: int = 0
 
 
-def _partner_out(p: Partner, asset_count: int = 0) -> PartnerOut:
+def _partner_out(p: Partner, asset_count: int = 0, placed_machine_count: int = 0) -> PartnerOut:
     return PartnerOut(
         id=str(p.id),
         partner_code=p.partner_code,
@@ -202,6 +205,7 @@ def _partner_out(p: Partner, asset_count: int = 0) -> PartnerOut:
         notes=p.notes,
         is_active=p.is_active,
         asset_count=asset_count,
+        placed_machine_count=placed_machine_count,
     )
 
 
@@ -354,7 +358,25 @@ async def list_partners(
             )
         ).all()
     )
-    return [_partner_out(p, int(counts.get(p.id, 0))) for p in partners]
+    # Kihelyezett TÁRGYI ESZKÖZ gépek partnerenként — ebből tudja a felület,
+    # hogy ki elszámolós partner és ki csak ügyfél.
+    placed = dict(
+        (
+            await db.execute(
+                select(Asset.partner_id, func.count())
+                .where(
+                    Asset.partner_id.is_not(None),
+                    Asset.tangible.is_(True),
+                    Asset.customer_owned.is_(False),
+                )
+                .group_by(Asset.partner_id)
+            )
+        ).all()
+    )
+    return [
+        _partner_out(p, int(counts.get(p.id, 0)), int(placed.get(p.id, 0)))
+        for p in partners
+    ]
 
 
 @router.get("/tax-lookup")

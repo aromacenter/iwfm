@@ -291,6 +291,32 @@ async def parcel_label(
     )
 
 
+@router.post("/{parcel_id}/print")
+async def print_parcel_label(
+    parcel_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """A címke-PDF a nyomtatási sorba — a központi gép nyomtató-ügynöke a
+    beállított címke-nyomtatóra (pl. Brother) küldi; telefonról is működik.
+    Korábbi címke így bármikor újranyomtatható."""
+    from app.api.tasks import _enqueue_pdf_print
+
+    p = await _parcel_or_404(db, parcel_id)
+    if not p.label_pdf:
+        raise HTTPException(status_code=404, detail={"code": "gls.no_label"})
+    job_id = await _enqueue_pdf_print(
+        db, label=f"GLS címke {p.parcel_number or ''}".strip(), pdf=p.label_pdf, actor=actor,
+    )
+    await record_audit(
+        db, actor=actor, action="gls.print", entity_type="gls_parcel",
+        entity_id=p.parcel_number or str(p.id), request=request,
+    )
+    await db.commit()
+    return {"ok": True, "job_id": job_id}
+
+
 @router.post("/{parcel_id}/refresh-status", response_model=ParcelOut)
 async def refresh_parcel_status(
     parcel_id: str,

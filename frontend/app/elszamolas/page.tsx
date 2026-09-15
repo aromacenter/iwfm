@@ -239,6 +239,10 @@ export default function ElszamolasPage() {
   const [counters, setCounters] = useState<Record<string, string>>({});
   const [payment, setPayment] = useState<(typeof PAYMENTS)[number]>("cash");
   const [note, setNote] = useState("");
+  // Eseti fizetési határidő (nap) átutalásnál; üres = szerződés/partner/8 nap.
+  const [dueDays, setDueDays] = useState("");
+  // GLS-feladás az elszámolás mentése után (utánvétnél a fizetendő az utánvét).
+  const [shipGls, setShipGls] = useState(false);
   // Gép-soros elszámolás: kontextus + gépenkénti beviteli mezők
   const [ctx, setCtx] = useState<SettlementContext | null>(null);
   const [machineInputs, setMachineInputs] = useState<Record<string, MachineInput>>({});
@@ -248,6 +252,9 @@ export default function ElszamolasPage() {
   const [machinePrices, setMachinePrices] = useState<Record<string, string>>({});
   const [linePrices, setLinePrices] = useState<Record<string, string>>({});
   const [handovers, setHandovers] = useState<Record<string, { qty: string; cost: string; price?: string }>>({});
+  // Készlethiány kg-árának felülírása termékenként (üres = beszerzési ár /
+  // adagár kg-egyenértéke).
+  const [kgPrices, setKgPrices] = useState<Record<string, string>>({});
   const [paidAmount, setPaidAmount] = useState("");
   // Készlet-sor nélküli partnernél is elszámolható: kézzel felvett termék-sorok
   const [extraProducts, setExtraProducts] = useState<string[]>([]);
@@ -579,7 +586,10 @@ export default function ElszamolasPage() {
   const machinePreview = useMemo(() => {
     const billedByProduct: Record<string, number> = {};
     const amountByProduct: Record<string, number> = {};
-    if (!ctx) return { rows: [], billedByProduct, amountByProduct };
+    // A LEFŐZÖTT adag (szerviz-adagokkal együtt) — a kg-fogyás
+    // keresztellenőrzés alapja, ahogy a mentésnél is.
+    const brewedByProduct: Record<string, number> = {};
+    if (!ctx) return { rows: [], billedByProduct, amountByProduct, brewedByProduct };
     const rows = ctx.machines.map((m) => {
       const inp = machineInputs[m.asset_id];
       let newCounter: number | null = null;
@@ -657,6 +667,7 @@ export default function ElszamolasPage() {
       if (filled && pid) {
         billedByProduct[pid] = (billedByProduct[pid] ?? 0) + billed;
         amountByProduct[pid] = (amountByProduct[pid] ?? 0) + amount;
+        brewedByProduct[pid] = (brewedByProduct[pid] ?? 0) + brewed;
       }
       // Kontrollos gépnél az "előző számláló" az ÖSSZESÍTŐ állása, nem a
       // számlálók összege (az duplázna a kijelzésen).
@@ -668,7 +679,7 @@ export default function ElszamolasPage() {
         belowPrev, detail, controlDiff, contractDefault, displayPrev,
       };
     });
-    return { rows, billedByProduct, amountByProduct };
+    return { rows, billedByProduct, amountByProduct, brewedByProduct };
   }, [ctx, machineInputs, machineProducts, machinePrices, stockRows, products]);
 
   // Kedvezményes elszámolás: a KÁVÉ ÁFA és számla nélkül megy (a nettó a
@@ -702,6 +713,7 @@ export default function ElszamolasPage() {
   // termékeknél a számlázott adag/összeg a gépekből jön.
   const preview = useMemo(() => {
     let net = 0;
+    let shortageNet = 0;
     const rows = stockRows.map((s) => {
       const phys = physical[s.product_id] ?? "";
       const physNum = phys === "" ? null : Number(phys);
@@ -731,18 +743,45 @@ export default function ElszamolasPage() {
         amount = portions * unitPrice;
       }
       net += amount;
+      // Számláló-alapú fogyás kg-ban (a norma szerint) + várt készlet +
+      // eltérés a beírt fizikai leltárhoz képest. A LEFŐZÖTT adag számít
+      // (szerviz-adagokkal), ahogy a mentés kg-keresztellenőrzése is.
+      const crossPortions =
+        machineBilled !== undefined
+          ? machinePreview.brewedByProduct[s.product_id] ?? machineBilled
+          : counterNum;
+      const consumedKgByCounter =
+        s.is_consignment && crossPortions !== null && crossPortions !== undefined
+          ? (crossPortions * s.grams_per_portion) / 1000
+          : null;
+      const expectedRemaining =
+        consumedKgByCounter !== null ? Math.max(s.quantity - consumedKgByCounter, 0) : null;
+      const stockDiff =
+        expectedRemaining !== null && physNum !== null ? physNum - expectedRemaining : null;
+      // Hiány: kg-áron számlázódik (átírható); a mentés ugyanígy számol.
+      const shortageKg = stockDiff !== null && stockDiff < -0.049 ? -stockDiff : 0;
+      const kgManual = kgPrices[s.product_id] ?? "";
+      const prod = products.find((x) => x.id === s.product_id);
+      const defaultKgPrice =
+        prod?.purchase_price ??
+        (s.grams_per_portion > 0 ? (unitPrice * 1000) / s.grams_per_portion : unitPrice);
+      const kgPrice = kgManual !== "" ? Number(kgManual) : defaultKgPrice;
+      const shortageAmount = shortageKg > 0 ? shortageKg * kgPrice : 0;
+      shortageNet += shortageAmount;
       return {
         ...s, consumed, portions, amount,
         filled: physNum !== null || machineBilled !== undefined,
         fromMachines: machineBilled !== undefined,
+        consumedKgByCounter, expectedRemaining, stockDiff,
+        shortageKg, shortageAmount, defaultKgPrice,
       };
     });
     // Gép-termék készlet-sor nélkül (ritka): az összegbe így is beszámít
     for (const [pid, amount] of Object.entries(machinePreview.amountByProduct)) {
       if (!stockRows.some((s) => s.product_id === pid)) net += amount;
     }
-    return { rows, net };
-  }, [stockRows, physical, counters, machinePreview]);
+    return { rows, net, shortageNet };
+  }, [stockRows, physical, counters, linePrices, kgPrices, products, machinePreview]);
 
   // Átadott NEM-bizományos áruk: azonnal fizetendők — csak a kávé bizomány.
   // A képviselő BRUTTÓ árat lát és ír be; a mentés nettósítja a termék ÁFA-ja
@@ -787,7 +826,8 @@ export default function ElszamolasPage() {
   // átadott eladási áruk és az SZL-tételek MINDIG bruttón (kedvezmény rájuk
   // nem vonatkozik) — így már az űrlapon a beszedendő összeg látszik.
   const grossEstimate = Math.round(
-    preview.net * (noVat ? 1 : 1.27) + handoverSale.gross + openDeliveryGross,
+    (preview.net + preview.shortageNet) * (noVat ? 1 : 1.27)
+    + handoverSale.gross + openDeliveryGross,
   );
   const totalPayable = grossEstimate + Math.round(ctx?.debt ?? 0);
 
@@ -999,6 +1039,8 @@ export default function ElszamolasPage() {
           (counters[s.product_id] ?? "") === "" ? null : Number(counters[s.product_id]),
         price_per_portion:
           (linePrices[s.product_id] ?? "") === "" ? null : Number(linePrices[s.product_id]),
+        kg_price:
+          (kgPrices[s.product_id] ?? "") === "" ? null : Number(kgPrices[s.product_id]),
       }));
     // Gép-sorok: csak a kitöltött (új számlálós) gépek kerülnek be
     if (machinePreview.rows.some((r) => r.belowPrev)) {
@@ -1048,6 +1090,7 @@ export default function ElszamolasPage() {
       handovers: handoverList,
       paid_amount: paid,
       note: note || null,
+      due_days: payment === "transfer" && dueDays !== "" ? Number(dueDays) : null,
     };
     setBusy(true);
     try {
@@ -1055,14 +1098,30 @@ export default function ElszamolasPage() {
         "/api/settlements", payload,
       );
       toast(t("cons.settlementSaved", { gross: res.total_gross.toLocaleString("hu-HU") }), "success");
+      const wantGls = shipGls;
+      // Utánvétnél a címkére a ténylegesen beszedendő összeg megy utánvétként.
+      const codAmount = payment === "cod" ? (paid ?? totalPayable) : 0;
       setNote("");
       setPaidAmount("");
+      setDueDays("");
+      setShipGls(false);
       loadStock();
       loadCtx();
       loadHistory();
       loadDue();
-      setSigning(res); // elszámolás után rögtön aláírathatjuk a partnerrel
-      setSignature(null);
+      if (wantGls) {
+        // GLS-feladásnál a Csomagok oldal nyílik előtöltve (aláírás később,
+        // az előzményekből is indítható) — utánvétnél az összeggel együtt.
+        const params = new URLSearchParams({
+          partner: partnerId,
+          content: t("cons.glsContentTag"),
+        });
+        if (codAmount > 0) params.set("cod", String(Math.round(codAmount)));
+        router.push(`/csomagok?${params}`);
+      } else {
+        setSigning(res); // elszámolás után rögtön aláírathatjuk a partnerrel
+        setSignature(null);
+      }
     } catch (err) {
       if (!(err instanceof ApiError)) {
         // hálózati hiba (offline): várólistára tesszük, később beküldjük
@@ -1127,10 +1186,38 @@ export default function ElszamolasPage() {
   }
 
   async function invoice(s: Settlement) {
+    // Megerősítés kötelező — régi elszámolásra kattintva véletlenül ne
+    // szülessen díjbekérő/számla.
+    const ok = await confirm(
+      t("cons.invoiceConfirm", {
+        partner: s.partner_name ?? "?",
+        gross: Math.round(s.total_gross).toLocaleString("hu-HU"),
+        date: fmt(s.created_at),
+      }),
+    );
+    if (!ok) return;
     try {
       const res = await api.post<Settlement>(`/api/settlements/${s.id}/invoice`);
       toast(t("cons.invoiceOk", { mode: res.billingo_status ?? "?" }), "success");
       loadHistory();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function downloadInvoicePdf(s: Settlement) {
+    try {
+      await downloadFile(`/api/settlements/${s.id}/invoice-pdf`, `szamla-${s.id.slice(0, 8)}.pdf`);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function resendInvoiceEmail(s: Settlement) {
+    if (!(await confirm(t("cons.invoiceResendConfirm", { partner: s.partner_name ?? "?" })))) return;
+    try {
+      await api.post(`/api/settlements/${s.id}/invoice-email`, {});
+      toast(t("cons.invoiceResent"), "success");
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -1935,9 +2022,10 @@ export default function ElszamolasPage() {
                 <th className="px-4 py-3">{t("prices.unitPrice")}</th>
                 <th className="px-4 py-3">{t("cons.bookQty")}</th>
                 <th className="px-4 py-3">{t("cons.portionsAvail")}</th>
-                <th className="px-4 py-3">{t("cons.physicalQty")}</th>
                 <th className="px-4 py-3">{t("cons.counterPortions")}</th>
                 <th className="px-4 py-3">{t("cons.consumed")}</th>
+                <th className="px-4 py-3">{t("cons.physicalQty")}</th>
+                <th className="px-4 py-3">{t("cons.stockDiff")}</th>
                 <th className="px-4 py-3">{t("cons.portions")}</th>
                 <th className="px-4 py-3">{t("cons.amountNet")}</th>
                 <th className="px-4 py-3">{t("cons.handover")}</th>
@@ -1952,7 +2040,7 @@ export default function ElszamolasPage() {
                 <Fragment key={s.product_id}>
                 {!s.is_consignment && (idx === 0 || arr[idx - 1].is_consignment) && (
                   <tr className="border-b border-slate-200 bg-slate-50">
-                    <td colSpan={10} className="px-4 py-2 text-xs font-semibold uppercase text-slate-500">
+                    <td colSpan={11} className="px-4 py-2 text-xs font-semibold uppercase text-slate-500">
                       🧃 {t("cons.otherProducts")}
                     </td>
                   </tr>
@@ -2016,21 +2104,6 @@ export default function ElszamolasPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-500">{s.is_consignment ? s.portions_available : "—"}</td>
                   <td className="px-4 py-3">
-                    {s.is_consignment ? (
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={physical[s.product_id] ?? ""}
-                        onChange={(e) => setPhysical({ ...physical, [s.product_id]: e.target.value })}
-                        placeholder={`${s.quantity} ${s.unit}`}
-                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
-                      />
-                    ) : (
-                      <span title={t("cons.noInventoryHint")} className="text-slate-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
                     {!s.is_consignment ? (
                       <span className="text-slate-300">—</span>
                     ) : s.fromMachines ? (
@@ -2054,9 +2127,78 @@ export default function ElszamolasPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {s.is_consignment && (physical[s.product_id] ?? "") !== ""
-                      ? `${s.consumed.toFixed(2)} ${s.unit}`
-                      : "—"}
+                    {/* FOGYÁS: a számlálók normája szerint kg-ban; számláló
+                        nélkül a mért (könyv − fizikai) fogyás. */}
+                    {s.consumedKgByCounter !== null && s.consumedKgByCounter !== undefined ? (
+                      <span title={t("cons.consumedByCounterHint")} className="font-medium text-slate-700">
+                        {s.consumedKgByCounter.toFixed(2)} {s.unit}
+                      </span>
+                    ) : s.is_consignment && (physical[s.product_id] ?? "") !== "" ? (
+                      `${s.consumed.toFixed(2)} ${s.unit}`
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {s.is_consignment ? (
+                      <>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={physical[s.product_id] ?? ""}
+                          onChange={(e) => setPhysical({ ...physical, [s.product_id]: e.target.value })}
+                          placeholder={`${s.quantity} ${s.unit}`}
+                          className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
+                        />
+                        {s.expectedRemaining !== null && s.expectedRemaining !== undefined && (
+                          <div
+                            title={t("cons.expectedStockHint")}
+                            className="mt-0.5 text-xs text-slate-400"
+                          >
+                            {t("cons.expectedStock")}: {s.expectedRemaining.toFixed(2)} {s.unit}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <span title={t("cons.noInventoryHint")} className="text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {/* ELTÉRÉS: kék = stimmel, zöld = többlet, piros = hiány */}
+                    {s.stockDiff === null || s.stockDiff === undefined ? (
+                      "—"
+                    ) : Math.abs(s.stockDiff) < 0.05 ? (
+                      <span title={t("cons.stockDiffOkHint")} className="rounded bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
+                        ✓ {s.stockDiff >= 0 ? "+" : ""}{s.stockDiff.toFixed(2)} kg
+                      </span>
+                    ) : s.stockDiff > 0 ? (
+                      <span title={t("cons.stockDiffPlusHint")} className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">
+                        +{s.stockDiff.toFixed(2)} kg
+                      </span>
+                    ) : (
+                      <div className="space-y-1">
+                        <span title={t("cons.stockDiffMinusHint")} className="rounded bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-800">
+                          −{(s.shortageKg ?? 0).toFixed(2)} kg
+                        </span>
+                        <div className="flex items-center gap-1 text-xs">
+                          <input
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={kgPrices[s.product_id] ?? ""}
+                            onChange={(e) => setKgPrices({ ...kgPrices, [s.product_id]: e.target.value })}
+                            placeholder={String(Math.round(s.defaultKgPrice ?? 0))}
+                            title={t("cons.shortageKgPriceHint")}
+                            className="w-20 rounded border border-rose-300 px-1.5 py-1"
+                          />
+                          <span className="text-slate-400">Ft/kg</span>
+                          <span className="font-semibold text-rose-700">
+                            = {ft(Math.round(s.shortageAmount ?? 0))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">{s.is_consignment && s.filled ? s.portions.toFixed(0) : "—"}</td>
                   <td className="px-4 py-3 font-medium">{s.is_consignment && s.filled ? ft(Math.round(s.amount)) : "—"}</td>
@@ -2116,7 +2258,7 @@ export default function ElszamolasPage() {
                 </Fragment>
               ))}
               {stockRows.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-6 text-center text-slate-400">{t("cons.noStockAddBelow")}</td></tr>
+                <tr><td colSpan={11} className="px-4 py-6 text-center text-slate-400">{t("cons.noStockAddBelow")}</td></tr>
               )}
             </tbody>
           </table>
@@ -2193,6 +2335,17 @@ export default function ElszamolasPage() {
                   <span className="font-semibold text-sky-900">{ft(Math.round(openDeliveryGross))}</span>
                 </div>
               )}
+              {preview.shortageNet > 0 && (
+                <div className="flex flex-wrap items-center justify-end gap-x-3 text-sm">
+                  <span
+                    title={t("cons.shortageTotalHint")}
+                    className="rounded bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800"
+                  >
+                    ⚠ {t("cons.shortageTotal")}
+                  </span>
+                  <span className="font-semibold text-rose-700">{ft(Math.round(preview.shortageNet))} {t("cons.netSuffix")}</span>
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
                 <span className="text-slate-500">
                   {t("cons.amountNet")}:{" "}
@@ -2238,6 +2391,36 @@ export default function ElszamolasPage() {
                     <option key={m} value={m}>{t(`cons.payments.${m}`)}</option>
                   ))}
                 </select>
+                {payment === "transfer" && (
+                  <label
+                    className="flex items-center gap-1.5 text-xs text-slate-600"
+                    title={t("cons.dueDaysHint")}
+                  >
+                    {t("cons.dueDaysLabel")}
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={dueDays}
+                      onChange={(e) => setDueDays(e.target.value)}
+                      placeholder="8"
+                      className="w-16 rounded-lg border border-slate-300 px-2 py-1.5"
+                    />
+                    <span className="text-slate-400">{t("cons.dueDaysUnit")}</span>
+                  </label>
+                )}
+                <label
+                  className="flex items-center gap-1.5 text-xs text-sky-800"
+                  title={t("cons.shipGlsHint")}
+                >
+                  <input
+                    type="checkbox"
+                    checked={shipGls}
+                    onChange={(e) => setShipGls(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  📦 {t("cons.shipGls")}
+                </label>
                 {noVat && (
                   <span className="rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
                     {t("cons.noVatBadge")}
@@ -2426,9 +2609,25 @@ export default function ElszamolasPage() {
                         {t("cons.noVatBadge")}
                       </span>
                     ) : s.invoiced ? (
-                      <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                        {t("cons.invoiced")}{s.billingo_status ? ` (${s.billingo_status})` : ""}
-                      </span>
+                      <>
+                        <button
+                          onClick={() => downloadInvoicePdf(s)}
+                          title={t("cons.invoicePdfBtn")}
+                          className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none text-emerald-700 hover:bg-emerald-50"
+                        >
+                          🧾
+                        </button>
+                        <button
+                          onClick={() => resendInvoiceEmail(s)}
+                          title={t("cons.invoiceResendBtn")}
+                          className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none text-emerald-700 hover:bg-emerald-50"
+                        >
+                          🧾✉
+                        </button>
+                        <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                          {t("cons.invoiced")}{s.billingo_status ? ` (${s.billingo_status})` : ""}
+                        </span>
+                      </>
                     ) : (
                       <button
                         onClick={() => invoice(s)}
@@ -2570,15 +2769,18 @@ export default function ElszamolasPage() {
               <div key={i} className="flex items-center gap-2">
                 <SearchSelect
                   items={activeProducts.map((p) => ({
-                    id: p.id, label: p.name, sublabel: p.category, badge: p.unit,
+                    id: p.id, label: p.name, sublabel: p.category,
+                    badge: p.code || p.unit, keywords: p.code,
                   }))}
                   value={line.product_id}
                   onChange={(id) => {
                     const prod = activeProducts.find((p) => p.id === id);
                     const lines = [...delivery.lines];
+                    // Termékváltásnál az ár MINDIG az új termék árára frissül
+                    // (a korábbi termék ára nem ragadhat be).
                     lines[i] = {
                       ...line, product_id: id,
-                      unit_price: line.unit_price || (prod ? String(prod.price_per_portion) : ""),
+                      unit_price: prod ? String(prod.price_per_portion) : "",
                     };
                     setDelivery({ ...delivery, lines });
                   }}

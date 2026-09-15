@@ -26,3 +26,17 @@ nyomtatás és hiba.
 A Godex IP-jének megtudása: a legtöbb Godexen a FEED gombot nyomva tartva
 bekapcsolva tesztcímkét nyomtat, rajta az IP-vel; vagy a GoLabel →
 Printer Setup mutatja.
+
+--- FRISSITES: PDF-nyomtatas (elismerveny, munkalap) ---
+Az ugynok PDF-eket is nyomtat az irodai nyomtatora (pl. ML-3310):
+   "pdf_printer": "Samsung ML-3310 Series"   <- a Windows nyomtato pontos neve;
+                                                uresen az alapertelmezett megy
+Ajanlott a SumatraPDF (ingyenes): https://www.sumatrapdfreader.org - az
+ugynok automatikusan megtalalja; hordozhatonal "sumatra_path" az exe utja.
+
+--- FRISSITES 2: GLS-cimkek kulon nyomtatora ---
+A GLS-cimke PDF-ek kulon nyomtatora iranyithatok (pl. Brother cimkezo):
+   "gls_printer": "Brother QL-800"   <- a Windows nyomtato pontos neve;
+                                        uresen a pdf_printer / alapertelmezett megy
+A cimket a Csomagok oldal "Irodai nyomtatas" gombja teszi a sorba -
+telefonrol is mukodik, es a korabbi cimkek is ujranyomtathatok vele.

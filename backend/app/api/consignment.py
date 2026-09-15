@@ -1091,6 +1091,9 @@ class SettlementLineIn(BaseModel):
     # Kézi egységár-felülírás ERRE az elszámolásra (Ft/adag, nettó) — az
     # átírás audit-naplóba kerül (settlement.override).
     price_per_portion: float | None = Field(default=None, ge=0)
+    # Készlethiány kg-árának felülírása (Ft/kg, nettó) — None: beszerzési ár,
+    # annak híján az adagár kg-egyenértéke.
+    kg_price: float | None = Field(default=None, ge=0)
 
 
 class SettlementMachineIn(BaseModel):
@@ -1130,6 +1133,9 @@ class SettlementCreate(BaseModel):
     # (a saját bruttó rendezettnek számít, tartozás nem képződik).
     paid_amount: float | None = Field(default=None, ge=0)
     note: str | None = Field(default=None, max_length=1000)
+    # Eseti fizetési határidő (nap) — átutalásnál írja felül a szerződés /
+    # partner / 8 nap erősorrendet.
+    due_days: int | None = Field(default=None, ge=1, le=120)
 
 
 class SettlementLineOut(BaseModel):
@@ -1506,6 +1512,7 @@ async def create_settlement(
         total_net=0.0,
         total_gross=0.0,
         note=body.note,
+        due_days=body.due_days,
     )
     db.add(settlement)
     await db.flush()
@@ -1830,8 +1837,14 @@ async def create_settlement(
             )
             shortage_kg = expected_remaining - line_in.physical_qty
             if shortage_kg >= 0.05:
-                kg_price = product.purchase_price or (
-                    unit_price * 1000.0 / max(product.grams_per_portion, 1)
+                # A képviselő átírhatja a hiány kg-árát; None → beszerzési
+                # ár, annak híján az adagár kg-egyenértéke.
+                kg_price = (
+                    line_in.kg_price
+                    if line_in.kg_price is not None
+                    else product.purchase_price or (
+                        unit_price * 1000.0 / max(product.grams_per_portion, 1)
+                    )
                 )
                 short_net = _money(shortage_kg * kg_price)
                 db.add(
@@ -2933,6 +2946,69 @@ async def invoice_settlement(
     await db.commit()
     await _cashbook_autopush(db, s)  # könyvelési feladás (best-effort)
     return _settlement_out(s, partner.name)
+
+
+@settlements_router.get("/{settlement_id}/invoice-pdf")
+async def settlement_invoice_pdf(
+    settlement_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """A kiállított számla/díjbekérő SZÁMLAKÉPE (a számlázó szolgáltatótól)."""
+    from app.services.wfm.invoicing import download_invoice_pdf
+
+    s = await _get_settlement_or_404(db, settlement_id)
+    if not s.invoiced or not s.billingo_document_id:
+        raise HTTPException(status_code=404, detail={"code": "settlement.not_invoiced"})
+    try:
+        pdf = await download_invoice_pdf(db, s.billingo_document_id, s.invoicing_company)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settlement.invoice_pdf_unavailable"})
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "settlement.invoice_failed"})
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="szamla-{s.billingo_document_id}.pdf"'},
+    )
+
+
+class InvoiceEmailBody(BaseModel):
+    to: EmailStr | None = None  # None → a partner kapcsolattartói címe
+
+
+@settlements_router.post("/{settlement_id}/invoice-email", response_model=SettlementOut)
+async def settlement_invoice_email(
+    settlement_id: str,
+    body: InvoiceEmailBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """A kiállított számla (újra)küldése emailben a számlázón keresztül."""
+    from app.services.wfm.invoicing import send_invoice_email
+
+    s = await _get_settlement_or_404(db, settlement_id)
+    if not s.invoiced or not s.billingo_document_id:
+        raise HTTPException(status_code=404, detail={"code": "settlement.not_invoiced"})
+    partner = (
+        await db.execute(select(Partner).where(Partner.id == s.partner_id))
+    ).scalar_one_or_none()
+    to = (str(body.to) if body.to else None) or (partner.contact_email if partner else None)
+    if not to:
+        raise HTTPException(status_code=422, detail={"code": "settlement.no_email"})
+    try:
+        await send_invoice_email(db, s.billingo_document_id, [to], s.invoicing_company)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settlement.invoice_pdf_unavailable"})
+    except Exception:
+        raise HTTPException(status_code=502, detail={"code": "settlement.invoice_failed"})
+    await record_audit(
+        db, actor=actor, action="settlement.invoice_email", entity_type="settlement",
+        entity_id=str(s.id), detail={"to": to}, request=request,
+    )
+    await db.commit()
+    return _settlement_out(s, partner.name if partner else None)
 
 
 # ─── Bizonylat: PDF + aláírás + email ────────────────────────────────────────

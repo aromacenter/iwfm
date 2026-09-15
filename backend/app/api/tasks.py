@@ -116,6 +116,7 @@ class TaskOut(BaseModel):
     worksheet_serial: str | None = None  # ML-2026-0001, ha van munkalap
     worksheet_completed: bool = False  # kitöltötte-e már a dolgozó
     worksheet_external: bool = False  # külső szerviznek átadott gép munkalapja
+    worksheet_total_loss: bool = False  # gazdasági totálkárnak jelölt gép
     asset: dict | None = None  # a munkalaphoz kötött gép adatai (KSZ)
     ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
     ticket_images: list[str] = []  # szervizjegyből jött feladat csatolt képei (id-k)
@@ -588,13 +589,15 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             select(
                 Worksheet.task_id, Worksheet.serial, Worksheet.work_description,
                 Worksheet.external_service, Worksheet.asset_id,
+                Worksheet.total_loss,
             ).where(Worksheet.task_id.in_([t.id for t in tasks]))
         )
     ).all()
-    worksheet_serials = {tid: serial for tid, serial, _, _, _ in ws_rows}
-    worksheet_done = {tid: bool((desc or "").strip()) for tid, _, desc, _, _ in ws_rows}
-    worksheet_external = {tid: ext for tid, _, _, ext, _ in ws_rows}
-    ws_asset_ids = {tid: aid for tid, _, _, _, aid in ws_rows if aid}
+    worksheet_serials = {tid: serial for tid, serial, _, _, _, _ in ws_rows}
+    worksheet_done = {tid: bool((desc or "").strip()) for tid, _, desc, _, _, _ in ws_rows}
+    worksheet_external = {tid: ext for tid, _, _, ext, _, _ in ws_rows}
+    worksheet_total_loss = {tid: bool(tl) for tid, _, _, _, _, tl in ws_rows}
+    ws_asset_ids = {tid: aid for tid, _, _, _, aid, _ in ws_rows if aid}
     task_assets: dict[uuid.UUID, dict] = {}
     if ws_asset_ids:
         asset_rows = (
@@ -658,6 +661,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             worksheet_serial=worksheet_serials.get(t.id),
             worksheet_completed=worksheet_done.get(t.id, False),
             worksheet_external=worksheet_external.get(t.id, False),
+            worksheet_total_loss=worksheet_total_loss.get(t.id, False),
             asset=task_assets.get(t.id),
             ticket_images=ticket_imgs.get(t.id, []),
         )
@@ -1026,8 +1030,28 @@ async def _build_worksheet_pdf(
     if ws.external_service and variant == "customer":
         work_description = ws.customer_note or ""
         pdf_comments = []
-        # A vevői példányon csak a TÉTELES munkák szerepelnek: az ajánlat-
-        # konstrukciók és a ráfordított idő nem kerülnek rá.
+        # Elfogadott (vagy lezárt) árajánlatnál a KIVÁLASZTOTT konstrukció a
+        # fizetendő tétel — az ára mindent tartalmaz, ezért az anyagok és a
+        # tételes munkadíjak ügyfél-árai lekerülnek (nem duplázódhat a végösszeg).
+        if (ws.quote_status or "none") in ("accepted", "declined"):
+            accepted_lines = [
+                {"name": w.get("name"), "price_net": w.get("price_net")}
+                for w in repair_options
+                if w.get("price_net") is not None
+            ]
+            if accepted_lines:
+                works = [
+                    {k: v for k, v in w.items() if k != "price_net"} for w in works
+                ]
+                # A karbantartási díj külön tétel — annak az ára marad.
+                materials = [
+                    m if m.get("name") == "Karbantartási díj"
+                    else {k: v for k, v in m.items() if k != "price_net"}
+                    for m in materials
+                ]
+                works = works + accepted_lines
+        # Az el nem fogadott ajánlat-konstrukciók és a ráfordított idő nem
+        # kerülnek az ügyfél-példányra.
         repair_options = []
         hours_spent = None
         # Garanciális feltételek — MINDIG rákerül az ügyfél-példány aljára
@@ -1906,24 +1930,34 @@ async def worksheet_picked_up(
 
 
 def _handover_items(ws: Worksheet) -> list[dict]:
-    """A vevő által fizetendő tételek — KIZÁRÓLAG a mi áraink (price_net)."""
+    """A vevő által fizetendő tételek — KIZÁRÓLAG a mi áraink (price_net).
+
+    Elfogadott (vagy lezárt) árajánlatnál a kiválasztott konstrukció ára
+    MINDENT tartalmaz: ilyenkor csak az + a karbantartási díj fizetendő, a
+    tételes munkadíjak és az alkatrészek ára nem duplázódhat rá."""
+    accepted = [
+        {"name": w.get("name") or "Javítás", "amount_net": float(w["price_net"])}
+        for w in (ws.repair_options or [])
+        if w.get("price_net") is not None
+    ]
     items: list[dict] = []
-    for w in ws.works or []:
-        if w.get("price_net") is not None:
-            items.append({"name": w.get("name") or "Munkadíj", "amount_net": float(w["price_net"])})
-    for w in ws.repair_options or []:
-        if w.get("price_net") is not None:
-            items.append({"name": w.get("name") or "Javítás", "amount_net": float(w["price_net"])})
-    for m in ws.materials or []:
-        if m.get("price_net") is not None:
-            try:
-                qty = float(str(m.get("qty", "1")).replace(",", "."))
-            except ValueError:
-                qty = 1.0
-            items.append({
-                "name": m.get("name") or "Anyag",
-                "amount_net": float(m["price_net"]) * (qty if qty > 0 else 1.0),
-            })
+    if (ws.quote_status or "none") in ("accepted", "declined") and accepted:
+        items.extend(accepted)
+    else:
+        for w in ws.works or []:
+            if w.get("price_net") is not None:
+                items.append({"name": w.get("name") or "Munkadíj", "amount_net": float(w["price_net"])})
+        items.extend(accepted)
+        for m in ws.materials or []:
+            if m.get("price_net") is not None:
+                try:
+                    qty = float(str(m.get("qty", "1")).replace(",", "."))
+                except ValueError:
+                    qty = 1.0
+                items.append({
+                    "name": m.get("name") or "Anyag",
+                    "amount_net": float(m["price_net"]) * (qty if qty > 0 else 1.0),
+                })
     if (ws.maintenance_fee or 0) > 0 and not ws.fee_discount:
         items.append({"name": "Karbantartási díj", "amount_net": float(ws.maintenance_fee)})
     return items
@@ -2033,7 +2067,30 @@ async def do_handover(
                 await db.execute(select(Partner).where(Partner.id == asset.partner_id))
             ).scalar_one_or_none()
         if partner is None:
-            raise HTTPException(status_code=422, detail={"code": "handover.no_partner"})
+            # Ügyfél-tulajdonú gép: nincs partner-törzs — a számla az átvételi
+            # elismervény (intake) ügfél-adataival készül. A Partner objektum
+            # csak átmeneti váz a számlázónak, NEM kerül az adatbázisba.
+            intake = None
+            if task.intake_id is not None:
+                from app.models import MachineIntake
+
+                intake = (
+                    await db.execute(
+                        select(MachineIntake).where(MachineIntake.id == task.intake_id)
+                    )
+                ).scalar_one_or_none()
+            client_name = (
+                (intake.client_company if intake else None)
+                or (intake.client_name if intake else None)
+                or ws.client_name
+            )
+            if not client_name:
+                raise HTTPException(status_code=422, detail={"code": "handover.no_partner"})
+            partner = Partner(
+                name=client_name,
+                contact_email=(intake.client_email if intake else None),
+                address=(intake.client_address if intake else None) or ws.client_location,
+            )
         from app.services.wfm import invoicing
 
         try:

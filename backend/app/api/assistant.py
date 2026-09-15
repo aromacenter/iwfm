@@ -24,8 +24,17 @@ class ChatMessage(BaseModel):
     content: str = Field(min_length=1, max_length=6000)
 
 
+class ChatContext(BaseModel):
+    """A kliens-oldal aktuális kontextusa — pl. a Gépek oldalon pipával
+    kijelölt gépek, hogy a „a kijelölt gépre" utalás is érthető legyen."""
+
+    page: str | None = Field(default=None, max_length=128)
+    selected_machines: list[str] = Field(default_factory=list, max_length=50)
+
+
 class ChatBody(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=40)
+    context: ChatContext | None = None
 
 
 class ChatEvent(BaseModel):
@@ -49,7 +58,8 @@ async def chat(
         raise HTTPException(status_code=422, detail={"code": "assistant.last_not_user"})
     try:
         result = await assistant.run_chat(
-            db, actor, [m.model_dump() for m in body.messages]
+            db, actor, [m.model_dump() for m in body.messages],
+            context=body.context.model_dump() if body.context else None,
         )
     except ValueError as exc:
         if str(exc) == "ai_not_configured":

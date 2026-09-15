@@ -35,6 +35,78 @@ PAYMENT_METHOD_MAP = {
 
 COMPANIES = {"xp": "X-Presso Coffee Kft.", "pc": "Premium Caffe Kft."}
 
+# Adagáras (számlálós) kávé-tétel megnevezése a számlán — a szerződés bérleti
+# díjként tartalmazza az adagra jutó kávé árát, a számlára EZ a szöveg megy.
+PORTION_LINE_NAME = (
+    "Bérleti díj (szerződés szerint tartalmazza az 1 adagra jutó kávé árát is)"
+)
+# A nem elektronikus bizonylatokra kerülő megjegyzés.
+INVOICE_COMMENT = "A bizonylat aláírás és bélyegző nélkül is érvényes!"
+
+
+def settlement_due_date(settlement: Settlement, partner: Partner) -> date:
+    """A bizonylat fizetési határideje.
+
+    Készpénz/kártya: minden dátum (teljesítés, kiállítás, határidő) a mai nap.
+    Átutalás/utánvét: az elszámoláson megadott eseti napok → aktív szerződés →
+    partner-beállítás → 8 nap erősorrend."""
+    today = date.today()
+    if settlement.payment_method in ("cash", "card"):
+        return today
+    days = getattr(settlement, "due_days", None)
+    if not days or days <= 0:
+        days = (
+            partner.contract_payment_terms_days
+            if (partner.contract_payment_terms_days or 0) > 0
+            else partner.payment_terms_days if (partner.payment_terms_days or 0) > 0 else 8
+        )
+    return today + timedelta(days=days)
+
+
+async def settlement_invoice_items(db: AsyncSession, settlement: Settlement) -> list[dict]:
+    """A számla-tételek az elszámolás soraiból, Billingó item-formában.
+
+    Adagáras kávé-tétel (bizományos termék, adagra számlázva) a számlán
+    egységesen bérleti díjként szerepel; minden más tétel a nevén."""
+    from app.models import Product
+
+    lines = (
+        (
+            await db.execute(
+                select(SettlementLine).where(SettlementLine.settlement_id == settlement.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    pids = [line.product_id for line in lines if line.product_id is not None]
+    consignment_ids: set = set()
+    if pids:
+        rows = (
+            await db.execute(select(Product.id).where(Product.id.in_(pids), Product.is_consignment.is_(True)))
+        ).scalars().all()
+        consignment_ids = set(rows)
+    items = []
+    for line in lines:
+        if line.portions <= 0:
+            continue
+        portion_based = (
+            line.product_id in consignment_ids
+            and not line.product_name.startswith("Készlethiány")
+        )
+        items.append({
+            "name": PORTION_LINE_NAME if portion_based
+            else f"{line.product_name} — fogyás ({line.consumed_qty:g} kg / {line.portions:.0f} adag)"
+            if line.consumed_qty > 0 and line.product_id in consignment_ids
+            else line.product_name,
+            "unit_price": line.price_per_portion,
+            "unit_price_type": "net",
+            "quantity": round(line.portions, 2),
+            "unit": "adag" if portion_based else ("adag" if line.product_id in consignment_ids else "db"),
+            "vat": _vat_label(line.vat_percent),
+        })
+    return items
+
 
 async def get_or_create_settings(db: AsyncSession) -> BillingoSettings:
     row = (
@@ -123,40 +195,16 @@ async def create_invoice_for_settlement(
     if not settings.enabled or not api_key or not block_id:
         raise ValueError("billingo_not_configured")
 
-    lines = (
-        (
-            await db.execute(
-                select(SettlementLine).where(SettlementLine.settlement_id == settlement.id)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    items = [
-        {
-            "name": f"{line.product_name} — fogyás ({line.consumed_qty:g} kg / {line.portions:.0f} adag)",
-            "unit_price": line.price_per_portion,
-            "unit_price_type": "net",
-            "quantity": round(line.portions, 2),
-            "unit": "adag",
-            "vat": _vat_label(line.vat_percent),
-        }
-        for line in lines
-        if line.portions > 0
-    ]
+    items = await settlement_invoice_items(db, settlement)
     if not items:
         raise ValueError("billingo_no_items")
 
     billingo_partner_id = await _find_or_create_billingo_partner(api_key, partner)
 
     today = date.today()
-    # Erősorrend: aktív szerződés határideje → partner-beállítás → 8 nap.
-    terms_days = (
-        partner.contract_payment_terms_days
-        if (partner.contract_payment_terms_days or 0) > 0
-        else partner.payment_terms_days if (partner.payment_terms_days or 0) > 0 else 8
-    )
-    due = today + timedelta(days=terms_days)
+    # Készpénz/kártya: minden dátum a mai nap; átutalásnál eseti napok →
+    # szerződés → partner → 8 nap erősorrend.
+    due = settlement_due_date(settlement, partner)
     doc_type = "proforma" if test_mode else "invoice"
     body = {
         "partner_id": billingo_partner_id,
@@ -168,6 +216,7 @@ async def create_invoice_for_settlement(
         "language": "hu",
         "currency": "HUF",
         "electronic": False,
+        "comment": INVOICE_COMMENT,
         "items": items,
     }
     created = await _api(api_key, "POST", "/documents", body)
@@ -271,6 +320,36 @@ async def create_handover_invoice(
     }
     created = await _api(api_key, "POST", "/documents", body)
     return str(created.get("id", "")), doc_type
+
+
+async def download_document_pdf(
+    db: AsyncSession, document_id: str, company: str | None = None
+) -> bytes:
+    """A Billingó-bizonylat számlaképe PDF-ben (GET /documents/{id}/download).
+    ValueError('billingo_not_configured'), ha nincs API-kulcs."""
+    settings = await get_or_create_settings(db)
+    api_key, _block, _test = _account(settings, company)
+    if not settings.enabled or not api_key:
+        raise ValueError("billingo_not_configured")
+    async with httpx.AsyncClient(timeout=30) as client:
+        res = await client.get(
+            f"{BASE_URL}/documents/{document_id}/download",
+            headers={"X-API-KEY": api_key},
+        )
+        res.raise_for_status()
+        return res.content
+
+
+async def send_document_email(
+    db: AsyncSession, document_id: str, emails: list[str], company: str | None = None
+) -> None:
+    """A bizonylat (újra)küldése emailben a Billingón keresztül
+    (POST /documents/{id}/send). ValueError('billingo_not_configured')."""
+    settings = await get_or_create_settings(db)
+    api_key, _block, _test = _account(settings, company)
+    if not settings.enabled or not api_key:
+        raise ValueError("billingo_not_configured")
+    await _api(api_key, "POST", f"/documents/{document_id}/send", {"emails": emails})
 
 
 async def fetch_payment_status(

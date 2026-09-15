@@ -12,6 +12,7 @@ import PartnerInfo from "@/components/PartnerInfo";
 import PartnerPicker from "@/components/PartnerPicker";
 import SearchSelect from "@/components/SearchSelect";
 import { api, ApiError, downloadFilePost, errorMessage, printFile } from "@/lib/api";
+import { setAssistantContext } from "@/lib/assistantContext";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -126,6 +127,16 @@ export default function GepekPage() {
     if (partnerFilter) params.set("partner_id", partnerFilter);
     api.get<Asset[]>(`/api/assets?${params}`).then(setAssets).catch(() => {});
   }, [search, statusFilter, partnerFilter]);
+
+  // A pipával kijelölt gépek az AI-asszisztensnek is látszanak — így a
+  // „csinálj hibajegyet a kijelölt gépre" kérés egyértelmű.
+  useEffect(() => {
+    const labels = assets
+      .filter((a) => selected.has(a.id))
+      .map((a) => `${a.barcode} (${a.name})`);
+    setAssistantContext({ page: "Gépek", selected_machines: labels });
+    return () => setAssistantContext(null);
+  }, [assets, selected]);
 
   const loadPartners = useCallback(() => {
     api.get<Partner[]>("/api/partners").then(setPartners).catch(() => {});

@@ -46,6 +46,25 @@ async def create_handover_invoice(db: AsyncSession, partner: Partner, **kw) -> t
     return await billingo_service.create_handover_invoice(db, partner, **kw)
 
 
+async def download_invoice_pdf(
+    db: AsyncSession, document_id: str, company: str | None = None
+) -> bytes:
+    """A kiállított bizonylat számlaképe PDF-ben. A Számlázz.hu Agentnél ez
+    külön hívást igényelne — ott ValueError('invoice_pdf_not_supported')."""
+    if await _provider(db) == "szamlazz":
+        raise ValueError("invoice_pdf_not_supported")
+    return await billingo_service.download_document_pdf(db, document_id, company)
+
+
+async def send_invoice_email(
+    db: AsyncSession, document_id: str, emails: list[str], company: str | None = None
+) -> None:
+    """A bizonylat (újra)küldése a számlázó szolgáltatón keresztül."""
+    if await _provider(db) == "szamlazz":
+        raise ValueError("invoice_pdf_not_supported")
+    await billingo_service.send_document_email(db, document_id, emails, company)
+
+
 async def fetch_payment_status(
     db: AsyncSession, document_id: str, company: str | None = None
 ) -> str | None:

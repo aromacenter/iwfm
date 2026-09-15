@@ -1,16 +1,22 @@
 "use client";
 
-/** Kamerás vonalkód-olvasó (BarcodeDetector API — Chrome/Android/Edge).
- * Ahol a böngésző nem támogatja (pl. régebbi iOS Safari), a gomb nem jelenik
- * meg — ott marad a kézi beírás / hardveres szkenner. */
+/** Kamerás vonalkód-olvasó. Ahol van BarcodeDetector API (Chrome/Android/
+ * Edge), azzal olvasunk (QR + hagyományos vonalkódok); iOS-en (Safari/Chrome
+ * — mindkettő WebKit, nincs BarcodeDetector) jsQR-tartalékkal QR-kódot
+ * olvasunk canvasról. A gomb így iPhone-on is megjelenik. */
 
+import jsQR from "jsqr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export function cameraScanSupported(): boolean {
-  return typeof window !== "undefined" && "BarcodeDetector" in window;
+  // BarcodeDetector VAGY kamera-hozzáférés (jsQR-tartalék) elegendő.
+  return (
+    typeof window !== "undefined"
+    && ("BarcodeDetector" in window || !!navigator.mediaDevices?.getUserMedia)
+  );
 }
 
 export default function CameraScanner({
@@ -32,15 +38,24 @@ export default function CameraScanner({
   }, []);
 
   useEffect(() => {
-    let detector: any;
-    try {
-      detector = new (window as any).BarcodeDetector({
-        formats: ["code_128", "code_39", "ean_13", "ean_8", "qr_code", "itf"],
-      });
-    } catch {
+    // BarcodeDetector, ha van; különben jsQR-tartalék (QR-kód canvasról) —
+    // az iOS-böngészők (WebKit) csak az utóbbit tudják.
+    let detector: any = null;
+    if ("BarcodeDetector" in window) {
+      try {
+        detector = new (window as any).BarcodeDetector({
+          formats: ["code_128", "code_39", "ean_13", "ean_8", "qr_code", "itf"],
+        });
+      } catch {
+        detector = null;
+      }
+    }
+    if (detector === null && !navigator.mediaDevices?.getUserMedia) {
       setError(t("scanner.unsupported"));
       return;
     }
+    const canvas = document.createElement("canvas");
+    const canvasCtx = canvas.getContext("2d", { willReadFrequently: true });
     (async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -52,8 +67,23 @@ export default function CameraScanner({
         const tick = async () => {
           if (stopRef.current || !videoRef.current) return;
           try {
-            const codes = await detector.detect(videoRef.current);
-            const value = codes?.[0]?.rawValue?.trim();
+            let value: string | undefined;
+            if (detector) {
+              const codes = await detector.detect(videoRef.current);
+              value = codes?.[0]?.rawValue?.trim();
+            } else if (canvasCtx && videoRef.current.videoWidth > 0) {
+              // jsQR: a videó képkockáját canvasra rajzoljuk és QR-t keresünk
+              const w = Math.min(videoRef.current.videoWidth, 640);
+              const h = Math.round(
+                (videoRef.current.videoHeight / videoRef.current.videoWidth) * w,
+              );
+              canvas.width = w;
+              canvas.height = h;
+              canvasCtx.drawImage(videoRef.current, 0, 0, w, h);
+              const img = canvasCtx.getImageData(0, 0, w, h);
+              const code = jsQR(img.data, w, h, { inversionAttempts: "dontInvert" });
+              value = code?.data?.trim();
+            }
             if (value) {
               stop();
               onDetect(value);
@@ -62,7 +92,7 @@ export default function CameraScanner({
           } catch {
             /* frame-hiba — próbáljuk tovább */
           }
-          setTimeout(tick, 180);
+          setTimeout(tick, detector ? 180 : 260);
         };
         void tick();
       } catch {

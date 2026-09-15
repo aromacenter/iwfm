@@ -4,5 +4,6 @@
   "printer_ip": "192.168.1.30",
   "printer_port": 9100,
   "pdf_printer": "",
-  "sumatra_path": ""
+  "sumatra_path": "",
+  "gls_printer": ""
 }
