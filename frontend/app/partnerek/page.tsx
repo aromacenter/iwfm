@@ -277,6 +277,7 @@ export default function PartnerekPage() {
     payment_method: string | null;
     payment_terms_days: number | null;
     no_minimum: boolean;
+    auto_billing: boolean;
     default_product_id: string | null;
     default_product_name: string | null;
     note: string | null;
@@ -302,7 +303,7 @@ export default function PartnerekPage() {
     below_min_price: string; min_kg: string; below_min_price_kg: string;
     rent_if_below_min: boolean; settlement_weeks: string;
     payment_method: string; payment_terms_days: string;
-    no_minimum: boolean; default_product_id: string; note: string;
+    no_minimum: boolean; auto_billing: boolean; default_product_id: string; note: string;
   } | null>(null);
   const [cError, setCError] = useState<string | null>(null);
   const [cBusy, setCBusy] = useState(false);
@@ -314,6 +315,7 @@ export default function PartnerekPage() {
     barcode: string;
     name: string;
     counter_count: number;
+    counter_names: (string | null)[] | null;
     counter_prices: (number | null)[] | null;
   }
   const [cMachines, setCMachines] = useState<ContractMachine[]>([]);
@@ -370,7 +372,7 @@ export default function PartnerekPage() {
       min_portions: "", below_min_price: "", min_kg: "", below_min_price_kg: "",
       rent_if_below_min: false, settlement_weeks: "4",
       payment_method: "", payment_terms_days: "",
-      no_minimum: false, default_product_id: "", note: "",
+      no_minimum: false, auto_billing: false, default_product_id: "", note: "",
     });
   }
 
@@ -387,6 +389,7 @@ export default function PartnerekPage() {
       payment_method: c.payment_method ?? "",
       payment_terms_days: c.payment_terms_days != null ? String(c.payment_terms_days) : "",
       no_minimum: c.no_minimum,
+      auto_billing: c.auto_billing,
       default_product_id: c.default_product_id ?? "",
       note: c.note ?? "",
     });
@@ -410,6 +413,7 @@ export default function PartnerekPage() {
         payment_method: cForm.payment_method || null,
         payment_terms_days: cForm.payment_terms_days ? Number(cForm.payment_terms_days) : null,
         no_minimum: cForm.no_minimum,
+        auto_billing: cForm.auto_billing,
         default_product_id: cForm.default_product_id || null,
         note: cForm.note || null,
       };
@@ -929,6 +933,7 @@ export default function PartnerekPage() {
                           !c.no_minimum && c.min_kg != null ? t("contracts.sumMinKg", { n: c.min_kg, price: c.below_min_price_kg ?? "—" }) : null,
                           c.rent_if_below_min ? t("contracts.sumRent") : null,
                           c.default_product_name ? `☕ ${c.default_product_name}` : null,
+                          c.auto_billing ? `⚡ ${t("contracts.autoBilling")}` : null,
                           c.note,
                         ].filter(Boolean).join(" · ") || t("contracts.noTerms")}
                       </div>
@@ -956,7 +961,7 @@ export default function PartnerekPage() {
                           <div className="mt-2 flex flex-wrap items-end gap-2">
                             {(machinePrices[m.id] ?? []).map((p, i) => (
                               <label key={i} className="block text-xs text-slate-600">
-                                {t("inv.counterN", { n: i + 1 })}
+                                {m.counter_names?.[i]?.trim() || t("inv.counterN", { n: i + 1 })}
                                 <input
                                   type="number"
                                   min={0}
@@ -1037,6 +1042,13 @@ export default function PartnerekPage() {
                   <span>
                     {t("contracts.noMinimum")}
                     <span className="block text-xs text-emerald-700">{t("contracts.noMinimumHint")}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm">
+                  <input type="checkbox" checked={cForm.auto_billing} onChange={(e) => setCForm({ ...cForm, auto_billing: e.target.checked })} className="mt-0.5 h-4 w-4" />
+                  <span>
+                    ⚡ {t("contracts.autoBilling")}
+                    <span className="block text-xs text-violet-700">{t("contracts.autoBillingHint")}</span>
                   </span>
                 </label>
                 <div className="block text-sm">

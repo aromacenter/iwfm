@@ -88,3 +88,70 @@ def test_handover_items_declined_survey_fee():
     )
     items = _handover_items(ws)
     assert sum(i["amount_net"] for i in items) == 11000
+
+
+async def test_auto_billing_invoices_on_save(client, manager, monkeypatch):
+    """Szerződéses automata számlázás: a mentett elszámolás azonnal számlázódik."""
+    from datetime import date as _date
+
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Diktálós Kft"}, headers=mgr)
+    ).json()
+    coffee = await make_product(client, mgr, price_per_portion=120.0, grams_per_portion=7)
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": coffee["id"], "quantity": 2.0},
+        headers=mgr,
+    )
+    res = await client.post(
+        f"/api/partners/{partner['id']}/contracts",
+        json={"valid_from": str(_date.today()), "auto_billing": True},
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["auto_billing"] is True
+
+    async def fake_invoice(db, settlement, p):
+        return "DOC-1", "invoice", _date.today()
+
+    from app.services.wfm import invoicing
+
+    monkeypatch.setattr(invoicing, "create_invoice_for_settlement", fake_invoice)
+    saved = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [{"product_id": coffee["id"], "physical_qty": 1.0,
+                          "counter_portions": 100}]},
+        headers=mgr,
+    )
+    assert saved.status_code == 201, saved.text
+    body = saved.json()
+    assert body["invoiced"] is True
+    assert body["billingo_status"] == "invoice"
+
+
+async def test_no_auto_billing_without_flag(client, manager):
+    """Kapcsoló nélkül a mentés NEM számláz automatikusan."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Sima Bolt"}, headers=mgr)
+    ).json()
+    coffee = await make_product(client, mgr, price_per_portion=100.0, grams_per_portion=7)
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": coffee["id"], "quantity": 1.0},
+        headers=mgr,
+    )
+    saved = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [{"product_id": coffee["id"], "physical_qty": 0.5}]},
+        headers=mgr,
+    )
+    assert saved.status_code == 201, saved.text
+    assert saved.json()["invoiced"] is False

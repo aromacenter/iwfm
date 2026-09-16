@@ -134,6 +134,7 @@ interface CtxMachine {
   name: string;
   counter_count: number;
   counters: number[] | null;
+  counter_names: (string | null)[] | null;
   counter_prices: (number | null)[] | null;
   prev_counter: number;
   last_settled_at: string | null;
@@ -169,6 +170,7 @@ interface SettlementContext {
   settlement_weeks: number | null;
   contract_product_id: string | null; // a szerződésben rögzített alap-kávé
   contract_product_name: string | null;
+  auto_billing: boolean; // a szerződés szerint mentés után azonnal számláz
 }
 
 interface MachineInput {
@@ -1098,6 +1100,12 @@ export default function ElszamolasPage() {
         "/api/settlements", payload,
       );
       toast(t("cons.settlementSaved", { gross: res.total_gross.toLocaleString("hu-HU") }), "success");
+      // Automata számlázás (szerződéses kapcsoló): a mentés már ki is számlázta
+      if (res.invoiced) {
+        toast(t("cons.autoInvoiced", { mode: res.billingo_status ?? "?" }), "success");
+      } else if (ctx?.auto_billing && res.billingo_status === "error") {
+        toast(t("cons.autoInvoiceFailed"), "error");
+      }
       const wantGls = shipGls;
       // Utánvétnél a címkére a ténylegesen beszedendő összeg megy utánvétként.
       const codAmount = payment === "cod" ? (paid ?? totalPayable) : 0;
@@ -1911,8 +1919,11 @@ export default function ElszamolasPage() {
                           const d = m.detail?.[i];
                           return (
                             <div key={i} className="flex items-center gap-2">
-                              <span className="w-24 shrink-0 text-right text-xs tabular-nums text-slate-500">
-                                {i + 1}. · {m.counters?.[i] ?? 0} →
+                              <span
+                                className="w-32 shrink-0 truncate text-right text-xs tabular-nums text-slate-500"
+                                title={m.counter_names?.[i] ?? undefined}
+                              >
+                                {(m.counter_names?.[i]?.trim() || `${i + 1}.`)} · {m.counters?.[i] ?? 0} →
                               </span>
                               <input
                                 type="number" min={0}
@@ -2408,6 +2419,14 @@ export default function ElszamolasPage() {
                     />
                     <span className="text-slate-400">{t("cons.dueDaysUnit")}</span>
                   </label>
+                )}
+                {ctx?.auto_billing && (
+                  <span
+                    title={t("cons.autoBillingHint")}
+                    className="rounded bg-violet-100 px-2 py-1 text-xs font-medium text-violet-800"
+                  >
+                    ⚡ {t("cons.autoBillingBadge")}
+                  </span>
                 )}
                 <label
                   className="flex items-center gap-1.5 text-xs text-sky-800"

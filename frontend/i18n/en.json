@@ -483,7 +483,11 @@
     "shortageKgPriceHint": "Shortage price (net Ft/kg) — editable; empty uses purchase price, else per-portion equivalent.",
     "shortageTotal": "Stock shortage (per kg)",
     "shortageTotalHint": "Physical stock below counter-expected — saved as a separate billed line, included in the payable total.",
-    "netSuffix": "net"
+    "netSuffix": "net",
+    "autoInvoiced": "Invoice issued automatically ({mode}).",
+    "autoInvoiceFailed": "Automatic invoicing failed — use the Invoice button to retry.",
+    "autoBillingBadge": "Auto invoicing",
+    "autoBillingHint": "Per the contract, the invoice is issued right after saving."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1979,7 +1983,9 @@
     "backfillOwnedBtn": "Mark customer machines",
     "backfillOwnedHint": "One-time pass over the imported stock: every machine NOT marked as a tangible asset gets the “customer's machine, we only service it” flag — their QR labels then carry no ownership text.",
     "backfillOwnedConfirm": "Every machine NOT marked as a tangible asset will get the “customer's machine, we only service it” flag — their QR labels will carry no ownership text. Already-flagged machines are untouched; mistakes can be reverted one by one in the machine editor. Proceed?",
-    "backfillOwnedDone": "Re-flagged: {count} machines are now customer-owned."
+    "backfillOwnedDone": "Re-flagged: {count} machines are now customer-owned.",
+    "counterNameN": "Counter {n} name",
+    "counterNamePh": "e.g. espresso (empty = number)"
   },
   "wh": {
     "title": "Warehouse",
@@ -2120,7 +2126,9 @@
     "defaultCoffeePh": "— search coffee by name or code —",
     "defaultCoffeeHint": "The settlement's handed-over coffee row suggests this — the rep can still hand over a different one on site.",
     "machineTerms": "machine-level terms",
-    "machineTermsHint": "The partner's machines carry contract terms (rent / minimum / per-counter prices) — settlements compute fine; only the partner-level contract record (validity, schedule, default coffee) is missing. Add it via Partners → 📜."
+    "machineTermsHint": "The partner's machines carry contract terms (rent / minimum / per-counter prices) — settlements compute fine; only the partner-level contract record (validity, schedule, default coffee) is missing. Add it via Partners → 📜.",
+    "autoBilling": "Automatic invoicing",
+    "autoBillingHint": "After a settlement saved from dictated counter readings, the invoice is issued immediately without a click (cash/card: paid; transfer: with due date)."
   },
   "delivery": {
     "title": "Delivery (delivery note)",

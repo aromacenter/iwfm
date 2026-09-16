@@ -588,14 +588,17 @@ class AssetBody(BaseModel):
     serial_number: str | None = Field(default=None, max_length=128)
     location_type: str | None = Field(default=None, max_length=64)  # figyelmen kívül — származtatott
     counter: int | None = Field(default=None, ge=0)
-    counter_count: int = Field(default=1, ge=1, le=8)  # hány számláló van a gépen
-    counters: list[int] | None = Field(default=None, max_length=8)  # állások (több számlálós)
+    # Számlálók száma: gyakorlatilag korlátlan (technikai plafon: 99).
+    counter_count: int = Field(default=1, ge=1, le=99)
+    counters: list[int] | None = Field(default=None, max_length=99)  # állások (több számlálós)
+    # Szabadszavas számláló-nevek (None/üres elem = sorszám jelenik meg).
+    counter_names: list[str | None] | None = Field(default=None, max_length=99)
     norm: float | None = Field(default=None, ge=0)
     # Számlálónkénti norma (g kávé/adag) több számlálós gépnél; 0 = nem használ kávét.
-    norms: list[float] | None = Field(default=None, max_length=8)
+    norms: list[float] | None = Field(default=None, max_length=99)
     default_product_id: str | None = None  # melyik terméket (kávét) főzi
     # Szerződéses adagár számlálónként (nettó Ft/adag) — None elem: termékár.
-    counter_prices: list[float | None] | None = Field(default=None, max_length=8)
+    counter_prices: list[float | None] | None = Field(default=None, max_length=99)
     tangible: bool = False
     customer_owned: bool = False  # az ügyfél saját gépe
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
@@ -616,12 +619,13 @@ class AssetPatch(BaseModel):
     serial_number: str | None = None
     location_type: str | None = None  # figyelmen kívül — származtatott
     counter: int | None = Field(default=None, ge=0)
-    counter_count: int | None = Field(default=None, ge=1, le=8)
-    counters: list[int] | None = Field(default=None, max_length=8)
+    counter_count: int | None = Field(default=None, ge=1, le=99)
+    counters: list[int] | None = Field(default=None, max_length=99)
+    counter_names: list[str | None] | None = Field(default=None, max_length=99)
     norm: float | None = Field(default=None, ge=0)
-    norms: list[float] | None = Field(default=None, max_length=8)
+    norms: list[float] | None = Field(default=None, max_length=99)
     default_product_id: str | None = None  # "" → törlés
-    counter_prices: list[float | None] | None = Field(default=None, max_length=8)
+    counter_prices: list[float | None] | None = Field(default=None, max_length=99)
     tangible: bool | None = None
     customer_owned: bool | None = None
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
@@ -670,6 +674,7 @@ class AssetOut(BaseModel):
     counter: int | None
     counter_count: int = 1
     counters: list[int] | None = None
+    counter_names: list[str | None] | None = None
     norm: float | None
     norms: list[float] | None = None
     default_product_id: str | None = None
@@ -715,6 +720,7 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         counter=a.counter,
         counter_count=a.counter_count or 1,
         counters=a.counters,
+        counter_names=a.counter_names,
         norm=a.norm,
         norms=a.norms,
         default_product_id=str(a.default_product_id) if a.default_product_id else None,
@@ -837,6 +843,7 @@ class TypeDefaultsOut(BaseModel):
     norm: float | None
     norms: list[float] | None
     counter_count: int
+    counter_names: list[str | None] | None = None
 
 
 @assets_router.get("/type-defaults", response_model=TypeDefaultsOut | None)
@@ -860,6 +867,7 @@ async def asset_type_defaults(
     return TypeDefaultsOut(
         manufacturer=a.manufacturer, article_number=a.article_number,
         norm=a.norm, norms=a.norms, counter_count=a.counter_count or 1,
+        counter_names=a.counter_names,
     )
 
 
@@ -1108,6 +1116,7 @@ async def create_asset(
         counter=sum(body.counters) if body.counters else body.counter,
         counter_count=body.counter_count,
         counters=body.counters,
+        counter_names=body.counter_names,
         norm=body.norm,
         norms=body.norms,
         default_product_id=await _parse_default_product(db, body.default_product_id),
@@ -1258,7 +1267,7 @@ class SwapBody(BaseModel):
     note: str | None = Field(default=None, max_length=512)
     # Számlálónkénti adagárak a cseregépre — ha a két gép számláló-kiosztása
     # eltér, itt adhatók meg egyesével; None = öröklés (egyező kiosztásnál).
-    counter_prices: list[float | None] | None = Field(default=None, max_length=8)
+    counter_prices: list[float | None] | None = Field(default=None, max_length=99)
 
 
 @assets_router.post("/{asset_id}/swap", response_model=AssetOut)
@@ -1299,6 +1308,13 @@ async def swap_asset(
         new.counter_prices = list(body.counter_prices)[: new.counter_count or 1]
     elif (new.counter_count or 1) == (old.counter_count or 1):
         new.counter_prices = old.counter_prices
+    # Egyező kiosztásnál a számláló-nevek is öröklődnek (ha a cseregépen
+    # nincsenek sajátok).
+    if (
+        not new.counter_names
+        and (new.counter_count or 1) == (old.counter_count or 1)
+    ):
+        new.counter_names = old.counter_names
     # régi gép: szervizre, kihelyezés lezárva
     prev_partner = old.partner_id
     old.status = "maintenance"

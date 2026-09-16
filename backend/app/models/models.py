@@ -922,6 +922,9 @@ class Asset(Base):
     # logika változatlanul erre épül.
     counter_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     counters: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [állás1, állás2…]
+    # Szabadszavas számláló-nevek (pl. "eszpresszó", "cappuccino") — None elem
+    # vagy hiányzó lista esetén a sorszám jelenik meg.
+    counter_names: Mapped[list | None] = mapped_column(JSON, nullable=True)
     norm: Mapped[float | None] = mapped_column(Float, nullable=True)  # norma
     # Számlálónkénti norma (g kávé/adag) több számlálós gépnél — 0 = az adott
     # számláló terméke (pl. forró csoki) NEM használ kávét; a kg-
@@ -1699,6 +1702,11 @@ class PartnerContract(Base):
     # Nincs minimum-elvárás: a partner mindig pontosan a lefőzöttet fizeti
     # (korlátlan türelmi időszak — a gép-szintű minimumokat is kikapcsolja).
     no_minimum: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Automata számlázás: a (diktált) számláló-állásokból mentett elszámolás
+    # után a számla emberi kattintás nélkül, azonnal kiállítódik.
+    auto_billing: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     # Alapértelmezett kávéfajta, amivel a partnert ellátjuk — az elszámolás
     # átadott-kávé sora ezt ajánlja fel, de a képviselő mást is adhat.
     default_product_id: Mapped[uuid.UUID | None] = mapped_column(

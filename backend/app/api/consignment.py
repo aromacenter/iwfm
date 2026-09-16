@@ -739,6 +739,7 @@ class SettlementCtxMachine(BaseModel):
     name: str
     counter_count: int
     counters: list[int] | None  # több számlálós gép aktuális állásai
+    counter_names: list[str | None] | None  # szabadszavas számláló-nevek
     counter_prices: list[float | None] | None  # szerződéses adagár számlálónként
     prev_counter: int  # az utolsó elszámoláskori állás (vagy a gép aktuális)
     last_settled_at: datetime | None
@@ -780,6 +781,9 @@ class SettlementContextOut(BaseModel):
     # ezt ajánlja fel, de a képviselő helyben mást is adhat.
     contract_product_id: str | None = None
     contract_product_name: str | None = None
+    # A ma érvényes szerződésen bekapcsolt automata számlázás — az űrlap
+    # jelzi, hogy mentés után a számla magától kiállítódik.
+    auto_billing: bool = False
 
 
 @stock_router.get("/{partner_id}/settlement-context", response_model=SettlementContextOut)
@@ -820,6 +824,7 @@ async def settlement_context(
             name=a.name,
             counter_count=a.counter_count,
             counters=a.counters,
+            counter_names=a.counter_names,
             counter_prices=a.counter_prices,
             prev_counter=prev,
             last_settled_at=last_at,
@@ -937,6 +942,11 @@ async def settlement_context(
     ).scalars().first()
     contract_pid = None
     contract_pname = None
+    ctx_auto_billing = bool(
+        active_contract is not None
+        and (active_contract.valid_to is None or active_contract.valid_to >= today_)
+        and active_contract.auto_billing
+    )
     if (
         active_contract is not None
         and (active_contract.valid_to is None or active_contract.valid_to >= today_)
@@ -968,6 +978,7 @@ async def settlement_context(
         settlement_weeks=partner.contract_settlement_weeks,
         contract_product_id=contract_pid,
         contract_product_name=contract_pname,
+        auto_billing=ctx_auto_billing,
     )
 
 
@@ -1675,7 +1686,9 @@ async def create_settlement(
                     else [None] * len(m_in.new_counters)
                 )
                 counters_detail = []
+                cnames = asset.counter_names if isinstance(asset.counter_names, list) else []
                 for i, diff in enumerate(per_counter_diffs):
+                    cname = (cnames[i] or "").strip() if i < len(cnames) and cnames[i] else None
                     if i in control_idx:
                         # összesítő (kontroll) sor: nem fogyás, 0 Ft
                         counters_detail.append({
@@ -1686,6 +1699,7 @@ async def create_settlement(
                             "amount": 0.0,
                             "control": True,
                             "control_ok": abs(diff - brewed) < 0.5,
+                            **({"name": cname} if cname else {}),
                         })
                         continue
                     if m_in.price_per_portion is not None:
@@ -1702,6 +1716,7 @@ async def create_settlement(
                         "portions": diff,
                         "price": _money(row_price),
                         "amount": _money(diff * row_price * (1 - m_in.discount_pct / 100.0)),
+                        **({"name": cname} if cname else {}),
                     })
             db.add(SettlementMachine(
                 settlement_id=settlement.id,
@@ -2071,6 +2086,55 @@ async def create_settlement(
                 "keszlet_kg": line_in.physical_qty,
                 "kuszob_kg": threshold,
             })
+
+    # Automata számlázás: ha a ma érvényes szerződésen be van kapcsolva, a
+    # mentett elszámolás számlája azonnal kiállítódik (best-effort — hiba
+    # esetén a mentés érvényes marad, a számlázás kézzel pótolható).
+    if not settlement.no_vat and settlement.total_net > 0:
+        from app.models import PartnerContract
+
+        today_ = date.today()
+        ac = (
+            await db.execute(
+                select(PartnerContract)
+                .where(
+                    PartnerContract.partner_id == partner.id,
+                    PartnerContract.valid_from <= today_,
+                )
+                .order_by(PartnerContract.valid_from.desc())
+            )
+        ).scalars().first()
+        if (
+            ac is not None
+            and ac.auto_billing
+            and (ac.valid_to is None or ac.valid_to >= today_)
+        ):
+            from app.services.wfm.invoicing import create_invoice_for_settlement
+
+            try:
+                document_id, mode, due = await create_invoice_for_settlement(
+                    db, settlement, partner,
+                )
+                settlement.invoiced = True
+                settlement.billingo_document_id = document_id
+                settlement.billingo_status = mode
+                if settlement.payment_method in ("cash", "card"):
+                    settlement.payment_status = "paid"
+                    settlement.paid_at = datetime.now(UTC)
+                else:
+                    settlement.payment_status = "outstanding"
+                    settlement.due_date = due
+                await record_audit(
+                    db, actor=actor, action="settlement.auto_invoice",
+                    entity_type="settlement", entity_id=str(settlement.id),
+                    detail={"billingo_id": document_id, "mode": mode}, request=request,
+                )
+                await db.commit()
+                await _cashbook_autopush(db, settlement)
+            except Exception:
+                logger.warning("auto billing failed for %s", settlement.id, exc_info=True)
+                settlement.billingo_status = "error"
+                await db.commit()
 
     out = _settlement_out(settlement, partner.name)
     out.lines = [

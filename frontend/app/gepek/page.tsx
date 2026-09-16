@@ -50,6 +50,7 @@ interface Asset {
   counter: number | null;
   counter_count: number;
   counters: number[] | null;
+  counter_names: (string | null)[] | null;
   norm: number | null;
   norms: number[] | null;
   default_product_id: string | null;
@@ -86,6 +87,7 @@ const EMPTY_ASSET = {
   counter: "",
   counter_count: "1",
   counters: [] as string[],
+  counter_names: [] as string[],
   norm: "",
   norms: [] as string[],
   default_product_id: "",
@@ -270,6 +272,7 @@ export default function GepekPage() {
         norm: number | null;
         norms: number[] | null;
         counter_count: number;
+        counter_names: (string | null)[] | null;
       } | null>(`/api/assets/type-defaults?name=${encodeURIComponent(assetForm.name.trim())}`);
       if (!d) return;
       setAssetForm((f) => {
@@ -280,6 +283,9 @@ export default function GepekPage() {
           article_number: f.article_number || d.article_number || "",
           norm: f.norm || (d.norm != null ? String(d.norm) : ""),
           norms: f.norms.some((x) => x !== "") ? f.norms : (d.norms ?? []).map(String),
+          counter_names: f.counter_names.some((x) => (x ?? "").trim() !== "")
+            ? f.counter_names
+            : (d.counter_names ?? []).map((x) => x ?? ""),
           counter_count: f.counter_count !== "1" ? f.counter_count : String(d.counter_count || 1),
         };
       });
@@ -303,6 +309,11 @@ export default function GepekPage() {
         maintenance_fee: assetForm.maintenance_fee ? Number(assetForm.maintenance_fee) : null,
         counter: assetForm.counter !== "" ? Number(assetForm.counter) : null,
         counter_count: Number(assetForm.counter_count) || 1,
+        counter_names:
+          Number(assetForm.counter_count) > 1
+            ? Array.from({ length: Number(assetForm.counter_count) }, (_, i) =>
+                (assetForm.counter_names[i] ?? "").trim() || null)
+            : null,
         counters:
           Number(assetForm.counter_count) > 1
             ? Array.from({ length: Number(assetForm.counter_count) }, (_, i) =>
@@ -726,7 +737,7 @@ export default function GepekPage() {
                     <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       🕘
                     </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", maintenance_fee: a.maintenance_fee != null ? String(a.maintenance_fee) : "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), norm: a.norm != null ? String(a.norm) : "", norms: (a.norms ?? []).map(String), default_product_id: a.default_product_id ?? "", tangible: a.tangible, customer_owned: a.customer_owned, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", maintenance_fee: a.maintenance_fee != null ? String(a.maintenance_fee) : "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), counter_names: (a.counter_names ?? []).map((x) => x ?? ""), norm: a.norm != null ? String(a.norm) : "", norms: (a.norms ?? []).map(String), default_product_id: a.default_product_id ?? "", tangible: a.tangible, customer_owned: a.customer_owned, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       ✏️
                     </button>
                   </div>
@@ -791,7 +802,7 @@ export default function GepekPage() {
               <label className="block text-sm">
                 {t("inv.counterCount")}
                 <input
-                  type="number" min={1} max={8}
+                  type="number" min={1} max={99}
                   value={assetForm.counter_count}
                   onChange={(e) => setAssetForm({ ...assetForm, counter_count: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
@@ -809,8 +820,23 @@ export default function GepekPage() {
               </label>
               </>
               ) : (
-                Array.from({ length: Math.min(Number(assetForm.counter_count) || 1, 8) }, (_, i) => (
-                  <div key={i} className="grid grid-cols-2 gap-2 sm:col-span-3">
+                Array.from({ length: Math.min(Number(assetForm.counter_count) || 1, 99) }, (_, i) => (
+                  <div key={i} className="grid grid-cols-3 gap-2 sm:col-span-3">
+                    <label className="block text-sm">
+                      {t("inv.counterNameN", { n: i + 1 })}
+                      <input
+                        type="text"
+                        maxLength={64}
+                        value={assetForm.counter_names[i] ?? ""}
+                        placeholder={t("inv.counterNamePh")}
+                        onChange={(e) => {
+                          const next = [...assetForm.counter_names];
+                          next[i] = e.target.value;
+                          setAssetForm({ ...assetForm, counter_names: next });
+                        }}
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                      />
+                    </label>
                     <label className="block text-sm">
                       {t("inv.counterN", { n: i + 1 })}
                       <input

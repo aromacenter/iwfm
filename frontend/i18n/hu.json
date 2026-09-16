@@ -483,7 +483,11 @@
     "shortageKgPriceHint": "A hiány kg-ára (nettó Ft/kg) — átírható; üresen a beszerzési ár, annak híján az adagár kg-egyenértéke.",
     "shortageTotal": "Készlethiány (kg-áron)",
     "shortageTotalHint": "A számláló szerint vártnál kevesebb a fizikai készlet — a mentés külön sorban számlázza, és beleszámít a fizetendőbe.",
-    "netSuffix": "nettó"
+    "netSuffix": "nettó",
+    "autoInvoiced": "Számla automatikusan kiállítva ({mode}).",
+    "autoInvoiceFailed": "Az automata számlázás nem sikerült — a Kiszámlázás gombbal pótolható.",
+    "autoBillingBadge": "Automata számlázás",
+    "autoBillingHint": "A szerződés szerint a mentés után a számla azonnal kiállítódik."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1979,7 +1983,9 @@
     "backfillOwnedBtn": "Ügyfélgép-átjelölés",
     "backfillOwnedHint": "Egyszeri művelet az importált állományra: minden NEM tárgyi eszköz gép „az ügyfél gépe, csak javítjuk” jelölést kap — a QR-címkéjükre így nem kerül tulajdon-felirat.",
     "backfillOwnedConfirm": "Minden tárgyi eszközként NEM jelölt gép megkapja „az ügyfél gépe, csak javítjuk” pipát — a QR-címkéjükön nem lesz tulajdon-felirat. A már jelölt gépekhez nem nyúlunk; tévedésnél a gép szerkesztőjében egyesével visszavehető. Mehet?",
-    "backfillOwnedDone": "Átjelölve: {count} gép mostantól ügyfélgép."
+    "backfillOwnedDone": "Átjelölve: {count} gép mostantól ügyfélgép.",
+    "counterNameN": "{n}. számláló neve",
+    "counterNamePh": "pl. eszpresszó (üresen sorszám)"
   },
   "wh": {
     "title": "Raktár",
@@ -2120,7 +2126,9 @@
     "defaultCoffeePh": "— kávé keresése névre vagy cikkszámra —",
     "defaultCoffeeHint": "Az elszámolásban az átadott kávé sora ezt ajánlja fel — a képviselő helyben mást is adhat.",
     "machineTerms": "gép-szintű feltételekkel",
-    "machineTermsHint": "A partner gépein vannak szerződéses feltételek (bérleti díj / minimum / számlálónkénti adagár) — az elszámolás jól számol, csak a partner-szintű szerződés-rekord (érvényesség, ütemezés, alap-kávé) hiányzik. Vedd fel a szerződést a Partnerek → 📜 gombbal."
+    "machineTermsHint": "A partner gépein vannak szerződéses feltételek (bérleti díj / minimum / számlálónkénti adagár) — az elszámolás jól számol, csak a partner-szintű szerződés-rekord (érvényesség, ütemezés, alap-kávé) hiányzik. Vedd fel a szerződést a Partnerek → 📜 gombbal.",
+    "autoBilling": "Automata számlázás",
+    "autoBillingHint": "A partner által diktált számláló-állásokból mentett elszámolás után a számla azonnal, kattintás nélkül kiállítódik (készpénz/kártya: fizetettként; átutalás: határidővel)."
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",

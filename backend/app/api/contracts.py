@@ -72,6 +72,9 @@ class ContractBody(BaseModel):
     # Nincs minimum: a partner mindig pontosan a lefőzöttet fizeti (a
     # gép-szintű minimumokat is kikapcsolja — korlátlan türelmi időszak).
     no_minimum: bool = False
+    # Automata számlázás: a diktált számláló-állásokból mentett elszámolás
+    # után a számla azonnal, emberi kattintás nélkül kiállítódik.
+    auto_billing: bool = False
     # Alapértelmezett kávéfajta a partnernek — az elszámolás átadott-kávé
     # sora ezt ajánlja, de a képviselő helyben mást is adhat.
     default_product_id: str | None = None
@@ -105,6 +108,7 @@ class ContractOut(BaseModel):
     payment_method: str | None
     payment_terms_days: int | None
     no_minimum: bool
+    auto_billing: bool = False
     default_product_id: str | None = None
     default_product_name: str | None = None
     note: str | None
@@ -149,6 +153,7 @@ def _out(c: PartnerContract, product_name: str | None = None) -> ContractOut:
         payment_method=c.payment_method,
         payment_terms_days=c.payment_terms_days,
         no_minimum=c.no_minimum,
+        auto_billing=c.auto_billing,
         default_product_id=str(c.default_product_id) if c.default_product_id else None,
         default_product_name=product_name,
         note=c.note,

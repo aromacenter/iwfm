@@ -168,11 +168,12 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
             c.drawRightString(right, y, _fmt_money(m.get("amount_net", 0)))
             y -= 4.5 * mm
             # Számlálónkénti bontás — soronként, mintha külön gépek lennének
-            for idx, d in enumerate((m.get("counters_detail") or [])[:8]):
+            for idx, d in enumerate((m.get("counters_detail") or [])[:24]):
                 c.setFont(FONT, 7.5)
+                label = (d.get("name") or "").strip() or f"{idx + 1}. számláló"
                 c.drawString(
                     left + 30 * mm, y,
-                    f"{idx + 1}. számláló: {d.get('prev', 0)} → {d.get('new', 0)}",
+                    f"{label[:24]}: {d.get('prev', 0)} → {d.get('new', 0)}",
                 )
                 c.drawString(left + 116 * mm, y, f"{d.get('price', 0):g} Ft/adag")
                 c.drawString(left + 132 * mm, y, f"{d.get('portions', 0):.0f}")
