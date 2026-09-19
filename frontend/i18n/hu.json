@@ -487,7 +487,8 @@
     "autoInvoiced": "Számla automatikusan kiállítva ({mode}).",
     "autoInvoiceFailed": "Az automata számlázás nem sikerült — a Kiszámlázás gombbal pótolható.",
     "autoBillingBadge": "Automata számlázás",
-    "autoBillingHint": "A szerződés szerint a mentés után a számla azonnal kiállítódik."
+    "autoBillingHint": "A szerződés szerint a mentés után a számla azonnal kiállítódik.",
+    "fixedPriceHint": "Az adagár a szerződésből / partner-árakból jön — az elszámolásban nem módosítható."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",

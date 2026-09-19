@@ -487,7 +487,8 @@
     "autoInvoiced": "Invoice issued automatically ({mode}).",
     "autoInvoiceFailed": "Automatic invoicing failed — use the Invoice button to retry.",
     "autoBillingBadge": "Auto invoicing",
-    "autoBillingHint": "Per the contract, the invoice is issued right after saving."
+    "autoBillingHint": "Per the contract, the invoice is issued right after saving.",
+    "fixedPriceHint": "The per-portion price comes from the contract / partner prices — not editable in the settlement."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",

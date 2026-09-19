@@ -1996,23 +1996,17 @@ export default function ElszamolasPage() {
                       className="w-16 rounded-lg border border-slate-300 px-2 py-1.5"
                     />
                   </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <input
-                      type="number" min={0} step="0.01"
-                      value={machinePrices[m.asset_id] ?? ""}
-                      onChange={(e) =>
-                        setMachinePrices({ ...machinePrices, [m.asset_id]: e.target.value })
-                      }
-                      placeholder={
-                        m.contractDefault != null
-                          ? String(m.contractDefault)
-                          : m.autoPrice !== null
-                            ? String(m.autoPrice)
-                            : "?"
-                      }
-                      title={t("cons.priceOverrideHint")}
-                      className={`w-20 rounded-lg border px-2 py-1.5 text-right tabular-nums ${(machinePrices[m.asset_id] ?? "") !== "" ? "border-amber-400 bg-amber-50" : "border-slate-300"}`}
-                    />
+                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">
+                    {/* Az adagár NEM módosítható itt — a szerződésben (vagy a
+                        partner-áraknál) beállított ár érvényes minden
+                        számlálóra. */}
+                    <span title={t("cons.fixedPriceHint")}>
+                      {m.contractDefault != null
+                        ? String(m.contractDefault)
+                        : m.autoPrice !== null
+                          ? String(m.autoPrice)
+                          : "?"}
+                    </span>
                   </td>
                   <td className="px-4 py-2.5 text-right font-medium tabular-nums">
                     {m.filled ? (m.price !== null ? ft(Math.round(m.amount)) : "?") : "—"}
@@ -2079,17 +2073,10 @@ export default function ElszamolasPage() {
                       ✕
                     </button>
                   </td>
-                  <td className="px-4 py-3">
-                    <input
-                      type="number" min={0} step="0.01"
-                      value={linePrices[s.product_id] ?? ""}
-                      onChange={(e) =>
-                        setLinePrices({ ...linePrices, [s.product_id]: e.target.value })
-                      }
-                      placeholder={String(s.price_per_portion)}
-                      title={t("cons.priceOverrideHint")}
-                      className={`w-24 rounded-lg border px-2 py-1.5 tabular-nums ${(linePrices[s.product_id] ?? "") !== "" ? "border-amber-400 bg-amber-50" : "border-slate-300"}`}
-                    />
+                  <td className="px-4 py-3 tabular-nums text-slate-700">
+                    {/* Fix ár: a szerződéses / partner-ár érvényes, itt nem
+                        írható át. */}
+                    <span title={t("cons.fixedPriceHint")}>{s.price_per_portion}</span>
                     {s.has_price_override && (
                       <span title={t("prices.overrideHint", { base: ft(s.base_price_per_portion) })} className="ml-1 text-xs text-indigo-600">*</span>
                     )}
@@ -2142,10 +2129,10 @@ export default function ElszamolasPage() {
                         nélkül a mért (könyv − fizikai) fogyás. */}
                     {s.consumedKgByCounter !== null && s.consumedKgByCounter !== undefined ? (
                       <span title={t("cons.consumedByCounterHint")} className="font-medium text-slate-700">
-                        {s.consumedKgByCounter.toFixed(2)} {s.unit}
+                        {s.consumedKgByCounter.toFixed(1)} {s.unit}
                       </span>
                     ) : s.is_consignment && (physical[s.product_id] ?? "") !== "" ? (
-                      `${s.consumed.toFixed(2)} ${s.unit}`
+                      `${s.consumed.toFixed(1)} ${s.unit}`
                     ) : (
                       "—"
                     )}
@@ -2167,7 +2154,7 @@ export default function ElszamolasPage() {
                             title={t("cons.expectedStockHint")}
                             className="mt-0.5 text-xs text-slate-400"
                           >
-                            {t("cons.expectedStock")}: {s.expectedRemaining.toFixed(2)} {s.unit}
+                            {t("cons.expectedStock")}: {s.expectedRemaining.toFixed(1)} {s.unit}
                           </div>
                         )}
                       </>

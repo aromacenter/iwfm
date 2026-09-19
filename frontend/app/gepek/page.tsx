@@ -165,15 +165,22 @@ export default function GepekPage() {
   }
 
   async function lookupCode(code: string) {
+    // A gépre ragasztott QR a támogatási URL-t kódolja — a kereséshez az
+    // utolsó út-szakasz (a gép qr_tokenje) kell, nem a teljes URL.
+    const raw = code.trim();
+    const isUrl = raw.includes("/");
+    const lookup = isUrl ? (raw.split("?")[0].split("/").filter(Boolean).pop() ?? raw) : raw;
     try {
-      const a = await api.get<Asset>(`/api/assets/by-barcode/${encodeURIComponent(code)}`);
+      const a = await api.get<Asset>(`/api/assets/by-barcode/${encodeURIComponent(lookup)}`);
       setScanMsg({ text: t("inv.scannedFound", { name: a.name, barcode: a.barcode }), ok: true });
-      setSearch(code);
+      setSearch(a.barcode);
     } catch (err) {
       if (err instanceof ApiError && err.code === "asset.barcode_not_found") {
-        setScanMsg({ text: t("inv.scannedMissing", { barcode: code }), ok: false });
-        // ismeretlen kód → új eszköz felvétele előtöltött vonalkóddal
-        setAssetForm({ ...EMPTY_ASSET, barcode: code });
+        setScanMsg({ text: t("inv.scannedMissing", { barcode: lookup }), ok: false });
+        // Ismeretlen KÉZI kód → új eszköz felvétele előtöltött vonalkóddal.
+        // URL-ből jövő (QR) találat-hiánynál nem nyitunk űrlapot — egy URL
+        // sosem vonalkód.
+        if (!isUrl) setAssetForm({ ...EMPTY_ASSET, barcode: lookup });
       } else {
         setScanMsg({ text: errorMessage(err), ok: false });
       }
