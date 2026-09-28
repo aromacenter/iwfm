@@ -1757,7 +1757,8 @@
       "no_parcel_number": "Ehhez a csomaghoz nincs csomagszám.",
       "already_handed_over": "A csomagot a futár már átvette — innentől nem törölhető."
     },
-    "settlement.invoice_pdf_unavailable": "A számlakép / újraküldés a beállított számlázó szolgáltatónál nem érhető el."
+    "settlement.invoice_pdf_unavailable": "A számlakép / újraküldés a beállított számlázó szolgáltatónál nem érhető el.",
+    "intake.contact_required": "A telefonszám és az e-mail cím megadása kötelező az átvételhez."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2344,7 +2345,10 @@
     "partnerNameRequired": "Add meg az ügyfél nevét.",
     "partnerCreated": "Ügyfél felvéve: {name}",
     "worksheetConfirm": "Minden adat megvan — készítsünk belőle munkalapot is?",
-    "worksheet": "Munkalap"
+    "worksheet": "Munkalap",
+    "contactRequired": "A telefonszám és az e-mail cím megadása kötelező — enélkül nem tudjuk értesíteni az ügyfelet.",
+    "printOfficeConfirm": "Elismervény ({serial}) nyomtatása az IRODAI nyomtatóra (telefonról is működik)?",
+    "officePrintQueued": "Elismervény a nyomtatási sorban — az irodai nyomtatón készül."
   },
   "handover": {
     "title": "Átadás",
@@ -2429,5 +2433,18 @@
     "noteTag": "Azonnali értékesítés",
     "done": "Azonnali értékesítés rögzítve.",
     "doneInvoiced": "Azonnali értékesítés rögzítve és kiszámlázva."
+  },
+  "uzk": {
+    "partnerLinkHint": "A partner elszámolásai és mozgásai — az Elszámolás oldal nyílik a partnerrel előválasztva.",
+    "detailHint": "Az elszámolás tételes részletei.",
+    "invoiceChipHint": "Számla-műveletek: letöltés, újraküldés, Billingó — vagy számla készítése.",
+    "machines": "Gépsorok",
+    "lines": "Tételek",
+    "invoiceTitle": "Számla-műveletek",
+    "openBillingo": "Megnyitás a Billingóban",
+    "billingoHint": "Módosítás és sztornó a Billingó felületén végezhető — a bizonylat a számlaszám alapján kereshető.",
+    "invoiceCreateConfirm": "Számla készítése ehhez az elszámoláshoz? ({partner})",
+    "invoiceCreated": "Számla kiállítva.",
+    "noInvoicePerm": "Számla készítéséhez számlázás jogosultság kell."
   }
 }

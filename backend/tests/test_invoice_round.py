@@ -133,8 +133,9 @@ async def test_auto_billing_invoices_on_save(client, manager, monkeypatch):
     assert body["billingo_status"] == "invoice"
 
 
-async def test_no_auto_billing_without_flag(client, manager):
-    """Kapcsoló nélkül a mentés NEM számláz automatikusan."""
+async def test_auto_billing_best_effort_without_provider(client, manager):
+    """Az automata számlázás minden mentésnél fut, de számlázó nélkül a
+    mentés akkor is érvényes marad (invoiced=False, státusz: error)."""
     from tests.test_consignment import make_product
 
     _, mgr = manager
@@ -155,3 +156,40 @@ async def test_no_auto_billing_without_flag(client, manager):
     )
     assert saved.status_code == 201, saved.text
     assert saved.json()["invoiced"] is False
+    assert saved.json()["billingo_status"] == "error"
+
+
+async def test_auto_billing_all_settlements(client, manager, monkeypatch):
+    """Szerződéses kapcsoló NÉLKÜL is automatikusan számláz a mentés."""
+    from datetime import date as _date
+
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Auto Bolt"}, headers=mgr)
+    ).json()
+    coffee = await make_product(client, mgr, price_per_portion=100.0, grams_per_portion=7)
+    await client.post(
+        f"/api/partners/{partner['id']}/stock/replenish",
+        json={"product_id": coffee["id"], "quantity": 1.0},
+        headers=mgr,
+    )
+
+    async def fake_invoice(db, settlement, p):
+        return "DOC-2", "invoice", _date.today()
+
+    from app.services.wfm import invoicing
+
+    monkeypatch.setattr(invoicing, "create_invoice_for_settlement", fake_invoice)
+    saved = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cod",
+              "lines": [{"product_id": coffee["id"], "physical_qty": 0.5}]},
+        headers=mgr,
+    )
+    assert saved.status_code == 201, saved.text
+    body = saved.json()
+    assert body["invoiced"] is True
+    # utánvét: azonnal fizetett státusz
+    assert body["payment_status"] == "paid"

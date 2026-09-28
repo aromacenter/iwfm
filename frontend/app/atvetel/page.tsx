@@ -277,6 +277,12 @@ export default function AtvetelPage() {
         };
         toast(t("intake.partnerCreated", { name: p.name }), "success");
       }
+      // Elérhetőség kötelező: telefon + e-mail nélkül nincs átvétel.
+      if (!(client.client_phone ?? "").trim() || !(client.client_email ?? "").trim()) {
+        setError(t("intake.contactRequired"));
+        setBusy(false);
+        return;
+      }
       const created = await api.post<Intake>("/api/intakes", {
         asset_id: assetId,
         partner_id: partnerId,
@@ -295,8 +301,16 @@ export default function AtvetelPage() {
       setNewPartner(EMPTY_PARTNER);
       toast(t("intake.created", { serial: created.serial }), "success");
       load();
-      // elismervény azonnali nyomtatása (nyomtatási ablakban, nem letöltés)
-      if (await confirm(t("intake.printConfirm", { serial: created.serial }))) {
+      // Elismervény nyomtatása: ELŐSZÖR az irodai nyomtató (ügynökön át —
+      // telefonról is működik), másodikként a helyi nyomtatási ablak.
+      if (await confirm(t("intake.printOfficeConfirm", { serial: created.serial }))) {
+        try {
+          await api.post(`/api/intakes/${created.id}/print`, {});
+          toast(t("intake.officePrintQueued"), "success");
+        } catch (err) {
+          toast(errorMessage(err), "error");
+        }
+      } else if (await confirm(t("intake.printConfirm", { serial: created.serial }))) {
         try {
           await printFile(`/api/intakes/${created.id}/pdf`);
         } catch (err) {
@@ -645,18 +659,22 @@ export default function AtvetelPage() {
                       className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
                     />
                   </div>
+                  {/* Telefonszám és e-mail KÖTELEZŐ — enélkül nem tudjuk
+                      értesíteni az ügyfelet (ajánlat, kész gép). */}
                   <div className="flex gap-2">
                     <input
+                      required
                       value={form.client_phone}
                       onChange={(e) => setForm({ ...form, client_phone: e.target.value })}
-                      placeholder={t("intake.clientPhone")}
+                      placeholder={`${t("intake.clientPhone")} *`}
                       className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
                     />
                     <input
+                      required
                       type="email"
                       value={form.client_email}
                       onChange={(e) => setForm({ ...form, client_email: e.target.value })}
-                      placeholder={t("intake.clientEmail")}
+                      placeholder={`${t("intake.clientEmail")} *`}
                       className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
                     />
                   </div>

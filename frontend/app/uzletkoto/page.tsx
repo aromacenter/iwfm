@@ -4,6 +4,7 @@
  *  összegben, milyen fizetési móddal — a végén fizetési módonkénti összesítés. */
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
 import { api, downloadFile, errorMessage } from "@/lib/api";
@@ -20,6 +21,7 @@ interface Agent {
 
 interface Settlement {
   id: string;
+  partner_id: string;
   partner_name: string | null;
   settled_by_name: string;
   invoicing_company: CompanyKey | null;
@@ -27,7 +29,20 @@ interface Settlement {
   total_net: number;
   total_gross: number;
   invoiced: boolean;
+  billingo_document_id: string | null;
+  billingo_status: string | null;
   created_at: string;
+}
+
+interface SettlementDetail extends Settlement {
+  lines: {
+    product_name: string; portions: number; price_per_portion: number;
+    amount_net: number; consumed_qty: number;
+  }[];
+  machines: {
+    barcode: string; asset_name: string | null; prev_counter: number;
+    new_counter: number; portions_billed: number; amount_net: number;
+  }[];
 }
 
 interface Summary {
@@ -66,6 +81,7 @@ const PAYMENTS = ["cash", "card", "transfer"] as const;
 export default function UzletkotoPage() {
   const { t, lang } = useT();
   const { toast, confirm } = useUI();
+  const router = useRouter();
   const { can } = usePerms();
   const canDelete = can("delete");
   const canInvoice = can("invoicing");
@@ -83,6 +99,38 @@ export default function UzletkotoPage() {
   const [expForm, setExpForm] = useState<{ amount: string; note: string; date: string } | null>(null);
   const [expBusy, setExpBusy] = useState(false);
   const [me, setMe] = useState<{ id: string; substitute_user_id: string | null } | null>(null);
+  // Kattinthato sorok: elszamolas-reszletek + szamla-muveletek modal
+  const [detail, setDetail] = useState<SettlementDetail | null>(null);
+  const [invoiceFor, setInvoiceFor] = useState<Settlement | null>(null);
+
+  async function openDetail(s: Settlement) {
+    try {
+      setDetail(await api.get<SettlementDetail>(`/api/settlements/${s.id}`));
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function createInvoice(s: Settlement) {
+    if (!(await confirm(t("uzk.invoiceCreateConfirm", { partner: s.partner_name ?? "?" })))) return;
+    try {
+      await api.post(`/api/settlements/${s.id}/invoice`);
+      toast(t("uzk.invoiceCreated"), "success");
+      setInvoiceFor(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function resendInvoice(s: Settlement) {
+    try {
+      await api.post(`/api/settlements/${s.id}/invoice-email`, {});
+      toast(t("cons.invoiceResent"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   const fmt = (dt: string) =>
     new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "short" });
@@ -331,7 +379,13 @@ export default function UzletkotoPage() {
                 )}
                 <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
                 <td className="px-4 py-3">
-                  <div className="font-medium">{s.partner_name}</div>
+                  <button
+                    onClick={() => router.push(`/elszamolas?partner=${s.partner_id}`)}
+                    title={t("uzk.partnerLinkHint")}
+                    className="text-left font-medium text-indigo-700 hover:underline"
+                  >
+                    {s.partner_name}
+                  </button>
                   <div className="flex items-center gap-1.5 text-xs text-slate-400">
                     <span>{s.settled_by_name}</span>
                     {s.invoicing_company && (
@@ -346,13 +400,23 @@ export default function UzletkotoPage() {
                 </td>
                 <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
                 <td className="px-4 py-3 text-right">
-                  <div className="font-medium">{ft(s.total_gross)}</div>
-                  <div className="text-xs text-slate-400">{t("cons.amountNet")}: {ft(s.total_net)}</div>
+                  <button
+                    onClick={() => void openDetail(s)}
+                    title={t("uzk.detailHint")}
+                    className="text-right hover:underline"
+                  >
+                    <div className="font-medium">{ft(s.total_gross)}</div>
+                    <div className="text-xs text-slate-400">{t("cons.amountNet")}: {ft(s.total_net)}</div>
+                  </button>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${s.invoiced ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                  <button
+                    onClick={() => setInvoiceFor(s)}
+                    title={t("uzk.invoiceChipHint")}
+                    className={`rounded px-2 py-0.5 text-xs font-medium hover:ring-1 hover:ring-slate-300 ${s.invoiced ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}
+                  >
                     {s.invoiced ? t("cons.invoiced") : t("cons.notInvoiced")}
-                  </span>
+                  </button>
                 </td>
               </tr>
             ))}
@@ -573,6 +637,116 @@ export default function UzletkotoPage() {
             ))}
           </select>
           <span className="text-xs text-indigo-700">{t("agent.substituteHint")}</span>
+        </div>
+      )}
+
+      {/* Elszámolás-részletek: tételek + gépsorok (az összegre kattintva) */}
+      {detail && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setDetail(null); }}
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+        >
+          <div className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">
+              {detail.partner_name} · {fmt(detail.created_at)}
+            </h2>
+            <p className="text-sm text-slate-500">
+              {detail.settled_by_name} · {t(`cons.payments.${detail.payment_method}`)} ·{" "}
+              <b>{ft(detail.total_gross)}</b>
+            </p>
+            {detail.machines.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase text-slate-500">⚙ {t("uzk.machines")}</p>
+                <div className="space-y-0.5 text-sm">
+                  {detail.machines.map((m, i) => (
+                    <p key={i} className="text-slate-700">
+                      <span className="font-mono text-xs">{m.barcode}</span> {m.asset_name} ·{" "}
+                      {m.prev_counter} → {m.new_counter} · {m.portions_billed.toFixed(0)}{" "}
+                      {t("cons.portionsShort")} · <b>{ft(Math.round(m.amount_net))}</b>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+            {detail.lines.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase text-slate-500">☕ {t("uzk.lines")}</p>
+                <div className="space-y-0.5 text-sm">
+                  {detail.lines.map((l, i) => (
+                    <p key={i} className="text-slate-700">
+                      {l.product_name} · {l.portions.toFixed(0)} × {l.price_per_portion} Ft ={" "}
+                      <b>{ft(Math.round(l.amount_net))}</b>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => downloadFile(`/api/settlements/${detail.id}/pdf`, `ELSZ-${detail.id.slice(0, 8)}.pdf`).catch((err) => toast(errorMessage(err), "error"))}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+              >
+                📄 {t("cons.receiptPdf")}
+              </button>
+              <button onClick={() => setDetail(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+                {t("common.close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Számla-műveletek (a Kiszámlázva / Nincs számlázva jelvényre kattintva) */}
+      {invoiceFor && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setInvoiceFor(null); }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        >
+          <div className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">🧾 {t("uzk.invoiceTitle")}</h2>
+            <p className="text-sm text-slate-500">
+              {invoiceFor.partner_name} · {ft(invoiceFor.total_gross)} · {fmt(invoiceFor.created_at)}
+            </p>
+            {invoiceFor.invoiced ? (
+              <div className="space-y-2">
+                <button
+                  onClick={() => downloadFile(`/api/settlements/${invoiceFor.id}/invoice-pdf`, `szamla-${invoiceFor.id.slice(0, 8)}.pdf`).catch((err) => toast(errorMessage(err), "error"))}
+                  className="w-full rounded-lg border border-emerald-300 px-4 py-2 text-sm text-emerald-800 hover:bg-emerald-50"
+                >
+                  🧾 {t("cons.invoicePdfBtn")}
+                </button>
+                <button
+                  onClick={() => void resendInvoice(invoiceFor)}
+                  className="w-full rounded-lg border border-emerald-300 px-4 py-2 text-sm text-emerald-800 hover:bg-emerald-50"
+                >
+                  ✉ {t("cons.invoiceResendBtn")}
+                </button>
+                <a
+                  href="https://app.billingo.hu/documents"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block w-full rounded-lg border border-slate-300 px-4 py-2 text-center text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  🔗 {t("uzk.openBillingo")}
+                </a>
+                <p className="text-xs text-slate-400">{t("uzk.billingoHint")}</p>
+              </div>
+            ) : canInvoice ? (
+              <button
+                onClick={() => void createInvoice(invoiceFor)}
+                className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                {t("cons.invoiceBtn")}
+              </button>
+            ) : (
+              <p className="text-sm text-slate-500">{t("uzk.noInvoicePerm")}</p>
+            )}
+            <div className="flex justify-end pt-1">
+              <button onClick={() => setInvoiceFor(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+                {t("common.close")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </AppShell>

@@ -382,11 +382,13 @@ async def list_partners(
 @router.get("/tax-lookup")
 async def tax_lookup(
     tax_number: str = Query(min_length=8, max_length=32),
+    db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("partners")),
 ):
-    """Közhiteles cégadat-lekérés adószám alapján (EU VIES). A magyar adószám
-    első 8 jegyével kérdezünk; a válaszból hivatalos cégnév + székhely jön.
-    Cégjegyzékszám/e-mail nincs ingyenes közhiteles forrásban."""
+    """Cégadat-lekérés adószám alapján. Először a Billingó NAV-alapú
+    ellenőrzése (az EU-s adószámmal nem rendelkező magyar vállalkozásokat is
+    ismeri), tartalékként az EU VIES. Cégjegyzékszám/e-mail nincs ingyenes
+    közhiteles forrásban."""
     import re as _re
 
     import httpx
@@ -395,6 +397,29 @@ async def tax_lookup(
     if len(digits) < 8:
         raise HTTPException(status_code=422, detail={"code": "partner.bad_tax_number"})
     vat = digits[:8]
+
+    # 1) Billingó (NAV) — EU-s adószám nélküli magyar cégeket is megtalálja.
+    from app.services.wfm.billingo_service import check_tax_number
+
+    billingo = await check_tax_number(db, tax_number.strip())
+    if billingo is not None:
+        raw_addr = (billingo.get("address") or "").replace("\n", " ").strip() or None
+        zip_code = city = street = None
+        if raw_addr:
+            m = _re.match(r"^(\d{4})\s+(\S+)\s+(.+)$", raw_addr)
+            if m:
+                zip_code, city, street = m.group(1), m.group(2), m.group(3)
+        return {
+            "found": True,
+            "company_name": billingo["name"],
+            "address": raw_addr,
+            "address_zip": zip_code,
+            "address_city": city,
+            "address_street": street,
+            "source": "billingo",
+        }
+
+    # 2) VIES tartalék (EU-s adószámot igényel)
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.get(
@@ -869,6 +894,40 @@ async def asset_type_defaults(
         norm=a.norm, norms=a.norms, counter_count=a.counter_count or 1,
         counter_names=a.counter_names,
     )
+
+
+@assets_router.get("/type-options")
+async def asset_type_options(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("machines")),
+):
+    """Új gép felvételéhez: a meglévő állomány gyártói és típusai (típusonként
+    a legutóbbi cikkszámmal) — a gyártó/típus mező ezekből szűkíthető, de
+    szabad szöveg is megadható."""
+    rows = (
+        await db.execute(
+            select(Asset.name, Asset.manufacturer, Asset.article_number, Asset.created_at)
+            .order_by(Asset.created_at.desc())
+            .limit(2000)
+        )
+    ).all()
+    seen_types: dict[str, dict] = {}
+    manufacturers: list[str] = []
+    for name, manufacturer, article_number, _created in rows:
+        key = (name or "").strip()
+        if key and key.lower() not in {k.lower() for k in seen_types}:
+            seen_types[key] = {
+                "name": key,
+                "manufacturer": manufacturer,
+                "article_number": article_number,
+            }
+        m = (manufacturer or "").strip()
+        if m and m.lower() not in {x.lower() for x in manufacturers}:
+            manufacturers.append(m)
+    return {
+        "types": sorted(seen_types.values(), key=lambda x: x["name"].lower()),
+        "manufacturers": sorted(manufacturers, key=str.lower),
+    }
 
 
 @assets_router.post("/backfill-customer-owned")

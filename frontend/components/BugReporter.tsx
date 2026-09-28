@@ -72,6 +72,8 @@ export default function BugReporter() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [capturing, setCapturing] = useState(false);
+  // natív fotózás alatt a bejelentő-panel elrejtve, hogy ne lógjon a képbe
+  const [panelHidden, setPanelHidden] = useState(false);
 
   function openAnnotator(dataUrl: string) {
     const img = new Image();
@@ -92,6 +94,44 @@ export default function BugReporter() {
     reader.readAsDataURL(file);
   }
 
+  // VALÓDI képernyőkép a böngésző képmegosztásával (asztali gépen): a
+  // felugró ablakok, dátumválasztók, minden pixelre pontosan látszik. A
+  // böngésző egyszer rákérdez, melyik lapot osztod meg — az aktuálisat
+  // ajánlja fel. Ha nem támogatott (mobil) vagy elutasítod, jön a DOM-alapú
+  // tartalék-fotózás.
+  async function captureNative(): Promise<string | null> {
+    const md = navigator.mediaDevices as MediaDevices & {
+      getDisplayMedia?: (c?: object) => Promise<MediaStream>;
+    };
+    if (!md?.getDisplayMedia) return null;
+    let stream: MediaStream | null = null;
+    try {
+      stream = await md.getDisplayMedia({
+        video: true,
+        audio: false,
+        // Chrome: az AKTUÁLIS lapot ajánlja fel elsőnek
+        preferCurrentTab: true,
+        selfBrowserSurface: "include",
+      } as object);
+      const track = stream.getVideoTracks()[0];
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.muted = true;
+      await video.play();
+      await new Promise((r) => setTimeout(r, 150)); // első képkocka
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d")!.drawImage(video, 0, 0);
+      track.stop();
+      return canvas.toDataURL("image/jpeg", 0.85);
+    } catch {
+      return null;
+    } finally {
+      stream?.getTracks().forEach((tr) => tr.stop());
+    }
+  }
+
   // az aktuális KÉPERNYŐ lefotózása (a bejelentő-panel kimarad a képből).
   // Szándékosan csak a látható területet rajzoljuk ki (nem a teljes görgetési
   // magasságot) és a betűtípus-beágyazást is kihagyjuk — nagy listáknál a
@@ -102,6 +142,12 @@ export default function BugReporter() {
     // hadd fesse ki a böngésző a "Fotózás…" állapotot, mielőtt dolgozunk
     await new Promise((r) => setTimeout(r, 30));
     try {
+      setPanelHidden(true);
+      const native = await captureNative().finally(() => setPanelHidden(false));
+      if (native) {
+        openAnnotator(native);
+        return;
+      }
       const { toJpeg } = await import("html-to-image");
       const vh = window.innerHeight;
       const dataUrl = await toJpeg(document.body, {
@@ -308,6 +354,7 @@ export default function BugReporter() {
         <div
           data-bug-ui="1"
           onPaste={onPaste}
+          style={panelHidden ? { visibility: "hidden" } : undefined}
           className="fixed bottom-40 right-5 z-[60] w-[340px] max-w-[calc(100vw-40px)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
         >
           <div className="mb-3 flex rounded-lg border border-slate-200 p-0.5 text-sm font-medium">

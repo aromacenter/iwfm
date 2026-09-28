@@ -24,6 +24,7 @@ async def test_intake_flow_and_clause(client, admin, manager):
         "/api/intakes",
         json={"asset_id": asset["id"], "client_name": "Kovács Ügyfél",
               "client_company": "Kovács Kft.", "client_email": "kovacs@example.com",
+              "client_phone": "+36301234567",
               "client_address": "1111 Budapest, Fő u. 1.",
               "accessories": "víztartály, tápkábel", "faults": "nem melegít"},
         headers=sz,
@@ -48,6 +49,7 @@ async def test_intake_flow_and_clause(client, admin, manager):
     res = await client.post(
         "/api/intakes",
         json={"asset_id": asset["id"], "client_name": "Fotós Ügyfél",
+              "client_phone": "+3630111", "client_email": "fotos@example.com",
               "faults": "törött víztartály", "photos": [jpg, jpg]},
         headers=sz,
     )
@@ -64,7 +66,9 @@ async def test_intake_flow_and_clause(client, admin, manager):
     # rossz formátum: érthető hiba
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": asset["id"], "photos": ["data:text/html;base64,PGI+"]},
+        json={"asset_id": asset["id"], "client_phone": "+3630222",
+              "client_email": "rossz@example.com",
+              "photos": ["data:text/html;base64,PGI+"]},
         headers=sz,
     )
     assert res.status_code == 422
@@ -151,6 +155,7 @@ async def test_intake_task_link(client, manager):
         await client.post(
             "/api/intakes",
             json={"asset_id": asset["id"], "client_name": "Linkes Lajos",
+                  "client_phone": "+3630333", "client_email": "lajos@example.com",
                   "faults": "csopog"},
             headers=mgr,
         )

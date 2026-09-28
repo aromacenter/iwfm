@@ -1757,7 +1757,8 @@
       "no_parcel_number": "This parcel has no parcel number.",
       "already_handed_over": "The courier already picked up this parcel — it can no longer be deleted."
     },
-    "settlement.invoice_pdf_unavailable": "Invoice image / resend is not available with the configured provider."
+    "settlement.invoice_pdf_unavailable": "Invoice image / resend is not available with the configured provider.",
+    "intake.contact_required": "Phone number and email are required for intake."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2344,7 +2345,10 @@
     "partnerNameRequired": "Enter the customer's name.",
     "partnerCreated": "Customer registered: {name}",
     "worksheetConfirm": "All data is here — create a worksheet from it as well?",
-    "worksheet": "Worksheet"
+    "worksheet": "Worksheet",
+    "contactRequired": "Phone number and email are required — we cannot notify the client without them.",
+    "printOfficeConfirm": "Print receipt ({serial}) on the OFFICE printer (works from a phone)?",
+    "officePrintQueued": "Receipt queued — printing on the office printer."
   },
   "handover": {
     "title": "Handover",
@@ -2429,5 +2433,18 @@
     "noteTag": "Instant sale",
     "done": "Instant sale recorded.",
     "doneInvoiced": "Instant sale recorded and invoiced."
+  },
+  "uzk": {
+    "partnerLinkHint": "Partner's settlements and movements — opens the Settlement page with the partner preselected.",
+    "detailHint": "Itemized settlement details.",
+    "invoiceChipHint": "Invoice actions: download, resend, Billingó — or create the invoice.",
+    "machines": "Machine rows",
+    "lines": "Lines",
+    "invoiceTitle": "Invoice actions",
+    "openBillingo": "Open in Billingó",
+    "billingoHint": "Editing and cancellation happen in Billingó — search by the document number.",
+    "invoiceCreateConfirm": "Create an invoice for this settlement? ({partner})",
+    "invoiceCreated": "Invoice created.",
+    "noInvoicePerm": "Creating an invoice requires the invoicing permission."
   }
 }

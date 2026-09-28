@@ -210,6 +210,10 @@ async def create_intake(
             partner_id = uuid.UUID(body.partner_id)
         except ValueError:
             raise HTTPException(status_code=422, detail={"code": "intake.bad_partner"})
+    # Elérhetőség KÖTELEZŐ: telefonszám és e-mail nélkül nem vehető át gép —
+    # ezek nélkül nem tudjuk értesíteni az ügyfelet (ajánlat, kész gép).
+    if not (body.client_phone or "").strip() or not (body.client_email or "").strip():
+        raise HTTPException(status_code=422, detail={"code": "intake.contact_required"})
     row = MachineIntake(
         id=uuid.uuid4(),
         serial=await _next_serial(db),

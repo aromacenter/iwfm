@@ -302,6 +302,9 @@ export default function ElszamolasPage() {
   useEffect(() => {
     api.get<Partner[]>("/api/partners").then(setPartners).catch(() => {});
     api.get<Product[]>("/api/products").then(setProducts).catch(() => {});
+    // Más oldalról (pl. Üzletkötő) érkező partner-előválasztás (?partner=)
+    const pid = new URLSearchParams(window.location.search).get("partner");
+    if (pid) setPartnerId(pid);
   }, []);
 
   const loadStock = useCallback(() => {
@@ -948,7 +951,14 @@ export default function ElszamolasPage() {
           .filter(Boolean)
           .join(", ")
           .slice(0, 200);
-        router.push(`/csomagok?partner=${partnerId}&content=${encodeURIComponent(content)}`);
+        const params = new URLSearchParams({ partner: partnerId, content });
+        // Utánvétes azonnali értékesítés: a fizetendő bruttó automatikusan
+        // az utánvét összege a címkén (átírható a Csomagok oldalon).
+        if (instantSale.payment === "cod") {
+          const gross = rows.reduce((a, r) => a + instantRowGross(r), 0);
+          if (gross > 0) params.set("cod", String(Math.round(gross)));
+        }
+        router.push(`/csomagok?${params}`);
       }
     } catch (err) {
       setInstantError(errorMessage(err));

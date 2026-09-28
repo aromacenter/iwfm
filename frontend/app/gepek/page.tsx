@@ -190,6 +190,36 @@ export default function GepekPage() {
   }
 
   const [cameraOpen, setCameraOpen] = useState(false);
+  // Gépcsere-modal kamerás beolvasója (telefonon/tableten nincs kézi szkenner)
+  const [swapCameraOpen, setSwapCameraOpen] = useState(false);
+
+  // Gyártó/típus javaslatok a meglévő állományból (szabad szöveg is mehet)
+  const [typeOptions, setTypeOptions] = useState<{
+    types: { name: string; manufacturer: string | null; article_number: string | null }[];
+    manufacturers: string[];
+  }>({ types: [], manufacturers: [] });
+  useEffect(() => {
+    api
+      .get<typeof typeOptions>("/api/assets/type-options")
+      .then(setTypeOptions)
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A gépcsere-kamera találata: QR-URL → token → gép feloldása vonalkódra
+  async function swapScanDetect(value: string) {
+    setSwapCameraOpen(false);
+    const raw = value.trim();
+    const lookup = raw.includes("/")
+      ? (raw.split("?")[0].split("/").filter(Boolean).pop() ?? raw)
+      : raw;
+    try {
+      const a = await api.get<Asset>(`/api/assets/by-barcode/${encodeURIComponent(lookup)}`);
+      setSwapCode(a.barcode);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   async function generateBarcode() {
     try {
@@ -531,6 +561,12 @@ export default function GepekPage() {
             onClose={() => setCameraOpen(false)}
           />
         )}
+        {swapCameraOpen && (
+          <CameraScanner
+            onDetect={(code) => { void swapScanDetect(code); }}
+            onClose={() => setSwapCameraOpen(false)}
+          />
+        )}
         <button
           onClick={async () => {
             if (!(await confirm(t("inv.backfillOwnedConfirm")))) return;
@@ -775,19 +811,38 @@ export default function GepekPage() {
               </div>
             </label>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {/* Gyártó/típus: a meglévő állományból szűkíthető javaslatok
+                  (datalist) — de szabad szöveg is megadható, ha új. Létező
+                  típusnál a cikkszám/gyártó/norma automatikusan előtöltődik. */}
               <label className="block text-sm">
                 {t("inv.manufacturer")}
-                <input value={assetForm.manufacturer} onChange={(e) => setAssetForm({ ...assetForm, manufacturer: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                <input
+                  list="asset-manufacturers"
+                  value={assetForm.manufacturer}
+                  onChange={(e) => setAssetForm({ ...assetForm, manufacturer: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+                <datalist id="asset-manufacturers">
+                  {typeOptions.manufacturers.map((m) => <option key={m} value={m} />)}
+                </datalist>
               </label>
               <label className="block text-sm">
                 {t("inv.type")} *
                 <input
                   required
+                  list="asset-types"
                   value={assetForm.name}
                   onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })}
                   onBlur={() => fillTypeDefaults()}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
                 />
+                <datalist id="asset-types">
+                  {typeOptions.types.map((tp) => (
+                    <option key={tp.name} value={tp.name}>
+                      {[tp.manufacturer, tp.article_number].filter(Boolean).join(" · ")}
+                    </option>
+                  ))}
+                </datalist>
               </label>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1039,14 +1094,26 @@ export default function GepekPage() {
             <p className="text-xs text-slate-500">{t("inv.swapHint")}</p>
             <label className="block text-sm">
               {t("inv.swapReplacement")}
-              <input
-                required
-                list="instock-assets"
-                value={swapCode}
-                onChange={(e) => setSwapCode(e.target.value)}
-                placeholder={t("inv.swapPh")}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono"
-              />
+              <div className="mt-1 flex gap-2">
+                <input
+                  required
+                  list="instock-assets"
+                  value={swapCode}
+                  onChange={(e) => setSwapCode(e.target.value)}
+                  placeholder={t("inv.swapPh")}
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 font-mono"
+                />
+                {cameraScanSupported() && (
+                  <button
+                    type="button"
+                    onClick={() => setSwapCameraOpen(true)}
+                    title={t("scanner.title")}
+                    className="rounded-lg border border-slate-300 px-3 py-2 hover:bg-slate-100"
+                  >
+                    📷
+                  </button>
+                )}
+              </div>
               <datalist id="instock-assets">
                 {inStock.map((x) => (
                   <option key={x.id} value={x.barcode}>{x.name}</option>

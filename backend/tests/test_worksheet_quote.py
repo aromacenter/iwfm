@@ -302,7 +302,7 @@ async def test_suggested_email_prefill(client, admin, manager):
     res = await client.post(
         "/api/intakes",
         json={"asset_id": asset["id"], "client_name": "Vevő",
-              "client_email": "vevo@example.com"},
+              "client_phone": "+3630555", "client_email": "vevo@example.com"},
         headers=mgr,
     )
     assert res.status_code in (200, 201), res.text

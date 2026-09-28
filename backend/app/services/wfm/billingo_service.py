@@ -51,7 +51,9 @@ def settlement_due_date(settlement: Settlement, partner: Partner) -> date:
     Átutalás/utánvét: az elszámoláson megadott eseti napok → aktív szerződés →
     partner-beállítás → 8 nap erősorrend."""
     today = date.today()
-    if settlement.payment_method in ("cash", "card"):
+    # Utánvét, készpénz, kártya: minden dátum a mai nap (a számla azonnal
+    # fizetett) — csak átutalásnál fut határidő.
+    if settlement.payment_method in ("cash", "card", "cod"):
         return today
     days = getattr(settlement, "due_days", None)
     if not days or days <= 0:
@@ -220,7 +222,50 @@ async def create_invoice_for_settlement(
         "items": items,
     }
     created = await _api(api_key, "POST", "/documents", body)
-    return str(created.get("id", "")), doc_type, due
+    document_id = str(created.get("id", ""))
+    # Utánvét/készpénz/kártya: a bizonylat azonnal FIZETETT státuszba kerül a
+    # Billingóban is (best-effort — a számla enélkül is érvényes).
+    if settlement.payment_method in ("cash", "card", "cod") and document_id:
+        try:
+            gross = created.get("gross_total") or settlement.total_gross
+            await _api(api_key, "POST", f"/documents/{document_id}/payments", [{
+                "date": today.isoformat(),
+                "price": round(float(gross), 2),
+                "payment_method": PAYMENT_METHOD_MAP.get(settlement.payment_method, "cash"),
+            }])
+        except Exception:
+            logger.warning("billingo mark-paid failed for %s", document_id, exc_info=True)
+    return document_id, doc_type, due
+
+
+async def check_tax_number(db: AsyncSession, tax_number: str) -> dict | None:
+    """Magyar adószám ellenőrzése a Billingón keresztül (NAV-alapú) — a VIES
+    csak EU-s adószámot ismer. None, ha nincs kulcs vagy nincs találat."""
+    settings = await get_or_create_settings(db)
+    api_key, _block, _test = _account(settings, None)
+    if not settings.enabled or not api_key:
+        return None
+    try:
+        data = await _api(api_key, "GET", f"/utils/check-tax-number/{tax_number}")
+    except Exception:
+        logger.warning("billingo tax check failed for %s", tax_number, exc_info=True)
+        return None
+    # A válasz szolgáltató-verziónként változhat — a nevet/címet rugalmasan
+    # olvassuk ki.
+    name = data.get("name") or data.get("taxpayer_name")
+    addr = data.get("address") or {}
+    if isinstance(addr, str):
+        address = addr
+    else:
+        address = " ".join(
+            str(x) for x in (
+                addr.get("post_code"), addr.get("city"),
+                addr.get("address") or addr.get("street"),
+            ) if x
+        ).strip() or None
+    if not name:
+        return None
+    return {"name": str(name), "address": address}
 
 
 async def create_maintenance_invoice(

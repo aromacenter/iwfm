@@ -2087,54 +2087,37 @@ async def create_settlement(
                 "kuszob_kg": threshold,
             })
 
-    # Automata számlázás: ha a ma érvényes szerződésen be van kapcsolva, a
-    # mentett elszámolás számlája azonnal kiállítódik (best-effort — hiba
-    # esetén a mentés érvényes marad, a számlázás kézzel pótolható).
+    # Automata számlázás: MINDEN elszámolás mentése után a számla azonnal
+    # kiállítódik (kivéve a kedvezményes / ÁFA nélkülit) — best-effort: hiba
+    # esetén a mentés érvényes marad, a Kiszámlázás gombbal pótolható.
     if not settlement.no_vat and settlement.total_net > 0:
-        from app.models import PartnerContract
+        from app.services.wfm.invoicing import create_invoice_for_settlement
 
-        today_ = date.today()
-        ac = (
-            await db.execute(
-                select(PartnerContract)
-                .where(
-                    PartnerContract.partner_id == partner.id,
-                    PartnerContract.valid_from <= today_,
-                )
-                .order_by(PartnerContract.valid_from.desc())
+        try:
+            document_id, mode, due = await create_invoice_for_settlement(
+                db, settlement, partner,
             )
-        ).scalars().first()
-        if (
-            ac is not None
-            and ac.auto_billing
-            and (ac.valid_to is None or ac.valid_to >= today_)
-        ):
-            from app.services.wfm.invoicing import create_invoice_for_settlement
-
-            try:
-                document_id, mode, due = await create_invoice_for_settlement(
-                    db, settlement, partner,
-                )
-                settlement.invoiced = True
-                settlement.billingo_document_id = document_id
-                settlement.billingo_status = mode
-                if settlement.payment_method in ("cash", "card"):
-                    settlement.payment_status = "paid"
-                    settlement.paid_at = datetime.now(UTC)
-                else:
-                    settlement.payment_status = "outstanding"
-                    settlement.due_date = due
-                await record_audit(
-                    db, actor=actor, action="settlement.auto_invoice",
-                    entity_type="settlement", entity_id=str(settlement.id),
-                    detail={"billingo_id": document_id, "mode": mode}, request=request,
-                )
-                await db.commit()
-                await _cashbook_autopush(db, settlement)
-            except Exception:
-                logger.warning("auto billing failed for %s", settlement.id, exc_info=True)
-                settlement.billingo_status = "error"
-                await db.commit()
+            settlement.invoiced = True
+            settlement.billingo_document_id = document_id
+            settlement.billingo_status = mode
+            # Utánvét/készpénz/kártya: azonnal fizetve; utalásnál határidő.
+            if settlement.payment_method in ("cash", "card", "cod"):
+                settlement.payment_status = "paid"
+                settlement.paid_at = datetime.now(UTC)
+            else:
+                settlement.payment_status = "outstanding"
+                settlement.due_date = due
+            await record_audit(
+                db, actor=actor, action="settlement.auto_invoice",
+                entity_type="settlement", entity_id=str(settlement.id),
+                detail={"billingo_id": document_id, "mode": mode}, request=request,
+            )
+            await db.commit()
+            await _cashbook_autopush(db, settlement)
+        except Exception:
+            logger.warning("auto billing failed for %s", settlement.id, exc_info=True)
+            settlement.billingo_status = "error"
+            await db.commit()
 
     out = _settlement_out(settlement, partner.name)
     out.lines = [
@@ -2996,8 +2979,9 @@ async def invoice_settlement(
     s.invoiced = True
     s.billingo_document_id = document_id
     s.billingo_status = mode  # 'proforma' (teszt) | 'invoice' (éles)
-    # Kintlévőség: készpénz/kártya azonnal fizetve; utalásnál határidő fut.
-    if s.payment_method in ("cash", "card"):
+    # Kintlévőség: utánvét/készpénz/kártya azonnal fizetve; utalásnál
+    # határidő fut.
+    if s.payment_method in ("cash", "card", "cod"):
         s.payment_status = "paid"
         s.paid_at = datetime.now(UTC)
     else:
