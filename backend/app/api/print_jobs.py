@@ -173,6 +173,29 @@ async def _agent_settings(db: AsyncSession, agent_key: str | None) -> PrintSetti
     return st
 
 
+@agent_router.get("/script")
+async def agent_script(
+    db: AsyncSession = Depends(get_db),
+    x_agent_key: str | None = Header(default=None),
+):
+    """Az ügynök ÖNFRISSÍTÉSE: a backenddel szállított aktuális
+    print_agent.ps1 + verziója. Az ügynök 10 percenként összeveti a saját
+    verziójával; ha a szerveré újabb, lecseréli magát és az őrszem az új
+    szkripttel indítja újra — az üzleti PC-hez többé nem kell hozzányúlni."""
+    import re
+    from pathlib import Path
+
+    await _agent_settings(db, x_agent_key)
+    await db.commit()  # agent_last_seen frissült
+    script_path = Path(__file__).resolve().parent.parent / "agent_dist" / "print_agent.ps1"
+    if not script_path.exists():
+        raise HTTPException(status_code=404, detail={"code": "print.no_script"})
+    content = script_path.read_text(encoding="utf-8")
+    m = re.search(r"AGENT_VERSION\s*=\s*(\d+)", content)
+    version = int(m.group(1)) if m else 0
+    return {"version": version, "script": content}
+
+
 @agent_router.get("/jobs")
 async def agent_poll(
     db: AsyncSession = Depends(get_db),

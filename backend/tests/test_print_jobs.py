@@ -192,3 +192,18 @@ async def test_pdf_print_jobs_and_qr_lookup(client, admin, manager):
     found = await client.get(f"/api/assets/by-barcode/{token}", headers=mgr)
     assert found.status_code == 200
     assert found.json()["id"] == asset["id"]
+
+
+async def test_agent_self_update_script(client, admin):
+    """Az önfrissítő végpont: kulccsal adja az aktuális szkriptet + verziót."""
+    _, adm = admin
+    # kulcs nélkül / rossz kulccsal 401
+    res = await client.get("/api/print-agent/script", headers={"X-Agent-Key": "rossz"})
+    assert res.status_code == 401
+    key = (await client.post("/api/print-jobs/agent-key", headers=adm)).json()["key"]
+    res = await client.get("/api/print-agent/script", headers={"X-Agent-Key": key})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["version"] >= 2
+    assert "IwfmPrintAgent" in body["script"]
+    assert "Check-SelfUpdate" in body["script"]

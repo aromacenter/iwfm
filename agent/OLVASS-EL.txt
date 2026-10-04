@@ -40,3 +40,13 @@ A GLS-cimke PDF-ek kulon nyomtatora iranyithatok (pl. Brother cimkezo):
                                         uresen a pdf_printer / alapertelmezett megy
 A cimket a Csomagok oldal "Irodai nyomtatas" gombja teszi a sorba -
 telefonrol is mukodik, es a korabbi cimkek is ujranyomtathatok vele.
+
+--- FRISSITES 3: ONFRISSITES (v2) ---
+Az ugynok mostantol ONMAGAT FRISSITI: 10 percenkent megnezi a szerveren,
+van-e ujabb szkript-verzio; ha igen, lecsereli magat, es az orszem az uj
+valtozattal inditja ujra. EZT a v2-es print_agent.ps1-et meg egyszer,
+UTOLJARA kezzel kell az uzleti PC-re masolni - utana soha tobbe.
+Raadasok a v2-ben:
+ - a log 5 MB felett rotalodik (nem telik meg a gep),
+ - az Adobe Reader-es tartalek-nyomtatas utan a megnyitott olvaso-folyamat
+   automatikusan bezarul (nem gyulnek a hatterben a processzek).
