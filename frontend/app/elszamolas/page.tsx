@@ -136,6 +136,9 @@ interface CtxMachine {
   counters: number[] | null;
   counter_names: (string | null)[] | null;
   counter_prices: (number | null)[] | null;
+  reported_counters: number[] | null; // a partner által bejelentett állások
+  reported_at: string | null;
+  reported_by: string | null;
   prev_counter: number;
   last_settled_at: string | null;
   default_product_id: string | null;
@@ -325,10 +328,22 @@ export default function ElszamolasPage() {
     if (!partnerId) { setCtx(null); setMachineInputs({}); setPaidAmount(""); return; }
     api.get<SettlementContext>(`/api/partners/${partnerId}/settlement-context`).then((c) => {
       setCtx(c);
+      // A partner által bejelentett állások ELŐTÖLTVE — a képviselő csak
+      // átnézi és menti (a mentés automatikusan számláz is).
       setMachineInputs(Object.fromEntries(c.machines.map((m) => [
         m.asset_id,
-        { newCounter: "", newCounters: Array.from({ length: m.counter_count }, () => ""),
-          service: "" },
+        {
+          newCounter:
+            m.counter_count <= 1 && m.reported_counters?.length
+              ? String(m.reported_counters.reduce((a, b) => a + b, 0))
+              : "",
+          newCounters: Array.from({ length: m.counter_count }, (_, i) =>
+            m.counter_count > 1 && m.reported_counters?.[i] != null
+              ? String(m.reported_counters[i])
+              : "",
+          ),
+          service: "",
+        },
       ])));
       setMachineProducts(Object.fromEntries(c.machines.map((m) => [
         m.asset_id,
@@ -716,14 +731,39 @@ export default function ElszamolasPage() {
 
   // Élő fogyás-előnézet a beírt leltár alapján — a gép-sorok által lefedett
   // termékeknél a számlázott adag/összeg a gépekből jön.
+  // ÖSSZEVONT kávékészlet: többféle átadott kávé EGY közös készletként —
+  // a leltár/fogyás az elsődleges (gép-termék) soron fut, a többi kávé-sor
+  // készlete ebbe olvad bele (a mentés könyveli az összevonást).
+  const pooled = useMemo(() => {
+    const coffee = stockRows.filter((r) => r.is_consignment);
+    if (coffee.length <= 1) return { mode: false as const, primary: null as string | null, qty: 0, count: 0 };
+    const machinePids = Object.values(machineProducts);
+    const primary = coffee.find((r) => machinePids.includes(r.product_id))?.product_id ?? coffee[0].product_id;
+    return {
+      mode: true as const,
+      primary,
+      qty: coffee.reduce((a, r) => a + r.quantity, 0),
+      count: coffee.length,
+    };
+  }, [stockRows, machineProducts]);
+
   const preview = useMemo(() => {
     let net = 0;
     let shortageNet = 0;
+    const coffeeIds = stockRows.filter((r) => r.is_consignment).map((r) => r.product_id);
     const rows = stockRows.map((s) => {
+      const pooledPrimary = pooled.mode && s.product_id === pooled.primary;
+      const pooledHidden = pooled.mode && s.is_consignment && !pooledPrimary;
+      const effQuantity = pooledPrimary ? pooled.qty : s.quantity;
       const phys = physical[s.product_id] ?? "";
       const physNum = phys === "" ? null : Number(phys);
-      const consumed = physNum === null ? 0 : Math.max(s.quantity - physNum, 0);
-      const machineBilled = machinePreview.billedByProduct[s.product_id];
+      const consumed = physNum === null ? 0 : Math.max(effQuantity - physNum, 0);
+      // Pool-soron a gépek BÁRMELY kávéra könyvelt adagjai összegződnek
+      const machineBilled = pooledPrimary
+        ? (coffeeIds.some((id) => machinePreview.billedByProduct[id] !== undefined)
+            ? coffeeIds.reduce((a, id) => a + (machinePreview.billedByProduct[id] ?? 0), 0)
+            : undefined)
+        : machinePreview.billedByProduct[s.product_id];
       // Ha a gép számlálója meg van adva, a számlázott adag AZ — a kg-fogyás
       // keresztellenőrzés (a hiányt a mentés kg-áron külön sorban számolja).
       const counterStr = counters[s.product_id] ?? "";
@@ -737,9 +777,15 @@ export default function ElszamolasPage() {
         // átadott (azonnal fizetendő) tételek számítanak.
         portions = 0;
         amount = 0;
+      } else if (pooledHidden) {
+        // összevont kávé-sor: a leltár az elsődleges soron fut
+        portions = 0;
+        amount = 0;
       } else if (machineBilled !== undefined) {
         portions = machineBilled;
-        amount = machinePreview.amountByProduct[s.product_id] ?? 0;
+        amount = pooledPrimary
+          ? coffeeIds.reduce((a, id) => a + (machinePreview.amountByProduct[id] ?? 0), 0)
+          : machinePreview.amountByProduct[s.product_id] ?? 0;
       } else if (counterNum !== null) {
         portions = counterNum;
         amount = portions * unitPrice;
@@ -751,16 +797,19 @@ export default function ElszamolasPage() {
       // Számláló-alapú fogyás kg-ban (a norma szerint) + várt készlet +
       // eltérés a beírt fizikai leltárhoz képest. A LEFŐZÖTT adag számít
       // (szerviz-adagokkal), ahogy a mentés kg-keresztellenőrzése is.
-      const crossPortions =
-        machineBilled !== undefined
-          ? machinePreview.brewedByProduct[s.product_id] ?? machineBilled
+      const crossPortions = pooledHidden
+        ? null
+        : machineBilled !== undefined
+          ? (pooledPrimary
+              ? coffeeIds.reduce((a, id) => a + (machinePreview.brewedByProduct[id] ?? 0), 0)
+              : machinePreview.brewedByProduct[s.product_id] ?? machineBilled)
           : counterNum;
       const consumedKgByCounter =
         s.is_consignment && crossPortions !== null && crossPortions !== undefined
           ? (crossPortions * s.grams_per_portion) / 1000
           : null;
       const expectedRemaining =
-        consumedKgByCounter !== null ? Math.max(s.quantity - consumedKgByCounter, 0) : null;
+        consumedKgByCounter !== null ? Math.max(effQuantity - consumedKgByCounter, 0) : null;
       const stockDiff =
         expectedRemaining !== null && physNum !== null ? physNum - expectedRemaining : null;
       // Hiány: kg-áron számlázódik (átírható); a mentés ugyanígy számol.
@@ -775,8 +824,9 @@ export default function ElszamolasPage() {
       shortageNet += shortageAmount;
       return {
         ...s, consumed, portions, amount,
-        filled: physNum !== null || machineBilled !== undefined,
-        fromMachines: machineBilled !== undefined,
+        filled: !pooledHidden && (physNum !== null || machineBilled !== undefined),
+        fromMachines: !pooledHidden && machineBilled !== undefined,
+        pooledPrimary, pooledHidden, effQuantity,
         consumedKgByCounter, expectedRemaining, stockDiff,
         shortageKg, shortageAmount, defaultKgPrice,
       };
@@ -786,7 +836,7 @@ export default function ElszamolasPage() {
       if (!stockRows.some((s) => s.product_id === pid)) net += amount;
     }
     return { rows, net, shortageNet };
-  }, [stockRows, physical, counters, linePrices, kgPrices, products, machinePreview]);
+  }, [stockRows, physical, counters, linePrices, kgPrices, products, machinePreview, pooled]);
 
   // Átadott NEM-bizományos áruk: azonnal fizetendők — csak a kávé bizomány.
   // A képviselő BRUTTÓ árat lát és ír be; a mentés nettósítja a termék ÁFA-ja
@@ -1053,6 +1103,7 @@ export default function ElszamolasPage() {
           (linePrices[s.product_id] ?? "") === "" ? null : Number(linePrices[s.product_id]),
         kg_price:
           (kgPrices[s.product_id] ?? "") === "" ? null : Number(kgPrices[s.product_id]),
+        pooled: pooled.mode && s.product_id === pooled.primary,
       }));
     // Gép-sorok: csak a kitöltött (új számlálós) gépek kerülnek be
     if (machinePreview.rows.some((r) => r.belowPrev)) {
@@ -1853,6 +1904,13 @@ export default function ElszamolasPage() {
         <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center gap-3 px-4 pt-3">
             <p className="text-sm font-semibold">{t("cons.machinesTitle")}</p>
+            {ctx?.machines.some((m) => m.reported_counters?.length) && (
+              <p className="mt-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-800">
+                📣 {t("cons.reportedBanner", {
+                  by: ctx.machines.find((m) => m.reported_by)?.reported_by ?? "?",
+                })}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => jumpToNextCounter()}
@@ -2063,6 +2121,22 @@ export default function ElszamolasPage() {
                 <tr className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3 font-medium">
                     {s.product_name}
+                    {s.pooledPrimary && (
+                      <span
+                        title={t("cons.pooledPrimaryHint", { count: pooled.count })}
+                        className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800"
+                      >
+                        Σ {t("cons.pooledBadge", { count: pooled.count })}
+                      </span>
+                    )}
+                    {s.pooledHidden && (
+                      <span
+                        title={t("cons.pooledHiddenHint")}
+                        className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500"
+                      >
+                        ↳ ☕ {t("cons.pooledHidden")}
+                      </span>
+                    )}
                     {contractedIds.has(s.product_id) && (
                       <span
                         title={t("cons.contractedCoffeeHint")}
@@ -2092,7 +2166,13 @@ export default function ElszamolasPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {s.quantity} {s.unit}
+                    {s.pooledPrimary ? (
+                      <span title={t("cons.pooledPrimaryHint", { count: pooled.count })} className="font-semibold text-violet-800">
+                        {Math.round(pooled.qty * 100) / 100} {s.unit}
+                      </span>
+                    ) : (
+                      <>{s.quantity} {s.unit}</>
+                    )}
                     {s.quantity > 0 && !extraProducts.includes(s.product_id) && (
                       <button
                         onClick={() => openStockReturn(s.product_id, s.quantity)}
@@ -2112,7 +2192,9 @@ export default function ElszamolasPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-500">{s.is_consignment ? s.portions_available : "—"}</td>
                   <td className="px-4 py-3">
-                    {!s.is_consignment ? (
+                    {s.pooledHidden ? (
+                      <span className="text-slate-300">☕→Σ</span>
+                    ) : !s.is_consignment ? (
                       <span className="text-slate-300">—</span>
                     ) : s.fromMachines ? (
                       <span
@@ -2148,7 +2230,9 @@ export default function ElszamolasPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {s.is_consignment ? (
+                    {s.pooledHidden ? (
+                      <span title={t("cons.pooledHiddenHint")} className="text-slate-300">☕→Σ</span>
+                    ) : s.is_consignment ? (
                       <>
                         <input
                           type="number"

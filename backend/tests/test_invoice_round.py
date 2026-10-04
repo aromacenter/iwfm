@@ -232,3 +232,89 @@ async def test_invoice_norma_zero_coffee_line(client, manager):
     assert abs(zero["portions"] - 4.0) < 0.01
     # a vegosszegbe NEM szamit bele
     assert saved.json()["total_net"] == 0.0
+
+
+async def test_pooled_coffee_stock_merges(client, manager):
+    """Közös kávékészlet: az előző mennyiség az összes kávé összege, mentés
+    után a maradék a pool-sor termékére olvad össze."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Pool Bolt"}, headers=mgr)
+    ).json()
+    a = await make_product(client, mgr, name="Kávé A", price_per_portion=100.0, grams_per_portion=10)
+    b = await make_product(client, mgr, name="Kávé B", price_per_portion=100.0, grams_per_portion=10)
+    for pid, qty in ((a["id"], 3.0), (b["id"], 2.0)):
+        await client.post(
+            f"/api/partners/{partner['id']}/stock/replenish",
+            json={"product_id": pid, "quantity": qty},
+            headers=mgr,
+        )
+    # pool-elszamolas az A termeken: osszkeszlet 5 kg, leltar 4 kg -> 1 kg fogyas
+    saved = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [{"product_id": a["id"], "physical_qty": 4.0, "pooled": True}]},
+        headers=mgr,
+    )
+    assert saved.status_code == 201, saved.text
+    line = saved.json()["lines"][0]
+    assert abs(line["previous_qty"] - 5.0) < 0.01
+    assert abs(line["consumed_qty"] - 1.0) < 0.01
+    # keszlet: A = 4.0 (osszevonva), B = 0
+    stock = (await client.get(f"/api/partners/{partner['id']}/stock", headers=mgr)).json()
+    by_pid = {s["product_id"]: s["quantity"] for s in stock}
+    assert abs(by_pid[a["id"]] - 4.0) < 0.01
+    assert abs(by_pid.get(b["id"], 0.0)) < 0.01
+
+
+async def test_counter_report_prefills_context(client, manager):
+    """A QR-oldali bejelentés előtölti az elszámolás-kontextust."""
+    import uuid as _uuid
+
+    from sqlalchemy import select as _select
+
+    import app.db as app_db
+    from app.models import Asset
+
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Diktáló Bt"}, headers=mgr)
+    ).json()
+    asset = (
+        await client.post(
+            "/api/assets",
+            json={"barcode": "RPT-1", "name": "Teszt Gép", "counter": 100},
+            headers=mgr,
+        )
+    ).json()
+    await client.post(
+        f"/api/assets/{asset['id']}/deploy", json={"partner_id": partner["id"]},
+        headers=mgr,
+    )
+    # QR-token a címke-generálással jön létre
+    res = await client.get(f"/api/assets/{asset['id']}/qr-label", headers=mgr)
+    assert res.status_code == 200
+    factory = app_db.get_session_factory()
+    async with factory() as session:
+        token = (
+            await session.execute(
+                _select(Asset.qr_token).where(Asset.id == _uuid.UUID(asset["id"]))
+            )
+        ).scalar_one()
+
+    res = await client.post(
+        f"/api/support/{token}/counter",
+        json={"counter": 180, "reporter_name": "Fodrász Olivér"},
+    )
+    assert res.status_code == 200, res.text
+
+    ctx = (
+        await client.get(
+            f"/api/partners/{partner['id']}/settlement-context", headers=mgr
+        )
+    ).json()
+    m = next(x for x in ctx["machines"] if x["barcode"] == "RPT-1")
+    assert m["reported_counters"] == [180]
+    assert m["reported_by"] == "Fodrász Olivér"

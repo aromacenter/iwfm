@@ -262,6 +262,9 @@ def create_app() -> FastAPI:
         knowledge.router, prefix="/api/knowledge", tags=["knowledge"],
         dependencies=[Depends(_mod("support"))],
     )
+    from app.api import stats as stats_api
+
+    app.include_router(stats_api.router, prefix="/api/stats", tags=["stats"])
     app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"])

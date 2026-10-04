@@ -161,7 +161,10 @@
     "intake": "Intake",
     "handover": "Handover",
     "calendar": "Calendar",
-    "gls": "Parcels (GLS)"
+    "gls": "Parcels (GLS)",
+    "cashbox": "Cash register",
+    "stats": "Statistics",
+    "serviceHandover": "Technician handover"
   },
   "roles": {
     "admin": "Admin",
@@ -488,7 +491,12 @@
     "autoInvoiceFailed": "Automatic invoicing failed — use the Invoice button to retry.",
     "autoBillingBadge": "Auto invoicing",
     "autoBillingHint": "Per the contract, the invoice is issued right after saving.",
-    "fixedPriceHint": "The per-portion price comes from the contract / partner prices — not editable in the settlement."
+    "fixedPriceHint": "The per-portion price comes from the contract / partner prices — not editable in the settlement.",
+    "reportedBanner": "Counter readings reported by the partner are PREFILLED ({by}) — review and save (the invoice is issued automatically).",
+    "pooledBadge": "pooled stock ({count} coffees)",
+    "pooledPrimaryHint": "Pooled coffee stock: previous stock is the sum of all coffees; after saving the remainder merges onto this coffee.",
+    "pooledHidden": "pooled",
+    "pooledHiddenHint": "This coffee merges into the pooled stock — inventory runs on the pooled row."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1251,7 +1259,19 @@
     "totalLossBadge": "Economic total loss",
     "totalLossBadgeHint": "Marked as total loss by the technician — the quote offers only the inspection fee or renouncing ownership.",
     "completedBy": "Completed by {name} · {date}",
-    "wsPhoto": "Technician's worksheet photo"
+    "wsPhoto": "Technician's worksheet photo",
+    "onsiteCheckbox": "On-site repair (simplified worksheet)",
+    "onsiteCheckboxHint": "No quote flow — both the client and the worker sign on site.",
+    "onsiteBadge": "On-site",
+    "loanerBtnHint": "Hand out a loaner machine for the repair (barcode or QR link).",
+    "loanerPrompt": "Loaner barcode or QR link (empty: remove loaner):",
+    "loanerSet": "Loaner recorded on the worksheet (with counter snapshot).",
+    "loanerCleared": "Loaner removed from the worksheet.",
+    "loanerBadgeHint": "Loaner machine handed out for the repair.",
+    "acceptInternal": "Accept internally",
+    "acceptInternalHint": "For our own machines the rep/admin decides — no customer quote, work starts immediately.",
+    "acceptInternalConfirm": "Accept this option internally? {name} — the technician is notified to start.",
+    "acceptInternalDone": "Option accepted — the technician can start."
   },
   "myTasks": {
     "title": "My tasks",
@@ -2461,5 +2481,86 @@
     "invoiceCreateConfirm": "Create an invoice for this settlement? ({partner})",
     "invoiceCreated": "Invoice created.",
     "noInvoicePerm": "Creating an invoice requires the invoicing permission."
+  },
+  "cash": {
+    "title": "Cash register",
+    "myRegister": "My register",
+    "central": "Central register (all workers)",
+    "revenue": "Cash revenue",
+    "deposits": "Deposits",
+    "withdrawals": "Withdrawals",
+    "expenses": "Expenses",
+    "balance": "Balance",
+    "date": "Date",
+    "type": "Type",
+    "amount": "Amount",
+    "details": "Details",
+    "worker": "Worker",
+    "note": "Description",
+    "supplier": "Supplier",
+    "receiptNo": "Receipt no.",
+    "addExpense": "Record expense",
+    "addDeposit": "Deposit",
+    "addWithdrawal": "Withdrawal",
+    "entrySaved": "Cash entry saved.",
+    "otherPayments": "other payments",
+    "types": {
+      "expense": "Expense",
+      "deposit": "Deposit",
+      "withdrawal": "Withdrawal"
+    },
+    "formTitles": {
+      "expense": "💸 Record expense",
+      "deposit": "➕ Deposit into worker's register",
+      "withdrawal": "➖ Withdraw from worker's register"
+    }
+  },
+  "stats": {
+    "title": "Statistics",
+    "day": "Today",
+    "week": "Week",
+    "month": "Month",
+    "year": "Year",
+    "custom": "Custom",
+    "byCategory": "Revenue by category (net)",
+    "cats": {
+      "coffee": "Coffee",
+      "goods": "Other goods",
+      "service": "Service",
+      "operations": "Operations (rent, minimum, shortage)"
+    },
+    "revenueTotal": "Total revenue",
+    "expensesTotal": "Total expenses",
+    "byEmployee": "By worker",
+    "byMachine": "By machine",
+    "byMachineHint": "Shows which machines/partners are worth keeping — sorted by net revenue.",
+    "costs": "Cash movements by worker",
+    "net": "Net",
+    "gross": "Gross",
+    "count": "Count",
+    "portions": "Portions",
+    "items": "items",
+    "empty": "No data in this period."
+  },
+  "svcHo": {
+    "title": "Technician handover",
+    "notify": "Notify clients by email (machine ready)",
+    "pickupBtn": "Pick up from technician ({count} · {fee} Ft fee)",
+    "confirm": "Pick up the selected {count} machines? Technician fee total: {fee} Ft. Clients get an email.",
+    "done": "{count} machines picked up — technician fee: {fee} Ft.",
+    "empty": "No machines at technicians.",
+    "feeDue": "Fee due",
+    "worksheet": "Worksheet",
+    "client": "Client",
+    "status": "Status",
+    "fee": "Fee (net)",
+    "ready": "ready",
+    "inProgress": "in progress",
+    "noEmailHint": "No client email on the worksheet — no notification.",
+    "technician": "Technician",
+    "feesTitle": "Picked-up machines — fee summary",
+    "feesHint": "Confirmed net costs of worksheets picked up in the period — the fee due to the technician. Cash purchases/deductions go in the Cash register.",
+    "cashLink": "Cash register (purchases, deductions)",
+    "worksheets": "Worksheets"
   }
 }

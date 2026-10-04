@@ -161,7 +161,10 @@
     "intake": "Átvétel",
     "handover": "Átadás",
     "calendar": "Naptár",
-    "gls": "Csomagok (GLS)"
+    "gls": "Csomagok (GLS)",
+    "cashbox": "Kassza",
+    "stats": "Statisztika",
+    "serviceHandover": "Szerelő-átadás"
   },
   "roles": {
     "admin": "Admin",
@@ -488,7 +491,12 @@
     "autoInvoiceFailed": "Az automata számlázás nem sikerült — a Kiszámlázás gombbal pótolható.",
     "autoBillingBadge": "Automata számlázás",
     "autoBillingHint": "A szerződés szerint a mentés után a számla azonnal kiállítódik.",
-    "fixedPriceHint": "Az adagár a szerződésből / partner-árakból jön — az elszámolásban nem módosítható."
+    "fixedPriceHint": "Az adagár a szerződésből / partner-árakból jön — az elszámolásban nem módosítható.",
+    "reportedBanner": "A partner által bejelentett számláló-állások ELŐTÖLTVE ({by}) — ellenőrizd, és mentsd az elszámolást (a számla automatikusan elkészül).",
+    "pooledBadge": "közös készlet ({count} kávé)",
+    "pooledPrimaryHint": "Összevont kávékészlet: az előző készlet az összes átadott kávé összege; mentés után a teljes maradék erre a kávéra olvad össze.",
+    "pooledHidden": "összevonva",
+    "pooledHiddenHint": "Ez a kávé a közös készletbe olvad — a leltár az összevont soron fut."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1251,7 +1259,19 @@
     "totalLossBadge": "Gazdasági totálkár",
     "totalLossBadgeHint": "A szervizes totálkárosnak jelölte a gépet — az árajánlaton az ügyfél csak a bevizsgálási díj vállalása vagy a tulajdonjog-lemondás közül választhat.",
     "completedBy": "Elvégezte: {name} · {date}",
-    "wsPhoto": "A szervizes munkalap-fotója"
+    "wsPhoto": "A szervizes munkalap-fotója",
+    "onsiteCheckbox": "Helyszíni javítás (egyszerűsített munkalap)",
+    "onsiteCheckboxHint": "Nincs ajánlat-folyamat — a helyszínen a partner/ügyfél ÉS a munkát végző is aláírja a munkalapot.",
+    "onsiteBadge": "Helyszíni",
+    "loanerBtnHint": "Cseregép kiadása a javítás idejére (vonalkód vagy QR-link beírásával/beolvasásával).",
+    "loanerPrompt": "Cseregép vonalkódja vagy QR-linkje (üresen: cseregép törlése a munkalapról):",
+    "loanerSet": "Cseregép rögzítve a munkalapon (számláló-pillanatképpel).",
+    "loanerCleared": "Cseregép törölve a munkalapról.",
+    "loanerBadgeHint": "Kiadott cseregép a javítás idejére.",
+    "acceptInternal": "Elfogadás belsőleg",
+    "acceptInternalHint": "Saját (tárgyi eszköz) gépnél a képviselő/admin dönt — nem megy ki ügyfél-ajánlat, a szervizes azonnal kezdheti a munkát.",
+    "acceptInternalConfirm": "Elfogadod ezt a konstrukciót belső döntéssel? {name} — a szervizes értesítést kap, hogy kezdheti a munkát.",
+    "acceptInternalDone": "Konstrukció elfogadva — a szervizes kezdheti a munkát."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -2461,5 +2481,86 @@
     "invoiceCreateConfirm": "Számla készítése ehhez az elszámoláshoz? ({partner})",
     "invoiceCreated": "Számla kiállítva.",
     "noInvoicePerm": "Számla készítéséhez számlázás jogosultság kell."
+  },
+  "cash": {
+    "title": "Kassza",
+    "myRegister": "Saját kasszám",
+    "central": "Központi kassza (minden dolgozó)",
+    "revenue": "Készpénz-bevétel",
+    "deposits": "Betét",
+    "withdrawals": "Kivét",
+    "expenses": "Költség",
+    "balance": "Egyenleg",
+    "date": "Dátum",
+    "type": "Típus",
+    "amount": "Összeg",
+    "details": "Részletek",
+    "worker": "Dolgozó",
+    "note": "Megnevezés",
+    "supplier": "Beszállító",
+    "receiptNo": "Bizonylatszám",
+    "addExpense": "Költség rögzítése",
+    "addDeposit": "Betét a kasszába",
+    "addWithdrawal": "Kivét a kasszából",
+    "entrySaved": "Kassza-tétel rögzítve.",
+    "otherPayments": "többi fizetési mód",
+    "types": {
+      "expense": "Költség",
+      "deposit": "Betét",
+      "withdrawal": "Kivét"
+    },
+    "formTitles": {
+      "expense": "💸 Költség rögzítése",
+      "deposit": "➕ Betét a dolgozó kasszájába",
+      "withdrawal": "➖ Kivét a dolgozó kasszájából"
+    }
+  },
+  "stats": {
+    "title": "Statisztika",
+    "day": "Ma",
+    "week": "Hét",
+    "month": "Hónap",
+    "year": "Év",
+    "custom": "Egyedi",
+    "byCategory": "Bevétel fajtánként (nettó)",
+    "cats": {
+      "coffee": "Kávé",
+      "goods": "Egyéb áru",
+      "service": "Szerviz",
+      "operations": "Üzemeltetés (bérleti díj, minimum, hiány)"
+    },
+    "revenueTotal": "Bevétel össz.",
+    "expensesTotal": "Költség össz.",
+    "byEmployee": "Dolgozónként",
+    "byMachine": "Gépenként",
+    "byMachineHint": "Ebből látszik, mely gépeket/partnereket érdemes tartani — a lista nettó forgalom szerint csökkenő.",
+    "costs": "Kassza-mozgások dolgozónként",
+    "net": "Nettó",
+    "gross": "Bruttó",
+    "count": "Darab",
+    "portions": "Adag",
+    "items": "tétel",
+    "empty": "Nincs adat az időszakban."
+  },
+  "svcHo": {
+    "title": "Szerelő-átadás",
+    "notify": "Ügyfél-értesítés emailben (átvehető a gép)",
+    "pickupBtn": "Átvétel a szerelőtől ({count} gép · {fee} Ft díj)",
+    "confirm": "Átveszed a kijelölt {count} gépet? A szerelőnek járó díj összesen: {fee} Ft. Az ügyfelek emailt kapnak, hogy a készülék átvehető.",
+    "done": "{count} gép átvéve — a szerelőnek járó díj: {fee} Ft.",
+    "empty": "Nincs gép a szerelőknél.",
+    "feeDue": "Járó díj",
+    "worksheet": "Munkalap",
+    "client": "Ügyfél",
+    "status": "Állapot",
+    "fee": "Díj (nettó)",
+    "ready": "kész",
+    "inProgress": "folyamatban",
+    "noEmailHint": "Nincs ügyfél-email a munkalapon — értesítés nem megy ki.",
+    "technician": "Szerelő",
+    "feesTitle": "Elhozott gépek — díj-összesítés",
+    "feesHint": "Az időszakban elhozott KSZ-munkalapok visszaigazolt nettó költségei — ennyi javítási díj jár a szerelőnek. A készpénzes költései/levonásai a Kasszában könyvelhetők.",
+    "cashLink": "Kassza (költések, levonások)",
+    "worksheets": "Munkalapok"
   }
 }

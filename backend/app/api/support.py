@@ -392,6 +392,20 @@ async def report_counter(
 
     asset.counter = new_total
     db.add(AssetMovement(asset_id=asset.id, action="counter", detail=detail[:512]))
+    # Bejelentés-sor az elszámolás előtöltéséhez: a képviselő az Elszámolás
+    # oldalon a bejelentett állásokkal előtöltve kapja a gép-sort.
+    from app.models import CounterReport
+
+    report = CounterReport(
+        partner_id=asset.partner_id,
+        asset_id=asset.id,
+        barcode=asset.barcode,
+        counters=body.counters or [body.counter],
+        total=new_total,
+        stock_kg=body.stock_kg,
+        reporter_name=reporter,
+    )
+    db.add(report)
     await record_audit(
         db, actor=None, action="support.counter", entity_type="asset",
         entity_id=asset.barcode,
@@ -404,6 +418,12 @@ async def report_counter(
     from app.services.wfm.automation import fire_event
 
     partner = await _asset_partner(db, asset)
+    from app.core.config import get_settings as _gs
+
+    elszamolas_link = (
+        f"{_gs().frontend_origin.rstrip('/')}/elszamolas?partner={partner.id}"
+        if partner else ""
+    )
     fire_event("counter.reported", {
         "_partner_id": partner.id if partner else None,
         "gep_vonalkod": asset.barcode,
@@ -412,6 +432,9 @@ async def report_counter(
         "szamlalo": new_total,
         "elozo_szamlalo": old,
         "keszlet_kg": body.stock_kg,
+        # Kattintható link az értesítés-sablonba: {link} — egyenesen a
+        # partner elszámolására visz, a bejelentett állások előtöltve.
+        "link": elszamolas_link,
     })
     return {"old_counter": old, "new_counter": new_total}
 

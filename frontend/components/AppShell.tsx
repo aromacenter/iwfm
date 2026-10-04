@@ -42,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/szerviz", key: "nav.service", perm: "service", icon: "🔧" },
       { href: "/atvetel", key: "nav.intake", perm: "intake", icon: "📥" },
       { href: "/atadas", key: "nav.handover", perm: "invoicing", icon: "🤝" },
+      { href: "/szerelo-atadas", key: "nav.serviceHandover", perm: "tasks", icon: "🔧" },
       { href: "/tudasbazis", key: "nav.kb", perm: "knowledge", icon: "📚", module: "support" },
       { href: "/beosztas", key: "nav.schedule", perm: "schedule", icon: "🗓️" },
       { href: "/jelenlet", key: "nav.attendance", perm: "attendance", icon: "⏱️" },
@@ -66,6 +67,8 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/elszamolas", key: "nav.settlement", perm: "settlements", icon: "🧾" },
       { href: "/csomagok", key: "nav.gls", perm: "settlements", icon: "📦", module: "gls" },
       { href: "/uzletkoto", key: "nav.agentReport", perm: "agent_report", icon: "💼" },
+      { href: "/kassza", key: "nav.cashbox", perm: "always", icon: "💰", module: "cashbox" },
+      { href: "/statisztika", key: "nav.stats", perm: "agent_report", icon: "📈", module: "stats" },
     ],
   },
   {

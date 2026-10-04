@@ -396,6 +396,20 @@ class Worksheet(Base):
     # A SZERVIZES ügyfélnek szánt megjegyzése — a munkalap ügyfél-példányán
     # és az ajánlat-elfogadó oldalon is megjelenik (árat nem tartalmazhat).
     public_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # HELYSZÍNI javítás: egyszerűsített munkalap — nincs ajánlat-folyamat,
+    # a helyszínen a partner/ügyfél ÉS a munkát végző is aláírja.
+    onsite: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Cseregép a javítás idejére: a kiadott gép + pillanatkép (vonalkód,
+    # számláló-állások a kiadáskor).
+    loaner_asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("assets.id", ondelete="SET NULL", name="fk_ws_loaner_asset"),
+        nullable=True,
+    )
+    loaner_barcode: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    loaner_counters: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Javítási konstrukciók (alternatív ajánlatok árral): [{name, cost_net,
     # price_net}] — a szervizes a saját díjával viszi fel, az ügyfél-példányra
     # a képviselő által beállított ár kerül.
@@ -543,6 +557,41 @@ class WorksheetSettings(Base):
     survey_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class CounterReport(Base):
+    """A partner által (QR-oldalon) bejelentett számláló-állás — az
+    elszámolás-űrlap ebből tölt elő; feldolgozottá a mentés teszi."""
+
+    __tablename__ = "counter_reports"
+    __table_args__ = (
+        Index("ix_counter_reports_partner", "partner_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("partners.id", ondelete="CASCADE", name="fk_creport_partner"),
+        nullable=True,
+    )
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("assets.id", ondelete="CASCADE", name="fk_creport_asset"),
+        nullable=True,
+    )
+    barcode: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    counters: Mapped[list | None] = mapped_column(JSON, nullable=True)  # állásonként
+    total: Mapped[int] = mapped_column(Integer, nullable=False)
+    stock_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reporter_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    settlement_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("settlements.id", ondelete="SET NULL", name="fk_creport_settlement"),
+        nullable=True,
     )
 
 
@@ -2078,6 +2127,13 @@ class AgentExpense(Base):
     expense_date: Mapped[date] = mapped_column(Date, nullable=False)
     amount_gross: Mapped[float] = mapped_column(Float, nullable=False)  # Ft, bruttó
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Kassza-tétel típusa: expense (dolgozói költség, -), deposit (manager
+    # betett a kasszába, +), withdrawal (manager kivett, -).
+    entry_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="expense", server_default="expense"
+    )
+    supplier: Mapped[str | None] = mapped_column(String(256), nullable=True)  # beszállító
+    receipt_no: Mapped[str | None] = mapped_column(String(64), nullable=True)  # bizonylatszám
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_agent_expenses_creator"),
         nullable=True,

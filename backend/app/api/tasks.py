@@ -11,7 +11,7 @@ from __future__ import annotations
 import base64
 import json
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field
@@ -68,6 +68,9 @@ class TaskCreateBody(BaseModel):
     # a visszaigazolt nettó költségek belsők, az ügyfél a -1-es példányt
     # kapja a mi szerviz-árainkkal).
     external_service: bool = False
+    # HELYSZÍNI javítás: egyszerűsített munkalap — nincs ajánlat-folyamat,
+    # mindkét fél a helyszínen írja alá.
+    onsite: bool = False
     # A munkalap tárgy-gépe: ebből jön a karbantartási díj alapértéke és az
     # aláírás utáni auto-számlázás partnere.
     asset_id: str | None = None
@@ -117,6 +120,8 @@ class TaskOut(BaseModel):
     worksheet_completed: bool = False  # kitöltötte-e már a dolgozó
     worksheet_external: bool = False  # külső szerviznek átadott gép munkalapja
     worksheet_total_loss: bool = False  # gazdasági totálkárnak jelölt gép
+    worksheet_onsite: bool = False  # helyszíni munkalap
+    worksheet_loaner: str | None = None  # kiadott cseregép vonalkódja
     asset: dict | None = None  # a munkalaphoz kötött gép adatai (KSZ)
     ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
     ticket_images: list[str] = []  # szervizjegyből jött feladat csatolt képei (id-k)
@@ -181,6 +186,9 @@ class WorksheetBody(BaseModel):
 class WorksheetOut(BaseModel):
     serial: str
     external_service: bool = False
+    onsite: bool = False  # helyszíni javítás (nincs ajánlat-folyamat)
+    loaner_barcode: str | None = None  # kiadott cseregép vonalkódja
+    loaner_counters: list[int] | None = None
     work_description: str
     works: list[WorkItem] = []
     repair_options: list[WorkItem] = []
@@ -243,6 +251,9 @@ def _worksheet_out(
     return WorksheetOut(
         serial=ws.serial,
         external_service=ws.external_service,
+        onsite=ws.onsite,
+        loaner_barcode=ws.loaner_barcode,
+        loaner_counters=ws.loaner_counters,
         work_description=ws.work_description,
         works=[WorkItem(**w) for w in works],
         repair_options=[WorkItem(**w) for w in repair_options],
@@ -602,15 +613,17 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             select(
                 Worksheet.task_id, Worksheet.serial, Worksheet.work_description,
                 Worksheet.external_service, Worksheet.asset_id,
-                Worksheet.total_loss,
+                Worksheet.total_loss, Worksheet.onsite, Worksheet.loaner_barcode,
             ).where(Worksheet.task_id.in_([t.id for t in tasks]))
         )
     ).all()
-    worksheet_serials = {tid: serial for tid, serial, _, _, _, _ in ws_rows}
-    worksheet_done = {tid: bool((desc or "").strip()) for tid, _, desc, _, _, _ in ws_rows}
-    worksheet_external = {tid: ext for tid, _, _, ext, _, _ in ws_rows}
-    worksheet_total_loss = {tid: bool(tl) for tid, _, _, _, _, tl in ws_rows}
-    ws_asset_ids = {tid: aid for tid, _, _, _, aid, _ in ws_rows if aid}
+    worksheet_serials = {r[0]: r[1] for r in ws_rows}
+    worksheet_done = {r[0]: bool((r[2] or "").strip()) for r in ws_rows}
+    worksheet_external = {r[0]: r[3] for r in ws_rows}
+    worksheet_total_loss = {r[0]: bool(r[5]) for r in ws_rows}
+    worksheet_onsite = {r[0]: bool(r[6]) for r in ws_rows}
+    worksheet_loaner = {r[0]: r[7] for r in ws_rows}
+    ws_asset_ids = {r[0]: r[4] for r in ws_rows if r[4]}
     task_assets: dict[uuid.UUID, dict] = {}
     if ws_asset_ids:
         asset_rows = (
@@ -717,6 +730,8 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             worksheet_completed=worksheet_done.get(t.id, False),
             worksheet_external=worksheet_external.get(t.id, False),
             worksheet_total_loss=worksheet_total_loss.get(t.id, False),
+            worksheet_onsite=worksheet_onsite.get(t.id, False),
+            worksheet_loaner=worksheet_loaner.get(t.id),
             asset=task_assets.get(t.id),
             ticket_images=ticket_imgs.get(t.id, []),
             completed_at=t.completed_at,
@@ -851,6 +866,7 @@ async def create_task(
         task_id=task.id,
         serial=await _next_worksheet_serial(db, body.external_service),
         external_service=body.external_service,
+        onsite=body.onsite,
         asset_id=ws_asset.id if ws_asset else None,
         maintenance_fee=ws_asset.maintenance_fee if ws_asset else None,
         work_description="",
@@ -1042,7 +1058,7 @@ async def _build_worksheet_pdf(
     comments = (await _comments_map(db, [task.id])).get(task.id, [])
 
     serial = ws.serial
-    title = None
+    title = "HELYSZÍNI MUNKALAP" if ws.onsite and not ws.external_service else None
     price_column = None
     materials = list(ws.materials or [])
     # Tételes munkadíjak: belső példányon a szerviz költsége (cost_net),
@@ -1135,6 +1151,18 @@ async def _build_worksheet_pdf(
 
         handover_url = (
             f"{get_settings().frontend_origin.rstrip('/')}/atadas?task={task.id}"
+        )
+
+    # Cseregép-sor: minden példányon látszik, hogy a javítás idejére milyen
+    # gépet adtunk ki (vonalkód + kiadáskori számláló-állások).
+    if ws.loaner_barcode:
+        counters_txt = (
+            " · számlálók: " + " + ".join(str(c) for c in ws.loaner_counters)
+            if ws.loaner_counters else ""
+        )
+        loaner_line = f"Cseregép a javítás idejére: {ws.loaner_barcode}{counters_txt}"
+        work_description = (
+            f"{work_description}\n{loaner_line}" if work_description else loaner_line
         )
 
     pdf = build_worksheet_pdf(
@@ -1572,6 +1600,128 @@ async def my_upsert_worksheet(
         await _upsert_worksheet(db, task, body, user, request, preserve_prices=True),
         for_worker=True,
     )
+
+
+class LoanerBody(BaseModel):
+    """Cseregép kiadása a javítás idejére — vonalkód vagy QR-token alapján;
+    None/üres = a cseregép visszavétele a munkalapról."""
+
+    code: str | None = Field(default=None, max_length=256)
+
+
+@router.post("/{task_id}/loaner", response_model=WorksheetOut)
+async def set_loaner(
+    task_id: str,
+    body: LoanerBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """Cseregép rögzítése a munkalapon: a kód (vonalkód / QR-token / QR-URL)
+    alapján a gép adatai — vonalkód, számláló-állások — automatikusan
+    kitöltődnek pillanatképként."""
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    if not (body.code or "").strip():
+        ws.loaner_asset_id = None
+        ws.loaner_barcode = None
+        ws.loaner_counters = None
+        detail = {"cleared": True}
+    else:
+        raw = body.code.strip()
+        lookup = raw.split("?")[0].rstrip("/").split("/")[-1] if "/" in raw else raw
+        asset = (
+            await db.execute(select(Asset).where(Asset.barcode == lookup))
+        ).scalar_one_or_none()
+        if asset is None:
+            asset = (
+                await db.execute(select(Asset).where(Asset.qr_token == lookup))
+            ).scalar_one_or_none()
+        if asset is None:
+            raise HTTPException(status_code=404, detail={"code": "asset.barcode_not_found"})
+        ws.loaner_asset_id = asset.id
+        ws.loaner_barcode = asset.barcode
+        # Számláló-pillanatkép kiadáskor (több számlálós gépnél állásonként)
+        ws.loaner_counters = (
+            asset.counters if isinstance(asset.counters, list) and asset.counters
+            else ([asset.counter] if asset.counter is not None else None)
+        )
+        detail = {"barcode": asset.barcode, "counters": ws.loaner_counters}
+    await record_audit(
+        db, actor=actor, action="worksheet.loaner", entity_type="worksheet",
+        entity_id=ws.serial, detail=detail, request=request,
+    )
+    await db.commit()
+    await db.refresh(ws)
+    return _worksheet_out(ws)
+
+
+class InternalAcceptBody(BaseModel):
+    option_name: str = Field(min_length=1, max_length=1000)
+
+
+@router.post("/{task_id}/quote/accept-internal", response_model=WorksheetOut)
+async def quote_accept_internal(
+    task_id: str,
+    body: InternalAcceptBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """Konstrukció BELSŐ elfogadása (saját tárgyi eszköz gépnél): a
+    képviselő/admin dönt a szervizes konstrukciói közül — nem megy ki
+    ügyfél-ajánlat, nem kell külsős ár. Az elfogadás után a szervizes
+    azonnal kezdheti a munkát (Telegram-értesítést kap)."""
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    if (ws.quote_status or "none") in ("accepted", "declined"):
+        raise HTTPException(status_code=422, detail={"code": "quote.already_accepted"})
+    chosen = next(
+        (
+            w for w in (ws.repair_options or [])
+            if (w.get("name") or "").strip() == body.option_name.strip()
+        ),
+        None,
+    )
+    if chosen is None:
+        raise HTTPException(status_code=422, detail={"code": "quote.bad_option"})
+    ws.repair_options = [chosen]
+    ws.quote_status = "accepted"
+    ws.quote_selected_name = chosen.get("name")
+    ws.quote_accepted_by = f"{actor.display_name} (belső döntés)"
+    ws.quote_accepted_at = datetime.now(UTC)
+    await record_audit(
+        db, actor=actor, action="worksheet.quote_accept_internal",
+        entity_type="worksheet", entity_id=ws.serial,
+        detail={"option": chosen.get("name")}, request=request,
+    )
+    await db.commit()
+    # Szervizes értesítése (ár nélkül) — kattintható linkkel
+    try:
+        from app.core.config import get_settings as _gs3
+        from app.services.wfm.telegram import send_personal
+
+        emp = (
+            await db.execute(select(Employee).where(Employee.id == task.employee_id))
+        ).scalar_one_or_none()
+        if emp is not None:
+            link = f"{_gs3().frontend_origin.rstrip('/')}/feladataim?task={task.id}"
+            msg = (
+                f"🟢 Konstrukció elfogadva (belső döntés): {ws.serial} — a munka kezdhető!\n"
+                f"Kiválasztva: {chosen.get('name')}\n"
+                f"🔗 {link}"
+            )
+            await send_personal(db, emp, msg)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("internal accept notify failed", exc_info=True)
+    await db.refresh(ws)
+    return _worksheet_out(ws)
 
 
 class WsPhotosBody(BaseModel):
@@ -2167,6 +2317,182 @@ async def _handover_row(db: AsyncSession, task: Task, ws: Worksheet) -> dict:
         "total_net": total,
         "total_gross": round(total * 1.27, 0),
     }
+
+
+def _service_fee_total(ws: Worksheet) -> float:
+    """A külsős szerelőnek járó javítási díj egy munkalapon: a visszaigazolt
+    NETTÓ költségek (munkadíjak + elfogadott konstrukció + anyagköltség)."""
+    total = 0.0
+    for w in ws.works or []:
+        if w.get("cost_net") is not None:
+            total += float(w["cost_net"])
+    for w in ws.repair_options or []:
+        if w.get("cost_net") is not None:
+            total += float(w["cost_net"])
+    for m in ws.materials or []:
+        if m.get("cost_net") is not None:
+            try:
+                qty = float(str(m.get("qty", "1")).replace(",", "."))
+            except ValueError:
+                qty = 1.0
+            total += float(m["cost_net"]) * (qty if qty > 0 else 1.0)
+    return round(total, 2)
+
+
+@router.get("/service-handover/list")
+async def service_handover_list(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("tasks")),
+):
+    """A külsős szerelőnél lévő (még el nem hozott) KSZ-gépek, szerelőnként
+    csoportosítható: munkalap + gép + ügyfél + a szerelőnek járó díj."""
+    rows = (
+        await db.execute(
+            select(Worksheet, Task)
+            .join(Task, Task.id == Worksheet.task_id)
+            .where(
+                Worksheet.external_service.is_(True),
+                Worksheet.picked_up_at.is_(None),
+            )
+            .order_by(Worksheet.created_at)
+            .limit(300)
+        )
+    ).all()
+    emp_ids = {t.employee_id for _, t in rows}
+    emp_names: dict = {}
+    if emp_ids:
+        for e in (
+            await db.execute(select(Employee).where(Employee.id.in_(emp_ids)))
+        ).scalars():
+            emp_names[e.id] = f"{e.last_name} {e.first_name}"
+    out = []
+    for ws, task in rows:
+        out.append({
+            "task_id": str(task.id),
+            "serial": ws.serial,
+            "title": task.title,
+            "client_name": ws.client_name,
+            "employee_id": str(task.employee_id),
+            "employee_name": emp_names.get(task.employee_id),
+            "quote_status": ws.quote_status or "none",
+            "completed": bool((ws.work_description or "").strip()),
+            "fee_total": _service_fee_total(ws),
+            "quote_email": ws.quote_email,
+        })
+    return out
+
+
+class ServicePickupBody(BaseModel):
+    task_ids: list[str] = Field(min_length=1, max_length=100)
+    notify: bool = True  # ügyfél-email: a készülék átvehető
+
+
+@router.post("/service-handover/pickup")
+async def service_handover_pickup(
+    body: ServicePickupBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """A szerelő átadja nekünk a nála lévő kész gépeket (tömegesen): a
+    munkalapok elhozottá válnak, az ügyfelek (best-effort) emailt kapnak,
+    és összesítjük, mennyi javítási díj jár a szerelőnek."""
+    from app.services.wfm.email_service import load_smtp_config, send_email
+
+    smtp = await load_smtp_config(db) if body.notify else None
+    picked = 0
+    fee_total = 0.0
+    fees_by_emp: dict = {}
+    serials = []
+    for tid in body.task_ids:
+        try:
+            task = await _get_task_or_404(db, tid)
+        except HTTPException:
+            continue
+        ws = await _get_worksheet(db, task.id)
+        if ws is None or not ws.external_service or ws.picked_up_at is not None:
+            continue
+        ws.picked_up_at = datetime.now(UTC)
+        picked += 1
+        serials.append(ws.serial)
+        fee = _service_fee_total(ws)
+        fee_total += fee
+        fees_by_emp[str(task.employee_id)] = fees_by_emp.get(str(task.employee_id), 0.0) + fee
+        if smtp is not None and ws.quote_email:
+            try:
+                body_lines = [
+                    "Tisztelt Ügyfelünk!",
+                    "",
+                    f"A(z) {ws.serial} munkalapon szereplő készülék javítása"
+                    " elkészült, a gép átvehető üzletünkben.",
+                    "",
+                    "Kérjük a +36 30 190 9071-es telefonszámon egyeztessen"
+                    " időpontot kollégánkkal, hogy mikor tudjuk átadni az"
+                    " elkészült készüléket.",
+                    "",
+                    "Üdvözlettel,",
+                    "X-Presso szerviz",
+                ]
+                await send_email(
+                    smtp, ws.quote_email,
+                    f"A javítás elkészült — a gép átvehető ({ws.serial})",
+                    "\n".join(body_lines),
+                )
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).warning("pickup notify failed", exc_info=True)
+    await record_audit(
+        db, actor=actor, action="worksheet.service_pickup", entity_type="worksheet",
+        entity_id=",".join(serials)[:256],
+        detail={"count": picked, "fee_total": round(fee_total, 2)}, request=request,
+    )
+    await db.commit()
+    return {"picked": picked, "fee_total": round(fee_total, 2), "fees_by_employee": fees_by_emp}
+
+
+@router.get("/service-handover/fees")
+async def service_fees(
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("tasks")),
+):
+    """Szerelőnkénti díj-összesítés: az időszakban elhozott KSZ-munkalapok
+    visszaigazolt költségei — ennyi javítási díj jár a szerelőnek."""
+    q = (
+        select(Worksheet, Task)
+        .join(Task, Task.id == Worksheet.task_id)
+        .where(
+            Worksheet.external_service.is_(True),
+            Worksheet.picked_up_at.is_not(None),
+        )
+    )
+    if date_from:
+        q = q.where(Worksheet.picked_up_at >= datetime.combine(date_from, time.min))
+    if date_to:
+        q = q.where(Worksheet.picked_up_at <= datetime.combine(date_to, time.max))
+    rows = (await db.execute(q)).all()
+    emp_ids = {t.employee_id for _, t in rows}
+    emp_names: dict = {}
+    if emp_ids:
+        for e in (
+            await db.execute(select(Employee).where(Employee.id.in_(emp_ids)))
+        ).scalars():
+            emp_names[e.id] = f"{e.last_name} {e.first_name}"
+    agg: dict = {}
+    for ws, task in rows:
+        key = str(task.employee_id)
+        row = agg.setdefault(key, {
+            "employee_id": key,
+            "employee_name": emp_names.get(task.employee_id),
+            "fee_total": 0.0, "count": 0, "serials": [],
+        })
+        row["fee_total"] = round(row["fee_total"] + _service_fee_total(ws), 2)
+        row["count"] += 1
+        if len(row["serials"]) < 50:
+            row["serials"].append(ws.serial)
+    return sorted(agg.values(), key=lambda r: -r["fee_total"])
 
 
 @router.get("/handovers/list")

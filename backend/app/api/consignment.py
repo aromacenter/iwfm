@@ -741,6 +741,11 @@ class SettlementCtxMachine(BaseModel):
     counters: list[int] | None  # több számlálós gép aktuális állásai
     counter_names: list[str | None] | None  # szabadszavas számláló-nevek
     counter_prices: list[float | None] | None  # szerződéses adagár számlálónként
+    # A partner által bejelentett (még fel nem dolgozott) állások — az űrlap
+    # ezekkel tölti elő az új számláló-mezőket.
+    reported_counters: list[int] | None = None
+    reported_at: datetime | None = None
+    reported_by: str | None = None
     prev_counter: int  # az utolsó elszámoláskori állás (vagy a gép aktuális)
     last_settled_at: datetime | None
     default_product_id: str | None
@@ -815,9 +820,28 @@ async def settlement_context(
         for p in (await db.execute(select(Product.id, Product.name).select_from(Product))).all()
     } if assets else {}
 
+    # Feldolgozatlan számláló-bejelentések gépenként (a legutóbbi számít)
+    from app.models import CounterReport
+
+    reports: dict = {}
+    if assets:
+        rep_rows = (
+            await db.execute(
+                select(CounterReport)
+                .where(
+                    CounterReport.asset_id.in_([a.id for a in assets]),
+                    CounterReport.processed_at.is_(None),
+                )
+                .order_by(CounterReport.created_at)
+            )
+        ).scalars().all()
+        for r in rep_rows:
+            reports[r.asset_id] = r  # a legutóbbi marad
+
     machines = []
     for a in assets:
         prev, last_at = await _machine_prev_counter(db, a)
+        rep = reports.get(a.id)
         machines.append(SettlementCtxMachine(
             asset_id=str(a.id),
             barcode=a.barcode,
@@ -830,6 +854,9 @@ async def settlement_context(
             last_settled_at=last_at,
             default_product_id=str(a.default_product_id) if a.default_product_id else None,
             product_name=product_names.get(a.default_product_id),
+            reported_counters=(rep.counters if rep else None),
+            reported_at=(rep.created_at if rep else None),
+            reported_by=(rep.reporter_name if rep else None),
         ))
 
     # A gép termék-tartaléka csak KÁVÉ (bizományos) lehet — a darabra menő
@@ -1105,6 +1132,10 @@ class SettlementLineIn(BaseModel):
     # Készlethiány kg-árának felülírása (Ft/kg, nettó) — None: beszerzési ár,
     # annak híján az adagár kg-egyenértéke.
     kg_price: float | None = Field(default=None, ge=0)
+    # ÖSSZEVONT kávékészlet: a partnernél többféle kávé van, de EGY közös
+    # készletként kezeljük — az előző készlet az összes bizományos termék
+    # összege, és mentés után a teljes készlet a sor termékére olvad össze.
+    pooled: bool = False
 
 
 class SettlementMachineIn(BaseModel):
@@ -1787,6 +1818,21 @@ async def create_settlement(
             )
         ).scalar_one_or_none()
         previous = stock.quantity if stock is not None else 0.0
+        # Összevont kávékészlet: az előző mennyiség az ÖSSZES bizományos
+        # termék készletének összege (többféle átadott kávé egy kalap alatt).
+        pooled_stocks: list[PartnerStock] | None = None
+        if line_in.pooled and product.is_consignment:
+            pooled_stocks = (
+                await db.execute(
+                    select(PartnerStock)
+                    .join(Product, Product.id == PartnerStock.product_id)
+                    .where(
+                        PartnerStock.partner_id == partner.id,
+                        Product.is_consignment.is_(True),
+                    )
+                )
+            ).scalars().all()
+            previous = sum(ps.quantity for ps in pooled_stocks)
         consumed = max(previous - line_in.physical_qty, 0.0)
         # Számlázott adagszám (erősorrend): a gép-sorok összege erre a
         # termékre → a kézzel megadott számláló-adag → a kg-fogyásból számolva.
@@ -1801,12 +1847,26 @@ async def create_settlement(
                     "from": unit_price, "to": line_in.price_per_portion,
                 })
             unit_price = line_in.price_per_portion
+        pooled_pids = (
+            [ps.product_id for ps in pooled_stocks] if pooled_stocks is not None else []
+        )
         if not product.is_consignment:
             # NEM kávé (pl. tejszín): darabra megy — fogyás × egységár, az
             # adag-logika és a gép-számlálók nem érintik.
             portions = consumed
             amount_net = _money(consumed * unit_price)
             cross_portions: float | None = None
+        elif pooled_pids and any(pid in machine_billed for pid in pooled_pids):
+            # Összevont készlet: a gépek AKÁRMELYIK kávéra számláztak, a
+            # pool-sor az összeset képviseli (dupla számlázás kizárva).
+            portions = sum(machine_billed[p] for p in pooled_pids if p in machine_billed)
+            amount_net = _money(
+                sum(machine_amount[p] for p in pooled_pids if p in machine_billed)
+            )
+            cross_portions = sum(
+                machine_brewed[p] for p in pooled_pids if p in machine_brewed
+            )
+            settled_pids.update(p for p in pooled_pids if p in machine_billed)
         elif product.id in machine_billed:
             portions = machine_billed[product.id]
             amount_net = _money(machine_amount[product.id])
@@ -1879,6 +1939,19 @@ async def create_settlement(
                 total_net += short_net
                 total_gross += _money(short_net * (1 + line_vat / 100))
         # A könyv szerinti készlet a leltár utáni fizikai mennyiségre áll.
+        # Összevont készletnél a többi kávé-sor 0-ra áll, és a teljes maradék
+        # a sor termékére olvad össze (mozgás-naplóval).
+        if pooled_stocks is not None:
+            for ps in pooled_stocks:
+                if ps.product_id != product.id and ps.quantity:
+                    db.add(StockMovement(
+                        partner_id=partner.id, product_id=ps.product_id,
+                        action="settlement", quantity_delta=-ps.quantity,
+                        settlement_id=settlement.id,
+                        note="Készlet-összevonás (közös kávékészlet)",
+                        actor_user_id=actor.id,
+                    ))
+                    ps.quantity = 0.0
         if stock is None:
             stock = PartnerStock(
                 partner_id=partner.id, product_id=product.id, quantity=line_in.physical_qty
@@ -2117,6 +2190,23 @@ async def create_settlement(
                 "keszlet_kg": line_in.physical_qty,
                 "kuszob_kg": threshold,
             })
+
+    # A partner feldolgozatlan számláló-bejelentései lezárulnak — ez az
+    # elszámolás dolgozta fel őket.
+    from app.models import CounterReport as _CR
+
+    open_reports = (
+        await db.execute(
+            select(_CR).where(
+                _CR.partner_id == partner.id, _CR.processed_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for r in open_reports:
+        r.processed_at = datetime.now(UTC)
+        r.settlement_id = settlement.id
+    if open_reports:
+        await db.commit()
 
     # Automata számlázás: MINDEN elszámolás mentése után a számla azonnal
     # kiállítódik (kivéve a kedvezményes / ÁFA nélkülit) — best-effort: hiba
@@ -2397,7 +2487,10 @@ async def settlement_summary(
     # Képviselői költségek az időszakban — a kasszából (készpénz) levonódnak.
     from app.models import AgentExpense
 
-    exp_q = select(sa_func.coalesce(sa_func.sum(AgentExpense.amount_gross), 0.0))
+    exp_q = select(
+        AgentExpense.entry_type,
+        sa_func.coalesce(sa_func.sum(AgentExpense.amount_gross), 0.0),
+    ).group_by(AgentExpense.entry_type)
     if settled_by:
         try:
             exp_q = exp_q.where(AgentExpense.user_id == uuid.UUID(settled_by))
@@ -2407,7 +2500,10 @@ async def settlement_summary(
         exp_q = exp_q.where(AgentExpense.expense_date >= date_from)
     if date_to:
         exp_q = exp_q.where(AgentExpense.expense_date <= date_to)
-    expenses_total = float((await db.execute(exp_q)).scalar_one() or 0.0)
+    by_type = {et or "expense": float(total or 0.0) for et, total in (await db.execute(exp_q)).all()}
+    expenses_total = by_type.get("expense", 0.0)
+    deposits_total = by_type.get("deposit", 0.0)
+    withdrawals_total = by_type.get("withdrawal", 0.0)
 
     return {
         "by_payment": by_payment,
@@ -2416,8 +2512,13 @@ async def settlement_summary(
         "total_gross": _money(sum(s.total_gross for s in settlements)),
         "count": len(settlements),
         "expenses_total": _money(expenses_total),
-        # Kassza: készpénzes bruttó bevétel − rögzített költségek
-        "cash_balance": _money(by_payment["cash"]["gross"] - expenses_total),
+        "deposits_total": _money(deposits_total),
+        "withdrawals_total": _money(withdrawals_total),
+        # Kassza: készpénzes bruttó bevétel + betétek − kivétek − költségek
+        "cash_balance": _money(
+            by_payment["cash"]["gross"] + deposits_total
+            - withdrawals_total - expenses_total
+        ),
     }
 
 
@@ -2429,6 +2530,11 @@ class ExpenseBody(BaseModel):
     note: str | None = Field(default=None, max_length=512)
     expense_date: date | None = None  # None = ma
     user_id: str | None = None  # csak invoicing joggal írható más nevére
+    # Kassza-tétel: expense (költség) | deposit (betét, +) | withdrawal
+    # (kivét, -). Betét/kivét CSAK invoicing joggal rögzíthető.
+    entry_type: str = Field(default="expense", pattern="^(expense|deposit|withdrawal)$")
+    supplier: str | None = Field(default=None, max_length=256)  # beszállító
+    receipt_no: str | None = Field(default=None, max_length=64)  # bizonylatszám
 
 
 class ExpenseOut(BaseModel):
@@ -2438,6 +2544,9 @@ class ExpenseOut(BaseModel):
     expense_date: date
     amount_gross: float
     note: str | None
+    entry_type: str = "expense"
+    supplier: str | None = None
+    receipt_no: str | None = None
     created_at: datetime
 
 
@@ -2475,7 +2584,8 @@ async def list_expenses(
         ExpenseOut(
             id=str(r.id), user_id=str(r.user_id), user_name=names.get(r.user_id),
             expense_date=r.expense_date, amount_gross=r.amount_gross,
-            note=r.note, created_at=r.created_at,
+            note=r.note, entry_type=r.entry_type or "expense",
+            supplier=r.supplier, receipt_no=r.receipt_no, created_at=r.created_at,
         )
         for r in rows
     ]
@@ -2494,10 +2604,14 @@ async def create_expense(
     from app.models import AgentExpense
 
     target_id = actor.id
-    if body.user_id and body.user_id != str(actor.id):
+    needs_invoicing = (body.user_id and body.user_id != str(actor.id)) or (
+        body.entry_type in ("deposit", "withdrawal")
+    )
+    if needs_invoicing:
         matrix = await get_permission_matrix(db)
         if "invoicing" not in permissions_for(actor.role, matrix):
             raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+    if body.user_id and body.user_id != str(actor.id):
         try:
             target_id = uuid.UUID(body.user_id)
         except ValueError:
@@ -2507,6 +2621,9 @@ async def create_expense(
         expense_date=body.expense_date or date.today(),
         amount_gross=body.amount_gross,
         note=body.note,
+        entry_type=body.entry_type,
+        supplier=(body.supplier or "").strip() or None,
+        receipt_no=(body.receipt_no or "").strip() or None,
         created_by=actor.id,
     )
     db.add(exp)
@@ -2520,7 +2637,8 @@ async def create_expense(
     return ExpenseOut(
         id=str(exp.id), user_id=str(exp.user_id), user_name=actor.display_name,
         expense_date=exp.expense_date, amount_gross=exp.amount_gross,
-        note=exp.note, created_at=exp.created_at,
+        note=exp.note, entry_type=exp.entry_type, supplier=exp.supplier,
+        receipt_no=exp.receipt_no, created_at=exp.created_at,
     )
 
 

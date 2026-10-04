@@ -18,6 +18,7 @@ from app.models.models import (  # noqa: F401
     CourierSettings,
     Employee,
     EmployeeSkill,
+    CounterReport,
     GlsParcel,
     IntakePhoto,
     GlsSettings,

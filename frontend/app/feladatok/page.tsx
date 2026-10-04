@@ -41,6 +41,8 @@ interface TaskOut {
   completed_at: string | null;
   completed_by_name: string | null;
   worksheet_photos: string[];
+  worksheet_onsite: boolean;
+  worksheet_loaner: string | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -64,6 +66,8 @@ export default function FeladatokPage() {
   const [statusFilter, setStatusFilter] = useState("open");
   const [kindFilter, setKindFilter] = useState<"all" | "normal" | "external">("all");
   const [externalService, setExternalService] = useState(false);
+  // Helyszíni javítás: egyszerűsített munkalap, nincs ajánlat-folyamat
+  const [onsite, setOnsite] = useState(false);
   // KSZ-munkalap tárgy-gépe: ebből jön a karbantartási díj és a számlázási partner
   const [taskAssetId, setTaskAssetId] = useState("");
   const [assetOptions, setAssetOptions] = useState<{ id: string; name: string; barcode: string; partner_name: string | null; manufacturer: string | null; category: string | null; article_number: string | null; serial_number: string | null }[]>([]);
@@ -241,11 +245,13 @@ export default function FeladatokPage() {
         client_name: form.client_name || null,
         client_location: form.client_location || null,
         external_service: externalService,
+        onsite: !externalService && onsite,
         asset_id: externalService && assetIdForTask ? assetIdForTask : null,
         intake_id: intakeIdForTask,
       });
       setShowForm(false);
       setExternalService(false);
+      setOnsite(false);
       setIntakeIdForTask(null);
       setTaskAssetId("");
       setNewAssetMode(false);
@@ -352,6 +358,35 @@ export default function FeladatokPage() {
     quote_selected_name: string | null;
     picked_up_at: string | null;
   }
+  async function acceptInternal(optionName: string) {
+    if (!priceEdit) return;
+    if (!(await confirm(t("tasks.acceptInternalConfirm", { name: optionName })))) return;
+    try {
+      await api.post(`/api/tasks/${priceEdit.task.id}/quote/accept-internal`, {
+        option_name: optionName,
+      });
+      toast(t("tasks.acceptInternalDone"), "success");
+      setPriceEdit(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function setLoaner(task: TaskOut) {
+    const code = await prompt(t("tasks.loanerPrompt"), {
+      initial: task.worksheet_loaner ?? "",
+    });
+    if (code === null) return;
+    try {
+      await api.post(`/api/tasks/${task.id}/loaner`, { code: code.trim() || null });
+      toast(code.trim() ? t("tasks.loanerSet") : t("tasks.loanerCleared"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[]; workPrices: string[]; repairPrices: string[]; fee: string; discount: boolean; customerNote: string } | null>(null);
 
   async function openPriceEdit(task: TaskOut) {
@@ -569,6 +604,19 @@ export default function FeladatokPage() {
                       🔧 {t("tasks.externalBadge")}
                     </span>
                   )}
+                  {task.worksheet_onsite && (
+                    <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-700">
+                      📍 {t("tasks.onsiteBadge")}
+                    </span>
+                  )}
+                  {task.worksheet_loaner && (
+                    <span
+                      title={t("tasks.loanerBadgeHint")}
+                      className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700"
+                    >
+                      🚐 {task.worksheet_loaner}
+                    </span>
+                  )}
                   {task.worksheet_total_loss && (
                     <span
                       title={t("tasks.totalLossBadgeHint")}
@@ -612,6 +660,13 @@ export default function FeladatokPage() {
               <div className="flex gap-2">
                 {task.worksheet_serial && (
                   <>
+                    <button
+                      onClick={() => void setLoaner(task)}
+                      title={t("tasks.loanerBtnHint")}
+                      className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${task.worksheet_loaner ? "border-sky-300 bg-sky-50 text-sky-800" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
+                    >
+                      🚐
+                    </button>
                     {/* KSZ: alapból az ÜGYFÉL példánya — a belső (költséges) külön gombra */}
                     {task.worksheet_external ? (
                       <>
@@ -805,12 +860,24 @@ export default function FeladatokPage() {
               <input
                 type="checkbox"
                 checked={externalService}
-                onChange={(e) => setExternalService(e.target.checked)}
+                onChange={(e) => { setExternalService(e.target.checked); if (e.target.checked) setOnsite(false); }}
                 className="mt-0.5 h-4 w-4"
               />
               <span>
                 <span className="font-semibold">🔧 {t("tasks.externalCheckbox")}</span>
                 <span className="mt-0.5 block text-xs text-orange-700">{t("tasks.externalCheckboxHint")}</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
+              <input
+                type="checkbox"
+                checked={onsite}
+                onChange={(e) => { setOnsite(e.target.checked); if (e.target.checked) setExternalService(false); }}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                <span className="font-semibold">📍 {t("tasks.onsiteCheckbox")}</span>
+                <span className="mt-0.5 block text-xs text-teal-700">{t("tasks.onsiteCheckboxHint")}</span>
               </span>
             </label>
             {externalService && (
@@ -945,7 +1012,19 @@ export default function FeladatokPage() {
                 <tbody>
                   {priceEdit.ws.repair_options.map((w, i) => (
                     <tr key={i} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2">🛠 {w.name}</td>
+                      <td className="py-1.5 pr-2">
+                        🛠 {w.name}
+                        {priceEdit.ws.quote_status !== "accepted" && priceEdit.ws.quote_status !== "declined" && (
+                          <button
+                            type="button"
+                            onClick={() => void acceptInternal(w.name)}
+                            title={t("tasks.acceptInternalHint")}
+                            className="ml-2 rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+                          >
+                            ✓ {t("tasks.acceptInternal")}
+                          </button>
+                        )}
+                      </td>
                       <td className="py-1.5 pr-2 text-right text-orange-700">
                         {w.cost_net != null ? `${w.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
                       </td>
