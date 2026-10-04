@@ -549,7 +549,8 @@
     "orderNotePh": "e.g. urgent, runs out by the weekend…",
     "orderSubmit": "Send order",
     "orderDoneTitle": "Thank you, your order has been recorded!",
-    "orderDoneText": "Order ID: {order}. Our colleague will bring the items on the next visit."
+    "orderDoneText": "Order ID: {order}. Our colleague will bring the items on the next visit.",
+    "productSearchPh": "Search by name or code…"
   },
   "orders": {
     "title": "Incoming orders ({count})",
@@ -1248,7 +1249,9 @@
     "pickupDone": "Recorded — the customer was notified: machine ready for pickup.",
     "pickedUpAt": "Machine picked up ({date}) — customer notified, ready for pickup.",
     "totalLossBadge": "Economic total loss",
-    "totalLossBadgeHint": "Marked as total loss by the technician — the quote offers only the inspection fee or renouncing ownership."
+    "totalLossBadgeHint": "Marked as total loss by the technician — the quote offers only the inspection fee or renouncing ownership.",
+    "completedBy": "Completed by {name} · {date}",
+    "wsPhoto": "Technician's worksheet photo"
   },
   "myTasks": {
     "title": "My tasks",
@@ -1325,7 +1328,13 @@
     "sigSaveSample": "Save as sample",
     "sigSampleSaved": "Signature sample saved — next time it's one click!",
     "wsSignerName": "Signer's name (required for the client signature)",
-    "wsSignerNameRequired": "The client signature requires the signer's typed name."
+    "wsSignerNameRequired": "The client signature requires the signer's typed name.",
+    "wsPublicNote": "Note to the customer",
+    "wsPublicNotePh": "e.g. what differs between the repair options…",
+    "wsPublicNoteHint": "Shown on the customer worksheet copy AND the quote page — do not include prices.",
+    "intakePhotos": "Intake photos",
+    "wsPhotosHint": "📷 Attach photos to the worksheet — repair state, from a phone too.",
+    "wsPhotosUploaded": "{count} photo(s) attached to the worksheet."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1758,7 +1767,9 @@
       "already_handed_over": "The courier already picked up this parcel — it can no longer be deleted."
     },
     "settlement.invoice_pdf_unavailable": "Invoice image / resend is not available with the configured provider.",
-    "intake.contact_required": "Phone number and email are required for intake."
+    "intake.contact_required": "Phone number and email are required for intake.",
+    "worksheet.too_many_photos": "At most 16 photos can be attached to a worksheet.",
+    "worksheet.photo_not_found": "Photo not found."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2130,7 +2141,11 @@
     "machineTerms": "machine-level terms",
     "machineTermsHint": "The partner's machines carry contract terms (rent / minimum / per-counter prices) — settlements compute fine; only the partner-level contract record (validity, schedule, default coffee) is missing. Add it via Partners → 📜.",
     "autoBilling": "Automatic invoicing",
-    "autoBillingHint": "After a settlement saved from dictated counter readings, the invoice is issued immediately without a click (cash/card: paid; transfer: with due date)."
+    "autoBillingHint": "After a settlement saved from dictated counter readings, the invoice is issued immediately without a click (cash/card: paid; transfer: with due date).",
+    "invoiceNorma": "Invoice norma (portions/kg)",
+    "invoiceNormaPh": "e.g. 80",
+    "invoiceNormaHint": "If set: the invoice comment shows brewable portions from handed-over coffee (with this norma), and the coffee appears as a 0 Ft line. Affects no other calculation.",
+    "sumInvoiceNorma": "invoice norma: {n}/kg"
   },
   "delivery": {
     "title": "Delivery (delivery note)",

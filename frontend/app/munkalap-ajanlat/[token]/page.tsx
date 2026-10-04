@@ -26,6 +26,7 @@ interface QuoteInfo {
   total_loss: boolean;
   survey_fee_net: number;
   survey_fee_gross: number;
+  public_note: string | null; // a szervizes megjegyzése az ügyfélnek
   options: QuoteOption[];
 }
 
@@ -102,6 +103,13 @@ export default function MunkalapAjanlatPage() {
         <h1 className="mt-1 text-2xl font-semibold">{info.serial}</h1>
         {info.machine && <p className="mt-1 text-sm text-slate-600">☕ {info.machine}</p>}
         {info.client_name && <p className="text-sm text-slate-500">{info.client_name} részére</p>}
+        {/* A szervizes megjegyzése az ügyfélnek — pl. a konstrukciók közti
+            különbség magyarázata */}
+        {info.public_note && (
+          <p className="mt-3 whitespace-pre-wrap rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-left text-sm text-sky-900">
+            💬 {info.public_note}
+          </p>
+        )}
       </header>
 
       {accepted ? (

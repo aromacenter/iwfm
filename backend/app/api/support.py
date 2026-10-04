@@ -270,7 +270,8 @@ async def support_info(token: str, db: AsyncSession = Depends(get_db)):
         "contact_name": partner.contact_name if partner else None,
         "contact_phone": partner.contact_phone if partner else None,
         "products": [
-            {"id": str(p.id), "name": p.name, "unit": p.unit} for p in products
+            {"id": str(p.id), "name": p.name, "unit": p.unit, "code": p.code}
+            for p in products
         ],
     }
 

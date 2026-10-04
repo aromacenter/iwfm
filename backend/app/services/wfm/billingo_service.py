@@ -90,6 +90,18 @@ async def settlement_invoice_items(db: AsyncSession, settlement: Settlement) -> 
         consignment_ids = set(rows)
     items = []
     for line in lines:
+        # A 0 Ft-os "utólagos adagelszámolásra átadva" kávésor a számlára
+        # kerül a saját nevén, kg-ban.
+        if "utólagos adagelszámolásra átadva" in line.product_name:
+            items.append({
+                "name": line.product_name,
+                "unit_price": 0.0,
+                "unit_price_type": "net",
+                "quantity": round(line.portions, 2),
+                "unit": "kg",
+                "vat": _vat_label(line.vat_percent),
+            })
+            continue
         if line.portions <= 0:
             continue
         portion_based = (
@@ -181,6 +193,78 @@ async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> in
     return int(created["id"])
 
 
+async def settlement_invoice_comment(
+    db: AsyncSession, settlement: Settlement, partner: Partner | None = None
+) -> str:
+    """A bizonylat megjegyzés-rovata: érvényességi szöveg + a bolt (telephely)
+    címe + a számláló-állások és fogyások számlálónként (névvel vagy
+    sorszámmal), vesszővel elválasztva — nem külön tétel-sorokban."""
+    from app.models import SettlementMachine
+
+    parts = [INVOICE_COMMENT]
+    if partner is not None and (partner.address or "").strip():
+        # Több boltos cégnél innen látszik, melyik egységre vonatkozik a számla.
+        parts.append(f"Telephely: {partner.address.strip()}")
+    # Számlára kerülő norma (szerződés): az átadott kávéból lefőzhető adagok.
+    if partner is not None:
+        from app.models import PartnerContract, SettlementLine as _SL
+
+        today_ = date.today()
+        ac = (
+            await db.execute(
+                select(PartnerContract)
+                .where(
+                    PartnerContract.partner_id == partner.id,
+                    PartnerContract.valid_from <= today_,
+                )
+                .order_by(PartnerContract.valid_from.desc())
+            )
+        ).scalars().first()
+        if (
+            ac is not None
+            and ac.invoice_norma
+            and (ac.valid_to is None or ac.valid_to >= today_)
+        ):
+            handed = (
+                await db.execute(
+                    select(_SL).where(
+                        _SL.settlement_id == settlement.id,
+                        _SL.product_name.contains("utólagos adagelszámolásra átadva"),
+                    )
+                )
+            ).scalars().all()
+            for hl in handed:
+                portions = round(hl.consumed_qty * ac.invoice_norma)
+                parts.append(
+                    f"Az átadott {hl.consumed_qty:g} kg kávéból {portions} adag"
+                    " kávé készíthető."
+                )
+    machines = (
+        await db.execute(
+            select(SettlementMachine)
+            .where(SettlementMachine.settlement_id == settlement.id)
+            .order_by(SettlementMachine.barcode)
+        )
+    ).scalars().all()
+    for m in machines:
+        detail = m.counters_detail if isinstance(m.counters_detail, list) else None
+        if detail:
+            bits = []
+            for i, d in enumerate(detail):
+                label = (d.get("name") or "").strip() or f"{i + 1}. számláló"
+                bits.append(
+                    f"{label}: {d.get('prev', 0)}→{d.get('new', 0)}"
+                    f" ({d.get('portions', 0):g} adag)"
+                )
+            parts.append(f"{m.barcode}: " + ", ".join(bits))
+        else:
+            parts.append(
+                f"{m.barcode}: {m.prev_counter}→{m.new_counter}"
+                f" ({m.portions_billed:g} adag)"
+            )
+    return "\n".join(parts)[:4000]
+
+
 async def create_invoice_for_settlement(
     db: AsyncSession, settlement: Settlement, partner: Partner
 ) -> tuple[str, str, date]:
@@ -218,7 +302,7 @@ async def create_invoice_for_settlement(
         "language": "hu",
         "currency": "HUF",
         "electronic": False,
-        "comment": INVOICE_COMMENT,
+        "comment": await settlement_invoice_comment(db, settlement, partner),
         "items": items,
     }
     created = await _api(api_key, "POST", "/documents", body)

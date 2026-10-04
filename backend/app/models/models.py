@@ -297,6 +297,9 @@ class Task(Base):
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
+    # Elvégzés pillanatképe: mikor és ki zárta le (status -> done).
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     employee_id: Mapped[uuid.UUID] = mapped_column(
@@ -390,6 +393,9 @@ class Worksheet(Base):
     # A KSZ ügyfél-példányára (−1) szánt megjegyzés — a képviselő írja; a
     # szervizes belső leírása SOSEM kerül az ügyfél elé.
     customer_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A SZERVIZES ügyfélnek szánt megjegyzése — a munkalap ügyfél-példányán
+    # és az ajánlat-elfogadó oldalon is megjelenik (árat nem tartalmazhat).
+    public_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Javítási konstrukciók (alternatív ajánlatok árral): [{name, cost_net,
     # price_net}] — a szervizes a saját díjával viszi fel, az ügyfél-példányra
     # a képviselő által beállított ár kerül.
@@ -537,6 +543,26 @@ class WorksheetSettings(Base):
     survey_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class WorksheetPhoto(Base):
+    """A szervizes által a munkalaphoz csatolt fotók (javítás közbeni
+    állapot-dokumentáció) — az admin a feladatnál látja őket."""
+
+    __tablename__ = "worksheet_photos"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    worksheet_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("worksheets.id", ondelete="CASCADE", name="fk_photo_worksheet"),
+        nullable=False,
+        index=True,
+    )
+    image: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    mime: Mapped[str] = mapped_column(String(32), nullable=False, default="image/jpeg")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
 
@@ -1707,6 +1733,11 @@ class PartnerContract(Base):
     auto_billing: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # Számlára kerülő norma (adag/kg): ha be van állítva, a számla
+    # megjegyzésében megjelenik az átadott kávéból lefőzhető adagok száma
+    # (ezzel a normával számolva), és az átadott kávé 0 Ft-os tételként a
+    # számlára kerül. SEMMILYEN más számítás nem használja.
+    invoice_norma: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Alapértelmezett kávéfajta, amivel a partnert ellátjuk — az elszámolás
     # átadott-kávé sora ezt ajánlja fel, de a képviselő mást is adhat.
     default_product_id: Mapped[uuid.UUID | None] = mapped_column(

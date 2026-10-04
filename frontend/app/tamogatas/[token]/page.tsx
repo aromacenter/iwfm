@@ -22,7 +22,7 @@ interface SupportInfo {
   partner_code: string | null;
   contact_name: string | null;
   contact_phone: string | null;
-  products: { id: string; name: string; unit: string }[];
+  products: { id: string; name: string; unit: string; code: string | null }[];
 }
 
 interface ChatMsg {
@@ -67,6 +67,10 @@ export default function TamogatasPage() {
 
   // termékrendelés
   const [orderItems, setOrderItems] = useState<{ product_id: string; quantity: string }[]>([]);
+  // A kereső-mezőkben gépelt szöveg sorononként (amíg nincs pontos találat)
+  const [orderLabels, setOrderLabels] = useState<Record<number, string>>({});
+  const productLabel = (p?: { name: string; code: string | null }) =>
+    p ? (p.code ? p.code + " — " + p.name : p.name) : "";
   const [orderNote, setOrderNote] = useState("");
   const [orderNo, setOrderNo] = useState<string | null>(null);
 
@@ -79,7 +83,7 @@ export default function TamogatasPage() {
         setContactPhone(data.contact_phone ?? "");
         setReporterName(data.contact_name ?? "");
         if (data.products.length > 0) {
-          setOrderItems([{ product_id: data.products[0].id, quantity: "1" }]);
+          setOrderItems([{ product_id: "", quantity: "1" }]);
         }
       })
       .catch(() => setNotFound(true));
@@ -401,22 +405,29 @@ export default function TamogatasPage() {
                 ← {t("support.back")}
               </button>
             </div>
+            <datalist id="support-products">
+              {info.products.map((p) => (
+                <option key={p.id} value={productLabel(p)} />
+              ))}
+            </datalist>
             <div className="space-y-2">
               {orderItems.map((item, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <select
-                    value={item.product_id}
+                  {/* Szabadszavas kereső: névre és cikkszámra is szűkül */}
+                  <input
+                    list="support-products"
+                    value={orderLabels[i] ?? productLabel(info.products.find((p) => p.id === item.product_id))}
                     onChange={(e) => {
+                      const text = e.target.value;
+                      setOrderLabels((ls) => ({ ...ls, [i]: text }));
+                      const match = info.products.find((p) => productLabel(p) === text);
                       const next = [...orderItems];
-                      next[i] = { ...next[i], product_id: e.target.value };
+                      next[i] = { ...next[i], product_id: match ? match.id : "" };
                       setOrderItems(next);
                     }}
+                    placeholder={t("support.productSearchPh")}
                     className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                  >
-                    {info.products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                  />
                   <input
                     type="number"
                     min={0.5}

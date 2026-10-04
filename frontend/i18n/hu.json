@@ -549,7 +549,8 @@
     "orderNotePh": "pl. sürgős, hétvégére elfogy…",
     "orderSubmit": "Rendelés elküldése",
     "orderDoneTitle": "Köszönjük, a rendelést rögzítettük!",
-    "orderDoneText": "A rendelés azonosítója: {order}. Kollégánk a következő látogatáskor hozza a kért termékeket."
+    "orderDoneText": "A rendelés azonosítója: {order}. Kollégánk a következő látogatáskor hozza a kért termékeket.",
+    "productSearchPh": "Keresés névre vagy cikkszámra…"
   },
   "orders": {
     "title": "Beérkezett rendelések ({count})",
@@ -1248,7 +1249,9 @@
     "pickupDone": "Rögzítve — az ügyfél értesítve: a gép átvehető.",
     "pickedUpAt": "Gép elhozva a szerelőtől ({date}) — az ügyfél értesítve, a gép átvehető.",
     "totalLossBadge": "Gazdasági totálkár",
-    "totalLossBadgeHint": "A szervizes totálkárosnak jelölte a gépet — az árajánlaton az ügyfél csak a bevizsgálási díj vállalása vagy a tulajdonjog-lemondás közül választhat."
+    "totalLossBadgeHint": "A szervizes totálkárosnak jelölte a gépet — az árajánlaton az ügyfél csak a bevizsgálási díj vállalása vagy a tulajdonjog-lemondás közül választhat.",
+    "completedBy": "Elvégezte: {name} · {date}",
+    "wsPhoto": "A szervizes munkalap-fotója"
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1325,7 +1328,13 @@
     "sigSaveSample": "Mentés mintaként",
     "sigSampleSaved": "Aláírás-minta elmentve — legközelebb egy kattintás!",
     "wsSignerName": "Aláíró neve (kötelező az ügyfél-aláíráshoz)",
-    "wsSignerNameRequired": "Az ügyfél-aláíráshoz kötelező begépelni az aláíró nevét."
+    "wsSignerNameRequired": "Az ügyfél-aláíráshoz kötelező begépelni az aláíró nevét.",
+    "wsPublicNote": "Megjegyzés az ügyfélnek",
+    "wsPublicNotePh": "pl. mi a különbség az egyes konstrukciók között…",
+    "wsPublicNoteHint": "Ez a szöveg a munkalap ügyfél-példányán ÉS az ajánlat-elfogadó oldalon is megjelenik — árat ne írj bele.",
+    "intakePhotos": "Átvételi fotók",
+    "wsPhotosHint": "📷 Fotó csatolása a munkalaphoz — javítás közbeni állapot, telefonnal is.",
+    "wsPhotosUploaded": "{count} fotó csatolva a munkalaphoz."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1758,7 +1767,9 @@
       "already_handed_over": "A csomagot a futár már átvette — innentől nem törölhető."
     },
     "settlement.invoice_pdf_unavailable": "A számlakép / újraküldés a beállított számlázó szolgáltatónál nem érhető el.",
-    "intake.contact_required": "A telefonszám és az e-mail cím megadása kötelező az átvételhez."
+    "intake.contact_required": "A telefonszám és az e-mail cím megadása kötelező az átvételhez.",
+    "worksheet.too_many_photos": "Legfeljebb 16 fotó csatolható egy munkalaphoz.",
+    "worksheet.photo_not_found": "A fotó nem található."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2130,7 +2141,11 @@
     "machineTerms": "gép-szintű feltételekkel",
     "machineTermsHint": "A partner gépein vannak szerződéses feltételek (bérleti díj / minimum / számlálónkénti adagár) — az elszámolás jól számol, csak a partner-szintű szerződés-rekord (érvényesség, ütemezés, alap-kávé) hiányzik. Vedd fel a szerződést a Partnerek → 📜 gombbal.",
     "autoBilling": "Automata számlázás",
-    "autoBillingHint": "A partner által diktált számláló-állásokból mentett elszámolás után a számla azonnal, kattintás nélkül kiállítódik (készpénz/kártya: fizetettként; átutalás: határidővel)."
+    "autoBillingHint": "A partner által diktált számláló-állásokból mentett elszámolás után a számla azonnal, kattintás nélkül kiállítódik (készpénz/kártya: fizetettként; átutalás: határidővel).",
+    "invoiceNorma": "Számlára kerülő norma (adag/kg)",
+    "invoiceNormaPh": "pl. 80",
+    "invoiceNormaHint": "Ha ki van töltve: a számla megjegyzésében megjelenik az átadott kávéból lefőzhető adagok száma (ezzel a normával), és az átadott kávé 0 Ft-os tételként a számlára kerül. Más számítást NEM befolyásol.",
+    "sumInvoiceNorma": "számla-norma: {n} adag/kg"
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",

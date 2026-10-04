@@ -38,6 +38,9 @@ interface TaskOut {
   worksheet_completed: boolean;
   worksheet_external: boolean;
   worksheet_total_loss: boolean;
+  completed_at: string | null;
+  completed_by_name: string | null;
+  worksheet_photos: string[];
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -579,6 +582,32 @@ export default function FeladatokPage() {
                   {task.employee_name} · {task.due_date}
                   {task.comments.length > 0 && ` · ${t("tasks.comments", { count: task.comments.length })}`}
                 </p>
+                {task.status === "done" && task.completed_at && (
+                  <p className="text-xs font-medium text-emerald-700">
+                    ✔ {t("tasks.completedBy", {
+                      name: task.completed_by_name ?? task.employee_name ?? "?",
+                      date: new Date(task.completed_at).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" }),
+                    })}
+                  </p>
+                )}
+                {(task.worksheet_photos ?? []).length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {task.worksheet_photos.map((pid) => {
+                      const src = `/api/tasks/${task.id}/worksheet/photos/${pid}`;
+                      return (
+                        <button
+                          key={pid}
+                          onClick={() => window.open(src, "_blank")}
+                          title={t("tasks.wsPhoto")}
+                          className="overflow-hidden rounded-lg border border-slate-200 shadow-sm hover:ring-2 hover:ring-indigo-300"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={src} alt="" className="h-12 w-12 object-cover" loading="lazy" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div className="flex gap-2">
                 {task.worksheet_serial && (

@@ -193,3 +193,42 @@ async def test_auto_billing_all_settlements(client, manager, monkeypatch):
     assert body["invoiced"] is True
     # utánvét: azonnal fizetett státusz
     assert body["payment_status"] == "paid"
+
+
+async def test_invoice_norma_zero_coffee_line(client, manager):
+    """Számlára kerülő norma: az átadott kávé 0 Ft-os sorként is rögzül."""
+    from datetime import date as _date
+
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Normás Bolt"}, headers=mgr)
+    ).json()
+    coffee = await make_product(client, mgr, price_per_portion=100.0, grams_per_portion=7)
+    res = await client.post(
+        f"/api/partners/{partner['id']}/contracts",
+        json={"valid_from": str(_date.today()), "invoice_norma": 80},
+        headers=mgr,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["invoice_norma"] == 80
+
+    saved = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [],
+              "handovers": [{"product_id": coffee["id"], "quantity": 4.0}]},
+        headers=mgr,
+    )
+    assert saved.status_code == 201, saved.text
+    lines = saved.json()["lines"]
+    zero = next(
+        (x for x in lines if "utólagos adagelszámolásra átadva" in x["product_name"]),
+        None,
+    )
+    assert zero is not None, lines
+    assert zero["amount_net"] == 0.0
+    assert abs(zero["portions"] - 4.0) < 0.01
+    # a vegosszegbe NEM szamit bele
+    assert saved.json()["total_net"] == 0.0

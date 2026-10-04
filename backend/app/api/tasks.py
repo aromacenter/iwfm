@@ -120,6 +120,11 @@ class TaskOut(BaseModel):
     asset: dict | None = None  # a munkalaphoz kötött gép adatai (KSZ)
     ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
     ticket_images: list[str] = []  # szervizjegyből jött feladat csatolt képei (id-k)
+    completed_at: datetime | None = None  # mikor lett kész
+    completed_by_name: str | None = None  # ki zárta le
+    intake_id: str | None = None  # az átvétel, amiből a feladat készült
+    intake_photos: list[str] = []  # az átvételi fotók id-i (a szerelő is látja)
+    worksheet_photos: list[str] = []  # a szervizes munkalap-fotóinak id-i
 
 
 MAX_SIGNATURE_BYTES = 300_000  # ~300KB data URL-enként
@@ -140,7 +145,9 @@ class WorkItem(BaseModel):
     (SOHA nem kerül az ügyfél elé), a price_net a MI árunk az ügyfél-példányra
     — utóbbit a képviselő állítja be az ár-szerkesztőben."""
 
-    name: str = Field(min_length=1, max_length=256)
+    # Hosszabb magyarázat is elfér — az ügyfél ebből érti meg a különbséget
+    # az egyes konstrukciók között.
+    name: str = Field(min_length=1, max_length=1000)
     cost_net: float | None = Field(default=None, ge=0)
     price_net: float | None = Field(default=None, ge=0)
 
@@ -167,6 +174,8 @@ class WorksheetBody(BaseModel):
     total_loss: bool | None = None
     # Az ügyfél-példány (−1) megjegyzése — None = nem nyúlunk hozzá.
     customer_note: str | None = Field(default=None, max_length=8000)
+    # A szervizes ügyfélnek szánt megjegyzése (munkalapon + ajánlat-oldalon).
+    public_note: str | None = Field(default=None, max_length=8000)
 
 
 class WorksheetOut(BaseModel):
@@ -191,6 +200,7 @@ class WorksheetOut(BaseModel):
     total_loss: bool = False  # gazdasági totálkáros gép
     invoiced: bool = False  # az auto-számla már kiment
     customer_note: str | None = None
+    public_note: str | None = None
     # Ügyfél-árajánlat állapota (none → sent → accepted)
     quote_status: str = "none"
     quote_email: str | None = None
@@ -252,6 +262,7 @@ def _worksheet_out(
         total_loss=ws.total_loss,
         invoiced=ws.billingo_document_id is not None,
         customer_note=None if hide else ws.customer_note,
+        public_note=ws.public_note,
         quote_status=ws.quote_status or "none",
         quote_email=None if hide else ws.quote_email,
         suggested_email=None if hide else suggested_email,
@@ -395,6 +406,8 @@ async def _upsert_worksheet(
         ws.total_loss = body.total_loss
     if body.customer_note is not None:
         ws.customer_note = body.customer_note.strip() or None
+    if body.public_note is not None:
+        ws.public_note = body.public_note.strip() or None
     # Csak KITÖLTÖTT aláírás ír felül — üres/None sosem törli a mentettet,
     # így az újranyitott munkalap mentése nem "tünteti el" az aláírásokat.
     if body.employee_signature:
@@ -622,6 +635,48 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
         task_assets = {
             tid: by_id[aid] for tid, aid in ws_asset_ids.items() if aid in by_id
         }
+    # Átvételi fotók a feladathoz (a szerelő is látja a gép állapotát) +
+    # a szervizes munkalap-fotói.
+    intake_photo_ids: dict[uuid.UUID, list[str]] = {}
+    intake_map = {t.id: t.intake_id for t in tasks if t.intake_id}
+    if intake_map:
+        from app.models import IntakePhoto
+
+        ip_rows = (
+            await db.execute(
+                select(IntakePhoto.id, IntakePhoto.intake_id)
+                .where(IntakePhoto.intake_id.in_(set(intake_map.values())))
+                .order_by(IntakePhoto.created_at)
+            )
+        ).all()
+        by_intake: dict[uuid.UUID, list[str]] = {}
+        for pid, iid in ip_rows:
+            by_intake.setdefault(iid, []).append(str(pid))
+        intake_photo_ids = {
+            tid: by_intake.get(iid, []) for tid, iid in intake_map.items()
+        }
+    ws_photo_ids: dict[uuid.UUID, list[str]] = {}
+    if ws_rows:
+        from app.models import WorksheetPhoto
+
+        ws_id_rows = (
+            await db.execute(
+                select(Worksheet.id, Worksheet.task_id)
+                .where(Worksheet.task_id.in_([t.id for t in tasks]))
+            )
+        ).all()
+        wsid_to_task = {wsid: tid for wsid, tid in ws_id_rows}
+        wp_rows = (
+            await db.execute(
+                select(WorksheetPhoto.id, WorksheetPhoto.worksheet_id)
+                .where(WorksheetPhoto.worksheet_id.in_(set(wsid_to_task)))
+                .order_by(WorksheetPhoto.created_at)
+            )
+        ).all()
+        for pid, wsid in wp_rows:
+            tid = wsid_to_task.get(wsid)
+            if tid is not None:
+                ws_photo_ids.setdefault(tid, []).append(str(pid))
     # Szervizjegyből kiosztott feladatoknál a jegy képei is átjönnek — a
     # kolléga jogosultság nélkül is látja őket a saját feladat-nézetében.
     ticket_imgs: dict[uuid.UUID, list[str]] = {}
@@ -664,6 +719,11 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             worksheet_total_loss=worksheet_total_loss.get(t.id, False),
             asset=task_assets.get(t.id),
             ticket_images=ticket_imgs.get(t.id, []),
+            completed_at=t.completed_at,
+            completed_by_name=t.completed_by_name,
+            intake_id=str(t.intake_id) if t.intake_id else None,
+            intake_photos=intake_photo_ids.get(t.id, []),
+            worksheet_photos=ws_photo_ids.get(t.id, []),
         )
         for t in tasks
     ]
@@ -829,7 +889,10 @@ async def _notify_assignee(db: AsyncSession, task: Task, emp: Employee, serial: 
             parts.append(f"munkalap: {serial}")
         if task.due_date:
             parts.append(f"határidő: {task.due_date.isoformat()}")
-        await send_personal(db, emp, " · ".join(parts))
+        from app.core.config import get_settings as _gs
+
+        link = f"{_gs().frontend_origin.rstrip('/')}/feladataim?task={task.id}"
+        await send_personal(db, emp, " · ".join(parts) + chr(10) + f"🔗 {link}")
     except Exception:
         import logging
 
@@ -885,6 +948,13 @@ async def update_task(
     )
     for key, value in data.items():
         setattr(task, key, value)
+    # Elvegzes pillanatkepe: ki es mikor zarta le (ujranyitasnal torlodik).
+    if data.get("status") == "done" and task.completed_at is None:
+        task.completed_at = datetime.now(UTC)
+        task.completed_by_name = actor.display_name
+    elif data.get("status") in ("open", "needs_more_work"):
+        task.completed_at = None
+        task.completed_by_name = None
     await record_audit(
         db, actor=actor, action="task.update", entity_type="task",
         entity_id=str(task.id), detail={"fields": sorted(data)}, request=request,
@@ -1028,7 +1098,9 @@ async def _build_worksheet_pdf(
     extra_footer = None
     handover_url = None
     if ws.external_service and variant == "customer":
-        work_description = ws.customer_note or ""
+        work_description = chr(10).join(
+            x for x in (ws.customer_note, ws.public_note) if x
+        )
         pdf_comments = []
         # Elfogadott (vagy lezárt) árajánlatnál a KIVÁLASZTOTT konstrukció a
         # fizetendő tétel — az ára mindent tartalmaz, ezért az anyagok és a
@@ -1502,6 +1574,93 @@ async def my_upsert_worksheet(
     )
 
 
+class WsPhotosBody(BaseModel):
+    photos: list[str] = Field(min_length=1, max_length=8)
+
+
+@me_router.post("/{task_id}/worksheet/photos", response_model=TaskOut)
+async def my_worksheet_photos(
+    task_id: str,
+    body: WsPhotosBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """A szervizes fotókat csatol a munkalaphoz (javítás közbeni állapot) —
+    telefonról, kamerával is. Az admin a Feladatoknál látja őket."""
+    from app.api.intake import _decode_photo
+    from app.models import WorksheetPhoto
+
+    task = await _own_task_or_404(db, emp, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    existing = (
+        await db.execute(
+            select(sa_func.count()).select_from(WorksheetPhoto)
+            .where(WorksheetPhoto.worksheet_id == ws.id)
+        )
+    ).scalar_one()
+    if existing + len(body.photos) > 16:
+        raise HTTPException(status_code=422, detail={"code": "worksheet.too_many_photos"})
+    for data_url in body.photos:
+        raw, mime = _decode_photo(data_url)
+        db.add(WorksheetPhoto(worksheet_id=ws.id, image=raw, mime=mime))
+    await record_audit(
+        db, actor=user, action="worksheet.photos", entity_type="worksheet",
+        entity_id=ws.serial, detail={"count": len(body.photos)}, request=request,
+    )
+    await db.commit()
+    return (await _tasks_out(db, [task]))[0]
+
+
+async def _ws_photo_or_404(db: AsyncSession, task: Task, photo_id: str):
+    from app.models import WorksheetPhoto
+
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    try:
+        pid = uuid.UUID(photo_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.photo_not_found"})
+    photo = (
+        await db.execute(
+            select(WorksheetPhoto).where(
+                WorksheetPhoto.id == pid, WorksheetPhoto.worksheet_id == ws.id
+            )
+        )
+    ).scalar_one_or_none()
+    if photo is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.photo_not_found"})
+    return photo
+
+
+@me_router.get("/{task_id}/worksheet/photos/{photo_id}")
+async def my_worksheet_photo(
+    task_id: str,
+    photo_id: str,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+):
+    task = await _own_task_or_404(db, emp, task_id)
+    photo = await _ws_photo_or_404(db, task, photo_id)
+    return Response(content=photo.image, media_type=photo.mime)
+
+
+@router.get("/{task_id}/worksheet/photos/{photo_id}")
+async def worksheet_photo(
+    task_id: str,
+    photo_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("tasks")),
+):
+    task = await _get_task_or_404(db, task_id)
+    photo = await _ws_photo_or_404(db, task, photo_id)
+    return Response(content=photo.image, media_type=photo.mime)
+
+
 @me_router.post("/{task_id}/status", response_model=TaskOut)
 async def my_status(
     task_id: str,
@@ -1515,6 +1674,12 @@ async def my_status(
         raise HTTPException(status_code=422, detail={"code": "tasks.bad_status"})
     task = await _own_task_or_404(db, emp, task_id)
     task.status = body.status
+    if body.status == "done":
+        task.completed_at = datetime.now(UTC)
+        task.completed_by_name = user.display_name
+    else:
+        task.completed_at = None
+        task.completed_by_name = None
     if body.comment:
         db.add(TaskComment(task_id=task.id, author_user_id=user.id, text=body.comment.strip()))
     await record_audit(
@@ -1698,6 +1863,8 @@ async def public_worksheet_quote(token: str, db: AsyncSession = Depends(get_db))
         "accepted_at": ws.quote_accepted_at,
         # Gazdasági totálkár: csak két opció — bevizsgálási díj VAGY lemondás.
         "total_loss": ws.total_loss,
+        # A szervizes ügyfélnek szánt megjegyzése — az ajánlat-oldalon is látszik
+        "public_note": ws.public_note,
         # Mindig felkínált opció: "nem kérem a javítást" — felmérési díjjal.
         "survey_fee_net": survey_fee,
         "survey_fee_gross": round(survey_fee * 1.27, 0),
@@ -1827,7 +1994,13 @@ async def public_worksheet_quote_accept(
                         f"🟢 Árajánlat elfogadva: {ws.serial} — a munka kezdhető!\n"
                         f"Kiválasztott konstrukció: {selected_label}"
                     )
-                await send_personal(db, emp, msg)
+                # Kattintható link egyenesen a feladatra
+                from app.core.config import get_settings as _gs2
+
+                link = (
+                    f"{_gs2().frontend_origin.rstrip('/')}/feladataim?task={task.id}"
+                )
+                await send_personal(db, emp, f"{msg}\n🔗 {link}")
         except Exception:
             import logging
 
@@ -1896,6 +2069,9 @@ async def worksheet_picked_up(
         + " javítása elkészült.",
         "",
         "A gép átvehető üzletünkben, nyitvatartási időben.",
+        "",
+        "Kérjük a +36 30 190 9071-es telefonszámon egyeztessen időpontot",
+        "kollégánkkal, hogy mikor tudjuk átadni az elkészült készüléket.",
         "",
         "Üdvözlettel,",
         company,

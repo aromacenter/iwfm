@@ -278,6 +278,7 @@ export default function PartnerekPage() {
     payment_terms_days: number | null;
     no_minimum: boolean;
     auto_billing: boolean;
+    invoice_norma: number | null;
     default_product_id: string | null;
     default_product_name: string | null;
     note: string | null;
@@ -303,7 +304,7 @@ export default function PartnerekPage() {
     below_min_price: string; min_kg: string; below_min_price_kg: string;
     rent_if_below_min: boolean; settlement_weeks: string;
     payment_method: string; payment_terms_days: string;
-    no_minimum: boolean; auto_billing: boolean; default_product_id: string; note: string;
+    no_minimum: boolean; auto_billing: boolean; invoice_norma: string; default_product_id: string; note: string;
   } | null>(null);
   const [cError, setCError] = useState<string | null>(null);
   const [cBusy, setCBusy] = useState(false);
@@ -372,7 +373,7 @@ export default function PartnerekPage() {
       min_portions: "", below_min_price: "", min_kg: "", below_min_price_kg: "",
       rent_if_below_min: false, settlement_weeks: "4",
       payment_method: "", payment_terms_days: "",
-      no_minimum: false, auto_billing: false, default_product_id: "", note: "",
+      no_minimum: false, auto_billing: false, invoice_norma: "", default_product_id: "", note: "",
     });
   }
 
@@ -390,6 +391,7 @@ export default function PartnerekPage() {
       payment_terms_days: c.payment_terms_days != null ? String(c.payment_terms_days) : "",
       no_minimum: c.no_minimum,
       auto_billing: c.auto_billing,
+      invoice_norma: c.invoice_norma != null ? String(c.invoice_norma) : "",
       default_product_id: c.default_product_id ?? "",
       note: c.note ?? "",
     });
@@ -414,6 +416,7 @@ export default function PartnerekPage() {
         payment_terms_days: cForm.payment_terms_days ? Number(cForm.payment_terms_days) : null,
         no_minimum: cForm.no_minimum,
         auto_billing: cForm.auto_billing,
+        invoice_norma: cForm.invoice_norma ? Number(cForm.invoice_norma) : null,
         default_product_id: cForm.default_product_id || null,
         note: cForm.note || null,
       };
@@ -934,6 +937,7 @@ export default function PartnerekPage() {
                           c.rent_if_below_min ? t("contracts.sumRent") : null,
                           c.default_product_name ? `☕ ${c.default_product_name}` : null,
                           c.auto_billing ? `⚡ ${t("contracts.autoBilling")}` : null,
+                          c.invoice_norma != null ? t("contracts.sumInvoiceNorma", { n: c.invoice_norma }) : null,
                           c.note,
                         ].filter(Boolean).join(" · ") || t("contracts.noTerms")}
                       </div>
@@ -1050,6 +1054,17 @@ export default function PartnerekPage() {
                     ⚡ {t("contracts.autoBilling")}
                     <span className="block text-xs text-violet-700">{t("contracts.autoBillingHint")}</span>
                   </span>
+                </label>
+                <label className="block rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+                  ☕ {t("contracts.invoiceNorma")}
+                  <input
+                    type="number" min={1} max={1000}
+                    value={cForm.invoice_norma}
+                    onChange={(e) => setCForm({ ...cForm, invoice_norma: e.target.value })}
+                    placeholder={t("contracts.invoiceNormaPh")}
+                    className="mt-1 w-32 rounded-lg border border-amber-300 px-2 py-1.5"
+                  />
+                  <span className="mt-0.5 block text-xs text-amber-800">{t("contracts.invoiceNormaHint")}</span>
                 </label>
                 <div className="block text-sm">
                   ☕ {t("contracts.defaultCoffee")}

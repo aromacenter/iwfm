@@ -116,6 +116,7 @@ def _invoice_xml(
     due: date,
     vevo: str,
     tetelek: list[str],
+    comment: str | None = None,
 ) -> str:
     today = date.today().isoformat()
     return (
@@ -134,7 +135,7 @@ def _invoice_xml(
         f"<fizmod>{PAYMENT_METHOD_MAP.get(payment_method, 'Készpénz')}</fizmod>"
         "<penznem>HUF</penznem>"
         "<szamlaNyelve>hu</szamlaNyelve>"
-        "<megjegyzes>A bizonylat aláírás és bélyegző nélkül is érvényes!</megjegyzes>"
+        f"<megjegyzes>{escape(comment or 'A bizonylat aláírás és bélyegző nélkül is érvényes!')}</megjegyzes>"
         + (f"<szamlaszamElotag>{escape(prefix)}</szamlaszamElotag>" if prefix else "")
         + f"<dijbekero>{'true' if test_mode else 'false'}</dijbekero>"
         "</fejlec>"
@@ -196,11 +197,14 @@ async def create_invoice_for_settlement(
     if not tetelek:
         raise ValueError("billingo_no_items")
 
+    from app.services.wfm.billingo_service import settlement_invoice_comment
+
     due = settlement_due_date(settlement, partner)
     xml = _invoice_xml(
         agent_key, prefix, test_mode=test_mode,
         payment_method=settlement.payment_method, due=due,
         vevo=_vevo_xml(partner), tetelek=tetelek,
+        comment=await settlement_invoice_comment(db, settlement, partner),
     )
     headers = await _agent_call("action-xmlagentxmlfile", xml)
     doc = headers.get("szlahu_szamlaszam", "")

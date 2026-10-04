@@ -51,6 +51,11 @@ interface TaskOut {
     maintenance_fee: number | null;
   } | null;
   ticket_images: string[]; // szervizjegyből jött feladat csatolt képei (id-k)
+  intake_id: string | null;
+  intake_photos: string[]; // az átvételkor készült fotók id-i
+  worksheet_photos: string[]; // a munkalaphoz csatolt saját fotók id-i
+  completed_at: string | null;
+  completed_by_name: string | null;
 }
 
 interface MaterialRow {
@@ -70,6 +75,7 @@ interface WorkRow {
 
 interface WorksheetForm {
   work_description: string;
+  public_note: string; // az ügyfélnek szánt megjegyzés (munkalap + ajánlat)
   works: WorkRow[];
   repairs: WorkRow[]; // javítási konstrukciók (alternatív ajánlatok árral)
   hours_spent: string;
@@ -86,6 +92,7 @@ interface WorksheetForm {
 
 const EMPTY_WS: WorksheetForm = {
   work_description: "",
+  public_note: "",
   works: [],
   repairs: [],
   hours_spent: "",
@@ -110,6 +117,19 @@ export default function FeladataimPage() {
   const [tasks, setTasks] = useState<TaskOut[]>([]);
   // státusz-szűrő: alapból a nyitottak, hogy a hosszú múlt ne lassítson
   const [statusFilter, setStatusFilter] = useState<"open" | "done" | "all">("open");
+
+  // Telegram-linkbol erkezes (?task=): a konkret feladathoz gorgetunk.
+  useEffect(() => {
+    const tid = new URLSearchParams(window.location.search).get("task");
+    if (!tid || tasks.length === 0) return;
+    const el = document.getElementById(`task-${tid}`);
+    if (el) {
+      el.scrollIntoView({ block: "start", behavior: "smooth" });
+      el.classList.add("ring-2", "ring-indigo-400");
+      setTimeout(() => el.classList.remove("ring-2", "ring-indigo-400"), 4000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks.length]);
   const [comments, setComments] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [noEmployee, setNoEmployee] = useState(false);
@@ -239,10 +259,12 @@ export default function FeladataimPage() {
           total_loss: boolean;
           quote_status: string;
           quote_selected_name: string | null;
+          public_note: string | null;
         }>(`/api/me/tasks/${task.id}/worksheet`);
         setWsQuote({ status: existing.quote_status, selected: existing.quote_selected_name });
         setWs({
           work_description: existing.work_description,
+          public_note: existing.public_note ?? "",
           works: (existing.works ?? []).map((w) => {
             const fee = task.worksheet_external ? w.cost_net : w.price_net;
             return { name: w.name, fee: fee != null ? String(fee) : "" };
@@ -273,6 +295,25 @@ export default function FeladataimPage() {
       } catch {
         /* friss űrlap marad */
       }
+    }
+  }
+
+  async function uploadWsPhotos(task: TaskOut, files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const toDataUrl = (f: File) =>
+      new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.onerror = reject;
+        r.readAsDataURL(f);
+      });
+    try {
+      const photos = await Promise.all(Array.from(files).slice(0, 8).map(toDataUrl));
+      await api.post(`/api/me/tasks/${task.id}/worksheet/photos`, { photos });
+      toast(t("myTasks.wsPhotosUploaded", { count: photos.length }), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -387,6 +428,7 @@ export default function FeladataimPage() {
           })),
         client_name: ws.client_name || null,
         client_location: ws.client_location || null,
+        public_note: ws.public_note.trim() || null,
         employee_signature: ws.employee_signature,
         client_signature: ws.client_signature,
         client_signer_name: ws.client_signer_name.trim() || null,
@@ -508,7 +550,7 @@ export default function FeladataimPage() {
               ? task.status === "done"
               : task.status !== "done"),
         ).map((task) => (
-          <section key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <section key={task.id} id={`task-${task.id}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <h2 className="font-semibold">{task.title}</h2>
               <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[task.status]}`}>
@@ -552,6 +594,60 @@ export default function FeladataimPage() {
                     </button>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Átvételi fotók: a szerelő látja, milyen állapotban vettük át a gépet */}
+            {task.intake_id && (task.intake_photos ?? []).length > 0 && (
+              <div className="mt-2">
+                <p className="mb-1 text-xs font-semibold uppercase text-slate-500">📥 {t("myTasks.intakePhotos")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {task.intake_photos.map((pid) => {
+                    const src = `/api/intakes/${task.intake_id}/photos/${pid}`;
+                    return (
+                      <button
+                        key={pid}
+                        onClick={() => window.open(src, "_blank")}
+                        className="overflow-hidden rounded-xl border border-slate-200 shadow-sm transition hover:ring-2 hover:ring-indigo-300"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={src} alt="" className="h-20 w-20 object-cover" loading="lazy" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {/* A munkalaphoz csatolt saját fotók + új fotó készítése */}
+            {task.worksheet_serial && (
+              <div className="mt-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {(task.worksheet_photos ?? []).map((pid) => {
+                    const src = `/api/me/tasks/${task.id}/worksheet/photos/${pid}`;
+                    return (
+                      <button
+                        key={pid}
+                        onClick={() => window.open(src, "_blank")}
+                        className="overflow-hidden rounded-xl border border-slate-200 shadow-sm transition hover:ring-2 hover:ring-indigo-300"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={src} alt="" className="h-20 w-20 object-cover" loading="lazy" />
+                      </button>
+                    );
+                  })}
+                  <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-2xl text-slate-400 hover:border-indigo-400 hover:text-indigo-500">
+                    📷
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => void uploadWsPhotos(task, e.target.files)}
+                    />
+                  </label>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-400">{t("myTasks.wsPhotosHint")}</p>
               </div>
             )}
 
@@ -800,6 +896,17 @@ export default function FeladataimPage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
                 placeholder={t("myTasks.wsWorkPlaceholder")}
               />
+            </label>
+            <label className="block text-sm">
+              {t("myTasks.wsPublicNote")}
+              <textarea
+                value={ws.public_note}
+                onChange={(e) => setWs({ ...ws, public_note: e.target.value })}
+                rows={3}
+                className="mt-1 w-full rounded-lg border border-emerald-300 bg-emerald-50/40 px-3 py-2"
+                placeholder={t("myTasks.wsPublicNotePh")}
+              />
+              <span className="mt-0.5 block text-xs text-emerald-700">{t("myTasks.wsPublicNoteHint")}</span>
             </label>
             <label className="block text-sm">
               {t("myTasks.wsHours")}

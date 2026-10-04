@@ -1921,6 +1921,23 @@ async def create_settlement(
     # Átadott áru. Bizományos (kávé): a leltár UTÁN növeli a készletet — a
     # következő időszakban számolódik el. Minden más termék ELADÁS: azonnal
     # fizetendő tételként kerül az elszámolásra, készletbe nem megy.
+    # A ma érvényes szerződés számlára-kerülő normája (None = nincs ilyen
+    # kijelzés) — csak a 0 Ft-os kávésort és a számla-megjegyzést vezérli.
+    invoice_norma_contract = None
+    if body.handovers:
+        from app.models import PartnerContract as _PC
+
+        _today = date.today()
+        _ac = (
+            await db.execute(
+                select(_PC)
+                .where(_PC.partner_id == partner.id, _PC.valid_from <= _today)
+                .order_by(_PC.valid_from.desc())
+            )
+        ).scalars().first()
+        if _ac is not None and (_ac.valid_to is None or _ac.valid_to >= _today):
+            invoice_norma_contract = _ac.invoice_norma
+
     for h in body.handovers:
         product = await _get_product_or_404(db, h.product_id)
         if product.is_consignment:
@@ -1942,6 +1959,20 @@ async def create_settlement(
                 settlement_id=settlement.id, note="Elszámoláskor átadva",
                 actor_user_id=actor.id,
             ))
+            # Számlára kerülő norma a szerződésen: az átadott kávé 0 Ft-os
+            # tételként a számlára kerül (a lefőzhető adagok a megjegyzésben).
+            if invoice_norma_contract is not None:
+                db.add(SettlementLine(
+                    settlement_id=settlement.id,
+                    product_id=product.id,
+                    product_name=f"{product.name} (utólagos adagelszámolásra átadva)",
+                    previous_qty=0.0, physical_qty=0.0, consumed_qty=h.quantity,
+                    portions=h.quantity,
+                    counter_portions=None,
+                    price_per_portion=0.0,
+                    vat_percent=product.vat_percent,
+                    amount_net=0.0,
+                ))
         else:
             unit_price = _effective_price(product, price_overrides)
             if h.price is not None:
