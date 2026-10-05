@@ -496,7 +496,11 @@
     "pooledBadge": "pooled stock ({count} coffees)",
     "pooledPrimaryHint": "Pooled coffee stock: previous stock is the sum of all coffees; after saving the remainder merges onto this coffee.",
     "pooledHidden": "pooled",
-    "pooledHiddenHint": "This coffee merges into the pooled stock — inventory runs on the pooled row."
+    "pooledHiddenHint": "This coffee merges into the pooled stock — inventory runs on the pooled row.",
+    "customerBanner": "Customer — no placed machine, settlements are not available.",
+    "customerBannerHint": "Instant sale (💰) and Delivery (🚚) remain available; repairs go through Tasks/Intake. Deploy a machine to make them a partner.",
+    "phoneVisit": "phone — maintenance visit",
+    "phoneVisitHint": "Phone-settled partner: the visit is due only for the contractual maintenance cycle."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1789,7 +1793,12 @@
     "settlement.invoice_pdf_unavailable": "Invoice image / resend is not available with the configured provider.",
     "intake.contact_required": "Phone number and email are required for intake.",
     "worksheet.too_many_photos": "At most 16 photos can be attached to a worksheet.",
-    "worksheet.photo_not_found": "Photo not found."
+    "worksheet.photo_not_found": "Photo not found.",
+    "settlement.customer_only": "This partner is a customer (no placed machine) — only instant sale/delivery is available.",
+    "cash.transfer_not_found": "Transfer not found.",
+    "cash.transfer_decided": "This transfer was already decided.",
+    "cash.self_transfer": "You cannot transfer to yourself.",
+    "cash.bad_amount": "Invalid amount."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2165,7 +2174,13 @@
     "invoiceNorma": "Invoice norma (portions/kg)",
     "invoiceNormaPh": "e.g. 80",
     "invoiceNormaHint": "If set: the invoice comment shows brewable portions from handed-over coffee (with this norma), and the coffee appears as a 0 Ft line. Affects no other calculation.",
-    "sumInvoiceNorma": "invoice norma: {n}/kg"
+    "sumInvoiceNorma": "invoice norma: {n}/kg",
+    "phoneSettlement": "Phone settlement",
+    "phoneSettlementHint": "Route planning skips this partner — readings are reported by phone/QR.",
+    "visitWeeks": "Visit cycle (e.g. maintenance)",
+    "visitWeeksPh": "e.g. 12",
+    "visitWeeksHint": "If set, the partner is scheduled every N weeks anyway (📞🔧 flag). Empty = never.",
+    "visitEveryWeeks": "visit every {n} weeks"
   },
   "delivery": {
     "title": "Delivery (delivery note)",
@@ -2513,7 +2528,22 @@
       "expense": "💸 Record expense",
       "deposit": "➕ Deposit into worker's register",
       "withdrawal": "➖ Withdraw from worker's register"
-    }
+    },
+    "periodAll": "All time",
+    "transfersIn": "Transfers in",
+    "transfersOut": "Transfers out",
+    "transferBtn": "Transfer cash",
+    "transferTitle": "Transfer cash to a colleague",
+    "transferHint": "The recipient must accept — until then it is pending and moves no register.",
+    "transferTo": "Recipient",
+    "transferSend": "Send transfer",
+    "transferSent": "Transfer sent — awaiting acceptance.",
+    "transferIncoming": "is handing you {amount} Ft — accept?",
+    "transferPendingOut": "Pending transfer: {amount} Ft → {name}",
+    "transferAccept": "Accept",
+    "transferDecline": "Decline",
+    "transferAccepted": "Accepted — the amount is in your register.",
+    "transferDeclined": "Transfer declined."
   },
   "stats": {
     "title": "Statistics",
@@ -2561,6 +2591,17 @@
     "feesTitle": "Picked-up machines — fee summary",
     "feesHint": "Confirmed net costs of worksheets picked up in the period — the fee due to the technician. Cash purchases/deductions go in the Cash register.",
     "cashLink": "Cash register (purchases, deductions)",
-    "worksheets": "Worksheets"
+    "worksheets": "Worksheets",
+    "paidNow": "Paid now",
+    "paidNowHint": "Cash paid at handover — deducted from YOUR register, reduces the technician's balance.",
+    "costsCol": "Their costs",
+    "payoutsCol": "Paid out",
+    "balance": "Balance",
+    "addCost": "Cost",
+    "addCostHint": "The technician bought parts with their own money — increases what we owe.",
+    "costTitle": "Technician cost — {name}",
+    "costHint": "Bought with their own money — added to the amount due.",
+    "costSaved": "Cost recorded on the technician's balance.",
+    "worksheetLinkHint": "Task details — what happened, what's next."
   }
 }

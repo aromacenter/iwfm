@@ -49,6 +49,8 @@ async def apply_active_contract(db: AsyncSession, partner: Partner) -> None:
     partner.contract_below_min_price_kg = c.below_min_price_kg if c else None
     partner.contract_rent_if_below_min = bool(c.rent_if_below_min) if c else False
     partner.contract_settlement_weeks = c.settlement_weeks if c else None
+    partner.contract_phone_settlement = bool(c.phone_settlement) if c else False
+    partner.contract_visit_weeks = c.visit_weeks if c else None
     partner.contract_payment_method = c.payment_method if c else None
     partner.contract_payment_terms_days = c.payment_terms_days if c else None
     partner.contract_no_minimum = bool(c.no_minimum) if c else False

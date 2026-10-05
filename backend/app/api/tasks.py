@@ -2385,6 +2385,10 @@ async def service_handover_list(
 class ServicePickupBody(BaseModel):
     task_ids: list[str] = Field(min_length=1, max_length=100)
     notify: bool = True  # ügyfél-email: a készülék átvehető
+    # Átadáskor készpénzben kifizetett összeg a szerelőnek — levonódik a
+    # kitöltő dolgozó kasszájából ÉS a szerelő folyószámlájáról. Lehet
+    # kevesebb vagy több is, mint a járandóság (az egyenleg +/−/0).
+    paid_amount: float | None = Field(default=None, ge=0, le=10_000_000)
 
 
 @router.post("/service-handover/pickup")
@@ -2442,10 +2446,40 @@ async def service_handover_pickup(
                 import logging
 
                 logging.getLogger(__name__).warning("pickup notify failed", exc_info=True)
+    # Készpénz-kifizetés a szerelőnek: a kitöltő kasszájából költségként
+    # levonódik, a szerelő folyószámláján payout-ként csökkenti a tartozást.
+    if body.paid_amount and picked > 0:
+        from app.models import AgentExpense, TechLedger
+
+        # az első érintett szerelő (tipikusan egy szerelőtől veszünk át)
+        first_emp = next(iter(fees_by_emp)) if fees_by_emp else None
+        emp_name = ""
+        if first_emp:
+            e = (
+                await db.execute(
+                    select(Employee).where(Employee.id == uuid.UUID(first_emp))
+                )
+            ).scalar_one_or_none()
+            emp_name = f"{e.last_name} {e.first_name}" if e else ""
+            db.add(TechLedger(
+                employee_id=uuid.UUID(first_emp), kind="payout",
+                amount=float(round(body.paid_amount)),
+                note=f"Átadáskori kifizetés ({', '.join(serials)[:200]})",
+                created_by=actor.id,
+            ))
+        db.add(AgentExpense(
+            user_id=actor.id,
+            expense_date=date.today(),
+            amount_gross=float(round(body.paid_amount)),
+            note=f"Szerelő-kifizetés — {emp_name}"[:512],
+            entry_type="expense",
+            created_by=actor.id,
+        ))
     await record_audit(
         db, actor=actor, action="worksheet.service_pickup", entity_type="worksheet",
         entity_id=",".join(serials)[:256],
-        detail={"count": picked, "fee_total": round(fee_total, 2)}, request=request,
+        detail={"count": picked, "fee_total": round(fee_total, 2),
+                "paid_amount": body.paid_amount}, request=request,
     )
     await db.commit()
     return {"picked": picked, "fee_total": round(fee_total, 2), "fees_by_employee": fees_by_emp}
@@ -2487,12 +2521,93 @@ async def service_fees(
             "employee_id": key,
             "employee_name": emp_names.get(task.employee_id),
             "fee_total": 0.0, "count": 0, "serials": [],
+            "costs": 0.0, "payouts": 0.0, "balance": 0.0,
         })
         row["fee_total"] = round(row["fee_total"] + _service_fee_total(ws), 2)
         row["count"] += 1
         if len(row["serials"]) < 50:
             row["serials"].append(ws.serial)
-    return sorted(agg.values(), key=lambda r: -r["fee_total"])
+    # Szerelő-folyószámla: a saját pénzéből vett alkatrész (+) és a
+    # kifizetések (−) — az egyenleg a díjakkal együtt áll össze.
+    from app.models import TechLedger
+
+    tq = select(
+        TechLedger.employee_id, TechLedger.kind,
+        sa_func.coalesce(sa_func.sum(TechLedger.amount), 0.0),
+    ).group_by(TechLedger.employee_id, TechLedger.kind)
+    if date_from:
+        tq = tq.where(TechLedger.created_at >= datetime.combine(date_from, time.min))
+    if date_to:
+        tq = tq.where(TechLedger.created_at <= datetime.combine(date_to, time.max))
+    extra_names: set = set()
+    for emp_id, kind, total in (await db.execute(tq)).all():
+        key = str(emp_id)
+        if key not in agg:
+            agg[key] = {
+                "employee_id": key, "employee_name": None,
+                "fee_total": 0.0, "count": 0, "serials": [],
+                "costs": 0.0, "payouts": 0.0, "balance": 0.0,
+            }
+            extra_names.add(emp_id)
+        if kind == "cost":
+            agg[key]["costs"] = round(float(total or 0.0))
+        elif kind == "payout":
+            agg[key]["payouts"] = round(float(total or 0.0))
+    if extra_names:
+        for e in (
+            await db.execute(select(Employee).where(Employee.id.in_(extra_names)))
+        ).scalars():
+            agg[str(e.id)]["employee_name"] = f"{e.last_name} {e.first_name}"
+    for row in agg.values():
+        row["balance"] = round(row["fee_total"] + row["costs"] - row["payouts"])
+    return sorted(agg.values(), key=lambda r: -r["balance"])
+
+
+class TechLedgerBody(BaseModel):
+    employee_id: str
+    kind: str = Field(pattern="^(cost|payout)$")
+    amount: float = Field(gt=0, le=10_000_000)
+    note: str | None = Field(default=None, max_length=512)
+    supplier: str | None = Field(default=None, max_length=256)
+    receipt_no: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/service-handover/ledger")
+async def add_tech_ledger(
+    body: TechLedgerBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """Szerelő-folyószámla tétel: cost = a szerelő saját pénzéből vett
+    alkatrész (a tartozásunkat NÖVELI), payout = készpénz-kifizetés
+    (csökkenti)."""
+    from app.models import TechLedger
+
+    try:
+        emp_id = uuid.UUID(body.employee_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "employee.not_found"})
+    emp = (
+        await db.execute(select(Employee).where(Employee.id == emp_id))
+    ).scalar_one_or_none()
+    if emp is None:
+        raise HTTPException(status_code=404, detail={"code": "employee.not_found"})
+    db.add(TechLedger(
+        employee_id=emp_id, kind=body.kind, amount=float(round(body.amount)),
+        note=(body.note or "").strip() or None,
+        supplier=(body.supplier or "").strip() or None,
+        receipt_no=(body.receipt_no or "").strip() or None,
+        created_by=actor.id,
+    ))
+    await record_audit(
+        db, actor=actor, action="tech_ledger.add", entity_type="employee",
+        entity_id=str(emp_id),
+        detail={"kind": body.kind, "amount": body.amount, "note": body.note},
+        request=request,
+    )
+    await db.commit()
+    return {"ok": True}
 
 
 @router.get("/handovers/list")

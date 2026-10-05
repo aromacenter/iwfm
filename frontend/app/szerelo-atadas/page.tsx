@@ -31,6 +31,9 @@ interface FeeRow {
   fee_total: number;
   count: number;
   serials: string[];
+  costs: number;
+  payouts: number;
+  balance: number;
 }
 
 export default function SzereloAtadasPage() {
@@ -45,6 +48,13 @@ export default function SzereloAtadasPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [fees, setFees] = useState<FeeRow[]>([]);
+  // Átadáskor készpénzben kifizetett összeg (a kitöltő kasszájából levonódik)
+  const [paidAmount, setPaidAmount] = useState("");
+  // Szerelő saját költése (alkatrész a saját pénzéből) — a tartozást növeli
+  const [costForm, setCostForm] = useState<{
+    employee_id: string; employee_name: string;
+    amount: string; note: string; supplier: string; receipt_no: string;
+  } | null>(null);
 
   const load = useCallback(() => {
     api.get<Row[]>("/api/tasks/service-handover/list").then(setRows).catch(() => {});
@@ -75,18 +85,43 @@ export default function SzereloAtadasPage() {
     try {
       const res = await api.post<{ picked: number; fee_total: number }>(
         "/api/tasks/service-handover/pickup",
-        { task_ids: [...selected], notify },
+        {
+          task_ids: [...selected],
+          notify,
+          paid_amount: paidAmount !== "" ? Number(paidAmount) : null,
+        },
       );
       toast(t("svcHo.done", {
         count: res.picked,
         fee: Math.round(res.fee_total).toLocaleString("hu-HU"),
       }), "success");
       setSelected(new Set());
+      setPaidAmount("");
       load();
     } catch (err) {
       toast(errorMessage(err), "error");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function saveCost(e: React.FormEvent) {
+    e.preventDefault();
+    if (!costForm) return;
+    try {
+      await api.post("/api/tasks/service-handover/ledger", {
+        employee_id: costForm.employee_id,
+        kind: "cost",
+        amount: Number(costForm.amount),
+        note: costForm.note || null,
+        supplier: costForm.supplier || null,
+        receipt_no: costForm.receipt_no || null,
+      });
+      toast(t("svcHo.costSaved"), "success");
+      setCostForm(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -98,6 +133,21 @@ export default function SzereloAtadasPage() {
           <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="h-4 w-4" />
           ✉ {t("svcHo.notify")}
         </label>
+        {selected.size > 0 && (
+          <label className="flex items-center gap-1.5 text-sm text-slate-700">
+            💵 {t("svcHo.paidNow")}
+            <input
+              type="number"
+              min={0}
+              value={paidAmount}
+              onChange={(e) => setPaidAmount(e.target.value)}
+              placeholder="0"
+              title={t("svcHo.paidNowHint")}
+              className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
+            />
+            <span className="text-xs text-slate-400">Ft</span>
+          </label>
+        )}
         {selected.size > 0 && (
           <button
             onClick={pickup}
@@ -166,7 +216,13 @@ export default function SzereloAtadasPage() {
                       />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <span className="font-mono text-xs font-semibold">{r.serial}</span>{" "}
+                      <Link
+                        href={`/feladatok?task=${r.task_id}`}
+                        title={t("svcHo.worksheetLinkHint")}
+                        className="font-mono text-xs font-semibold text-indigo-700 hover:underline"
+                      >
+                        {r.serial}
+                      </Link>{" "}
                       <span className="text-slate-600">{r.title}</span>
                     </td>
                     <td className="py-1.5 pr-2 text-slate-600">{r.client_name ?? "—"}</td>
@@ -206,6 +262,9 @@ export default function SzereloAtadasPage() {
             <tr className="text-left text-xs uppercase text-slate-500">
               <th className="py-1.5 pr-2">{t("svcHo.technician")}</th>
               <th className="py-1.5 pr-2 text-right">{t("svcHo.feeDue")}</th>
+              <th className="py-1.5 pr-2 text-right">{t("svcHo.costsCol")}</th>
+              <th className="py-1.5 pr-2 text-right">{t("svcHo.payoutsCol")}</th>
+              <th className="py-1.5 pr-2 text-right">{t("svcHo.balance")}</th>
               <th className="py-1.5 pr-2 text-right">{t("stats.count")}</th>
               <th className="py-1.5">{t("svcHo.worksheets")}</th>
             </tr>
@@ -213,18 +272,60 @@ export default function SzereloAtadasPage() {
           <tbody>
             {fees.map((f) => (
               <tr key={f.employee_id} className="border-t border-slate-100">
-                <td className="py-1.5 pr-2 font-medium">{f.employee_name ?? "?"}</td>
-                <td className="py-1.5 pr-2 text-right font-semibold tabular-nums">{ft(f.fee_total)}</td>
+                <td className="py-1.5 pr-2 font-medium">
+                  {f.employee_name ?? "?"}
+                  <button
+                    onClick={() => setCostForm({ employee_id: f.employee_id, employee_name: f.employee_name ?? "?", amount: "", note: "", supplier: "", receipt_no: "" })}
+                    title={t("svcHo.addCostHint")}
+                    className="ml-2 rounded border border-orange-300 px-1.5 py-0.5 text-xs text-orange-700 hover:bg-orange-50"
+                  >
+                    + {t("svcHo.addCost")}
+                  </button>
+                </td>
+                <td className="py-1.5 pr-2 text-right tabular-nums">{ft(f.fee_total)}</td>
+                <td className="py-1.5 pr-2 text-right tabular-nums text-orange-700">+{ft(f.costs)}</td>
+                <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-700">-{ft(f.payouts)}</td>
+                <td className={`py-1.5 pr-2 text-right font-semibold tabular-nums ${f.balance > 0 ? "text-rose-700" : f.balance < 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                  {ft(f.balance)}
+                </td>
                 <td className="py-1.5 pr-2 text-right tabular-nums text-slate-400">{f.count}</td>
                 <td className="py-1.5 font-mono text-xs text-slate-500">{f.serials.join(", ")}</td>
               </tr>
             ))}
             {fees.length === 0 && (
-              <tr><td colSpan={4} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
+              <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
             )}
           </tbody>
         </table>
       </div>
+      {costForm && (
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setCostForm(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={saveCost} className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">🧾 {t("svcHo.costTitle", { name: costForm.employee_name })}</h2>
+            <p className="text-xs text-slate-500">{t("svcHo.costHint")}</p>
+            <label className="block text-sm">
+              {t("cash.amount")} (Ft) *
+              <input required type="number" min={1} value={costForm.amount} onChange={(e) => setCostForm({ ...costForm, amount: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="block text-sm">
+              {t("cash.note")} *
+              <input required value={costForm.note} onChange={(e) => setCostForm({ ...costForm, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="block text-sm">
+              {t("cash.supplier")}
+              <input value={costForm.supplier} onChange={(e) => setCostForm({ ...costForm, supplier: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="block text-sm">
+              {t("cash.receiptNo")}
+              <input value={costForm.receipt_no} onChange={(e) => setCostForm({ ...costForm, receipt_no: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setCostForm(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("common.save")}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </AppShell>
   );
 }

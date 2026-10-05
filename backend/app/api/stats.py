@@ -12,7 +12,7 @@ Statisztika (stats modul): bevétel/költség bontás kategóriára (kávé, egy
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -36,7 +36,8 @@ router = APIRouter()
 
 
 def _money(v: float) -> float:
-    return round(v or 0.0, 2)
+    # Kassza/statisztika: 1 Ft-ra kerekítve — tizedes nem kell a felületen.
+    return float(round(v or 0.0))
 
 
 def _range_filter(q, column, date_from: date | None, date_to: date | None):
@@ -69,6 +70,8 @@ class CashRegisterOut(BaseModel):
     deposits: float
     withdrawals: float
     expenses: float
+    transfers_in: float = 0.0  # elfogadott bejövő pénz-átadások
+    transfers_out: float = 0.0
     balance: float
     entries: list[CashEntryOut] = []
 
@@ -100,6 +103,26 @@ async def _cash_register(
         e.amount_gross for e in entries if (e.entry_type or "expense") == "expense"
     )
 
+    # Elfogadott pénz-átadások: bejövő +, kimenő −
+    from app.models import CashTransfer
+
+    t_in = float((await db.execute(
+        _range_filter(
+            select(sa_func.coalesce(sa_func.sum(CashTransfer.amount), 0.0)).where(
+                CashTransfer.to_user_id == user_id, CashTransfer.status == "accepted",
+            ),
+            CashTransfer.decided_at, date_from, date_to,
+        )
+    )).scalar_one() or 0.0)
+    t_out = float((await db.execute(
+        _range_filter(
+            select(sa_func.coalesce(sa_func.sum(CashTransfer.amount), 0.0)).where(
+                CashTransfer.from_user_id == user_id, CashTransfer.status == "accepted",
+            ),
+            CashTransfer.decided_at, date_from, date_to,
+        )
+    )).scalar_one() or 0.0)
+
     out_entries: list[CashEntryOut] = []
     if with_entries:
         creator_ids = {e.created_by for e in entries if e.created_by}
@@ -124,7 +147,10 @@ async def _cash_register(
         cash_revenue=_money(cash_revenue),
         deposits=_money(deposits), withdrawals=_money(withdrawals),
         expenses=_money(expenses),
-        balance=_money(cash_revenue + deposits - withdrawals - expenses),
+        transfers_in=_money(t_in), transfers_out=_money(t_out),
+        balance=_money(
+            cash_revenue + deposits + t_in - t_out - withdrawals - expenses
+        ),
         entries=out_entries,
     )
 
@@ -364,3 +390,136 @@ async def business_stats(
         "expenses_total": _money(expenses_total),
         "revenue_total_net": _money(revenue_total),
     }
+
+
+# ─── Pénz-átadás képviselők között (elfogadással) ────────────────────────────
+
+
+class TransferBody(BaseModel):
+    to_user_id: str
+    amount: float
+    note: str | None = None
+
+
+class TransferOut(BaseModel):
+    id: str
+    from_user_id: str
+    from_name: str | None
+    to_user_id: str
+    to_name: str | None
+    amount: float
+    note: str | None
+    status: str
+    created_at: datetime
+
+
+async def _transfer_out(db: AsyncSession, rows) -> list[TransferOut]:
+    from app.models import CashTransfer  # noqa: F401
+
+    ids = {r.from_user_id for r in rows} | {r.to_user_id for r in rows}
+    names: dict = {}
+    if ids:
+        for u in (await db.execute(select(User).where(User.id.in_(ids)))).scalars():
+            names[u.id] = u.display_name
+    return [
+        TransferOut(
+            id=str(r.id), from_user_id=str(r.from_user_id),
+            from_name=names.get(r.from_user_id),
+            to_user_id=str(r.to_user_id), to_name=names.get(r.to_user_id),
+            amount=_money(r.amount), note=r.note, status=r.status,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@router.post(
+    "/cash/transfer", response_model=TransferOut,
+    dependencies=[Depends(require_module("cashbox"))], status_code=201,
+)
+async def create_transfer(
+    body: TransferBody,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """Készpénz átadása másik képviselőnek — a címzett elfogadásáig függő."""
+    from app.models import CashTransfer
+
+    if body.amount <= 0 or body.amount > 10_000_000:
+        raise HTTPException(status_code=422, detail={"code": "cash.bad_amount"})
+    try:
+        to_id = uuid.UUID(body.to_user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+    if to_id == actor.id:
+        raise HTTPException(status_code=422, detail={"code": "cash.self_transfer"})
+    target = (await db.execute(select(User).where(User.id == to_id))).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+    t = CashTransfer(
+        from_user_id=actor.id, to_user_id=to_id,
+        amount=float(round(body.amount)), note=(body.note or "").strip()[:512] or None,
+    )
+    db.add(t)
+    await db.commit()
+    await db.refresh(t)
+    return (await _transfer_out(db, [t]))[0]
+
+
+@router.get(
+    "/cash/transfers", response_model=list[TransferOut],
+    dependencies=[Depends(require_module("cashbox"))],
+)
+async def list_transfers(
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """A rám váró (függő) és a legutóbbi saját átadásaim."""
+    from app.models import CashTransfer
+
+    rows = (
+        await db.execute(
+            select(CashTransfer)
+            .where(
+                (CashTransfer.to_user_id == actor.id)
+                | (CashTransfer.from_user_id == actor.id)
+            )
+            .order_by(CashTransfer.created_at.desc())
+            .limit(50)
+        )
+    ).scalars().all()
+    return await _transfer_out(db, rows)
+
+
+@router.post(
+    "/cash/transfers/{transfer_id}/decide", response_model=TransferOut,
+    dependencies=[Depends(require_module("cashbox"))],
+)
+async def decide_transfer(
+    transfer_id: str,
+    accept: bool = Query(...),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """A címzett elfogadja vagy elutasítja a pénz-átadást — elfogadáskor az
+    összeg az ő kasszájába kerül, az átadóéból levonódik."""
+    from app.models import CashTransfer
+
+    try:
+        tid = uuid.UUID(transfer_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "cash.transfer_not_found"})
+    t = (
+        await db.execute(select(CashTransfer).where(CashTransfer.id == tid))
+    ).scalar_one_or_none()
+    if t is None:
+        raise HTTPException(status_code=404, detail={"code": "cash.transfer_not_found"})
+    if t.to_user_id != actor.id:
+        raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+    if t.status != "pending":
+        raise HTTPException(status_code=422, detail={"code": "cash.transfer_decided"})
+    t.status = "accepted" if accept else "declined"
+    t.decided_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(t)
+    return (await _transfer_out(db, [t]))[0]

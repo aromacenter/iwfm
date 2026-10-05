@@ -560,6 +560,59 @@ class WorksheetSettings(Base):
     )
 
 
+class CashTransfer(Base):
+    """Készpénz-átadás képviselők között — a címzett ELFOGADÁSÁVAL válik
+    érvényessé (mint a termék-átadás): addig függőben van."""
+
+    __tablename__ = "cash_transfers"
+    __table_args__ = (
+        Index("ix_cash_transfers_to", "to_user_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    from_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE", name="fk_ct_from"), nullable=False
+    )
+    to_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE", name="fk_ct_to"), nullable=False
+    )
+    amount: Mapped[float] = mapped_column(Float, nullable=False)  # Ft, bruttó
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TechLedger(Base):
+    """Külsős szerelő folyószámlája: cost = a szerelő saját pénzéből vett
+    alkatrész/szolgáltatás (a tartozásunkat NÖVELI), payout = átadáskor
+    készpénzben kifizetett összeg (CSÖKKENTI). Az egyenleg a munkalap-díjakkal
+    együtt: díjak + cost − payout."""
+
+    __tablename__ = "tech_ledger"
+    __table_args__ = (
+        Index("ix_tech_ledger_emp", "employee_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("employees.id", ondelete="CASCADE", name="fk_tl_emp"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # cost | payout
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    supplier: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    receipt_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_tl_user"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class CounterReport(Base):
     """A partner által (QR-oldalon) bejelentett számláló-állás — az
     elszámolás-űrlap ebből tölt elő; feldolgozottá a mentés teszi."""
@@ -903,6 +956,10 @@ class Partner(Base):
     contract_no_min_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Elszámolás-gyakoriság tükre (1/2/4 hét) az aktív szerződésből.
     contract_settlement_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    contract_phone_settlement: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    contract_visit_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Az aktív szerződés fizetési módja/határideje (elszámolás-alapértelmezés).
     contract_payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
     contract_payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -1782,6 +1839,13 @@ class PartnerContract(Base):
     auto_billing: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # Telefonos elszámolás: a partnert NEM kell útvonalba tervezni — az
+    # állásokat telefonon/QR-en diktálja. Ha visit_weeks is be van állítva,
+    # ritkább (pl. karbantartó) látogatás mégis ütemeződik.
+    phone_settlement: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    visit_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Számlára kerülő norma (adag/kg): ha be van állítva, a számla
     # megjegyzésében megjelenik az átadott kávéból lefőzhető adagok száma
     # (ezzel a normával számolva), és az átadott kávé 0 Ft-os tételként a

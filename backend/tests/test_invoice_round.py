@@ -318,3 +318,61 @@ async def test_counter_report_prefills_context(client, manager):
     m = next(x for x in ctx["machines"] if x["barcode"] == "RPT-1")
     assert m["reported_counters"] == [180]
     assert m["reported_by"] == "Fodrász Olivér"
+
+
+async def test_customer_cannot_settle_but_can_sell(client, manager):
+    """Ügyfél (nincs kihelyezett gép): leltáros/gépes elszámolás tiltva,
+    azonnali értékesítés (csak átadás) megy."""
+    from tests.test_consignment import make_product
+
+    _, mgr = manager
+    partner = (
+        await client.post("/api/partners", json={"name": "Csak Ügyfél"}, headers=mgr)
+    ).json()
+    coffee = await make_product(client, mgr, price_per_portion=100.0, grams_per_portion=10)
+    cream = await make_product(
+        client, mgr, name="Tejszín2", price_per_portion=200.0, unit="db",
+        is_consignment=False,
+    )
+    denied = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [{"product_id": coffee["id"], "physical_qty": 0.5}]},
+        headers=mgr,
+    )
+    assert denied.status_code == 422
+    assert denied.json()["detail"]["code"] == "settlement.customer_only"
+
+    ok = await client.post(
+        "/api/settlements",
+        json={"partner_id": partner["id"], "payment_method": "cash",
+              "lines": [], "machines": [],
+              "handovers": [{"product_id": cream["id"], "quantity": 2}]},
+        headers=mgr,
+    )
+    assert ok.status_code == 201, ok.text
+
+
+async def test_cash_transfer_flow(client, manager, admin):
+    """Pénz-átadás: függő → a címzett elfogadja → az egyenlegekben mozog."""
+    _, mgr = manager
+    _, adm = admin
+    me = (await client.get("/api/auth/me", headers=mgr)).json()
+    other = (await client.get("/api/auth/me", headers=adm)).json()
+    created = await client.post(
+        "/api/stats/cash/transfer",
+        json={"to_user_id": other["id"], "amount": 5000, "note": "napi kassza"},
+        headers=mgr,
+    )
+    assert created.status_code == 201, created.text
+    tid = created.json()["id"]
+    # idegen nem dönthet — a feladó sem
+    deny = await client.post(f"/api/stats/cash/transfers/{tid}/decide?accept=true", headers=mgr)
+    assert deny.status_code == 403
+    acc = await client.post(f"/api/stats/cash/transfers/{tid}/decide?accept=true", headers=adm)
+    assert acc.status_code == 200, acc.text
+    reg = (await client.get("/api/stats/cash/me", headers=adm)).json()
+    assert reg["transfers_in"] == 5000
+    reg2 = (await client.get("/api/stats/cash/me", headers=mgr)).json()
+    assert reg2["transfers_out"] == 5000
+    del me

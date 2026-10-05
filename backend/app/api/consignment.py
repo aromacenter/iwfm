@@ -1544,6 +1544,40 @@ async def create_settlement(
 
     await apply_active_contract(db, partner)
 
+    # ELSZÁMOLNI csak PARTNERREL lehet. Partner-viszonyt jelent: kihelyezett
+    # tárgyi-eszköz gép VAGY kint lévő bizományi készlet VAGY korábbi
+    # elszámolás. Tiszta ügyfélnek (egyik sincs) csak azonnali értékesítés /
+    # kiszállítás megy — ott lines/machines nélkül jön a mentés.
+    if body.lines or body.machines:
+        has_placed = (
+            await db.execute(
+                select(Asset.id).where(
+                    Asset.partner_id == partner.id,
+                    Asset.tangible.is_(True),
+                    Asset.customer_owned.is_(False),
+                ).limit(1)
+            )
+        ).first()
+        if has_placed is None:
+            has_stock = (
+                await db.execute(
+                    select(PartnerStock.product_id)
+                    .where(PartnerStock.partner_id == partner.id)
+                    .limit(1)
+                )
+            ).first()
+            has_prior = (
+                await db.execute(
+                    select(Settlement.id)
+                    .where(Settlement.partner_id == partner.id)
+                    .limit(1)
+                )
+            ).first()
+            if has_stock is None and has_prior is None:
+                raise HTTPException(
+                    status_code=422, detail={"code": "settlement.customer_only"}
+                )
+
     settlement = Settlement(
         partner_id=partner.id,
         settled_by_user_id=actor.id,
@@ -2671,6 +2705,7 @@ async def delete_expense(
 
 class DuePartnerOut(BaseModel):
     partner_id: str
+    phone_visit: bool = False  # telefonos partner karbantartó-látogatása
     partner_code: str | None
     name: str
     contact_phone: str | None
@@ -2774,6 +2809,13 @@ async def due_settlements(
         last = _aware(last_at.get(p.id))
         since = (now - last).days if last is not None else None
         interval_weeks = p.contract_settlement_weeks or 4
+        # Telefonos elszámolású partner: az útvonalba NEM kerül be — kivéve,
+        # ha a szerződésben karbantartó-látogatási ciklus (visit_weeks) van.
+        phone = bool(getattr(p, "contract_phone_settlement", False))
+        if phone:
+            if not p.contract_visit_weeks:
+                continue
+            interval_weeks = p.contract_visit_weeks
         interval_days = interval_weeks * 7
         next_due = (
             _tue_thu((last + timedelta(days=interval_days)).date())
@@ -2812,6 +2854,7 @@ async def due_settlements(
                 avg_daily_kg=avg_daily,
                 days_left=days_left,
                 suggested_kg=suggested,
+                phone_visit=phone,
             )
         )
     # hamarosan kifogyók legelöl, aztán a sosem elszámoltak, majd a legrégebbiek

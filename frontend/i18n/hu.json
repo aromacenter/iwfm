@@ -496,7 +496,11 @@
     "pooledBadge": "közös készlet ({count} kávé)",
     "pooledPrimaryHint": "Összevont kávékészlet: az előző készlet az összes átadott kávé összege; mentés után a teljes maradék erre a kávéra olvad össze.",
     "pooledHidden": "összevonva",
-    "pooledHiddenHint": "Ez a kávé a közös készletbe olvad — a leltár az összevont soron fut."
+    "pooledHiddenHint": "Ez a kávé a közös készletbe olvad — a leltár az összevont soron fut.",
+    "customerBanner": "Ügyfél — nincs kihelyezett tárgyi-eszköz gépünk, elszámolás nem készíthető.",
+    "customerBannerHint": "Azonnali értékesítés (💰) és Kiszállítás (🚚) továbbra is elérhető; a saját gépe javítása a Feladatok/Átvétel menüben megy. Partnerré a Gépek menüben történő kihelyezéssel válik.",
+    "phoneVisit": "telefonos — karbantartó látogatás",
+    "phoneVisitHint": "Telefonos elszámolású partner: a látogatás csak a szerződés szerinti karbantartási ciklus miatt esedékes."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1789,7 +1793,12 @@
     "settlement.invoice_pdf_unavailable": "A számlakép / újraküldés a beállított számlázó szolgáltatónál nem érhető el.",
     "intake.contact_required": "A telefonszám és az e-mail cím megadása kötelező az átvételhez.",
     "worksheet.too_many_photos": "Legfeljebb 16 fotó csatolható egy munkalaphoz.",
-    "worksheet.photo_not_found": "A fotó nem található."
+    "worksheet.photo_not_found": "A fotó nem található.",
+    "settlement.customer_only": "Ez a partner ügyfél (nincs kihelyezett gépünk nála) — elszámolás nem készíthető, csak azonnali értékesítés/kiszállítás.",
+    "cash.transfer_not_found": "A pénz-átadás nem található.",
+    "cash.transfer_decided": "Ezt az átadást már elfogadták/elutasították.",
+    "cash.self_transfer": "Saját magadnak nem adhatsz át pénzt.",
+    "cash.bad_amount": "Érvénytelen összeg."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2165,7 +2174,13 @@
     "invoiceNorma": "Számlára kerülő norma (adag/kg)",
     "invoiceNormaPh": "pl. 80",
     "invoiceNormaHint": "Ha ki van töltve: a számla megjegyzésében megjelenik az átadott kávéból lefőzhető adagok száma (ezzel a normával), és az átadott kávé 0 Ft-os tételként a számlára kerül. Más számítást NEM befolyásol.",
-    "sumInvoiceNorma": "számla-norma: {n} adag/kg"
+    "sumInvoiceNorma": "számla-norma: {n} adag/kg",
+    "phoneSettlement": "Telefonos elszámolás",
+    "phoneSettlementHint": "A partnert az útvonal-tervezés NEM ütemezi be — az állásokat telefonon/QR-oldalon diktálja.",
+    "visitWeeks": "Látogatási ciklus (pl. karbantartás)",
+    "visitWeeksPh": "pl. 12",
+    "visitWeeksHint": "Ha ki van töltve, ennyi hetente mégis bekerül a látogatási tervbe (📞🔧 jelzéssel). Üresen soha.",
+    "visitEveryWeeks": "{n} hetente látogatás"
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",
@@ -2513,7 +2528,22 @@
       "expense": "💸 Költség rögzítése",
       "deposit": "➕ Betét a dolgozó kasszájába",
       "withdrawal": "➖ Kivét a dolgozó kasszájából"
-    }
+    },
+    "periodAll": "Teljes idő",
+    "transfersIn": "Átvett pénz",
+    "transfersOut": "Átadott pénz",
+    "transferBtn": "Pénz átadása",
+    "transferTitle": "Készpénz átadása képviselőnek",
+    "transferHint": "A másik félnek el kell fogadnia — addig függőben marad, és egyik kasszában sem mozog.",
+    "transferTo": "Címzett",
+    "transferSend": "Átadás elküldése",
+    "transferSent": "Pénz-átadás elküldve — a címzett elfogadására vár.",
+    "transferIncoming": "{amount} Ft készpénzt ad át neked — elfogadod?",
+    "transferPendingOut": "Függő átadás: {amount} Ft → {name} (elfogadásra vár)",
+    "transferAccept": "Elfogadom",
+    "transferDecline": "Elutasítom",
+    "transferAccepted": "Átvétel elfogadva — az összeg a kasszádba került.",
+    "transferDeclined": "Átadás elutasítva."
   },
   "stats": {
     "title": "Statisztika",
@@ -2561,6 +2591,17 @@
     "feesTitle": "Elhozott gépek — díj-összesítés",
     "feesHint": "Az időszakban elhozott KSZ-munkalapok visszaigazolt nettó költségei — ennyi javítási díj jár a szerelőnek. A készpénzes költései/levonásai a Kasszában könyvelhetők.",
     "cashLink": "Kassza (költések, levonások)",
-    "worksheets": "Munkalapok"
+    "worksheets": "Munkalapok",
+    "paidNow": "Most kifizetve",
+    "paidNowHint": "Átadáskor készpénzben kifizetett összeg — a TE kasszádból levonódik, a szerelő egyenlegét csökkenti. Lehet több vagy kevesebb is, mint a járandóság.",
+    "costsCol": "Költései",
+    "payoutsCol": "Kifizetve",
+    "balance": "Egyenleg",
+    "addCost": "Költés",
+    "addCostHint": "A szerelő a saját pénzéből vett alkatrészt/szolgáltatást — az összeg a tartozásunkat NÖVELI.",
+    "costTitle": "Szerelő költése — {name}",
+    "costHint": "Saját pénzből vett alkatrész/szolgáltatás — hozzáadódik a szerelőnek járó összeghez.",
+    "costSaved": "Költés rögzítve a szerelő egyenlegén.",
+    "worksheetLinkHint": "A feladat adatlapja — mi történt, mi a teendő."
   }
 }

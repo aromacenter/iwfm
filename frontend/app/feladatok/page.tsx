@@ -97,6 +97,25 @@ export default function FeladatokPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Mas oldalrol (pl. Szerelo-atadas, Telegram) erkezo ?task= - kinyitjuk
+  // es odagorgetjuk a konkret feladatot.
+  useEffect(() => {
+    const tid = new URLSearchParams(window.location.search).get("task");
+    if (!tid || tasks.length === 0) return;
+    if (!tasks.some((x) => x.id === tid)) return;
+    setExpanded(tid);
+    setStatusFilter(""); // a kesz feladat is latsszon
+    setTimeout(() => {
+      const el = document.getElementById(`task-${tid}`);
+      if (el) {
+        el.scrollIntoView({ block: "start", behavior: "smooth" });
+        el.classList.add("ring-2", "ring-indigo-400");
+        setTimeout(() => el.classList.remove("ring-2", "ring-indigo-400"), 4000);
+      }
+    }, 150);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks.length]);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<{
     employee_name: string;
@@ -574,7 +593,7 @@ export default function FeladatokPage() {
                 : !task.worksheet_external
           )
           .map((task) => (
-          <div key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div key={task.id} id={`task-${task.id}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">

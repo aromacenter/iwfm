@@ -75,6 +75,10 @@ class ContractBody(BaseModel):
     # Automata számlázás: a diktált számláló-állásokból mentett elszámolás
     # után a számla azonnal, emberi kattintás nélkül kiállítódik.
     auto_billing: bool = False
+    # Telefonos elszámolás: az útvonal-tervezés kihagyja a partnert;
+    # visit_weeks megadásával ritkább (karbantartó) látogatás mégis ütemeződik.
+    phone_settlement: bool = False
+    visit_weeks: int | None = Field(default=None, ge=1, le=52)
     # Számlára kerülő norma (adag/kg) — csak a számla-megjegyzés lefőzhető
     # adag kijelzését és a 0 Ft-os kávésort vezérli.
     invoice_norma: int | None = Field(default=None, ge=1, le=1000)
@@ -112,6 +116,8 @@ class ContractOut(BaseModel):
     payment_terms_days: int | None
     no_minimum: bool
     auto_billing: bool = False
+    phone_settlement: bool = False
+    visit_weeks: int | None = None
     invoice_norma: int | None = None
     default_product_id: str | None = None
     default_product_name: str | None = None
@@ -158,6 +164,8 @@ def _out(c: PartnerContract, product_name: str | None = None) -> ContractOut:
         payment_terms_days=c.payment_terms_days,
         no_minimum=c.no_minimum,
         auto_billing=c.auto_billing,
+        phone_settlement=c.phone_settlement,
+        visit_weeks=c.visit_weeks,
         invoice_norma=c.invoice_norma,
         default_product_id=str(c.default_product_id) if c.default_product_id else None,
         default_product_name=product_name,
