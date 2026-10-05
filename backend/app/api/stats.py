@@ -90,18 +90,25 @@ async def _cash_register(
     cash_revenue = float((await db.execute(rev_q)).scalar_one() or 0.0)
 
     exp_q = select(AgentExpense).where(AgentExpense.user_id == user_id)
+    sum_q = select(
+        AgentExpense.entry_type,
+        sa_func.coalesce(sa_func.sum(AgentExpense.amount_gross), 0.0),
+    ).where(AgentExpense.user_id == user_id)
     if date_from:
         exp_q = exp_q.where(AgentExpense.expense_date >= date_from)
+        sum_q = sum_q.where(AgentExpense.expense_date >= date_from)
     if date_to:
         exp_q = exp_q.where(AgentExpense.expense_date <= date_to)
+        sum_q = sum_q.where(AgentExpense.expense_date <= date_to)
     entries = (
         await db.execute(exp_q.order_by(AgentExpense.expense_date.desc()).limit(300))
     ).scalars().all()
-    deposits = sum(e.amount_gross for e in entries if e.entry_type == "deposit")
-    withdrawals = sum(e.amount_gross for e in entries if e.entry_type == "withdrawal")
-    expenses = sum(
-        e.amount_gross for e in entries if (e.entry_type or "expense") == "expense"
-    )
+    # Az összegek SQL-aggregátumból jönnek — a tétel-lista 300-as limitje
+    # (megjelenítés) nem torzíthatja az egyenleget (import utáni nagy történet!).
+    sums = {(t or "expense"): float(v or 0.0) for t, v in (await db.execute(sum_q)).all()}
+    deposits = sums.get("deposit", 0.0)
+    withdrawals = sums.get("withdrawal", 0.0)
+    expenses = sums.get("expense", 0.0)
 
     # Elfogadott pénz-átadások: bejövő +, kimenő −
     from app.models import CashTransfer

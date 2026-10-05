@@ -1615,6 +1615,17 @@ async def create_settlement(
             )
         ).scalars().all()
         fallback_pid = stock_pids[0] if len(stock_pids) == 1 else None
+        # Sávos adagárazás (tiered modul): a szerződés sávjai — az elszámolt
+        # adagszám sávja adja a gép adagárát (kézi felülírás erősebb).
+        from app.services.wfm.license import module_enabled
+
+        price_tiers = (
+            partner.contract_price_tiers
+            if isinstance(partner.contract_price_tiers, list) and partner.contract_price_tiers
+            else None
+        )
+        if price_tiers and not await module_enabled(db, "tiered"):
+            price_tiers = None
         for m_in in body.machines:
             try:
                 aid = uuid.UUID(m_in.asset_id)
@@ -1726,6 +1737,25 @@ async def create_settlement(
                     if i not in control_idx  # az összesítő nem fogyás
                 )
                 unit_price = weighted / brewed
+            # Sávos ár: a számlázott adagszám sávjának ára felülírja a
+            # termék-/számláló-árat (a kézi felülírás ezt is felülírja).
+            tier_price: float | None = None
+            if price_tiers and billed > 0:
+                for t_ in price_tiers:
+                    try:
+                        lo = float(t_.get("qty_from") or 0)
+                        hi = t_.get("qty_to")
+                        hi_f = float(hi) if hi not in (None, "") else None
+                    except (TypeError, ValueError, AttributeError):
+                        continue
+                    if billed >= lo and (hi_f is None or billed <= hi_f):
+                        try:
+                            tier_price = float(t_.get("price"))
+                        except (TypeError, ValueError):
+                            tier_price = None
+                        break
+                if tier_price is not None:
+                    unit_price = tier_price
             if m_in.price_per_portion is not None:
                 if abs(m_in.price_per_portion - unit_price) > 1e-9:
                     manual_overrides.append({
@@ -1769,6 +1799,8 @@ async def create_settlement(
                         continue
                     if m_in.price_per_portion is not None:
                         row_price = unit_price  # kézi felülírás minden számlálóra
+                    elif tier_price is not None:
+                        row_price = tier_price  # sávos ár minden számlálóra
                     elif cps and i < len(cps) and cps[i] is not None:
                         row_price = float(cps[i])
                     elif cps_default is not None:

@@ -59,6 +59,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/gepek", key: "nav.inventory", perm: "machines", icon: "☕" },
       { href: "/termekek", key: "nav.products", perm: "products", icon: "📦" },
       { href: "/raktar", key: "nav.warehouse", perm: "settlements", icon: "🏬" },
+      { href: "/leltar", key: "nav.stocktake", perm: "settlements", icon: "📋", module: "stocktake" },
     ],
   },
   {

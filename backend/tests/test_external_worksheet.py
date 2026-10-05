@@ -190,3 +190,58 @@ async def test_renounce_requires_total_loss(client, manager):
         json={"renounce": True, "accepted_by": "Kovacs Anna"},
     )
     assert res.status_code == 422
+
+
+async def test_fee_no_double_count_on_accepted_quote(client, manager):
+    """ce3a0ae4: elfogadott konstrukcional a szerelo-dij CSAK a konstrukcio
+    koltsege — a tetelesen rogzitett munkak koltsege nem adodik hozza."""
+    from tests.conftest import make_employee_record, make_user
+
+    _, mgr = manager
+    emp_user, emp_hdr = await make_user(email="dupla-dij@example.com", role="szervizes")
+    emp = await make_employee_record(emp_user)
+    task = (
+        await client.post(
+            "/api/tasks",
+            json={"title": "Daralo javitas", "employee_id": str(emp.id),
+                  "due_date": "2026-10-05", "external_service": True},
+            headers=mgr,
+        )
+    ).json()
+    long_name = (
+        "Alap javitas: Daralomotor fogaskerek csere (eltort), kifolyo "
+        "szetszedese, tisztitasa, karbantartas elvegzese, tomitesek csereje, "
+        "belso takaritas a gepben, tomitesek csereje."
+    )
+    res = await client.put(
+        f"/api/me/tasks/{task['id']}/worksheet",
+        json={
+            "work_description": "Szetszedes, javitas.",
+            "works": [{"name": "Alapjavitas, a gep szetszedese, tisztitasa, "
+                               "tomitesek csereje, alkatresz csere, karbantartas",
+                       "cost_net": 21000}],
+            "repair_options": [{"name": long_name, "cost_net": 29000,
+                                "price_net": 40000}],
+        },
+        headers=emp_hdr,
+    )
+    assert res.status_code == 200, res.text
+
+    # belso elfogadas → accepted
+    res = await client.post(
+        f"/api/tasks/{task['id']}/quote/accept-internal",
+        json={"option_name": long_name},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+
+    res = await client.get("/api/tasks/service-handover/list", headers=mgr)
+    assert res.status_code == 200, res.text
+    row = next(r for r in res.json() if r["task_id"] == task["id"])
+    assert row["fee_total"] == 29000  # NEM 50000!
+
+    # a hosszu tetelnev mellett is epul a PDF (tordelve, nem levagva)
+    res = await client.get(
+        f"/api/tasks/{task['id']}/worksheet/pdf?variant=customer", headers=mgr
+    )
+    assert res.status_code == 200

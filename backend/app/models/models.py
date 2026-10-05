@@ -960,6 +960,8 @@ class Partner(Base):
         Boolean, nullable=False, default=False, server_default="0"
     )
     contract_visit_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Az aktív szerződés sávos adagár-tükre (tiered modul).
+    contract_price_tiers: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Az aktív szerződés fizetési módja/határideje (elszámolás-alapértelmezés).
     contract_payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
     contract_payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -1846,6 +1848,10 @@ class PartnerContract(Base):
         Boolean, nullable=False, default=False, server_default="0"
     )
     visit_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Sávos adagárazás (tiered modul): [{"qty_from","qty_to","price"}] — az
+    # elszámolt adagszám sávja adja a gép adagárát; qty_to None = felső határ
+    # nélkül. Üres/None = nincs sávos ár (a szokásos ár-feloldás él).
+    price_tiers: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Számlára kerülő norma (adag/kg): ha be van állítva, a számla
     # megjegyzésében megjelenik az átadott kávéból lefőzhető adagok száma
     # (ezzel a normával számolva), és az átadott kávé 0 Ft-os tételként a
@@ -1920,6 +1926,54 @@ class WarehouseStock(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class Stocktake(Base):
+    """Leltár-ív (stocktake modul): egy raktár teljes készletének megszámolása.
+    Nyitáskor pillanatkép készül a raktár termékeiről (stocktake_lines),
+    záráskor a számolt értékek leltár-korrekciós (adjust) mozgással állnak be."""
+
+    __tablename__ = "stocktakes"
+    __table_args__ = (Index("ix_stocktakes_wh", "warehouse_id", "opened_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("warehouses.id", ondelete="CASCADE", name="fk_stocktakes_wh"),
+        nullable=False,
+    )
+    warehouse_name: Mapped[str] = mapped_column(String(128), nullable=False)  # pillanatkép
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="open", server_default="open"
+    )  # open | closed
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    opened_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    closed_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    opened_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class StocktakeLine(Base):
+    """Egy leltár-ív sora: a nyitáskori könyv szerinti készlet (system_qty)
+    és a megszámolt érték (counted_qty, üres = még nem számolták)."""
+
+    __tablename__ = "stocktake_lines"
+    __table_args__ = (Index("ix_stocktake_lines_st", "stocktake_id"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    stocktake_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("stocktakes.id", ondelete="CASCADE", name="fk_stlines_st"),
+        nullable=False,
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="CASCADE", name="fk_stlines_product"),
+        nullable=False,
+    )
+    product_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    unit: Mapped[str] = mapped_column(String(16), nullable=False, default="db")
+    system_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    counted_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class WarehouseMovement(Base):

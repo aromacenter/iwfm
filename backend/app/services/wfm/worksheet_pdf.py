@@ -134,6 +134,18 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             c.drawString(left, y, paragraph)
             y -= 4.5 * mm
 
+    def name_lines(text: str, max_chars: int) -> list[str]:
+        # tétel-nevek tördelése — a hosszú szöveg NEM vágódik le (b83391bc)
+        out: list[str] = []
+        for paragraph in str(text or "").splitlines() or [""]:
+            while len(paragraph) > max_chars:
+                cut = paragraph.rfind(" ", 0, max_chars)
+                cut = cut if cut > 0 else max_chars
+                out.append(paragraph[:cut])
+                paragraph = paragraph[cut:].lstrip()
+            out.append(paragraph)
+        return out or [""]
+
     accent_tint = tuple(ch + (1 - ch) * 0.88 for ch in accent)  # nagyon világos akcentus
 
     def section(title: str) -> None:
@@ -228,12 +240,16 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         c.setFont(FONT, 9)
         works_total = 0.0
         for item in works[:25]:
-            c.drawString(left, y, str(item.get("name", ""))[:70])
+            rows = name_lines(item.get("name", ""), 70)
+            c.drawString(left, y, rows[0])
             price = item.get(works_field)
             if price is not None:
                 works_total += float(price)
                 c.drawRightString(right, y, f"{float(price):,.0f} Ft".replace(",", " "))
             y -= 4.5 * mm
+            for cont in rows[1:]:
+                c.drawString(left + 3 * mm, y, cont)
+                y -= 4.5 * mm
         if works_total > 0:
             c.setFont(FONT_BOLD, 9)
             c.drawRightString(
@@ -252,11 +268,15 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         y -= 5 * mm
         c.setFont(FONT, 9)
         for item in repair_options[:25]:
-            c.drawString(left, y, str(item.get("name", ""))[:70])
+            rows = name_lines(item.get("name", ""), 70)
+            c.drawString(left, y, rows[0])
             price = item.get(r_field)
             if price is not None:
                 c.drawRightString(right, y, f"{float(price):,.0f} Ft".replace(",", " "))
             y -= 4.5 * mm
+            for cont in rows[1:]:
+                c.drawString(left + 3 * mm, y, cont)
+                y -= 4.5 * mm
         y -= 1 * mm
 
     # ─── Anyagok / tételek ───
@@ -276,7 +296,8 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         c.setFont(FONT, 9)
         total = 0.0
         for item in materials[:25]:
-            c.drawString(left, y, str(item.get("name", ""))[:60])
+            mat_rows = name_lines(item.get("name", ""), 50)
+            c.drawString(left, y, mat_rows[0])
             c.drawString(left + 95 * mm, y, str(item.get("qty", "")))
             c.drawString(left + 125 * mm, y, str(item.get("unit", "")))
             if price_col:
@@ -290,10 +311,20 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
                     total += amount
                     c.drawRightString(right, y, f"{amount:,.0f} Ft".replace(",", " "))
             y -= 4.5 * mm
+            for cont in mat_rows[1:]:
+                c.drawString(left + 3 * mm, y, cont)
+                y -= 4.5 * mm
         if price_col and total > 0:
             c.setFont(FONT_BOLD, 9)
             c.drawRightString(right, y, f"Összesen (nettó): {total:,.0f} Ft".replace(",", " "))
             y -= 5 * mm
+
+    # ─── Megjegyzés (ügyfél-példány: a képviselő megjegyzése külön szakaszban,
+    # NEM az "Elvégzett munka" alatt — b83391bc) ───
+    remark = (data.get("remark") or "").strip()
+    if remark:
+        section("Megjegyzés")
+        wrapped(remark)
 
     # ─── Megjegyzések ───
     comments = data.get("comments") or [] if show_comments else []

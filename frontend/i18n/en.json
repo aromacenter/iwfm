@@ -164,7 +164,8 @@
     "gls": "Parcels (GLS)",
     "cashbox": "Cash register",
     "stats": "Statistics",
-    "serviceHandover": "Technician handover"
+    "serviceHandover": "Technician handover",
+    "stocktake": "Stocktake"
   },
   "roles": {
     "admin": "Admin",
@@ -1798,7 +1799,13 @@
     "cash.transfer_not_found": "Transfer not found.",
     "cash.transfer_decided": "This transfer was already decided.",
     "cash.self_transfer": "You cannot transfer to yourself.",
-    "cash.bad_amount": "Invalid amount."
+    "cash.bad_amount": "Invalid amount.",
+    "stocktake.not_found": "Stocktake not found.",
+    "stocktake.already_open": "This warehouse already has an open stocktake.",
+    "stocktake.closed": "This stocktake is already closed.",
+    "contract.bad_tier": "Invalid price tier.",
+    "contract.tier_overlap": "Price tiers overlap.",
+    "contract.too_many_tiers": "At most 20 tiers."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2180,7 +2187,12 @@
     "visitWeeks": "Visit cycle (e.g. maintenance)",
     "visitWeeksPh": "e.g. 12",
     "visitWeeksHint": "If set, the partner is scheduled every N weeks anyway (📞🔧 flag). Empty = never.",
-    "visitEveryWeeks": "visit every {n} weeks"
+    "visitEveryWeeks": "visit every {n} weeks",
+    "tiers": "Tiered portion pricing",
+    "tiersHint": "The billed portion count's band sets the per-portion price. Empty upper bound = no cap. Manual price override still wins.",
+    "tierPortions": "portions, price",
+    "tierAdd": "Add tier",
+    "tiersSummary": "tiered pricing ({n} tiers)"
   },
   "delivery": {
     "title": "Delivery (delivery note)",
@@ -2603,5 +2615,34 @@
     "costHint": "Bought with their own money — added to the amount due.",
     "costSaved": "Cost recorded on the technician's balance.",
     "worksheetLinkHint": "Task details — what happened, what's next."
+  },
+  "stk": {
+    "title": "Stocktake",
+    "subtitle": "Warehouse stocktake sheets: open, count, close with adjustments.",
+    "warehouse": "Warehouse",
+    "note": "Note",
+    "notePh": "e.g. year-end count",
+    "open": "Open stocktake",
+    "opened": "Stocktake opened — book quantities captured.",
+    "status": "Status",
+    "statusOpen": "open",
+    "statusClosed": "closed",
+    "openedAt": "Opened",
+    "openedBy": "Opened by",
+    "lines": "Lines",
+    "counted": "Counted",
+    "diffs": "Diffs",
+    "empty": "No stocktakes yet — pick a warehouse and open one.",
+    "product": "Product",
+    "systemQty": "Book qty",
+    "countedQty": "Counted",
+    "diff": "Diff",
+    "notCounted": "not counted",
+    "hint": "Empty row = not counted, unchanged at close. You can save partial progress.",
+    "save": "Save",
+    "saved": "Counts saved.",
+    "close": "Close stocktake",
+    "closeConfirm": "Close the stocktake? Counted values become the stock; differences are recorded as adjustments.",
+    "closed": "Stocktake closed — adjustments recorded."
   }
 }

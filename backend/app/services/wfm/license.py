@@ -23,7 +23,7 @@ from app.models import Employee, LicenseSettings, User
 MODULES = (
     "billing", "gls", "labels", "ai", "portal", "support",
     "mpl", "foxpost", "dpd", "bugreport", "cashbook", "szamlazz",
-    "cashbox", "stats",
+    "cashbox", "stats", "tiered", "stocktake",
 )
 
 
@@ -41,6 +41,14 @@ def effective_modules(row: LicenseSettings | None) -> list[str] | None:
     if env is None:
         return None
     return [m for m in (p.strip() for p in env.split(",")) if m in MODULES]
+
+
+async def module_enabled(db: AsyncSession, key: str) -> bool:
+    """Igaz, ha a modul elérhető ezen a példányon (üzleti logikán belüli
+    ellenőrzéshez — router-szinten a require_module való)."""
+    row = await get_license_row(db)
+    modules = effective_modules(row)
+    return modules is None or key in modules
 
 
 def require_module(key: str):

@@ -1113,10 +1113,12 @@ async def _build_worksheet_pdf(
     pdf_settings = await _worksheet_pdf_settings(db)
     extra_footer = None
     handover_url = None
+    customer_remark = None
     if ws.external_service and variant == "customer":
-        work_description = chr(10).join(
-            x for x in (ws.customer_note, ws.public_note) if x
-        )
+        # Elvégzett munka = a szervizes publikus összefoglalója; a képviselő
+        # megjegyzése KÜLÖN "Megjegyzés" szakaszba kerül (b83391bc).
+        work_description = ws.public_note or ""
+        customer_remark = ws.customer_note
         pdf_comments = []
         # Elfogadott (vagy lezárt) árajánlatnál a KIVÁLASZTOTT konstrukció a
         # fizetendő tétel — az ára mindent tartalmaz, ezért az anyagok és a
@@ -1180,6 +1182,7 @@ async def _build_worksheet_pdf(
             "employee_code": emp.employee_code if emp else None,
             "job_title": emp.job_title if emp else None,
             "work_description": work_description,
+            "remark": customer_remark,
             "works": works,
             "repair_options": repair_options,
             "works_price_field": works_price_field,
@@ -2320,15 +2323,23 @@ async def _handover_row(db: AsyncSession, task: Task, ws: Worksheet) -> dict:
 
 
 def _service_fee_total(ws: Worksheet) -> float:
-    """A külsős szerelőnek járó javítási díj egy munkalapon: a visszaigazolt
-    NETTÓ költségek (munkadíjak + elfogadott konstrukció + anyagköltség)."""
+    """A külsős szerelőnek járó javítási díj egy munkalapon (nettó).
+
+    Elfogadott árajánlatnál az ELFOGADOTT konstrukció költsége (cost_net) a
+    mérvadó — a tételes munkadíjak annak bontásai, NEM adódnak hozzá
+    (különben duplázódna a díj, ce3a0ae4). El nem fogadott konstrukció csak
+    ajánlat, az sem fizetendő. Anyagköltség mindig hozzáadódik."""
+    opts_cost = sum(
+        float(w["cost_net"]) for w in (ws.repair_options or [])
+        if w.get("cost_net") is not None
+    )
     total = 0.0
-    for w in ws.works or []:
-        if w.get("cost_net") is not None:
-            total += float(w["cost_net"])
-    for w in ws.repair_options or []:
-        if w.get("cost_net") is not None:
-            total += float(w["cost_net"])
+    if (ws.quote_status or "none") == "accepted" and opts_cost:
+        total += opts_cost
+    else:
+        for w in ws.works or []:
+            if w.get("cost_net") is not None:
+                total += float(w["cost_net"])
     for m in ws.materials or []:
         if m.get("cost_net") is not None:
             try:

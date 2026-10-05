@@ -280,6 +280,7 @@ export default function PartnerekPage() {
     auto_billing: boolean;
     phone_settlement: boolean;
     visit_weeks: number | null;
+    price_tiers: { qty_from: number; qty_to: number | null; price: number }[] | null;
     invoice_norma: number | null;
     default_product_id: string | null;
     default_product_name: string | null;
@@ -306,7 +307,7 @@ export default function PartnerekPage() {
     below_min_price: string; min_kg: string; below_min_price_kg: string;
     rent_if_below_min: boolean; settlement_weeks: string;
     payment_method: string; payment_terms_days: string;
-    no_minimum: boolean; auto_billing: boolean; phone_settlement: boolean; visit_weeks: string; invoice_norma: string; default_product_id: string; note: string;
+    no_minimum: boolean; auto_billing: boolean; phone_settlement: boolean; visit_weeks: string; tiers: { from: string; to: string; price: string }[]; invoice_norma: string; default_product_id: string; note: string;
   } | null>(null);
   const [cError, setCError] = useState<string | null>(null);
   const [cBusy, setCBusy] = useState(false);
@@ -375,7 +376,7 @@ export default function PartnerekPage() {
       min_portions: "", below_min_price: "", min_kg: "", below_min_price_kg: "",
       rent_if_below_min: false, settlement_weeks: "4",
       payment_method: "", payment_terms_days: "",
-      no_minimum: false, auto_billing: false, phone_settlement: false, visit_weeks: "", invoice_norma: "", default_product_id: "", note: "",
+      no_minimum: false, auto_billing: false, phone_settlement: false, visit_weeks: "", tiers: [], invoice_norma: "", default_product_id: "", note: "",
     });
   }
 
@@ -395,6 +396,9 @@ export default function PartnerekPage() {
       auto_billing: c.auto_billing,
       phone_settlement: c.phone_settlement,
       visit_weeks: c.visit_weeks != null ? String(c.visit_weeks) : "",
+      tiers: (c.price_tiers || []).map((tr) => ({
+        from: String(tr.qty_from), to: tr.qty_to != null ? String(tr.qty_to) : "", price: String(tr.price),
+      })),
       invoice_norma: c.invoice_norma != null ? String(c.invoice_norma) : "",
       default_product_id: c.default_product_id ?? "",
       note: c.note ?? "",
@@ -422,6 +426,15 @@ export default function PartnerekPage() {
         auto_billing: cForm.auto_billing,
         phone_settlement: cForm.phone_settlement,
         visit_weeks: cForm.phone_settlement && cForm.visit_weeks ? Number(cForm.visit_weeks) : null,
+        price_tiers: cForm.tiers.filter((tr) => tr.price !== "").length
+          ? cForm.tiers
+              .filter((tr) => tr.price !== "")
+              .map((tr) => ({
+                qty_from: tr.from ? Number(tr.from) : 0,
+                qty_to: tr.to ? Number(tr.to) : null,
+                price: Number(tr.price),
+              }))
+          : null,
         invoice_norma: cForm.invoice_norma ? Number(cForm.invoice_norma) : null,
         default_product_id: cForm.default_product_id || null,
         note: cForm.note || null,
@@ -944,6 +957,7 @@ export default function PartnerekPage() {
                           c.default_product_name ? `☕ ${c.default_product_name}` : null,
                           c.auto_billing ? `⚡ ${t("contracts.autoBilling")}` : null,
                           c.phone_settlement ? `📞 ${t("contracts.phoneSettlement")}${c.visit_weeks ? ` (${t("contracts.visitEveryWeeks", { n: c.visit_weeks })})` : ""}` : null,
+                          c.price_tiers?.length ? `📊 ${t("contracts.tiersSummary", { n: c.price_tiers.length })}` : null,
                           c.invoice_norma != null ? t("contracts.sumInvoiceNorma", { n: c.invoice_norma }) : null,
                           c.note,
                         ].filter(Boolean).join(" · ") || t("contracts.noTerms")}
@@ -1084,6 +1098,48 @@ export default function PartnerekPage() {
                       <span className="mt-1 block">{t("contracts.visitWeeksHint")}</span>
                     </label>
                   )}
+                </div>
+                <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+                  <div className="font-medium">📊 {t("contracts.tiers")}</div>
+                  <p className="mb-2 text-xs text-sky-700">{t("contracts.tiersHint")}</p>
+                  {cForm.tiers.map((tr, i) => (
+                    <div key={i} className="mb-1.5 flex items-center gap-2 text-xs">
+                      <input
+                        type="number" min={0} value={tr.from}
+                        onChange={(e) => setCForm({ ...cForm, tiers: cForm.tiers.map((x, j) => (j === i ? { ...x, from: e.target.value } : x)) })}
+                        placeholder="0" className="w-20 rounded-lg border border-sky-300 px-2 py-1"
+                      />
+                      <span>–</span>
+                      <input
+                        type="number" min={0} value={tr.to}
+                        onChange={(e) => setCForm({ ...cForm, tiers: cForm.tiers.map((x, j) => (j === i ? { ...x, to: e.target.value } : x)) })}
+                        placeholder="∞" className="w-20 rounded-lg border border-sky-300 px-2 py-1"
+                      />
+                      <span>{t("contracts.tierPortions")}:</span>
+                      <input
+                        type="number" min={0} step="0.01" value={tr.price}
+                        onChange={(e) => setCForm({ ...cForm, tiers: cForm.tiers.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)) })}
+                        placeholder="Ft/adag" className="w-24 rounded-lg border border-sky-300 px-2 py-1"
+                      />
+                      <span>Ft</span>
+                      <button
+                        type="button"
+                        onClick={() => setCForm({ ...cForm, tiers: cForm.tiers.filter((_, j) => j !== i) })}
+                        className="rounded px-1.5 py-0.5 text-rose-500 hover:bg-rose-100"
+                      >✕</button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const last = cForm.tiers[cForm.tiers.length - 1];
+                      const nextFrom = last && last.to ? String(Number(last.to) + 1) : last ? "" : "0";
+                      setCForm({ ...cForm, tiers: [...cForm.tiers, { from: nextFrom, to: "", price: "" }] });
+                    }}
+                    className="mt-1 rounded-lg border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100"
+                  >
+                    ➕ {t("contracts.tierAdd")}
+                  </button>
                 </div>
                 <label className="block rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
                   ☕ {t("contracts.invoiceNorma")}

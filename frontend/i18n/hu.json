@@ -164,7 +164,8 @@
     "gls": "Csomagok (GLS)",
     "cashbox": "Kassza",
     "stats": "Statisztika",
-    "serviceHandover": "Szerelő-átadás"
+    "serviceHandover": "Szerelő-átadás",
+    "stocktake": "Leltár"
   },
   "roles": {
     "admin": "Admin",
@@ -1798,7 +1799,13 @@
     "cash.transfer_not_found": "A pénz-átadás nem található.",
     "cash.transfer_decided": "Ezt az átadást már elfogadták/elutasították.",
     "cash.self_transfer": "Saját magadnak nem adhatsz át pénzt.",
-    "cash.bad_amount": "Érvénytelen összeg."
+    "cash.bad_amount": "Érvénytelen összeg.",
+    "stocktake.not_found": "A leltár nem található.",
+    "stocktake.already_open": "Ennél a raktárnál már van nyitott leltár — előbb zárd le.",
+    "stocktake.closed": "Ez a leltár már le van zárva.",
+    "contract.bad_tier": "Hibás ársáv (ellenőrizd a határokat és az árat).",
+    "contract.tier_overlap": "Az ársávok átfedik egymást.",
+    "contract.too_many_tiers": "Legfeljebb 20 ársáv adható meg."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2180,7 +2187,12 @@
     "visitWeeks": "Látogatási ciklus (pl. karbantartás)",
     "visitWeeksPh": "pl. 12",
     "visitWeeksHint": "Ha ki van töltve, ennyi hetente mégis bekerül a látogatási tervbe (📞🔧 jelzéssel). Üresen soha.",
-    "visitEveryWeeks": "{n} hetente látogatás"
+    "visitEveryWeeks": "{n} hetente látogatás",
+    "tiers": "Sávos adagárazás",
+    "tiersHint": "Az elszámolt adagszám sávja adja az adagárat (pl. 0–100 adag: 60 Ft, 101-től: 40 Ft). Üres felső határ = nincs plafon. A kézi ár-átírás ezt is felülírja.",
+    "tierPortions": "adag, ár",
+    "tierAdd": "Sáv hozzáadása",
+    "tiersSummary": "sávos ár ({n} sáv)"
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",
@@ -2603,5 +2615,34 @@
     "costHint": "Saját pénzből vett alkatrész/szolgáltatás — hozzáadódik a szerelőnek járó összeghez.",
     "costSaved": "Költés rögzítve a szerelő egyenlegén.",
     "worksheetLinkHint": "A feladat adatlapja — mi történt, mi a teendő."
+  },
+  "stk": {
+    "title": "Leltár",
+    "subtitle": "Raktári leltár-ívek: nyitás, számolás, zárás korrekcióval.",
+    "warehouse": "Raktár",
+    "note": "Megjegyzés",
+    "notePh": "pl. évzáró leltár",
+    "open": "Leltár nyitása",
+    "opened": "Leltár megnyitva — a könyv szerinti készlet rögzítve.",
+    "status": "Állapot",
+    "statusOpen": "nyitott",
+    "statusClosed": "lezárt",
+    "openedAt": "Nyitva",
+    "openedBy": "Nyitotta",
+    "lines": "Tétel",
+    "counted": "Számolva",
+    "diffs": "Eltérés",
+    "empty": "Még nincs leltár — válassz raktárt és nyiss egyet.",
+    "product": "Termék",
+    "systemQty": "Könyv szerinti",
+    "countedQty": "Számolt",
+    "diff": "Eltérés",
+    "notCounted": "nem számolt",
+    "hint": "Üresen hagyott sor = nem számoltátok, záráskor nem változik. Menteni részletekben is lehet.",
+    "save": "Mentés",
+    "saved": "Számolt mennyiségek elmentve.",
+    "close": "Leltár zárása",
+    "closeConfirm": "Zárod a leltárt? A számolt értékek a készletre állnak, az eltérések korrekciós mozgásként rögzülnek.",
+    "closed": "Leltár lezárva — az eltérések könyvelve."
   }
 }

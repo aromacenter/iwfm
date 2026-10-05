@@ -85,7 +85,35 @@ class ContractBody(BaseModel):
     # Alapértelmezett kávéfajta a partnernek — az elszámolás átadott-kávé
     # sora ezt ajánlja, de a képviselő helyben mást is adhat.
     default_product_id: str | None = None
+    # Sávos adagárazás (tiered modul): az elszámolt adagszám sávja adja az
+    # adagárat. qty_to None = nincs felső határ (utolsó sáv).
+    price_tiers: list[dict] | None = None
     note: str | None = None
+
+    @field_validator("price_tiers")
+    @classmethod
+    def _check_tiers(cls, v: list[dict] | None) -> list[dict] | None:
+        if not v:
+            return None
+        if len(v) > 20:
+            raise ValueError("contract.too_many_tiers")
+        out = []
+        prev_to: float | None = None
+        for t in v:
+            try:
+                lo = float(t.get("qty_from") or 0)
+                hi = t.get("qty_to")
+                hi = float(hi) if hi not in (None, "") else None
+                price = float(t.get("price"))
+            except (TypeError, ValueError):
+                raise ValueError("contract.bad_tier")
+            if lo < 0 or price < 0 or (hi is not None and hi < lo):
+                raise ValueError("contract.bad_tier")
+            if prev_to is not None and lo < prev_to:
+                raise ValueError("contract.tier_overlap")
+            prev_to = hi if hi is not None else float("inf")
+            out.append({"qty_from": lo, "qty_to": hi, "price": price})
+        return out
 
     @field_validator("settlement_weeks")
     @classmethod
@@ -118,6 +146,7 @@ class ContractOut(BaseModel):
     auto_billing: bool = False
     phone_settlement: bool = False
     visit_weeks: int | None = None
+    price_tiers: list[dict] | None = None
     invoice_norma: int | None = None
     default_product_id: str | None = None
     default_product_name: str | None = None
@@ -166,6 +195,7 @@ def _out(c: PartnerContract, product_name: str | None = None) -> ContractOut:
         auto_billing=c.auto_billing,
         phone_settlement=c.phone_settlement,
         visit_weeks=c.visit_weeks,
+        price_tiers=c.price_tiers,
         invoice_norma=c.invoice_norma,
         default_product_id=str(c.default_product_id) if c.default_product_id else None,
         default_product_name=product_name,
