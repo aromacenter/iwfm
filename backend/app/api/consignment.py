@@ -25,7 +25,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_perm
+from app.api.deps import get_current_user, record_audit, require_perm
 from app.db import get_db
 from app.services.wfm import license as license_service
 from app.models import (
@@ -750,6 +750,12 @@ class SettlementCtxMachine(BaseModel):
     last_settled_at: datetime | None
     default_product_id: str | None
     product_name: str | None
+    # Gépcserével leszerelt gép függő elszámolása: a záró állások fixek
+    # (a cserét rögzítő adta meg), az űrlap előtölti és zárolja őket.
+    swapped: bool = False
+    swap_final_counters: list[int] | None = None
+    swap_final_counter: int | None = None
+    swap_at: str | None = None
 
 
 class DebtItemOut(BaseModel):
@@ -818,7 +824,7 @@ async def settlement_context(
     product_names = {
         p.id: p.name
         for p in (await db.execute(select(Product.id, Product.name).select_from(Product))).all()
-    } if assets else {}
+    }
 
     # Feldolgozatlan számláló-bejelentések gépenként (a legutóbbi számít)
     from app.models import CounterReport
@@ -857,6 +863,34 @@ async def settlement_context(
             reported_counters=(rep.counters if rep else None),
             reported_at=(rep.created_at if rep else None),
             reported_by=(rep.reporter_name if rep else None),
+        ))
+
+    # Gépcserével leszerelt gépek FÜGGŐ elszámolása: a cseréig lefőzött
+    # adagokat ez az elszámolás számlázza a cserekor rögzített záró állásokból.
+    swapped_assets = (
+        await db.execute(select(Asset).where(Asset.swap_pending.is_not(None)))
+    ).scalars().all()
+    for a in swapped_assets:
+        sp = a.swap_pending or {}
+        if sp.get("partner_id") != str(partner.id):
+            continue
+        prev, last_at = await _machine_prev_counter(db, a)
+        machines.append(SettlementCtxMachine(
+            asset_id=str(a.id),
+            barcode=a.barcode,
+            name=a.name,
+            counter_count=a.counter_count,
+            counters=a.counters,
+            counter_names=a.counter_names,
+            counter_prices=a.counter_prices,
+            prev_counter=prev,
+            last_settled_at=last_at,
+            default_product_id=str(a.default_product_id) if a.default_product_id else None,
+            product_name=product_names.get(a.default_product_id) if product_names else None,
+            swapped=True,
+            swap_final_counters=sp.get("counters"),
+            swap_final_counter=sp.get("counter"),
+            swap_at=sp.get("at"),
         ))
 
     # A gép termék-tartaléka csak KÁVÉ (bizományos) lehet — a darabra menő
@@ -1178,6 +1212,9 @@ class SettlementCreate(BaseModel):
     # Eseti fizetési határidő (nap) — átutalásnál írja felül a szerződés /
     # partner / 8 nap erősorrendet.
     due_days: int | None = Field(default=None, ge=1, le=120)
+    # Késedelmi felár kikapcsolása ERRE az elszámolásra (30+ napja lejárt
+    # tartozásnál alapból +10% minden tételre) — naplózva + TG-értesítés.
+    late_fee_waived: bool = False
 
 
 class SettlementLineOut(BaseModel):
@@ -1230,6 +1267,7 @@ class SettlementOut(BaseModel):
     paid_at: datetime | None = None
     debt_before: float | None = None  # nyitott egyenleg az elszámolás előtt
     paid_amount: float | None = None  # a helyszínen fizetett bruttó összeg
+    late_fee_pct: float | None = None  # alkalmazott késedelmi felár (%)
     previous_at: datetime | None = None  # a partner ELŐZŐ elszámolása (időszak-kezdet)
     note: str | None
     created_at: datetime
@@ -1279,6 +1317,7 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         due_date=s.due_date,
         paid_at=s.paid_at,
         debt_before=s.debt_before,
+        late_fee_pct=s.late_fee_pct,
         paid_amount=s.paid_amount,
         note=s.note,
         created_at=s.created_at,
@@ -1331,7 +1370,10 @@ async def _machine_prev_counter(
             .limit(1)
         )
     ).first()
-    if row is not None:
+    # Számláló-nullázás után a nullázott állás az alapvonal — a nullázás
+    # ELŐTTI elszámolás nem számít előzménynek (74e44b49).
+    reset_at = asset.counters_reset_at
+    if row is not None and (reset_at is None or row[1] >= reset_at):
         return int(row[0]), row[1]
     return int(asset.counter or 0), None
 
@@ -1636,7 +1678,13 @@ async def create_settlement(
             ).scalar_one_or_none()
             if asset is None:
                 raise HTTPException(status_code=404, detail={"code": "asset.not_found"})
-            if asset.partner_id != partner.id:
+            swap_pending = (
+                asset.swap_pending
+                if isinstance(asset.swap_pending, dict)
+                and asset.swap_pending.get("partner_id") == str(partner.id)
+                else None
+            )
+            if asset.partner_id != partner.id and swap_pending is None:
                 raise HTTPException(
                     status_code=422, detail={"code": "settlement.machine_wrong_partner"}
                 )
@@ -1862,6 +1910,10 @@ async def create_settlement(
             asset.counter = new_counter
             if m_in.new_counters and asset.counter_count > 1:
                 asset.counters = list(m_in.new_counters)
+            # Gépcsere függő elszámolása lezárva — a cseréig lefőzött adagok
+            # ezzel az elszámolással kiszámlázódtak.
+            if swap_pending is not None:
+                asset.swap_pending = None
             db.add(AssetMovement(
                 asset_id=asset.id, action="counter", partner_id=partner.id,
                 actor_user_id=actor.id,
@@ -2193,6 +2245,50 @@ async def create_settlement(
     total_net += extra_net
     total_gross += extra_gross
 
+    # ── Késedelmi felár (9c7f54e5): 30+ napja lejárt tartozásnál +10% MINDEN
+    # tételre, az ÁSZF-re hivatkozva; a képviselő pipával kikapcsolhatja —
+    # mindkét eset naplózott + Telegram az adminnak/managernek.
+    LATE_FEE_PCT = 10.0
+    overdue_ref = None  # (settlement, lejárat napja)
+    cutoff_30 = date.today() - timedelta(days=30)
+    for old_s in (
+        await db.execute(
+            select(Settlement)
+            .where(Settlement.partner_id == partner.id, Settlement.id != settlement.id)
+            .order_by(Settlement.created_at)
+        )
+    ).scalars().all():
+        paid = old_s.paid_amount if old_s.paid_amount is not None else old_s.total_gross
+        if old_s.total_gross - paid <= 0.5:
+            continue
+        ref_day = old_s.due_date or old_s.created_at.date()
+        if ref_day <= cutoff_30:
+            overdue_ref = (old_s, ref_day)
+            break  # a legrégebbi lejárt tétel a hivatkozás
+    if overdue_ref is not None and not body.late_fee_waived:
+        factor = 1 + LATE_FEE_PCT / 100.0
+        await db.flush()
+        fee_lines = (
+            await db.execute(
+                select(SettlementLine).where(SettlementLine.settlement_id == settlement.id)
+            )
+        ).scalars().all()
+        for obj in fee_lines:
+            obj.amount_net = _money(obj.amount_net * factor)
+            obj.price_per_portion = round(obj.price_per_portion * factor, 2)
+            obj.product_name = f"{obj.product_name} (+10% késedelmi felár)"[:256]
+        total_net = _money(total_net * factor)
+        total_gross = _money(total_gross * factor)
+        settlement.late_fee_pct = LATE_FEE_PCT
+        ref_s, ref_day = overdue_ref
+        aszf_line = (
+            f"Késedelmi felár 10% az ÁSZF alapján — lejárt tartozás: "
+            f"{ref_s.created_at.date().isoformat()} elszámolás"
+            + (f" (számla: {ref_s.billingo_document_id})" if ref_s.billingo_document_id else "")
+            + f", fizetési határidő: {ref_day.isoformat()}"
+        )
+        settlement.note = f"{body.note}\n{aszf_line}" if body.note else aszf_line
+
     settlement.total_net = _money(total_net)
     settlement.total_gross = _money(total_gross)
 
@@ -2215,7 +2311,54 @@ async def create_settlement(
             detail={"partner": partner.name, "overrides": manual_overrides[:50]},
             request=request,
         )
+    if overdue_ref is not None:
+        # Felár alkalmazva VAGY kikapcsolva — mindkettő naplózott esemény.
+        await record_audit(
+            db, actor=actor, action="settlement.late_fee", entity_type="settlement",
+            entity_id=str(settlement.id),
+            detail={
+                "partner": partner.name,
+                "applied": not body.late_fee_waived,
+                "pct": LATE_FEE_PCT,
+                "waived_by": actor.display_name if body.late_fee_waived else None,
+                "overdue_since": overdue_ref[1].isoformat(),
+            },
+            request=request,
+        )
     await db.commit()
+
+    # Telegram a vezetőknek a késedelmi felárról (alkalmazva/kikapcsolva) —
+    # best-effort, kattintható linkkel.
+    if overdue_ref is not None:
+        try:
+            from app.core.config import get_settings as _gs_lf
+            from app.models import Employee as _Emp
+            from app.services.wfm.telegram import send_personal as _send_p
+
+            link = f"{_gs_lf().frontend_origin.rstrip('/')}/elszamolas?partner={partner.id}"
+            if body.late_fee_waived:
+                msg = (
+                    f"⚠️ Késedelmi felár KIKAPCSOLVA: {partner.name} — "
+                    f"{actor.display_name} kapcsolta ki (lejárt tartozás: "
+                    f"{overdue_ref[1].isoformat()}).\n🔗 {link}"
+                )
+            else:
+                msg = (
+                    f"💸 Késedelmi felár (+10%) felszámítva: {partner.name} — "
+                    f"elszámolás: {settlement.total_gross:,.0f} Ft (lejárt tartozás: "
+                    f"{overdue_ref[1].isoformat()}).\n🔗 {link}"
+                ).replace(",", " ")
+            boss_ids = (
+                await db.execute(select(User.id).where(User.role.in_(("admin", "manager"))))
+            ).scalars().all()
+            for emp in (
+                await db.execute(select(_Emp).where(_Emp.user_id.in_(boss_ids)))
+            ).scalars().all():
+                await _send_p(db, emp, msg)
+        except Exception:  # pragma: no cover — értesítési hiba nem akaszt
+            import logging
+
+            logging.getLogger(__name__).warning("late fee notify failed", exc_info=True)
 
     # Automatizálások (háttérben, saját sessionnel)
     from app.services.wfm.automation import fire_event
@@ -2662,10 +2805,11 @@ async def create_expense(
     body: ExpenseBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("agent_report")),
+    actor: User = Depends(get_current_user),
 ):
-    """Költség rögzítése — alapból a bejelentkezett képviselő kasszájára; más
-    nevére csak invoicing joggal írható."""
+    """Költség rögzítése — a SAJÁT kasszájára MINDEN bejelentkezett dolgozó
+    (szervizes is) jogosult, külön jog nélkül (590a9b99); más nevére, illetve
+    betét/kivét csak invoicing joggal."""
     from app.api.deps import get_permission_matrix, permissions_for
     from app.models import AgentExpense
 

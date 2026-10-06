@@ -159,6 +159,11 @@ class Employee(Base):
     # Alvállalkozó (számlás) — nem munkaviszonyos: csak név/cím/elérhetőség/
     # adószám/bankszámla kell; bármikor átváltható alkalmazottira és vissza.
     is_contractor: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Alvállalkozó CÉG: saját dolgozókkal — a munkalapot a cégre osztjuk,
+    # belül ők döntik el, ki javít; minden más a külsős szervizessel azonos.
+    is_company: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     # Alvállalkozó adószáma (ha számlaképes) — nem titkosított, céges adat.
     company_tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Heti elérhetőség a beosztás-generáláshoz: {"0": ["08:00","16:00"], …}
@@ -697,6 +702,9 @@ class MachineIntake(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     serial: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Átvételkor kiadott cseregép vonalkódja — a munkalap létrejöttekor a
+    # cseregép-mezőbe kerül (255777ce).
+    loaner_barcode: Mapped[str | None] = mapped_column(String(64), nullable=True)
     asset_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("assets.id", ondelete="SET NULL", name="fk_intakes_asset"),
         nullable=True,
@@ -986,7 +994,9 @@ class Partner(Base):
     eu_tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)  # közösségi adószám
     reg_number: Mapped[str | None] = mapped_column(String(64), nullable=True)  # cégjegyzékszám
     contact_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    # Több cím vesszővel/pontosvesszővel elválasztva — minden számla és
+    # értesítés az összes címre megy (partner_emails helper bontja).
+    contact_email: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     website: Mapped[str | None] = mapped_column(String(256), nullable=True)
     # Összerakott (legacy) címek — a strukturált részekből számolódnak, ha azok
@@ -1076,6 +1086,20 @@ class Asset(Base):
     tangible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # tárgyi eszköz
     # Az ügyfél SAJÁT gépe (mi csak szervizeljük) — nem "kihelyezett" saját eszköz.
     customer_owned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Általunk BÉRELT gép: üzletileg tárgyi eszközként viselkedik (kihelyezhető,
+    # szerződhető), de a címkékre nem kerül tulajdonos-felirat.
+    rented: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Gépcsere után a leszerelt gép ZÁRÓ állásai + a partner — a következő
+    # elszámolás ebből számlázza a cseréig lefőzött adagokat, majd törli.
+    # {"partner_id": str, "counters": [int] | None, "counter": int, "at": iso}
+    swap_pending: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Számláló-nullázás időpontja: az ennél régebbi elszámolás nem alapvonal —
+    # a következő elszámolás a nullázott állásokhoz képest számol.
+    counters_reset_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Szerződéses feltételek (nettó árak, az elszámolás automatikusan számolja):
     contract_min_portions: Mapped[int | None] = mapped_column(Integer, nullable=True)  # min. adag/hó
     contract_below_min_price: Mapped[float | None] = mapped_column(Float, nullable=True)  # Ft/adag a különbözetre
@@ -1355,6 +1379,8 @@ class Settlement(Base):
     # ÁFA és számla nélküli elszámolás: a megadott (nettó) ár a fizetendő,
     # Billingó-számla nem készül hozzá.
     no_vat: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Alkalmazott késedelmi felár (%) — None/0 = nem volt felár.
+    late_fee_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     total_net: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     total_gross: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     invoiced: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

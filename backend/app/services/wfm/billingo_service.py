@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_pii
+from app.services.wfm.email_service import split_addresses
 from app.models import BillingoSettings, Partner, Settlement, SettlementLine
 
 logger = logging.getLogger(__name__)
@@ -186,7 +187,7 @@ async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> in
             "city": city,
             "address": street,
         },
-        "emails": [partner.contact_email] if partner.contact_email else [],
+        "emails": split_addresses(partner.contact_email),
         "taxcode": partner.tax_number or "",
     }
     created = await _api(api_key, "POST", "/partners", body)
@@ -202,6 +203,15 @@ async def settlement_invoice_comment(
     from app.models import SettlementMachine
 
     parts = [INVOICE_COMMENT]
+    # Késedelmi felár: a számla-megjegyzésben ÁSZF-hivatkozás + a lejárt
+    # tétel adatai (az elszámolás note-jában állnak össze).
+    if settlement.late_fee_pct:
+        for ln in (settlement.note or "").splitlines():
+            if "ÁSZF" in ln:
+                parts.append(ln.strip())
+                break
+        else:
+            parts.append(f"Késedelmi felár {settlement.late_fee_pct:.0f}% az ÁSZF alapján.")
     if partner is not None and (partner.address or "").strip():
         # Több boltos cégnél innen látszik, melyik egységre vonatkozik a számla.
         parts.append(f"Telephely: {partner.address.strip()}")

@@ -63,6 +63,17 @@ class CashEntryOut(BaseModel):
     created_by_name: str | None = None
 
 
+class ContractorLedgerOut(BaseModel):
+    """Külsős szerelő folyószámlája (a szerelő SAJÁT nézetéhez): az elhozott
+    munkalapok visszaigazolt díjai + saját költései − kifizetések."""
+
+    fee_total: float
+    costs: float
+    payouts: float
+    balance: float
+    worksheets: int
+
+
 class CashRegisterOut(BaseModel):
     user_id: str
     user_name: str | None
@@ -73,6 +84,7 @@ class CashRegisterOut(BaseModel):
     transfers_in: float = 0.0  # elfogadott bejövő pénz-átadások
     transfers_out: float = 0.0
     balance: float
+    contractor: ContractorLedgerOut | None = None  # szerelő-folyószámla (ha van)
     entries: list[CashEntryOut] = []
 
 
@@ -172,8 +184,137 @@ async def my_cash_register(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    """A bejelentkezett dolgozó saját kasszája, tételesen."""
-    return await _cash_register(db, actor.id, actor.display_name, date_from, date_to, True)
+    """A bejelentkezett dolgozó saját kasszája, tételesen. Külsős szerelőnél
+    a szerelő-folyószámla is (járó díjak + költései − kifizetések) — így a
+    szerelő a saját kasszáján látja, mennyivel tartozunk neki (53af6761)."""
+    out = await _cash_register(db, actor.id, actor.display_name, date_from, date_to, True)
+    out.contractor = await _contractor_ledger(db, actor.id)
+    return out
+
+
+async def _contractor_ledger(db: AsyncSession, user_id: uuid.UUID) -> ContractorLedgerOut | None:
+    """A userhez tartozó dolgozó szerelő-folyószámlája (időszűrés nélkül —
+    ez göngyölt egyenleg), ha van KSZ-munkalapja vagy folyószámla-tétele."""
+    from app.models import Employee, Task, TechLedger
+
+    emp_id = (
+        await db.execute(select(Employee.id).where(Employee.user_id == user_id))
+    ).scalars().first()
+    if emp_id is None:
+        return None
+    from app.api.tasks import _service_fee_total
+
+    ws_rows = (
+        await db.execute(
+            select(Worksheet)
+            .join(Task, Task.id == Worksheet.task_id)
+            .where(
+                Task.employee_id == emp_id,
+                Worksheet.external_service.is_(True),
+                Worksheet.picked_up_at.is_not(None),
+            )
+        )
+    ).scalars().all()
+    tl_rows = (
+        await db.execute(
+            select(TechLedger.kind, sa_func.coalesce(sa_func.sum(TechLedger.amount), 0.0))
+            .where(TechLedger.employee_id == emp_id)
+            .group_by(TechLedger.kind)
+        )
+    ).all()
+    if not ws_rows and not tl_rows:
+        return None
+    sums = {k: float(v or 0.0) for k, v in tl_rows}
+    fee_total = sum(_service_fee_total(ws) for ws in ws_rows)
+    costs = sums.get("cost", 0.0)
+    payouts = sums.get("payout", 0.0)
+    return ContractorLedgerOut(
+        fee_total=_money(fee_total), costs=_money(costs), payouts=_money(payouts),
+        balance=_money(fee_total + costs - payouts), worksheets=len(ws_rows),
+    )
+
+
+class MapPartnerOut(BaseModel):
+    id: str
+    name: str
+    city: str | None
+    zip: str | None
+    lat: float | None
+    lng: float | None
+    machines: int
+    revenue: float  # összes elszámolás-bevétel (bruttó)
+
+
+@router.get(
+    "/map", response_model=list[MapPartnerOut],
+    dependencies=[Depends(require_module("stats"))],
+)
+async def stats_map(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("agent_report")),
+):
+    """Térkép-nézet adatai (8f78ba71): partnerenként a kihelyezett gépek száma
+    és az összes bevétel — a kliens városonként összesíti és rajzolja ki."""
+    from app.models import Asset, Partner
+
+    mach = {
+        pid: int(n or 0)
+        for pid, n in (
+            await db.execute(
+                select(Asset.partner_id, sa_func.count())
+                .where(Asset.status == "deployed", Asset.partner_id.is_not(None))
+                .group_by(Asset.partner_id)
+            )
+        ).all()
+    }
+    rev = {
+        pid: float(v or 0.0)
+        for pid, v in (
+            await db.execute(
+                select(Settlement.partner_id, sa_func.sum(Settlement.total_gross))
+                .group_by(Settlement.partner_id)
+            )
+        ).all()
+    }
+    out: list[MapPartnerOut] = []
+    for p in (
+        await db.execute(select(Partner).where(Partner.is_active.is_(True)))
+    ).scalars().all():
+        machines = mach.get(p.id, 0)
+        revenue = rev.get(p.id, 0.0)
+        if machines == 0 and revenue <= 0:
+            continue
+        out.append(MapPartnerOut(
+            id=str(p.id), name=p.name, city=p.address_city, zip=p.address_zip,
+            lat=p.lat, lng=p.lng, machines=machines, revenue=_money(revenue),
+        ))
+    return out
+
+
+@router.get(
+    "/cash/suppliers", response_model=list[str],
+    dependencies=[Depends(require_module("cashbox"))],
+)
+async def cash_suppliers(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """A korábban rögzített beszállító-nevek (költés-űrlap önkitöltéséhez) —
+    a mező szabad szavas marad, ez csak javaslat-lista (68c1bcf4)."""
+    from app.models import TechLedger
+
+    names: set[str] = set()
+    for (s,) in (
+        await db.execute(select(AgentExpense.supplier).distinct().where(AgentExpense.supplier.is_not(None)))
+    ).all():
+        if s and s.strip():
+            names.add(s.strip())
+    for (s,) in (
+        await db.execute(select(TechLedger.supplier).distinct().where(TechLedger.supplier.is_not(None)))
+    ).all():
+        if s and s.strip():
+            names.add(s.strip())
+    return sorted(names, key=str.lower)[:300]
 
 
 class CashOverviewOut(BaseModel):
@@ -215,7 +356,13 @@ async def cash_overview(
         exp_user_q = exp_user_q.where(AgentExpense.expense_date <= date_to)
     exp_users = set((await db.execute(exp_user_q)).scalars().all())
 
-    all_ids = set(rev_rows) | exp_users
+    # MINDEN aktív dolgozó kasszája listázódik — üres kasszába is lehet
+    # betenni/kivenni (c1e08c67: eddig csak az jelent meg, akinek már volt
+    # bevétele vagy tétele).
+    active_users = set(
+        (await db.execute(select(User.id).where(User.is_active.is_(True)))).scalars().all()
+    )
+    all_ids = set(rev_rows) | exp_users | active_users
     if user_id:
         try:
             all_ids = {uuid.UUID(user_id)}

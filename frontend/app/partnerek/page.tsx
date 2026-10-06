@@ -118,14 +118,25 @@ export default function PartnerekPage() {
 
   useEffect(load, [load]);
 
+  // Képviselő-szűrő ("" = mind, "none" = nincs képviselő, user_id = övé) +
+  // képviselő-oszlop szerinti rendezés (b05bc541).
+  const [agentFilter, setAgentFilter] = useState<string>("");
+  const [sortByAgent, setSortByAgent] = useState(false);
+  const agentName = useMemo(
+    () => Object.fromEntries(agents.map((a) => [a.id, a.display_name])),
+    [agents],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return partners.filter((p) => {
+    const rows = partners.filter((p) => {
       if (kindFilter === "partner" && (p.placed_machine_count ?? 0) === 0) return false;
       if (kindFilter === "customer" && (p.placed_machine_count ?? 0) > 0) return false;
       if (typeFilter && p.partner_type !== typeFilter) return false;
       if (companyFilter === "none" && p.invoicing_company) return false;
       if (companyFilter && companyFilter !== "none" && p.invoicing_company !== companyFilter) return false;
+      if (agentFilter === "none" && p.agent_user_id) return false;
+      if (agentFilter && agentFilter !== "none" && p.agent_user_id !== agentFilter) return false;
       if (!q) return true;
       return (
         p.name.toLowerCase().includes(q) ||
@@ -136,7 +147,15 @@ export default function PartnerekPage() {
         (p.contact_email ?? "").toLowerCase().includes(q)
       );
     });
-  }, [partners, search, typeFilter, companyFilter, kindFilter]);
+    if (sortByAgent) {
+      rows.sort((a, b) => {
+        const an = a.agent_user_id ? (agentName[a.agent_user_id] ?? "~") : "";
+        const bn = b.agent_user_id ? (agentName[b.agent_user_id] ?? "~") : "";
+        return an.localeCompare(bn, "hu") || a.name.localeCompare(b.name, "hu");
+      });
+    }
+    return rows;
+  }, [partners, search, typeFilter, companyFilter, kindFilter, agentFilter, sortByAgent, agentName]);
 
   async function copyPortalLink(p: Partner) {
     try {
@@ -591,6 +610,17 @@ export default function PartnerekPage() {
           <option value="pc">{COMPANY_SHORT.pc}</option>
           <option value="none">{t("partners.noCompany")}</option>
         </select>
+        <select
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value="">{t("partners.allAgents")}</option>
+          <option value="none">{t("partners.noAgent")}</option>
+          {agents.map((a) => (
+            <option key={a.id} value={a.id}>💼 {a.display_name}</option>
+          ))}
+        </select>
         {selected.size > 0 && (
           <button
             onClick={bulkDelete}
@@ -632,6 +662,15 @@ export default function PartnerekPage() {
               )}
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("partners.name")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("partners.taxNumber")}</th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">
+                <button
+                  onClick={() => setSortByAgent((v) => !v)}
+                  title={t("partners.agentSortHint")}
+                  className="uppercase hover:text-indigo-700"
+                >
+                  💼 {t("partners.agentCol")}{sortByAgent ? " ↓" : ""}
+                </button>
+              </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("partners.contact")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("partners.assets")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
@@ -694,6 +733,15 @@ export default function PartnerekPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{p.tax_number ?? "—"}</td>
+                <td className="px-4 py-3 text-slate-500">
+                  {p.agent_user_id && agentName[p.agent_user_id] ? (
+                    <span className="text-slate-700">💼 {agentName[p.agent_user_id]}</span>
+                  ) : (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+                      {t("partners.noAgent")}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-slate-500">
                   {p.contact_name ?? "—"}
                   {p.contact_phone && <div className="text-xs text-slate-400">{p.contact_phone}</div>}
@@ -832,7 +880,10 @@ export default function PartnerekPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {field(t("partners.contactName"), "contact_name")}
                 {field(t("partners.contactPhone"), "contact_phone")}
-                {field(t("partners.contactEmail"), "contact_email", { type: "email" })}
+                <div>
+                  {field(t("partners.contactEmail"), "contact_email")}
+                  <p className="mt-0.5 text-xs text-slate-500">{t("partners.contactEmailHint")}</p>
+                </div>
               </div>
               {field(t("partners.website"), "website")}
             </fieldset>

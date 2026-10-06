@@ -74,7 +74,9 @@ def _vevo_xml(partner: Partner) -> str:
             partner.billing_number or partner.address_number,
         ) if x
     ) or (partner.billing_address or partner.address or "-")
-    email = partner.contact_email or ""
+    from app.services.wfm.email_service import split_addresses
+    _addrs = split_addresses(partner.contact_email)
+    email = ",".join(_addrs)  # a Számlázz.hu vesszős listát fogad
     tax = partner.tax_number or ""
     return (
         "<vevo>"

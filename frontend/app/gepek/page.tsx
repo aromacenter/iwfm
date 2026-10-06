@@ -57,6 +57,7 @@ interface Asset {
   counter_prices: (number | null)[] | null;
   tangible: boolean;
   customer_owned: boolean;
+  rented: boolean;
   contract_min_portions: number | null;
   contract_below_min_price: number | null;
   rent_fee: number | null;
@@ -93,6 +94,7 @@ const EMPTY_ASSET = {
   default_product_id: "",
   tangible: false,
   customer_owned: false,
+  rented: false,
   notes: "",
   status: "in_stock",
 };
@@ -366,6 +368,7 @@ export default function GepekPage() {
         default_product_id: assetForm.default_product_id || null,
         tangible: assetForm.tangible,
         customer_owned: assetForm.customer_owned,
+        rented: assetForm.rented,
         notes: assetForm.notes || null,
       };
       if (assetForm.id) await api.patch(`/api/assets/${assetForm.id}`, body);
@@ -412,10 +415,18 @@ export default function GepekPage() {
   const [inStock, setInStock] = useState<Asset[]>([]);
   // Számlálónkénti adagárak a cseregépre — eltérő kiosztásnál kézzel adandók.
   const [swapPrices, setSwapPrices] = useState<string[]>([]);
+  // A leszerelt gép ZÁRÓ állásai (ebből számláz a következő elszámolás) és a
+  // cseregép INDULÓ állásai (73cbc5ee) — több számlálósnál MIND megadandó.
+  const [swapOldCounters, setSwapOldCounters] = useState<string[]>([]);
+  const [swapNewCounters, setSwapNewCounters] = useState<string[]>([]);
 
   useEffect(() => {
     if (!swapFor) return;
     api.get<Asset[]>("/api/assets?status=in_stock").then(setInStock).catch(() => {});
+    const olds = swapFor.counters?.length
+      ? swapFor.counters
+      : [swapFor.counter ?? 0];
+    setSwapOldCounters(olds.map((c) => String(c ?? 0)));
   }, [swapFor]);
 
   const swapReplacement = swapFor
@@ -432,13 +443,23 @@ export default function GepekPage() {
       return;
     }
     const n = swapReplacement.counter_count || 1;
+    // Javasolt adagárak a KICSERÉLT gép árai alapján: egyező kiosztásnál
+    // egy az egyben, eltérőnél az első szerződéses ár minden mezőbe.
+    const oldPrices = swapFor.counter_prices ?? [];
+    const fallback = oldPrices.find((x) => x != null);
     const inherited =
-      n === (swapFor.counter_count || 1) ? swapFor.counter_prices ?? [] : [];
+      n === (swapFor.counter_count || 1)
+        ? oldPrices
+        : Array.from({ length: n }, () => fallback ?? null);
     setSwapPrices(
       Array.from({ length: n }, (_, i) =>
         inherited[i] != null ? String(inherited[i]) : "",
       ),
     );
+    const starts = swapReplacement.counters?.length
+      ? swapReplacement.counters
+      : [swapReplacement.counter ?? 0];
+    setSwapNewCounters(starts.map((c) => String(c ?? 0)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [swapFor?.id, swapReplacement?.id]);
 
@@ -453,11 +474,17 @@ export default function GepekPage() {
     setBusy(true);
     setError(null);
     try {
+      const oldNums = swapOldCounters.map((c) => Number(c || 0));
+      const newNums = swapNewCounters.map((c) => Number(c || 0));
       await api.post(`/api/assets/${swapFor.id}/swap`, {
         replacement_asset_id: replacement.id,
         counter_prices: swapPrices.some((p) => p.trim())
           ? swapPrices.map((p) => (p.trim() ? Number(p) : null))
           : null,
+        old_counters: oldNums.length > 1 ? oldNums : null,
+        old_counter: oldNums.length === 1 ? oldNums[0] : null,
+        new_counters: newNums.length > 1 ? newNums : null,
+        new_counter: newNums.length === 1 ? newNums[0] : null,
       });
       toast(t("inv.swapDone", { old: swapFor.barcode, new: replacement.barcode }), "success");
       setSwapFor(null);
@@ -466,6 +493,19 @@ export default function GepekPage() {
       setError(errorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Számláló-nullázás a kontroll (0 Ft-os) számláló kivételével — naplózott,
+  // az admin/manager Telegram-értesítést kap (74e44b49).
+  async function resetCounters(asset: Asset) {
+    if (!(await confirm(t("inv.resetCountersConfirm", { barcode: asset.barcode })))) return;
+    try {
+      await api.post(`/api/assets/${asset.id}/reset-counters`, {});
+      toast(t("inv.resetCountersDone"), "success");
+      loadAssets();
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -766,7 +806,13 @@ export default function GepekPage() {
                         🔁
                       </button>
                       </>
-                    ) : a.status !== "retired" ? (
+                    ) : null}
+                    {a.status !== "retired" && (
+                      <button onClick={() => void resetCounters(a)} title={t("inv.resetCountersBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                        0️⃣
+                      </button>
+                    )}
+                    {a.status !== "deployed" && a.status !== "retired" ? (
                       <button onClick={() => { setError(null); setDeploy({ ...EMPTY_DEPLOY }); setDeployFor(a); }} title={t("inv.deploy")} className="rounded bg-emerald-600 px-2 py-1 text-sm leading-none hover:bg-emerald-700">
                         📤
                       </button>
@@ -780,7 +826,7 @@ export default function GepekPage() {
                     <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       🕘
                     </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", maintenance_fee: a.maintenance_fee != null ? String(a.maintenance_fee) : "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), counter_names: (a.counter_names ?? []).map((x) => x ?? ""), norm: a.norm != null ? String(a.norm) : "", norms: (a.norms ?? []).map(String), default_product_id: a.default_product_id ?? "", tangible: a.tangible, customer_owned: a.customer_owned, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", maintenance_fee: a.maintenance_fee != null ? String(a.maintenance_fee) : "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), counter_names: (a.counter_names ?? []).map((x) => x ?? ""), norm: a.norm != null ? String(a.norm) : "", norms: (a.norms ?? []).map(String), default_product_id: a.default_product_id ?? "", tangible: a.tangible, customer_owned: a.customer_owned, rented: a.rented ?? false, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                       ✏️
                     </button>
                   </div>
@@ -948,10 +994,22 @@ export default function GepekPage() {
               <input
                 type="checkbox"
                 checked={assetForm.customer_owned}
-                onChange={(e) => setAssetForm({ ...assetForm, customer_owned: e.target.checked, tangible: e.target.checked ? false : assetForm.tangible })}
+                onChange={(e) => setAssetForm({ ...assetForm, customer_owned: e.target.checked, tangible: e.target.checked ? false : assetForm.tangible, rented: e.target.checked ? false : assetForm.rented })}
                 className="h-4 w-4"
               />
               {t("inv.customerOwned")}
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={assetForm.rented}
+                onChange={(e) => setAssetForm({ ...assetForm, rented: e.target.checked, tangible: e.target.checked ? true : assetForm.tangible, customer_owned: e.target.checked ? false : assetForm.customer_owned })}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                {t("inv.rented")}
+                <span className="block text-xs text-slate-500">{t("inv.rentedHint")}</span>
+              </span>
             </label>
             {/* Szerződéses feltételek NEM itt: a partner Szerződések moduljában */}
             <label className="block text-sm">
@@ -1092,6 +1150,27 @@ export default function GepekPage() {
               {swapFor.name} · <span className="font-mono">{swapFor.barcode}</span> → {swapFor.partner_name}
             </p>
             <p className="text-xs text-slate-500">{t("inv.swapHint")}</p>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm font-medium text-amber-900">⏱ {t("inv.swapOldCounters")}</p>
+              <p className="text-xs text-amber-800">{t("inv.swapOldCountersHint")}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {swapOldCounters.map((c, i) => (
+                  <label key={i} className="block text-xs text-amber-900">
+                    {t("inv.counterN", { n: i + 1 })}
+                    <input
+                      required
+                      type="number"
+                      min={0}
+                      value={c}
+                      onChange={(e) =>
+                        setSwapOldCounters((arr) => arr.map((v, j) => (j === i ? e.target.value : v)))
+                      }
+                      className="mt-0.5 block w-24 rounded-lg border border-amber-300 px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
             <label className="block text-sm">
               {t("inv.swapReplacement")}
               <div className="mt-1 flex gap-2">
@@ -1133,7 +1212,27 @@ export default function GepekPage() {
                         new: swapReplacement.counter_count || 1,
                       })}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <p className="mt-2 text-xs font-medium text-slate-700">{t("inv.swapNewCounters")}</p>
+                <p className="text-xs text-slate-500">{t("inv.swapNewCountersHint")}</p>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {swapNewCounters.map((c, i) => (
+                    <label key={i} className="block text-xs text-slate-600">
+                      {t("inv.counterN", { n: i + 1 })}
+                      <input
+                        required
+                        type="number"
+                        min={0}
+                        value={c}
+                        onChange={(e) =>
+                          setSwapNewCounters((arr) => arr.map((v, j) => (j === i ? e.target.value : v)))
+                        }
+                        className="mt-0.5 block w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs font-medium text-slate-700">{t("inv.swapPricesTitle")}</p>
+                <div className="mt-1 flex flex-wrap gap-2">
                   {swapPrices.map((p, i) => (
                     <label key={i} className="block text-xs text-slate-600">
                       {t("inv.counterN", { n: i + 1 })}

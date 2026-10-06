@@ -92,6 +92,7 @@ export default function DolgozokPage() {
   // Alvállalkozó (számlás): csak név/cím/elérhetőség/adószám/bankszámla kell;
   // bármikor átváltható alkalmazottira és vissza.
   const [contractor, setContractor] = useState(false);
+  const [isCompany, setIsCompany] = useState(false);
   const [companyTax, setCompanyTax] = useState("");
   const [avail, setAvail] = useState<Record<string, AvailDay>>(emptyAvail());
   const [showArchived, setShowArchived] = useState(false);
@@ -141,6 +142,7 @@ export default function DolgozokPage() {
     setArchive(false);
     setTermDate("");
     setContractor(false);
+    setIsCompany(false);
     setCompanyTax("");
     setAvail(emptyAvail());
     setError(null);
@@ -177,6 +179,7 @@ export default function DolgozokPage() {
     setArchive(emp.status === "inactive");
     setTermDate(emp.termination_date ?? "");
     setContractor(emp.is_contractor);
+    setIsCompany(emp.is_company ?? false);
     setCompanyTax(emp.company_tax_number ?? "");
     const av = emptyAvail();
     for (const [day, iv] of Object.entries(emp.availability ?? {})) {
@@ -219,6 +222,7 @@ export default function DolgozokPage() {
           role: form.role,
           availability: availToApi(avail),
           is_contractor: contractor,
+          is_company: contractor && isCompany,
           company_tax_number: contractor ? (companyTax.trim() || null) : null,
           // Munkaviszony megszüntetése: archivált (inactive) státusz + dátum;
           // visszavonva újra aktív, a dátum törlődik.
@@ -238,6 +242,7 @@ export default function DolgozokPage() {
           // hire_date a felvétel napja lesz.
           hire_date: form.hire_date || new Date().toISOString().slice(0, 10),
           is_contractor: contractor,
+          is_company: contractor && isCompany,
           company_tax_number: contractor ? (companyTax.trim() || null) : null,
           availability: availToApi(avail),
           skill_ids: skillIds,
@@ -372,7 +377,12 @@ export default function DolgozokPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium">
                       {emp.last_name} {emp.first_name}
-                      {emp.is_contractor && (
+                      {emp.is_company && (
+                        <span title={t("emp.companyCheckbox")} className="rounded bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-800">
+                          🏢 {t("emp.companyBadge")}
+                        </span>
+                      )}
+                      {emp.is_contractor && !emp.is_company && (
                         <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-xs text-indigo-700">
                           🧾 {t("emp.contractorBadge")}
                         </span>
@@ -510,6 +520,20 @@ export default function DolgozokPage() {
                 <span className="mt-0.5 block text-xs text-indigo-700">{t("emp.contractorHint")}</span>
               </span>
             </label>
+            {contractor && (
+              <label className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
+                <input
+                  type="checkbox"
+                  checked={isCompany}
+                  onChange={(e) => setIsCompany(e.target.checked)}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>
+                  <span className="font-semibold">🏢 {t("emp.companyCheckbox")}</span>
+                  <span className="mt-0.5 block text-xs text-violet-700">{t("emp.companyHint")}</span>
+                </span>
+              </label>
+            )}
 
             <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <legend className="mb-1 text-sm font-semibold text-slate-700">{t("emp.personalSection")}</legend>

@@ -101,6 +101,7 @@ async def _label_items(db: AsyncSession, assets: list[Asset]) -> list[dict]:
                 "partner_name": partner_names.get(a.partner_id) if a.partner_id else None,
                 # Ügyfél behozott gépe: a címkére NEM kerül tulajdon-felirat
                 "customer_owned": a.customer_owned,
+                "rented": a.rented,
             }
         )
     return items

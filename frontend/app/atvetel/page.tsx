@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
+import ScanAssetButton from "@/components/ScanAssetButton";
 import CameraScanner, { cameraScanSupported } from "@/components/CameraScanner";
 import SearchSelect from "@/components/SearchSelect";
 import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
@@ -60,6 +61,7 @@ const EMPTY_FORM = {
   client_address: "",
   accessories: "",
   faults: "",
+  loaner_barcode: "",
   note: "",
 };
 
@@ -289,6 +291,7 @@ export default function AtvetelPage() {
         ...client,
         accessories: form.accessories || null,
         faults: form.faults || null,
+        loaner_barcode: form.loaner_barcode || null,
         note: form.note || null,
         photos,
       });
@@ -709,6 +712,20 @@ export default function AtvetelPage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
+
+            <div className="block rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+              🚐 {t("intake.loaner")}
+              <div className="mt-1 flex gap-2">
+                <input
+                  value={form.loaner_barcode}
+                  onChange={(e) => setForm({ ...form, loaner_barcode: e.target.value })}
+                  placeholder={t("intake.loanerPh")}
+                  className="w-full rounded-lg border border-sky-300 px-3 py-2 font-mono"
+                />
+                <ScanAssetButton onBarcode={(bc) => setForm((f) => ({ ...f, loaner_barcode: bc }))} />
+              </div>
+              <p className="mt-1 text-xs text-sky-700">{t("intake.loanerHint")}</p>
+            </div>
 
             <label className="block text-sm">
               {t("intake.note")}

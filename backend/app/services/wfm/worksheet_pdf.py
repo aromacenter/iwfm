@@ -387,27 +387,42 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             logger.warning("handover QR failed", exc_info=True)
 
     # ─── Extra lábléc-blokk (pl. garanciális feltételek az ügyfél-példányon) ───
+    # A TELJES szövegnek látszania kell (7cfc9a27): szükség esetén kisebb
+    # betűvel és sűrűbb sorközzel, levágás nélkül.
     extra_footer = data.get("extra_footer")
     if extra_footer:
-        # QR a jobb alsó sarokban → a sorok rövidebbek, hogy ne érjenek alá
-        max_line = 100 if data.get("handover_url") else 125
-        c.setFont(FONT, 7)
-        c.setFillColorRGB(0.25, 0.25, 0.3)
-        fy = 31 * mm
-        for paragraph in str(extra_footer).splitlines():
-            text = paragraph.strip()
-            if not text:
-                continue
-            while text and fy >= 19 * mm:
-                if len(text) <= max_line:
-                    cut = len(text)
-                else:
+        qr_narrow = bool(data.get("handover_url"))
+        top_limit = 33 * mm   # az aláírás-címkék alatt kezdődhet
+        bottom_limit = 9 * mm
+        wrapped_lines: list[str] = []
+        chosen = (7, 3.2)
+        for fsize, leading, max_line in (
+            (7, 3.2, 100 if qr_narrow else 125),
+            (6, 2.8, 118 if qr_narrow else 146),
+            (5.5, 2.5, 128 if qr_narrow else 160),
+        ):
+            wrapped_lines = []
+            for paragraph in str(extra_footer).splitlines():
+                text = paragraph.strip()
+                if not text:
+                    continue
+                while len(text) > max_line:
                     cut = text.rfind(" ", 0, max_line)
                     cut = cut if cut > 0 else max_line
-                c.drawString(left, fy, text[:cut])
-                text = text[cut:].lstrip()
-                fy -= 3.2 * mm
-            if fy < 19 * mm:
+                    wrapped_lines.append(text[:cut])
+                    text = text[cut:].lstrip()
+                wrapped_lines.append(text)
+            chosen = (fsize, leading)
+            if bottom_limit + len(wrapped_lines) * leading * mm <= top_limit:
+                break
+        fsize, leading = chosen
+        c.setFont(FONT, fsize)
+        c.setFillColorRGB(0.25, 0.25, 0.3)
+        fy = min(top_limit, bottom_limit + (len(wrapped_lines) - 1) * leading * mm + leading * mm)
+        for line_text in wrapped_lines:
+            c.drawString(left, fy, line_text)
+            fy -= leading * mm
+            if fy < bottom_limit:
                 break
         c.setFillColorRGB(0, 0, 0)
 

@@ -501,7 +501,13 @@
     "customerBanner": "Ügyfél — nincs kihelyezett tárgyi-eszköz gépünk, elszámolás nem készíthető.",
     "customerBannerHint": "Azonnali értékesítés (💰) és Kiszállítás (🚚) továbbra is elérhető; a saját gépe javítása a Feladatok/Átvétel menüben megy. Partnerré a Gépek menüben történő kihelyezéssel válik.",
     "phoneVisit": "telefonos — karbantartó látogatás",
-    "phoneVisitHint": "Telefonos elszámolású partner: a látogatás csak a szerződés szerinti karbantartási ciklus miatt esedékes."
+    "phoneVisitHint": "Telefonos elszámolású partner: a látogatás csak a szerződés szerinti karbantartási ciklus miatt esedékes.",
+    "swapped": "kicserélt gép",
+    "swappedHint": "Gépcserével leszerelt gép — a záró állások a cserét rögzítőtől jönnek, ez az elszámolás számlázza a cseréig lefőzött adagokat.",
+    "lateFeeBanner": "30 napnál régebbi lejárt tartozás — +10% késedelmi felár kerül minden tételre (ÁSZF).",
+    "lateFeeDetail": "Lejárt tétel: {date} elszámolás, határidő {due}, fennmaradó {amount}. A felár a számlán és a bizonylaton is látszik, a megjegyzésben ÁSZF-hivatkozással.",
+    "lateFeeWaive": "Felár kikapcsolása ERRE az elszámolásra",
+    "lateFeeWaiveHint": "A kikapcsolás naplózódik, és az admin/manager Telegram-értesítést kap róla."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -870,7 +876,12 @@
     "kindPartner": "Partner",
     "kindCustomer": "Ügyfél",
     "kindPartnerHint": "Kihelyezett tárgyi-eszköz gépünk van nála — velük van elszámolás.",
-    "kindCustomerHint": "Nincs kihelyezett gépünk nála — vásárol, vagy a saját gépét javíttatja."
+    "kindCustomerHint": "Nincs kihelyezett gépünk nála — vásárol, vagy a saját gépét javíttatja.",
+    "agentCol": "Képviselő",
+    "agentSortHint": "Kattints a képviselő szerinti rendezéshez",
+    "allAgents": "Minden képviselő",
+    "noAgent": "Nincs képviselő",
+    "contactEmailHint": "Több cím vesszővel elválasztva — minden számla és értesítés az összes címre megy."
   },
   "account": {
     "password": "Jelszó módosítása",
@@ -1042,7 +1053,10 @@
     "telegramNotLinkedHint": "Nincs összekapcsolva a Telegram-bottal. Összekapcsolás: a dolgozó a botnak privátban küldje el a 6 jegyű törzsszámát.",
     "telegramUnlink": "Telegram-kapcsolat törlése",
     "telegramUnlinkConfirm": "Törlöd a dolgozó Telegram-összekapcsolását? (A törzsszáma újraküldésével bármikor újra összekapcsolhat.)",
-    "telegramUnlinked": "Telegram-kapcsolat törölve."
+    "telegramUnlinked": "Telegram-kapcsolat törölve.",
+    "companyCheckbox": "Alvállalkozó CÉG (saját dolgozókkal)",
+    "companyHint": "A munkalapokat a cégre osztod ki — ők döntik el, melyik szerelőjük javít. Minden más (díjak, folyószámla, átadás) a külsős szervizessel azonosan működik.",
+    "companyBadge": "alvállalkozó cég"
   },
   "sched": {
     "title": "Beosztás",
@@ -1276,7 +1290,11 @@
     "acceptInternal": "Elfogadás belsőleg",
     "acceptInternalHint": "Saját (tárgyi eszköz) gépnél a képviselő/admin dönt — nem megy ki ügyfél-ajánlat, a szervizes azonnal kezdheti a munkát.",
     "acceptInternalConfirm": "Elfogadod ezt a konstrukciót belső döntéssel? {name} — a szervizes értesítést kap, hogy kezdheti a munkát.",
-    "acceptInternalDone": "Konstrukció elfogadva — a szervizes kezdheti a munkát."
+    "acceptInternalDone": "Konstrukció elfogadva — a szervizes kezdheti a munkát.",
+    "loanerTitle": "Cseregép kiadása",
+    "loanerPh": "vonalkód vagy QR",
+    "loanerClear": "Cseregép visszavéve",
+    "loanerFromIntakeFailed": "Az átvételkor megadott cseregépet ({code}) nem sikerült rögzíteni — add meg a feladatnál kézzel."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1805,7 +1823,9 @@
     "stocktake.closed": "Ez a leltár már le van zárva.",
     "contract.bad_tier": "Hibás ársáv (ellenőrizd a határokat és az árat).",
     "contract.tier_overlap": "Az ársávok átfedik egymást.",
-    "contract.too_many_tiers": "Legfeljebb 20 ársáv adható meg."
+    "contract.too_many_tiers": "Legfeljebb 20 ársáv adható meg.",
+    "partner.bad_email": "Hibás e-mail cím a listában — több címet vesszővel válassz el.",
+    "asset.rented_xor_customer": "A gép nem lehet egyszerre bérelt és az ügyfél saját gépe."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2034,7 +2054,17 @@
     "backfillOwnedConfirm": "Minden tárgyi eszközként NEM jelölt gép megkapja „az ügyfél gépe, csak javítjuk” pipát — a QR-címkéjükön nem lesz tulajdon-felirat. A már jelölt gépekhez nem nyúlunk; tévedésnél a gép szerkesztőjében egyesével visszavehető. Mehet?",
     "backfillOwnedDone": "Átjelölve: {count} gép mostantól ügyfélgép.",
     "counterNameN": "{n}. számláló neve",
-    "counterNamePh": "pl. eszpresszó (üresen sorszám)"
+    "counterNamePh": "pl. eszpresszó (üresen sorszám)",
+    "rented": "Általunk bérelt gép",
+    "rentedHint": "Úgy viselkedik, mint a tárgyi eszköz (kihelyezhető, szerződhető), de a címkékre NEM kerül rá a tulajdonos-felirat.",
+    "resetCountersBtn": "Számlálók nullázása (kontroll kivételével)",
+    "resetCountersConfirm": "Minden számláló nullázódik a(z) {barcode} gépen (a 0 Ft-os kontroll kivételével), és a következő elszámolás nulláról indul. A művelet naplózódik, az admin/manager értesítést kap. Mehet?",
+    "resetCountersDone": "Számlálók nullázva — naplózva, a vezetők értesítést kaptak.",
+    "swapOldCounters": "A leszerelt gép ZÁRÓ állásai",
+    "swapOldCountersHint": "A cseréig lefőzött adagokat a következő elszámolás ebből számlázza — több számlálós gépnél MINDET olvasd le!",
+    "swapNewCounters": "A cseregép INDULÓ állásai",
+    "swapNewCountersHint": "A következő elszámolás ezekhez képest számolja a fogyást.",
+    "swapPricesTitle": "Adagárak számlálónként (javaslat a kicserélt gép árai alapján)"
   },
   "wh": {
     "title": "Raktár",
@@ -2410,7 +2440,10 @@
     "worksheet": "Munkalap",
     "contactRequired": "A telefonszám és az e-mail cím megadása kötelező — enélkül nem tudjuk értesíteni az ügyfelet.",
     "printOfficeConfirm": "Elismervény ({serial}) nyomtatása az IRODAI nyomtatóra (telefonról is működik)?",
-    "officePrintQueued": "Elismervény a nyomtatási sorban — az irodai nyomtatón készül."
+    "officePrintQueued": "Elismervény a nyomtatási sorban — az irodai nyomtatón készül.",
+    "loaner": "Cseregép az ügyfélnek (opcionális)",
+    "loanerPh": "vonalkód vagy QR-beolvasás",
+    "loanerHint": "A munkalap kiállításakor automatikusan rákerül a cseregép — a QR a 📷 gombbal is beolvasható."
   },
   "handover": {
     "title": "Átadás",
@@ -2555,7 +2588,10 @@
     "transferAccept": "Elfogadom",
     "transferDecline": "Elutasítom",
     "transferAccepted": "Átvétel elfogadva — az összeg a kasszádba került.",
-    "transferDeclined": "Átadás elutasítva."
+    "transferDeclined": "Átadás elutasítva.",
+    "contractorTitle": "Szerelő-folyószámla (ennyivel tartozunk neked)",
+    "contractorHint": "Az elhozott munkalapjaid visszaigazolt díjai + saját pénzből vett alkatrészeid − átvett kifizetések. Pozitív egyenleg = még járandóság.",
+    "contractorFees": "Javítási díjak ({n} munkalap)"
   },
   "stats": {
     "title": "Statisztika",
@@ -2582,7 +2618,8 @@
     "count": "Darab",
     "portions": "Adag",
     "items": "tétel",
-    "empty": "Nincs adat az időszakban."
+    "empty": "Nincs adat az időszakban.",
+    "mapBtn": "Térkép-nézet"
   },
   "svcHo": {
     "title": "Szerelő-átadás",
@@ -2644,5 +2681,17 @@
     "close": "Leltár zárása",
     "closeConfirm": "Zárod a leltárt? A számolt értékek a készletre állnak, az eltérések korrekciós mozgásként rögzülnek.",
     "closed": "Leltár lezárva — az eltérések könyvelve."
+  },
+  "map": {
+    "title": "Kihelyezett gépek térképe",
+    "all": "Országos",
+    "buda": "Buda",
+    "pest": "Pest",
+    "partners": "partner",
+    "machines": "kihelyezett gép",
+    "machinesShort": "gép",
+    "city": "Település",
+    "missingGeo": "{n} partnernek még nincs térkép-koordinátája (geokódolás folyamatban) — ők csak a táblázatban látszanak.",
+    "loadFailed": "A térkép betöltése nem sikerült — ellenőrizd az internetkapcsolatot."
   }
 }

@@ -64,7 +64,7 @@ def _draw_label(c: pdf_canvas.Canvas, item: dict, x: float, y: float) -> None:
     if item.get("serial_number"):
         c.drawString(text_x, text_y, f"Gyári szám: {str(item['serial_number'])[:20]}")
         text_y -= 5 * mm
-    if not item.get("customer_owned"):
+    if not item.get("customer_owned") and not item.get("rented"):
         c.setFillColorRGB(0.35, 0.4, 0.5)
         c.drawString(text_x, text_y, OWNER_TEXT)
         c.setFillColorRGB(0, 0, 0)
@@ -105,7 +105,7 @@ def _draw_small_label(c: pdf_canvas.Canvas, item: dict) -> None:
     c.setFont(FONT, 6.5)
     c.setFillColorRGB(0.3, 0.35, 0.45)
     # Ügyfél behozott gépén nincs tulajdon-felirat
-    if not item.get("customer_owned"):
+    if not item.get("customer_owned") and not item.get("rented"):
         c.drawString(text_x, pad + 4.8 * mm, OWNER_TEXT)
     c.drawString(text_x, pad + 1.5 * mm, "Olvassa be a QR-kódot!")
     c.setFillColorRGB(0, 0, 0)
@@ -174,7 +174,7 @@ def build_qr_labels_ezpl(items: list[dict]) -> bytes:
         texts = [name, f"Kod: {barcode}"[:MAX_CHARS]]
         if serial:
             texts.append(f"Gy.sz: {serial}"[:MAX_CHARS])
-        if not item.get("customer_owned"):
+        if not item.get("customer_owned") and not item.get("rented"):
             texts += ["X-Presso Coffee", "Kft tulajdona"]
         texts.append("Olvassa be a QR-t!")
         # legfeljebb 6 sor: 8, 38, 68, 98, 128, 158 (egy sor ~20 dot magas)

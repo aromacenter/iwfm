@@ -35,6 +35,8 @@ class IntakeBody(BaseModel):
     accessories: str | None = Field(default=None, max_length=4000)
     faults: str | None = Field(default=None, max_length=8000)
     note: str | None = Field(default=None, max_length=4000)
+    # Átvételkor kiadott cseregép vonalkódja/QR-je (opcionális)
+    loaner_barcode: str | None = Field(default=None, max_length=64)
     # állapot-fotók a gépről (data-URL, a felület ~1600px-re kicsinyíti)
     photos: list[str] = Field(default_factory=list, max_length=8)
 
@@ -75,6 +77,7 @@ class IntakeOut(BaseModel):
     accessories: str | None
     faults: str | None
     note: str | None
+    loaner_barcode: str | None = None
     received_by_name: str | None
     received_at: datetime
     photo_count: int = 0
@@ -165,6 +168,7 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
             accessories=r.accessories,
             faults=r.faults,
             note=r.note,
+            loaner_barcode=r.loaner_barcode,
             received_by_name=r.received_by_name,
             received_at=r.received_at,
             photo_count=photo_counts.get(r.id, 0),
@@ -227,6 +231,7 @@ async def create_intake(
         accessories=(body.accessories or "").strip() or None,
         faults=(body.faults or "").strip() or None,
         note=(body.note or "").strip() or None,
+        loaner_barcode=(body.loaner_barcode or "").strip() or None,
         received_by_name=actor.display_name,
         received_at=datetime.now(UTC),
         created_by=actor.id,

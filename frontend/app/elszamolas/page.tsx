@@ -145,6 +145,11 @@ interface CtxMachine {
   last_settled_at: string | null;
   default_product_id: string | null;
   product_name: string | null;
+  // Gépcserével leszerelt gép függő elszámolása — a záró állások fixek.
+  swapped?: boolean;
+  swap_final_counters?: number[] | null;
+  swap_final_counter?: number | null;
+  swap_at?: string | null;
 }
 
 interface DebtItem {
@@ -336,8 +341,12 @@ export default function ElszamolasPage() {
     }).catch(() => {});
   }, [partnerId]);
 
+  // Késedelmi felár kikapcsolása erre az elszámolásra (9c7f54e5)
+  const [lateFeeWaived, setLateFeeWaived] = useState(false);
+
   const loadCtx = useCallback(() => {
     setDiscountAll(false);
+    setLateFeeWaived(false);
     setMachinePrices({});
     setLinePrices({});
     if (!partnerId) { setCtx(null); setMachineInputs({}); setPaidAmount(""); return; }
@@ -349,13 +358,17 @@ export default function ElszamolasPage() {
         m.asset_id,
         {
           newCounter:
-            m.counter_count <= 1 && m.reported_counters?.length
-              ? String(m.reported_counters.reduce((a, b) => a + b, 0))
-              : "",
+            m.swapped && m.swap_final_counter != null
+              ? String(m.swap_final_counter)
+              : m.counter_count <= 1 && m.reported_counters?.length
+                ? String(m.reported_counters.reduce((a, b) => a + b, 0))
+                : "",
           newCounters: Array.from({ length: m.counter_count }, (_, i) =>
-            m.counter_count > 1 && m.reported_counters?.[i] != null
-              ? String(m.reported_counters[i])
-              : "",
+            m.swapped && m.swap_final_counters?.[i] != null
+              ? String(m.swap_final_counters[i])
+              : m.counter_count > 1 && m.reported_counters?.[i] != null
+                ? String(m.reported_counters[i])
+                : "",
           ),
           service: "",
         },
@@ -1169,6 +1182,7 @@ export default function ElszamolasPage() {
       paid_amount: paid,
       note: note || null,
       due_days: payment === "transfer" && dueDays !== "" ? Number(dueDays) : null,
+      late_fee_waived: lateFeeWaived,
     };
     setBusy(true);
     try {
@@ -1921,6 +1935,41 @@ export default function ElszamolasPage() {
         </div>
       )}
 
+      {/* Késedelmi felár: 30+ napja lejárt tartozásnál +10% minden tételre
+          (ÁSZF) — a képviselő pipával kikapcsolhatja; mindkettő naplózott. */}
+      {partnerId && ctx && (() => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 30);
+        const overdue = ctx.debt_items.find(
+          (d) => new Date(d.due_date ?? d.created_at) <= cutoff,
+        );
+        if (!overdue) return null;
+        return (
+          <div className="mb-4 rounded-2xl border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-900 shadow-sm">
+            <div className="font-semibold">⚠️ {t("cons.lateFeeBanner")}</div>
+            <p className="mt-0.5 text-xs">
+              {t("cons.lateFeeDetail", {
+                date: fmt(overdue.created_at),
+                due: overdue.due_date ?? "—",
+                amount: ft(Math.round(overdue.remaining)),
+              })}
+            </p>
+            <label className="mt-2 flex items-start gap-2 text-xs font-medium">
+              <input
+                type="checkbox"
+                checked={lateFeeWaived}
+                onChange={(e) => setLateFeeWaived(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                {t("cons.lateFeeWaive")}
+                <span className="block font-normal text-orange-700">{t("cons.lateFeeWaiveHint")}</span>
+              </span>
+            </label>
+          </div>
+        );
+      })()}
+
       {partnerId && ctx && ctx.open_deliveries > 0 && (
         <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
           🚚 {t("delivery.openBanner", {
@@ -1978,7 +2027,17 @@ export default function ElszamolasPage() {
                 <tr key={m.asset_id} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-2.5 font-mono text-xs">{m.barcode}</td>
                   <td className="px-4 py-2.5">
-                    <div className="font-medium">{m.name}</div>
+                    <div className="font-medium">
+                      {m.name}
+                      {m.swapped && (
+                        <span
+                          title={t("cons.swappedHint")}
+                          className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
+                        >
+                          🔁 {t("cons.swapped")}
+                        </span>
+                      )}
+                    </div>
                     <SearchSelect
                       items={[
                         // a gép csak KÁVÉT (bizományos terméket) főzhet — a

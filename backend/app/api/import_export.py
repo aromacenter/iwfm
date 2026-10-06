@@ -49,7 +49,7 @@ ENTITY_FIELDS: dict[str, list[dict]] = {
         {"key": "eu_tax_number", "required": False, "max_len": 32, "type": "str"},
         {"key": "reg_number", "required": False, "max_len": 64, "type": "str"},
         {"key": "contact_name", "required": False, "max_len": 256, "type": "str"},
-        {"key": "contact_email", "required": False, "max_len": 320, "type": "str"},
+        {"key": "contact_email", "required": False, "max_len": 1000, "type": "str"},
         {"key": "contact_phone", "required": False, "max_len": 32, "type": "str"},
         {"key": "website", "required": False, "max_len": 256, "type": "str"},
         {"key": "address", "required": False, "max_len": 512, "type": "str"},

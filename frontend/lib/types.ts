@@ -35,6 +35,7 @@ export interface EmployeeOut {
   annual_leave_days: number;
   // Alvállalkozó (számlás) — bármikor átváltható alkalmazottira és vissza
   is_contractor: boolean;
+  is_company?: boolean;
   company_tax_number: string | null;
   // Bérszámfejtés alapja: blokkolás (attendance) vagy beosztás (schedule)
   payroll_source: "attendance" | "schedule";

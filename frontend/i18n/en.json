@@ -501,7 +501,13 @@
     "customerBanner": "Customer — no placed machine, settlements are not available.",
     "customerBannerHint": "Instant sale (💰) and Delivery (🚚) remain available; repairs go through Tasks/Intake. Deploy a machine to make them a partner.",
     "phoneVisit": "phone — maintenance visit",
-    "phoneVisitHint": "Phone-settled partner: the visit is due only for the contractual maintenance cycle."
+    "phoneVisitHint": "Phone-settled partner: the visit is due only for the contractual maintenance cycle.",
+    "swapped": "swapped out",
+    "swappedHint": "Removed at swap — this settlement bills the portions brewed until the swap.",
+    "lateFeeBanner": "Debt overdue by 30+ days — a 10% late fee is applied to every line (T&C).",
+    "lateFeeDetail": "Overdue: settlement {date}, due {due}, remaining {amount}.",
+    "lateFeeWaive": "Waive the late fee for THIS settlement",
+    "lateFeeWaiveHint": "Waiving is logged and managers are notified."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -870,7 +876,12 @@
     "kindPartner": "Partner",
     "kindCustomer": "Customer",
     "kindPartnerHint": "Has our placed tangible-asset machine — settlements happen with them.",
-    "kindCustomerHint": "No placed machine — buys products or has their own machine serviced."
+    "kindCustomerHint": "No placed machine — buys products or has their own machine serviced.",
+    "agentCol": "Agent",
+    "agentSortHint": "Click to sort by agent",
+    "allAgents": "All agents",
+    "noAgent": "No agent",
+    "contactEmailHint": "Multiple addresses separated by commas — every invoice and notice goes to all."
   },
   "account": {
     "password": "Change password",
@@ -1042,7 +1053,10 @@
     "telegramNotLinkedHint": "Not linked to the Telegram bot. To link: the employee sends their 6-digit staff code to the bot in a private chat.",
     "telegramUnlink": "Remove Telegram link",
     "telegramUnlinkConfirm": "Remove this employee's Telegram link? (They can re-link anytime by sending their staff code again.)",
-    "telegramUnlinked": "Telegram link removed."
+    "telegramUnlinked": "Telegram link removed.",
+    "companyCheckbox": "Subcontractor COMPANY",
+    "companyHint": "Assign worksheets to the company — they pick the technician internally.",
+    "companyBadge": "subcontractor co."
   },
   "sched": {
     "title": "Schedule",
@@ -1276,7 +1290,11 @@
     "acceptInternal": "Accept internally",
     "acceptInternalHint": "For our own machines the rep/admin decides — no customer quote, work starts immediately.",
     "acceptInternalConfirm": "Accept this option internally? {name} — the technician is notified to start.",
-    "acceptInternalDone": "Option accepted — the technician can start."
+    "acceptInternalDone": "Option accepted — the technician can start.",
+    "loanerTitle": "Loaner machine",
+    "loanerPh": "barcode or QR",
+    "loanerClear": "Loaner returned",
+    "loanerFromIntakeFailed": "Could not record the loaner ({code}) from intake — set it on the task manually."
   },
   "myTasks": {
     "title": "My tasks",
@@ -1805,7 +1823,9 @@
     "stocktake.closed": "This stocktake is already closed.",
     "contract.bad_tier": "Invalid price tier.",
     "contract.tier_overlap": "Price tiers overlap.",
-    "contract.too_many_tiers": "At most 20 tiers."
+    "contract.too_many_tiers": "At most 20 tiers.",
+    "partner.bad_email": "Invalid e-mail address in the list.",
+    "asset.rented_xor_customer": "A machine cannot be both rented and customer-owned."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2034,7 +2054,17 @@
     "backfillOwnedConfirm": "Every machine NOT marked as a tangible asset will get the “customer's machine, we only service it” flag — their QR labels will carry no ownership text. Already-flagged machines are untouched; mistakes can be reverted one by one in the machine editor. Proceed?",
     "backfillOwnedDone": "Re-flagged: {count} machines are now customer-owned.",
     "counterNameN": "Counter {n} name",
-    "counterNamePh": "e.g. espresso (empty = number)"
+    "counterNamePh": "e.g. espresso (empty = number)",
+    "rented": "Rented by us",
+    "rentedHint": "Behaves like a tangible asset, but labels omit the owner text.",
+    "resetCountersBtn": "Reset counters (except control)",
+    "resetCountersConfirm": "All counters on {barcode} will be zeroed (except the control counter). Logged; admins get notified. Proceed?",
+    "resetCountersDone": "Counters reset — logged and managers notified.",
+    "swapOldCounters": "Final counters of the removed machine",
+    "swapOldCountersHint": "The next settlement bills the portions brewed until the swap from these.",
+    "swapNewCounters": "Starting counters of the replacement",
+    "swapNewCountersHint": "The next settlement counts consumption from these.",
+    "swapPricesTitle": "Per-counter prices (suggested from the replaced machine)"
   },
   "wh": {
     "title": "Warehouse",
@@ -2410,7 +2440,10 @@
     "worksheet": "Worksheet",
     "contactRequired": "Phone number and email are required — we cannot notify the client without them.",
     "printOfficeConfirm": "Print receipt ({serial}) on the OFFICE printer (works from a phone)?",
-    "officePrintQueued": "Receipt queued — printing on the office printer."
+    "officePrintQueued": "Receipt queued — printing on the office printer.",
+    "loaner": "Loaner machine (optional)",
+    "loanerPh": "barcode or scan QR",
+    "loanerHint": "Added to the worksheet automatically when the task is created."
   },
   "handover": {
     "title": "Handover",
@@ -2555,7 +2588,10 @@
     "transferAccept": "Accept",
     "transferDecline": "Decline",
     "transferAccepted": "Accepted — the amount is in your register.",
-    "transferDeclined": "Transfer declined."
+    "transferDeclined": "Transfer declined.",
+    "contractorTitle": "Technician ledger (what we owe you)",
+    "contractorHint": "Confirmed fees + your own costs − payouts received.",
+    "contractorFees": "Repair fees ({n} worksheets)"
   },
   "stats": {
     "title": "Statistics",
@@ -2582,7 +2618,8 @@
     "count": "Count",
     "portions": "Portions",
     "items": "items",
-    "empty": "No data in this period."
+    "empty": "No data in this period.",
+    "mapBtn": "Map view"
   },
   "svcHo": {
     "title": "Technician handover",
@@ -2644,5 +2681,17 @@
     "close": "Close stocktake",
     "closeConfirm": "Close the stocktake? Counted values become the stock; differences are recorded as adjustments.",
     "closed": "Stocktake closed — adjustments recorded."
+  },
+  "map": {
+    "title": "Deployed machines map",
+    "all": "All",
+    "buda": "Buda",
+    "pest": "Pest",
+    "partners": "partners",
+    "machines": "machines deployed",
+    "machinesShort": "machines",
+    "city": "City",
+    "missingGeo": "{n} partners have no coordinates yet.",
+    "loadFailed": "Map failed to load."
   }
 }

@@ -25,6 +25,14 @@ interface CashEntry {
   created_by_name: string | null;
 }
 
+interface ContractorLedger {
+  fee_total: number;
+  costs: number;
+  payouts: number;
+  balance: number;
+  worksheets: number;
+}
+
 interface Register {
   user_id: string;
   user_name: string | null;
@@ -35,6 +43,7 @@ interface Register {
   transfers_in: number;
   transfers_out: number;
   balance: number;
+  contractor: ContractorLedger | null;
   entries: CashEntry[];
 }
 
@@ -89,6 +98,11 @@ export default function KasszaPage() {
     user_id: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Beszállító-javaslatok a korábbi költésekből (szabad szavas marad)
+  const [suppliers, setSuppliers] = useState<string[]>([]);
+  useEffect(() => {
+    api.get<string[]>("/api/stats/cash/suppliers").then(setSuppliers).catch(() => {});
+  }, []);
 
   const params = useCallback(() => {
     const p = new URLSearchParams();
@@ -215,6 +229,35 @@ export default function KasszaPage() {
             <p className="font-semibold text-slate-700">−{ft(r.transfers_out)}</p>
           </div>
         </div>
+        {r.contractor && (
+          <div className="mb-3 rounded-2xl border border-orange-200 bg-orange-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-orange-900">🔧 {t("cash.contractorTitle")}</p>
+              <span className={`rounded-lg px-2.5 py-0.5 font-bold ${r.contractor.balance > 0 ? "bg-emerald-100 text-emerald-800" : r.contractor.balance < 0 ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-600"}`}>
+                {ft(r.contractor.balance)}
+              </span>
+            </div>
+            <p className="mb-2 text-xs text-orange-800">{t("cash.contractorHint")}</p>
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              <div className="rounded-xl bg-white/70 px-3 py-2">
+                <p className="text-xs text-slate-500">{t("cash.contractorFees", { n: r.contractor.worksheets })}</p>
+                <p className="font-semibold">{ft(r.contractor.fee_total)}</p>
+              </div>
+              <div className="rounded-xl bg-white/70 px-3 py-2">
+                <p className="text-xs text-slate-500">{t("svcHo.costsCol")}</p>
+                <p className="font-semibold text-orange-800">+{ft(r.contractor.costs)}</p>
+              </div>
+              <div className="rounded-xl bg-white/70 px-3 py-2">
+                <p className="text-xs text-slate-500">{t("svcHo.payoutsCol")}</p>
+                <p className="font-semibold text-emerald-800">−{ft(r.contractor.payouts)}</p>
+              </div>
+              <div className="rounded-xl bg-white/70 px-3 py-2">
+                <p className="text-xs text-slate-500">{t("svcHo.balance")}</p>
+                <p className="font-semibold">{ft(r.contractor.balance)}</p>
+              </div>
+            </div>
+          </div>
+        )}
         {r.entries.length > 0 && (
           <div className="max-h-80 overflow-y-auto">
             <table className="w-full text-sm">
@@ -457,7 +500,12 @@ export default function KasszaPage() {
               <>
                 <label className="block text-sm">
                   {t("cash.supplier")}
-                  <input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                  <input list="cash-suppliers" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                  <datalist id="cash-suppliers">
+                    {suppliers.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
                 </label>
                 <label className="block text-sm">
                   {t("cash.receiptNo")}

@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete as sa_delete, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,8 +63,22 @@ class PartnerBody(BaseModel):
     eu_tax_number: str | None = Field(default=None, max_length=32)
     reg_number: str | None = Field(default=None, max_length=64)
     contact_name: str | None = Field(default=None, max_length=256)
-    contact_email: EmailStr | None = None
+    # Több cím vesszővel/pontosvesszővel — minden számla/értesítés mindre megy.
+    contact_email: str | None = Field(default=None, max_length=1000)
     contact_phone: str | None = Field(default=None, max_length=32)
+
+    @field_validator("contact_email")
+    @classmethod
+    def _check_emails(cls, v: str | None) -> str | None:
+        if v is None or not v.strip():
+            return None
+        from app.services.wfm.email_service import split_addresses
+
+        parts = split_addresses(v)
+        for p in parts:
+            if "@" not in p or " " in p or len(p) > 320:
+                raise ValueError("partner.bad_email")
+        return ", ".join(parts)
     website: str | None = Field(default=None, max_length=256)
     address: str | None = Field(default=None, max_length=512)
     billing_address: str | None = Field(default=None, max_length=512)
@@ -322,7 +336,8 @@ async def partner_overview(
         contracts=[contract_out(c).model_dump(mode="json") for c in contracts],
         machines=[
             {"id": str(a.id), "barcode": a.barcode, "name": a.name,
-             "counter": a.counter, "customer_owned": a.customer_owned}
+             "counter": a.counter, "customer_owned": a.customer_owned,
+             "rented": a.rented}
             for a in assets
         ],
         stock=[
@@ -626,6 +641,7 @@ class AssetBody(BaseModel):
     counter_prices: list[float | None] | None = Field(default=None, max_length=99)
     tangible: bool = False
     customer_owned: bool = False  # az ügyfél saját gépe
+    rented: bool = False  # általunk bérelt gép — címkén nincs tulajdonos-felirat
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
     contract_below_min_price: float | None = Field(default=None, ge=0)
     rent_fee: float | None = Field(default=None, ge=0)
@@ -653,6 +669,7 @@ class AssetPatch(BaseModel):
     counter_prices: list[float | None] | None = Field(default=None, max_length=99)
     tangible: bool | None = None
     customer_owned: bool | None = None
+    rented: bool | None = None
     contract_min_portions: int | None = Field(default=None, ge=0, le=1_000_000)
     contract_below_min_price: float | None = Field(default=None, ge=0)
     rent_fee: float | None = Field(default=None, ge=0)
@@ -706,6 +723,7 @@ class AssetOut(BaseModel):
     counter_prices: list[float | None] | None = None
     tangible: bool
     customer_owned: bool
+    rented: bool = False
     contract_min_portions: int | None
     contract_below_min_price: float | None
     rent_fee: float | None
@@ -752,6 +770,7 @@ def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
         counter_prices=a.counter_prices,
         tangible=a.tangible,
         customer_owned=a.customer_owned,
+        rented=a.rented,
         contract_min_portions=a.contract_min_portions,
         contract_below_min_price=a.contract_below_min_price,
         rent_fee=a.rent_fee,
@@ -1159,6 +1178,8 @@ async def create_asset(
     if existing is not None:
         raise HTTPException(status_code=409, detail={"code": "asset.barcode_taken"})
     # Vagy tárgyi eszköz, vagy az ügyfél saját gépe — a kettő együtt hibás.
+    if body.rented and body.customer_owned:
+        raise HTTPException(status_code=422, detail={"code": "asset.rented_xor_customer"})
     if body.tangible and body.customer_owned:
         raise HTTPException(status_code=422, detail={"code": "asset.tangible_xor_customer"})
 
@@ -1182,6 +1203,7 @@ async def create_asset(
         counter_prices=body.counter_prices,
         tangible=body.tangible,
         customer_owned=body.customer_owned,
+        rented=body.rented,
         contract_min_portions=body.contract_min_portions,
         contract_below_min_price=body.contract_below_min_price,
         rent_fee=body.rent_fee,
@@ -1253,6 +1275,9 @@ async def update_asset(
     # Vagy tárgyi eszköz, vagy az ügyfél saját gépe — együtt nem állhat.
     if a.tangible and a.customer_owned:
         raise HTTPException(status_code=422, detail={"code": "asset.tangible_xor_customer"})
+    # Bérelt gép nem lehet egyben az ügyfél saját gépe.
+    if a.rented and a.customer_owned:
+        raise HTTPException(status_code=422, detail={"code": "asset.rented_xor_customer"})
     # Több számlálós gép: az egyes állásokból a `counter` mindig az összeg
     if data.get("counters"):
         a.counter = sum(data["counters"])
@@ -1327,6 +1352,13 @@ class SwapBody(BaseModel):
     # Számlálónkénti adagárak a cseregépre — ha a két gép számláló-kiosztása
     # eltér, itt adhatók meg egyesével; None = öröklés (egyező kiosztásnál).
     counter_prices: list[float | None] | None = Field(default=None, max_length=99)
+    # A LESZERELT gép ZÁRÓ állásai (73cbc5ee): a cseréig lefőzött adagokat a
+    # következő elszámolás ebből számlázza. Több számlálós gépnél mindet!
+    old_counters: list[int] | None = Field(default=None, max_length=99)
+    old_counter: int | None = Field(default=None, ge=0)
+    # A CSEREGÉP induló állásai — a következő elszámolás ehhez képest számol.
+    new_counters: list[int] | None = Field(default=None, max_length=99)
+    new_counter: int | None = Field(default=None, ge=0)
 
 
 @assets_router.post("/{asset_id}/swap", response_model=AssetOut)
@@ -1374,6 +1406,30 @@ async def swap_asset(
         and (new.counter_count or 1) == (old.counter_count or 1)
     ):
         new.counter_names = old.counter_names
+    # A cseregép induló állásai — innen számol a következő elszámolás.
+    if body.new_counters:
+        new.counters = list(body.new_counters)[: new.counter_count or len(body.new_counters)]
+        new.counter = sum(body.new_counters)
+    elif body.new_counter is not None:
+        new.counter = body.new_counter
+
+    # A leszerelt gép ZÁRÓ állásai FÜGGŐ elszámolásként eltárolva: a partner
+    # következő elszámolása ebből számlázza a cseréig lefőzött adagokat
+    # (a gép tárolt counters/counter mezőihez NEM nyúlunk — azok az utolsó
+    # elszámolt állások, a különbség ebből képződik).
+    final_counters = body.old_counters
+    final_counter = (
+        sum(final_counters) if final_counters
+        else (body.old_counter if body.old_counter is not None else old.counter)
+    )
+    old.swap_pending = {
+        "partner_id": str(old.partner_id),
+        "counters": list(final_counters) if final_counters else None,
+        "counter": int(final_counter or 0),
+        "at": datetime.now(UTC).isoformat(),
+        "replaced_by": new.barcode,
+    }
+
     # régi gép: szervizre, kihelyezés lezárva
     prev_partner = old.partner_id
     old.status = "maintenance"
@@ -1399,6 +1455,75 @@ async def swap_asset(
     )
     await db.commit()
     return _asset_out(new, partner.name if partner else None)
+
+
+@assets_router.post("/{asset_id}/reset-counters", response_model=AssetOut)
+async def reset_counters(
+    asset_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("machines")),
+):
+    """Minden számláló nullázása a KONTROLL számláló kivételével (0 Ft-os
+    egységárral rögzített állás) — a következő elszámolás nulláról indul.
+    Naplózott művelet; az admin és manager Telegram-értesítést kap
+    kattintható linkkel (74e44b49)."""
+    a = await _get_asset_or_404(db, asset_id)
+    old_counters = list(a.counters) if isinstance(a.counters, list) else None
+    old_counter = a.counter
+    cps = a.counter_prices if isinstance(a.counter_prices, list) else []
+    if old_counters:
+        new_counters = [
+            (old_counters[i] if i < len(cps) and cps[i] == 0 else 0)
+            for i in range(len(old_counters))
+        ]
+        a.counters = new_counters
+        a.counter = sum(new_counters)
+    else:
+        a.counter = 0
+    a.counters_reset_at = datetime.now(UTC)
+    db.add(AssetMovement(
+        asset_id=a.id, action="counter", partner_id=a.partner_id,
+        detail=(
+            f"Számlálók nullázva (kontroll kivételével): {old_counters or old_counter} → "
+            f"{a.counters if old_counters else a.counter} — {actor.display_name}"
+        )[:512],
+        actor_user_id=actor.id,
+    ))
+    await record_audit(
+        db, actor=actor, action="asset.counters_reset", entity_type="asset",
+        entity_id=a.barcode,
+        detail={"from": old_counters or old_counter,
+                "to": a.counters if old_counters else 0},
+        request=request,
+    )
+    await db.commit()
+    # Telegram az adminoknak/managereknek — best effort, kattintható linkkel
+    try:
+        from app.core.config import get_settings as _gs
+        from app.models import Employee
+        from app.services.wfm.telegram import send_personal
+
+        link = f"{_gs().frontend_origin.rstrip('/')}/gepek?q={a.barcode}"
+        msg = (
+            f"🔄 Számláló-nullázás: {a.name} ({a.barcode})\n"
+            f"Ki: {actor.display_name} · régi állás: {old_counters or old_counter}\n"
+            f"🔗 {link}"
+        )
+        boss_ids = (
+            await db.execute(select(User.id).where(User.role.in_(("admin", "manager"))))
+        ).scalars().all()
+        emps = (
+            await db.execute(select(Employee).where(Employee.user_id.in_(boss_ids)))
+        ).scalars().all()
+        for emp in emps:
+            await send_personal(db, emp, msg)
+    except Exception:  # pragma: no cover — értesítési hiba nem akaszt
+        import logging
+
+        logging.getLogger(__name__).warning("counter reset notify failed", exc_info=True)
+    names = await _partner_names(db, {a.partner_id})
+    return _asset_out(a, names.get(a.partner_id))
 
 
 @assets_router.post("/{asset_id}/return", response_model=AssetOut)

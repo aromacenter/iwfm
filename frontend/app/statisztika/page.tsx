@@ -69,6 +69,14 @@ export default function StatisztikaPage() {
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">📈 {t("stats.title")}</h1>
+        <a
+          href="/terkep"
+          target="_blank"
+          rel="noopener"
+          className="rounded-lg border border-indigo-300 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+        >
+          🗺️ {t("stats.mapBtn")}
+        </a>
         <div className="flex gap-1.5">
           {([["day", t("stats.day")], ["week", t("stats.week")], ["month", t("stats.month")], ["year", t("stats.year")], ["custom", t("stats.custom")]] as const).map(([key, label]) => (
             <button

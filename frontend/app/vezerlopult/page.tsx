@@ -98,7 +98,8 @@ export default function VezerlopultPage() {
   }, []);
   useEffect(load, [load]);
 
-  const ft = (n: number) => `${n.toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
+  // Egész forintra kerekítve — tizedesek csak az ár-megadásnál kellenek (682834bc)
+  const ft = (n: number) => `${Math.round(n).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
 
   async function decide(id: string, status: "approved" | "rejected") {
     try {

@@ -52,6 +52,14 @@ async def load_smtp_config(db: AsyncSession) -> SmtpConfig | None:
 Attachment = tuple[str, bytes, str, str]  # (filename, data, maintype, subtype)
 
 
+def split_addresses(value: str | None) -> list[str]:
+    """Több e-mail cím vesszővel/pontosvesszővel elválasztva → tiszta lista.
+    A partnerhez több cím rögzíthető; minden számla/értesítés mindre megy."""
+    if not value:
+        return []
+    return [p.strip() for p in str(value).replace(";", ",").split(",") if p.strip()]
+
+
 def _send_sync(
     config: SmtpConfig,
     to: str,
@@ -61,7 +69,8 @@ def _send_sync(
 ) -> None:
     msg = EmailMessage()
     msg["From"] = config.from_address
-    msg["To"] = to
+    # Többcímes küldés: a "to" lehet vesszős/pontosvesszős lista is.
+    msg["To"] = ", ".join(split_addresses(to)) or to
     msg["Subject"] = subject
     msg.set_content(body)
     for filename, data, maintype, subtype in attachments or []:

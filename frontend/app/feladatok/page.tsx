@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
+import ScanAssetButton from "@/components/ScanAssetButton";
 import SearchSelect from "@/components/SearchSelect";
 import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -144,6 +145,8 @@ export default function FeladatokPage() {
   // Az átvétel azonosítója, amiből a feladat készül — a mentéskor a
   // kapcsolat is tárolódik (az átvétel-lista így tudja: már van munkalap).
   const [intakeIdForTask, setIntakeIdForTask] = useState<string | null>(null);
+  // Az átvételkor megadott cseregép — a feladat létrejötte után rögzítjük
+  const [intakeLoaner, setIntakeLoaner] = useState<string | null>(null);
 
   useEffect(() => {
     const intakeId = new URLSearchParams(window.location.search).get("intake");
@@ -155,6 +158,7 @@ export default function FeladatokPage() {
         asset_manufacturer: string | null; partner_name: string | null;
         client_name: string | null; client_address: string | null;
         accessories: string | null; faults: string | null; serial: string;
+        loaner_barcode?: string | null;
       }[]>("/api/intakes")
       .then((rows) => {
         const r = rows.find((x) => x.id === intakeId);
@@ -175,6 +179,7 @@ export default function FeladatokPage() {
           client_location: r.client_address ?? "",
         }));
         setExternalService(true);
+        if (r.loaner_barcode) setIntakeLoaner(r.loaner_barcode);
         if (r.asset_id) setTaskAssetId(r.asset_id);
         setShowForm(true);
       })
@@ -268,6 +273,15 @@ export default function FeladatokPage() {
         asset_id: externalService && assetIdForTask ? assetIdForTask : null,
         intake_id: intakeIdForTask,
       });
+      // Átvételkor megadott cseregép rögzítése az új munkalapra
+      if (intakeIdForTask && intakeLoaner) {
+        try {
+          await api.post(`/api/tasks/${created.id}/loaner`, { code: intakeLoaner });
+        } catch {
+          toast(t("tasks.loanerFromIntakeFailed", { code: intakeLoaner }), "error");
+        }
+        setIntakeLoaner(null);
+      }
       setShowForm(false);
       setExternalService(false);
       setOnsite(false);
@@ -392,14 +406,21 @@ export default function FeladatokPage() {
     }
   }
 
-  async function setLoaner(task: TaskOut) {
-    const code = await prompt(t("tasks.loanerPrompt"), {
-      initial: task.worksheet_loaner ?? "",
-    });
-    if (code === null) return;
+  // Cseregép-modal: kézi beírás MELLETT kamerás QR-beolvasás is (5d25ca92)
+  const [loanerFor, setLoanerFor] = useState<TaskOut | null>(null);
+  const [loanerCode, setLoanerCode] = useState("");
+
+  function setLoaner(task: TaskOut) {
+    setLoanerCode(task.worksheet_loaner ?? "");
+    setLoanerFor(task);
+  }
+
+  async function saveLoaner(code: string) {
+    if (!loanerFor) return;
     try {
-      await api.post(`/api/tasks/${task.id}/loaner`, { code: code.trim() || null });
+      await api.post(`/api/tasks/${loanerFor.id}/loaner`, { code: code.trim() || null });
       toast(code.trim() ? t("tasks.loanerSet") : t("tasks.loanerCleared"), "success");
+      setLoanerFor(null);
       load();
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -1209,6 +1230,47 @@ export default function FeladatokPage() {
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
               >
                 💾 {t("common.save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loanerFor && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setLoanerFor(null); }}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+        >
+          <div className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold">🚐 {t("tasks.loanerTitle")}</p>
+              <button onClick={() => setLoanerFor(null)} className="rounded px-2 py-1 text-lg leading-none text-slate-400 hover:text-slate-700">✕</button>
+            </div>
+            <p className="text-xs text-slate-500">{t("tasks.loanerPrompt")}</p>
+            <div className="flex gap-2">
+              <input
+                value={loanerCode}
+                onChange={(e) => setLoanerCode(e.target.value)}
+                placeholder={t("tasks.loanerPh")}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <ScanAssetButton onBarcode={(bc) => setLoanerCode(bc)} />
+            </div>
+            <div className="flex justify-end gap-2">
+              {loanerFor.worksheet_loaner && (
+                <button
+                  onClick={() => void saveLoaner("")}
+                  className="rounded-lg border border-rose-300 px-3 py-1.5 text-sm text-rose-700"
+                >
+                  {t("tasks.loanerClear")}
+                </button>
+              )}
+              <button
+                onClick={() => void saveLoaner(loanerCode)}
+                disabled={!loanerCode.trim()}
+                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {t("common.save")}
               </button>
             </div>
           </div>
