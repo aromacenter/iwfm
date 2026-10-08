@@ -884,7 +884,11 @@
     "contactEmailHint": "Több cím vesszővel elválasztva — minden számla és értesítés az összes címre megy.",
     "statusActive": "Aktív",
     "statusInactive": "Inaktív",
-    "statusAll": "Összes"
+    "statusAll": "Összes",
+    "countPartners": "partner",
+    "countMachines": "kihelyezett gép",
+    "countSelected": "Kijelölve",
+    "countActivePartners": "aktív partner"
   },
   "account": {
     "password": "Jelszó módosítása",
@@ -1059,7 +1063,11 @@
     "telegramUnlinked": "Telegram-kapcsolat törölve.",
     "companyCheckbox": "Alvállalkozó CÉG (saját dolgozókkal)",
     "companyHint": "A munkalapokat a cégre osztod ki — ők döntik el, melyik szerelőjük javít. Minden más (díjak, folyószámla, átadás) a külsős szervizessel azonosan működik.",
-    "companyBadge": "alvállalkozó cég"
+    "companyBadge": "alvállalkozó cég",
+    "companyName": "Cégnév",
+    "companyNamePh": "pl. GépDoktor Szerviz Kft.",
+    "companyContactHint": "A fenti vezeték- és keresztnév itt a KAPCSOLATTARTÓT jelenti — a listákban és a kiosztásnál a cégnév jelenik meg.",
+    "contactShort": "kapcsolattartó"
   },
   "sched": {
     "title": "Beosztás",
@@ -1297,7 +1305,10 @@
     "loanerTitle": "Cseregép kiadása",
     "loanerPh": "vonalkód vagy QR",
     "loanerClear": "Cseregép visszavéve",
-    "loanerFromIntakeFailed": "Az átvételkor megadott cseregépet ({code}) nem sikerült rögzíteni — add meg a feladatnál kézzel."
+    "loanerFromIntakeFailed": "Az átvételkor megadott cseregépet ({code}) nem sikerült rögzíteni — add meg a feladatnál kézzel.",
+    "clientNoPartner": "'{name}' néven nincs partner-törzsadat — az ügyfél adatlapja a Partnerek menüben vehető fel.",
+    "clientInfoHint": "Ügyfél-adatlap: minden adat, korábbi tranzakciók és javítások",
+    "assetLinkHint": "Ugrás a gép adatlapjára"
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1380,7 +1391,10 @@
     "wsPublicNoteHint": "Ez a szöveg a munkalap ügyfél-példányán ÉS az ajánlat-elfogadó oldalon is megjelenik — árat ne írj bele.",
     "intakePhotos": "Átvételi fotók",
     "wsPhotosHint": "📷 Fotó csatolása a munkalaphoz — javítás közbeni állapot, telefonnal is.",
-    "wsPhotosUploaded": "{count} fotó csatolva a munkalaphoz."
+    "wsPhotosUploaded": "{count} fotó csatolva a munkalaphoz.",
+    "wsTechnician": "Szerelő neve (cégen belül, opcionális)",
+    "wsTechnicianPh": "ki végezte a munkát",
+    "wsTechnicianHint": "Alvállalkozó cégnél: melyik szerelőtök csinálta — a díj a cég közös folyószámláján marad, de a bontás látszik."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -2248,7 +2262,11 @@
     "stock": "Kint lévő készlet",
     "recentSettlements": "Utolsó elszámolások",
     "counter": "számláló",
-    "invoiced": "számlázva"
+    "invoiced": "számlázva",
+    "repairs": "Javítás-előzmények (munkalapok)",
+    "repairDone": "átadva",
+    "repairPicked": "elhozva",
+    "repairOpen": "folyamatban"
   },
   "quote": {
     "publicTitle": "Kávégép az üzletébe — kérjen ajánlatot!",
@@ -2379,7 +2397,9 @@
     "noTasks": "—",
     "allTasks": "Feladatok listája →",
     "today": "ma",
-    "dayEmpty": "Erre a napra nincs betervezett teendő."
+    "dayEmpty": "Erre a napra nincs betervezett teendő.",
+    "week3": "2 hét múlva",
+    "week4": "3 hét múlva"
   },
   "worksheet": {
     "empty": "Adj meg leírást vagy legalább egy munkatételt.",
@@ -2655,7 +2675,8 @@
     "costTitle": "Szerelő költése — {name}",
     "costHint": "Saját pénzből vett alkatrész/szolgáltatás — hozzáadódik a szerelőnek járó összeghez.",
     "costSaved": "Költés rögzítve a szerelő egyenlegén.",
-    "worksheetLinkHint": "A feladat adatlapja — mi történt, mi a teendő."
+    "worksheetLinkHint": "A feladat adatlapja — mi történt, mi a teendő.",
+    "technicianHint": "A cégen belüli szerelő, aki a munkát végezte"
   },
   "stk": {
     "title": "Leltár",

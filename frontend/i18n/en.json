@@ -884,7 +884,11 @@
     "contactEmailHint": "Multiple addresses separated by commas — every invoice and notice goes to all.",
     "statusActive": "Active",
     "statusInactive": "Inactive",
-    "statusAll": "All"
+    "statusAll": "All",
+    "countPartners": "partners",
+    "countMachines": "machines",
+    "countSelected": "Selected",
+    "countActivePartners": "active partners"
   },
   "account": {
     "password": "Change password",
@@ -1059,7 +1063,11 @@
     "telegramUnlinked": "Telegram link removed.",
     "companyCheckbox": "Subcontractor COMPANY",
     "companyHint": "Assign worksheets to the company — they pick the technician internally.",
-    "companyBadge": "subcontractor co."
+    "companyBadge": "subcontractor co.",
+    "companyName": "Company name",
+    "companyNamePh": "e.g. FixIt Service Ltd.",
+    "companyContactHint": "The last/first name above is the CONTACT person — lists show the company name.",
+    "contactShort": "contact"
   },
   "sched": {
     "title": "Schedule",
@@ -1297,7 +1305,10 @@
     "loanerTitle": "Loaner machine",
     "loanerPh": "barcode or QR",
     "loanerClear": "Loaner returned",
-    "loanerFromIntakeFailed": "Could not record the loaner ({code}) from intake — set it on the task manually."
+    "loanerFromIntakeFailed": "Could not record the loaner ({code}) from intake — set it on the task manually.",
+    "clientNoPartner": "No partner record named '{name}'.",
+    "clientInfoHint": "Client page: all data, transactions and repairs",
+    "assetLinkHint": "Open the machine's page"
   },
   "myTasks": {
     "title": "My tasks",
@@ -1380,7 +1391,10 @@
     "wsPublicNoteHint": "Shown on the customer worksheet copy AND the quote page — do not include prices.",
     "intakePhotos": "Intake photos",
     "wsPhotosHint": "📷 Attach photos to the worksheet — repair state, from a phone too.",
-    "wsPhotosUploaded": "{count} photo(s) attached to the worksheet."
+    "wsPhotosUploaded": "{count} photo(s) attached to the worksheet.",
+    "wsTechnician": "Technician (within company, optional)",
+    "wsTechnicianPh": "who did the work",
+    "wsTechnicianHint": "For subcontractor companies: which of your technicians did it."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -2248,7 +2262,11 @@
     "stock": "Consignment stock",
     "recentSettlements": "Recent settlements",
     "counter": "counter",
-    "invoiced": "invoiced"
+    "invoiced": "invoiced",
+    "repairs": "Repair history (worksheets)",
+    "repairDone": "handed over",
+    "repairPicked": "picked up",
+    "repairOpen": "in progress"
   },
   "quote": {
     "publicTitle": "A coffee machine for your business — request a quote!",
@@ -2379,7 +2397,9 @@
     "noTasks": "—",
     "allTasks": "Task list →",
     "today": "today",
-    "dayEmpty": "Nothing planned for this day."
+    "dayEmpty": "Nothing planned for this day.",
+    "week3": "In 2 weeks",
+    "week4": "In 3 weeks"
   },
   "worksheet": {
     "empty": "Provide a description or at least one work item.",
@@ -2655,7 +2675,8 @@
     "costTitle": "Technician cost — {name}",
     "costHint": "Bought with their own money — added to the amount due.",
     "costSaved": "Cost recorded on the technician's balance.",
-    "worksheetLinkHint": "Task details — what happened, what's next."
+    "worksheetLinkHint": "Task details — what happened, what's next.",
+    "technicianHint": "The technician within the company"
   },
   "stk": {
     "title": "Stocktake",

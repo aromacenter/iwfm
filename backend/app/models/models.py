@@ -164,6 +164,8 @@ class Employee(Base):
     is_company: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # Az alvállalkozó CÉG neve — a vezeték-/keresztnév a kapcsolattartóé.
+    company_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     # Alvállalkozó adószáma (ha számlaképes) — nem titkosított, céges adat.
     company_tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Heti elérhetőség a beosztás-generáláshoz: {"0": ["08:00","16:00"], …}
@@ -415,6 +417,9 @@ class Worksheet(Base):
     )
     loaner_barcode: Mapped[str | None] = mapped_column(String(64), nullable=True)
     loaner_counters: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Alvállalkozó cégnél: a cégen BELÜLI szerelő, aki a munkát végezte —
+    # a díj a cég folyószámláján marad, a bontás szerelőnként látszik.
+    technician_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     # Javítási konstrukciók (alternatív ajánlatok árral): [{name, cost_net,
     # price_net}] — a szervizes a saját díjával viszi fel, az ügyfél-példányra
     # a képviselő által beállított ár kerül.

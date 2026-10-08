@@ -45,6 +45,10 @@ interface Overview {
   open_deliveries: number;
   open_deliveries_net: number;
   open_tickets: number;
+  repairs: {
+    task_id: string; serial: string; title: string; status: string;
+    external: boolean; created_at: string; picked_up: boolean; handed_over: boolean;
+  }[];
 }
 
 const ft = (n: number) => `${Math.round(n).toLocaleString("hu-HU")} Ft`;
@@ -201,6 +205,33 @@ export default function PartnerInfo({
                       <span className="font-medium">{ft(s.total_gross)}</span>
                       <span className="text-xs text-slate-400">{t(`cons.payments.${s.payment_method}`)}</span>
                       {s.invoiced && <span className="rounded bg-emerald-100 px-1.5 text-xs text-emerald-800">{t("pinfo.invoiced")}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(data.repairs ?? []).length > 0 && (
+              <div className="rounded-xl border border-slate-200 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase text-slate-400">{t("pinfo.repairs")}</p>
+                <div className="space-y-0.5 text-sm">
+                  {data.repairs.map((r) => (
+                    <div key={r.task_id} className="flex flex-wrap items-center gap-2">
+                      <span className="text-slate-500">{dt(r.created_at)}</span>
+                      <a
+                        href={`/feladatok?task=${r.task_id}`}
+                        className="font-mono text-xs font-semibold text-indigo-700 hover:underline"
+                      >
+                        {r.serial}
+                      </a>
+                      <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                      {r.external && <span className="rounded bg-orange-100 px-1.5 text-xs text-orange-700">KSZ</span>}
+                      {r.handed_over ? (
+                        <span className="rounded bg-emerald-100 px-1.5 text-xs text-emerald-800">{t("pinfo.repairDone")}</span>
+                      ) : r.picked_up ? (
+                        <span className="rounded bg-sky-100 px-1.5 text-xs text-sky-800">{t("pinfo.repairPicked")}</span>
+                      ) : (
+                        <span className="rounded bg-amber-100 px-1.5 text-xs text-amber-800">{t("pinfo.repairOpen")}</span>
+                      )}
                     </div>
                   ))}
                 </div>

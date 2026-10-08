@@ -62,6 +62,7 @@ class EmployeeBase(BaseModel):
     # bármikor átváltható alkalmazottira és vissza.
     is_contractor: bool = False
     is_company: bool = False  # alvállalkozó CÉG — saját dolgozókkal
+    company_name: str | None = Field(default=None, max_length=256)
     company_tax_number: str | None = Field(default=None, max_length=32)
     # Bérszámfejtés alapja: blokkolás (attendance) vagy beosztás (schedule).
     payroll_source: str = "attendance"
@@ -171,6 +172,7 @@ class EmployeeUpdate(BaseModel):
     annual_leave_days: int | None = Field(default=None, ge=0, le=60)
     is_contractor: bool | None = None
     is_company: bool | None = None
+    company_name: str | None = None
     company_tax_number: str | None = None
     payroll_source: str | None = None
     availability: dict[str, list[str]] | None = None
@@ -322,6 +324,7 @@ def _employee_out(emp: Employee, email: str | None = None, role: str | None = No
         annual_leave_days=emp.annual_leave_days,
         is_contractor=emp.is_contractor,
         is_company=emp.is_company,
+        company_name=emp.company_name,
         company_tax_number=emp.company_tax_number,
         payroll_source=emp.payroll_source or "attendance",
         availability=emp.availability,

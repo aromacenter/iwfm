@@ -5,7 +5,7 @@
  * ügyfél (best-effort) emailt kap, hogy a készülék átvehető. A szerelő
  * készpénzes költései/levonásai a Kassza modulban könyvelhetők. */
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
@@ -23,6 +23,7 @@ interface Row {
   completed: boolean;
   fee_total: number;
   quote_email: string | null;
+  technician: string | null;
 }
 
 interface FeeRow {
@@ -34,6 +35,7 @@ interface FeeRow {
   costs: number;
   payouts: number;
   balance: number;
+  technicians: { name: string; fee_total: number; count: number; serials: string[] }[];
 }
 
 export default function SzereloAtadasPage() {
@@ -224,6 +226,14 @@ export default function SzereloAtadasPage() {
                         {r.serial}
                       </Link>{" "}
                       <span className="text-slate-600">{r.title}</span>
+                      {r.technician && (
+                        <span
+                          title={t("svcHo.technicianHint")}
+                          className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-medium text-violet-800"
+                        >
+                          👷 {r.technician}
+                        </span>
+                      )}
                     </td>
                     <td className="py-1.5 pr-2 text-slate-600">{r.client_name ?? "—"}</td>
                     <td className="py-1.5 pr-2">
@@ -271,7 +281,8 @@ export default function SzereloAtadasPage() {
           </thead>
           <tbody>
             {fees.map((f) => (
-              <tr key={f.employee_id} className="border-t border-slate-100">
+              <Fragment key={f.employee_id}>
+              <tr className="border-t border-slate-100">
                 <td className="py-1.5 pr-2 font-medium">
                   {f.employee_name ?? "?"}
                   <button
@@ -291,6 +302,18 @@ export default function SzereloAtadasPage() {
                 <td className="py-1.5 pr-2 text-right tabular-nums text-slate-400">{f.count}</td>
                 <td className="py-1.5 font-mono text-xs text-slate-500">{f.serials.join(", ")}</td>
               </tr>
+              {/* Alvállalkozó cég: szerelőnkénti bontás — a díjak a cég közös
+                  folyószámláján maradnak, de látszik, ki mit csinált (c7ef9ce9) */}
+              {(f.technicians ?? []).map((tr) => (
+                <tr key={`${f.employee_id}-${tr.name}`} className="bg-violet-50/50 text-xs">
+                  <td className="py-1 pl-6 pr-2 text-violet-800">👷 {tr.name}</td>
+                  <td className="py-1 pr-2 text-right tabular-nums text-violet-800">{ft(tr.fee_total)}</td>
+                  <td colSpan={3} />
+                  <td className="py-1 pr-2 text-right tabular-nums text-violet-500">{tr.count}</td>
+                  <td className="py-1 font-mono text-[11px] text-violet-500">{tr.serials.join(", ")}</td>
+                </tr>
+              ))}
+              </Fragment>
             ))}
             {fees.length === 0 && (
               <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>

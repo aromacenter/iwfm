@@ -128,6 +128,15 @@ export default function PartnerekPage() {
     () => Object.fromEntries(agents.map((a) => [a.id, a.display_name])),
     [agents],
   );
+  // Képviselőnként hány AKTÍV partnert kezel (72b29dbb)
+  const agentCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of partners) {
+      if (!p.is_active || !p.agent_user_id) continue;
+      m[p.agent_user_id] = (m[p.agent_user_id] ?? 0) + 1;
+    }
+    return m;
+  }, [partners]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -637,7 +646,7 @@ export default function PartnerekPage() {
           <option value="">{t("partners.allAgents")}</option>
           <option value="none">{t("partners.noAgent")}</option>
           {agents.map((a) => (
-            <option key={a.id} value={a.id}>💼 {a.display_name}</option>
+            <option key={a.id} value={a.id}>💼 {a.display_name} ({agentCounts[a.id] ?? 0})</option>
           ))}
         </select>
         {selected.size > 0 && (
@@ -654,6 +663,30 @@ export default function PartnerekPage() {
         >
           {t("partners.new")}
         </button>
+      </div>
+
+      {/* Dinamikus számláló: a szűrésnek/kijelölésnek megfelelő partner- és
+          gépszám (72b29dbb) */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        <span className="rounded-lg bg-indigo-50 px-3 py-1.5 font-medium text-indigo-800">
+          🤝 {filtered.length} {t("partners.countPartners")} · ☕{" "}
+          {filtered.reduce((acc, p) => acc + (p.placed_machine_count ?? 0), 0)}{" "}
+          {t("partners.countMachines")}
+        </span>
+        {selected.size > 0 && (
+          <span className="rounded-lg bg-emerald-50 px-3 py-1.5 font-medium text-emerald-800">
+            ✅ {t("partners.countSelected")}: {selected.size} {t("partners.countPartners")} · ☕{" "}
+            {filtered
+              .filter((p) => selected.has(p.id))
+              .reduce((acc, p) => acc + (p.placed_machine_count ?? 0), 0)}{" "}
+            {t("partners.countMachines")}
+          </span>
+        )}
+        {agentFilter && agentFilter !== "none" && (
+          <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-slate-600">
+            💼 {agentName[agentFilter]}: {agentCounts[agentFilter] ?? 0} {t("partners.countActivePartners")}
+          </span>
+        )}
       </div>
 
       <IconLegend

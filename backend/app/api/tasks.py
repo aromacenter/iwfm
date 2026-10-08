@@ -123,6 +123,7 @@ class TaskOut(BaseModel):
     worksheet_onsite: bool = False  # helyszíni munkalap
     worksheet_loaner: str | None = None  # kiadott cseregép vonalkódja
     asset: dict | None = None  # a munkalaphoz kötött gép adatai (KSZ)
+    client_name: str | None = None  # a munkalapon rögzített ügyfél
     ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
     ticket_images: list[str] = []  # szervizjegyből jött feladat csatolt képei (id-k)
     completed_at: datetime | None = None  # mikor lett kész
@@ -159,6 +160,8 @@ class WorkItem(BaseModel):
 
 class WorksheetBody(BaseModel):
     work_description: str = Field(default="", max_length=8000)
+    # Alvállalkozó cégnél: a cégen belüli szerelő neve (opcionális)
+    technician_name: str | None = Field(default=None, max_length=256)
     works: list[WorkItem] = Field(default_factory=list, max_length=25)
     # Javítási konstrukciók: alternatív ajánlatok árral (nem összegződnek).
     repair_options: list[WorkItem] = Field(default_factory=list, max_length=25)
@@ -190,6 +193,7 @@ class WorksheetOut(BaseModel):
     loaner_barcode: str | None = None  # kiadott cseregép vonalkódja
     loaner_counters: list[int] | None = None
     work_description: str
+    technician_name: str | None = None
     works: list[WorkItem] = []
     repair_options: list[WorkItem] = []
     materials: list[MaterialItem]
@@ -255,6 +259,7 @@ def _worksheet_out(
         loaner_barcode=ws.loaner_barcode,
         loaner_counters=ws.loaner_counters,
         work_description=ws.work_description,
+        technician_name=ws.technician_name,
         works=[WorkItem(**w) for w in works],
         repair_options=[WorkItem(**w) for w in repair_options],
         materials=[MaterialItem(**m) for m in materials],
@@ -390,6 +395,7 @@ async def _upsert_worksheet(
     if not body.work_description.strip() and not body.works:
         raise HTTPException(status_code=422, detail={"code": "worksheet.empty"})
     ws.work_description = body.work_description.strip()
+    ws.technician_name = (body.technician_name or "").strip() or None
     works = [w.model_dump() for w in body.works]
     repair_options = [w.model_dump() for w in body.repair_options]
     materials = [m.model_dump() for m in body.materials]
@@ -648,6 +654,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
                 Worksheet.task_id, Worksheet.serial, Worksheet.work_description,
                 Worksheet.external_service, Worksheet.asset_id,
                 Worksheet.total_loss, Worksheet.onsite, Worksheet.loaner_barcode,
+                Worksheet.client_name,
             ).where(Worksheet.task_id.in_([t.id for t in tasks]))
         )
     ).all()
@@ -657,6 +664,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
     worksheet_total_loss = {r[0]: bool(r[5]) for r in ws_rows}
     worksheet_onsite = {r[0]: bool(r[6]) for r in ws_rows}
     worksheet_loaner = {r[0]: r[7] for r in ws_rows}
+    ws_clients = {r[0]: r[8] for r in ws_rows}
     ws_asset_ids = {r[0]: r[4] for r in ws_rows if r[4]}
     task_assets: dict[uuid.UUID, dict] = {}
     if ws_asset_ids:
@@ -767,6 +775,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             worksheet_onsite=worksheet_onsite.get(t.id, False),
             worksheet_loaner=worksheet_loaner.get(t.id),
             asset=task_assets.get(t.id),
+            client_name=ws_clients.get(t.id),
             ticket_images=ticket_imgs.get(t.id, []),
             completed_at=t.completed_at,
             completed_by_name=t.completed_by_name,
@@ -2363,6 +2372,13 @@ async def _handover_row(db: AsyncSession, task: Task, ws: Worksheet) -> dict:
     }
 
 
+def _emp_display(e: Employee) -> str:
+    """Dolgozó megjelenítési neve: alvállalkozó cégnél a CÉG neve."""
+    if e.is_company and (e.company_name or "").strip():
+        return e.company_name.strip()
+    return f"{e.last_name} {e.first_name}"
+
+
 def _service_fee_total(ws: Worksheet) -> float:
     """A külsős szerelőnek járó javítási díj egy munkalapon (nettó).
 
@@ -2416,7 +2432,7 @@ async def service_handover_list(
         for e in (
             await db.execute(select(Employee).where(Employee.id.in_(emp_ids)))
         ).scalars():
-            emp_names[e.id] = f"{e.last_name} {e.first_name}"
+            emp_names[e.id] = _emp_display(e)
     out = []
     for ws, task in rows:
         out.append({
@@ -2427,6 +2443,7 @@ async def service_handover_list(
             "employee_id": str(task.employee_id),
             "employee_name": emp_names.get(task.employee_id),
             "quote_status": ws.quote_status or "none",
+            "technician": ws.technician_name,
             "completed": bool((ws.work_description or "").strip()),
             "fee_total": _service_fee_total(ws),
             "quote_email": ws.quote_email,
@@ -2512,7 +2529,7 @@ async def service_handover_pickup(
                     select(Employee).where(Employee.id == uuid.UUID(first_emp))
                 )
             ).scalar_one_or_none()
-            emp_name = f"{e.last_name} {e.first_name}" if e else ""
+            emp_name = _emp_display(e) if e else ""
             db.add(TechLedger(
                 employee_id=uuid.UUID(first_emp), kind="payout",
                 amount=float(round(body.paid_amount)),
@@ -2565,7 +2582,7 @@ async def service_fees(
         for e in (
             await db.execute(select(Employee).where(Employee.id.in_(emp_ids)))
         ).scalars():
-            emp_names[e.id] = f"{e.last_name} {e.first_name}"
+            emp_names[e.id] = _emp_display(e)
     agg: dict = {}
     for ws, task in rows:
         key = str(task.employee_id)
@@ -2574,11 +2591,24 @@ async def service_fees(
             "employee_name": emp_names.get(task.employee_id),
             "fee_total": 0.0, "count": 0, "serials": [],
             "costs": 0.0, "payouts": 0.0, "balance": 0.0,
+            "technicians": {},
         })
-        row["fee_total"] = round(row["fee_total"] + _service_fee_total(ws), 2)
+        fee = _service_fee_total(ws)
+        row["fee_total"] = round(row["fee_total"] + fee, 2)
         row["count"] += 1
         if len(row["serials"]) < 50:
             row["serials"].append(ws.serial)
+        # Alvállalkozó CÉG bontása: melyik szerelőjük mit és mennyiért
+        # csinált — a díj a cég közös folyószámláján marad (c7ef9ce9).
+        tech = (ws.technician_name or "").strip()
+        if tech:
+            trow = row["technicians"].setdefault(
+                tech, {"name": tech, "fee_total": 0.0, "count": 0, "serials": []}
+            )
+            trow["fee_total"] = round(trow["fee_total"] + fee, 2)
+            trow["count"] += 1
+            if len(trow["serials"]) < 30:
+                trow["serials"].append(ws.serial)
     # Szerelő-folyószámla: a saját pénzéből vett alkatrész (+) és a
     # kifizetések (−) — az egyenleg a díjakkal együtt áll össze.
     from app.models import TechLedger
@@ -2599,6 +2629,7 @@ async def service_fees(
                 "employee_id": key, "employee_name": None,
                 "fee_total": 0.0, "count": 0, "serials": [],
                 "costs": 0.0, "payouts": 0.0, "balance": 0.0,
+                "technicians": {},
             }
             extra_names.add(emp_id)
         if kind == "cost":
@@ -2609,9 +2640,12 @@ async def service_fees(
         for e in (
             await db.execute(select(Employee).where(Employee.id.in_(extra_names)))
         ).scalars():
-            agg[str(e.id)]["employee_name"] = f"{e.last_name} {e.first_name}"
+            agg[str(e.id)]["employee_name"] = _emp_display(e)
     for row in agg.values():
         row["balance"] = round(row["fee_total"] + row["costs"] - row["payouts"])
+        row["technicians"] = sorted(
+            row["technicians"].values(), key=lambda tr: -tr["fee_total"]
+        )
     return sorted(agg.values(), key=lambda r: -r["balance"])
 
 

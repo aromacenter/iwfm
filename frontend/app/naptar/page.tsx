@@ -56,7 +56,7 @@ export default function NaptarPage() {
   const thisMonday = useMemo(() => mondayOf(new Date()), []);
   const todayIso = iso(new Date());
   const rangeFrom = iso(thisMonday);
-  const rangeTo = iso(addDays(thisMonday, 13));
+  const rangeTo = iso(addDays(thisMonday, 27)); // 4 hét előre (18da8b3c)
 
   useEffect(() => {
     if (canAll) {
@@ -160,6 +160,8 @@ export default function NaptarPage() {
       </div>
       {week(0, "cal.thisWeek")}
       {week(7, "cal.nextWeek")}
+      {week(14, "cal.week3")}
+      {week(21, "cal.week4")}
 
       {/* Nap-részletező: a kiválasztott nap teendői nagyban */}
       {openDay && (

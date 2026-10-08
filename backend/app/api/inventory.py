@@ -244,6 +244,9 @@ class PartnerOverviewOut(BaseModel):
     open_deliveries: int
     open_deliveries_net: float
     open_tickets: int
+    # Javítás-előzmények: a partner gépeihez / nevéhez tartozó munkalapok
+    # (az ügyfél-adatlapon a korábbi szervizmunkák is látszanak — 077af934).
+    repairs: list[dict] = []
 
 
 @router.get("/{partner_id}/overview", response_model=PartnerOverviewOut)
@@ -330,7 +333,41 @@ async def partner_overview(
         )
     ).scalar_one()
 
+    # Javítás-előzmények: munkalapok a partner BÁRMELY gépéhez (nem csak a
+    # kihelyezettekhez) vagy a partner nevére rögzített ügyfélhez.
+    from app.models import Task, Worksheet
+
+    partner_asset_ids = (
+        await db.execute(select(Asset.id).where(Asset.partner_id == p.id))
+    ).scalars().all()
+    ws_cond = Worksheet.client_name.ilike(p.name)
+    if partner_asset_ids:
+        ws_cond = ws_cond | Worksheet.asset_id.in_(partner_asset_ids)
+    repair_rows = (
+        await db.execute(
+            select(Worksheet, Task)
+            .join(Task, Task.id == Worksheet.task_id)
+            .where(ws_cond)
+            .order_by(Worksheet.created_at.desc())
+            .limit(15)
+        )
+    ).all()
+    repairs = [
+        {
+            "task_id": str(task.id),
+            "serial": ws.serial,
+            "title": task.title,
+            "status": task.status,
+            "external": ws.external_service,
+            "created_at": (ws.created_at or task.created_at).isoformat(),
+            "picked_up": ws.picked_up_at is not None,
+            "handed_over": ws.handed_over_at is not None,
+        }
+        for ws, task in repair_rows
+    ]
+
     return PartnerOverviewOut(
+        repairs=repairs,
         partner=_partner_out(p, asset_count=len(assets)),
         debt=await _partner_debt(db, p.id),
         contracts=[contract_out(c).model_dump(mode="json") for c in contracts],

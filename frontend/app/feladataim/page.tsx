@@ -75,6 +75,7 @@ interface WorkRow {
 
 interface WorksheetForm {
   work_description: string;
+  technician_name: string; // alvállalkozó cégnél: a cégen belüli szerelő
   public_note: string; // az ügyfélnek szánt megjegyzés (munkalap + ajánlat)
   works: WorkRow[];
   repairs: WorkRow[]; // javítási konstrukciók (alternatív ajánlatok árral)
@@ -92,6 +93,7 @@ interface WorksheetForm {
 
 const EMPTY_WS: WorksheetForm = {
   work_description: "",
+  technician_name: "",
   public_note: "",
   works: [],
   repairs: [],
@@ -264,6 +266,7 @@ export default function FeladataimPage() {
         setWsQuote({ status: existing.quote_status, selected: existing.quote_selected_name });
         setWs({
           work_description: existing.work_description,
+          technician_name: (existing as { technician_name?: string | null }).technician_name ?? "",
           public_note: existing.public_note ?? "",
           works: (existing.works ?? []).map((w) => {
             const fee = task.worksheet_external ? w.cost_net : w.price_net;
@@ -403,6 +406,7 @@ export default function FeladataimPage() {
     try {
       await api.put(`/api/me/tasks/${wsTask.id}/worksheet`, {
         work_description: ws.work_description,
+        technician_name: ws.technician_name.trim() || null,
         works: workRows.map((w) => {
           const fee = w.fee ? Number(w.fee) : null;
           // KSZ: a beírt díj a szerviz BELSŐ költsége; sima ML: a mi árunk.
@@ -887,6 +891,16 @@ export default function FeladataimPage() {
               </span>
             </label>
 
+            <label className="block text-sm">
+              👷 {t("myTasks.wsTechnician")}
+              <input
+                value={ws.technician_name}
+                onChange={(e) => setWs({ ...ws, technician_name: e.target.value })}
+                placeholder={t("myTasks.wsTechnicianPh")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+              <span className="mt-0.5 block text-xs text-slate-500">{t("myTasks.wsTechnicianHint")}</span>
+            </label>
             <label className="block text-sm">
               {t("myTasks.wsWork")}
               <textarea

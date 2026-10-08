@@ -93,6 +93,7 @@ export default function DolgozokPage() {
   // bármikor átváltható alkalmazottira és vissza.
   const [contractor, setContractor] = useState(false);
   const [isCompany, setIsCompany] = useState(false);
+  const [companyName, setCompanyName] = useState("");
   const [companyTax, setCompanyTax] = useState("");
   const [avail, setAvail] = useState<Record<string, AvailDay>>(emptyAvail());
   const [showArchived, setShowArchived] = useState(false);
@@ -143,6 +144,7 @@ export default function DolgozokPage() {
     setTermDate("");
     setContractor(false);
     setIsCompany(false);
+    setCompanyName("");
     setCompanyTax("");
     setAvail(emptyAvail());
     setError(null);
@@ -180,6 +182,7 @@ export default function DolgozokPage() {
     setTermDate(emp.termination_date ?? "");
     setContractor(emp.is_contractor);
     setIsCompany(emp.is_company ?? false);
+    setCompanyName(emp.company_name ?? "");
     setCompanyTax(emp.company_tax_number ?? "");
     const av = emptyAvail();
     for (const [day, iv] of Object.entries(emp.availability ?? {})) {
@@ -223,6 +226,7 @@ export default function DolgozokPage() {
           availability: availToApi(avail),
           is_contractor: contractor,
           is_company: contractor && isCompany,
+          company_name: contractor && isCompany ? (companyName.trim() || null) : null,
           company_tax_number: contractor ? (companyTax.trim() || null) : null,
           // Munkaviszony megszüntetése: archivált (inactive) státusz + dátum;
           // visszavonva újra aktív, a dátum törlődik.
@@ -243,6 +247,7 @@ export default function DolgozokPage() {
           hire_date: form.hire_date || new Date().toISOString().slice(0, 10),
           is_contractor: contractor,
           is_company: contractor && isCompany,
+          company_name: contractor && isCompany ? (companyName.trim() || null) : null,
           company_tax_number: contractor ? (companyTax.trim() || null) : null,
           availability: availToApi(avail),
           skill_ids: skillIds,
@@ -376,9 +381,18 @@ export default function DolgozokPage() {
                 <tr key={emp.id} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3">
                     <div className="font-medium">
-                      {emp.last_name} {emp.first_name}
+                      {emp.is_company && emp.company_name ? (
+                        <>
+                          {emp.company_name}
+                          <span className="ml-1 text-xs font-normal text-slate-500">
+                            ({t("emp.contactShort")}: {emp.last_name} {emp.first_name})
+                          </span>
+                        </>
+                      ) : (
+                        <>{emp.last_name} {emp.first_name}</>
+                      )}
                       {emp.is_company && (
-                        <span title={t("emp.companyCheckbox")} className="rounded bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-800">
+                        <span title={t("emp.companyCheckbox")} className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-800">
                           🏢 {t("emp.companyBadge")}
                         </span>
                       )}
@@ -533,6 +547,21 @@ export default function DolgozokPage() {
                   <span className="mt-0.5 block text-xs text-violet-700">{t("emp.companyHint")}</span>
                 </span>
               </label>
+            )}
+            {contractor && isCompany && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+                <label className="block text-sm font-medium text-violet-900">
+                  🏢 {t("emp.companyName")} *
+                  <input
+                    required
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder={t("emp.companyNamePh")}
+                    className={inputCls}
+                  />
+                </label>
+                <p className="mt-1 text-xs text-violet-700">{t("emp.companyContactHint")}</p>
+              </div>
             )}
 
             <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">

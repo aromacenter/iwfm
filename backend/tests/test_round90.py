@@ -246,3 +246,104 @@ def test_merge_emails_dedup():
     assert _merge_emails("a@x.hu; b@y.hu", "A@X.HU") == "a@x.hu, b@y.hu"
     assert _merge_emails(None, "csak@atvetel.hu") == "csak@atvetel.hu"
     assert _merge_emails(None, None) == ""
+
+
+async def test_company_technician_breakdown(client, manager):
+    """c7ef9ce9 v2: alvallalkozo CEG cegnevvel; a munkalapon rogzitett
+    szerelo szerinti bontas a dij-osszesitoben."""
+    from tests.conftest import make_employee_record, make_user
+
+    _, mgr = manager
+    emp_user, emp_hdr = await make_user(email="cegszerviz@example.com", role="szervizes")
+    emp = await make_employee_record(emp_user)
+    res = await client.patch(
+        f"/api/employees/{emp.id}",
+        json={"is_contractor": True, "is_company": True,
+              "company_name": "GepDoktor Kft."},
+        headers=mgr,
+    )
+    # admin-only PATCH eseten manager 403 lehet — akkor adminnal kene; itt
+    # elfogadjuk a 200-at vagy atallitjuk kozvetlenul.
+    if res.status_code != 200:
+        import app.db as app_db
+        from app.models import Employee as _E
+        from sqlalchemy import select as _sel
+
+        factory = app_db.get_session_factory()
+        async with factory() as session:
+            row = (await session.execute(_sel(_E).where(_E.id == emp.id))).scalar_one()
+            row.is_contractor = True
+            row.is_company = True
+            row.company_name = "GepDoktor Kft."
+            await session.commit()
+
+    task = (
+        await client.post(
+            "/api/tasks",
+            json={"title": "Ceges javitas", "employee_id": str(emp.id),
+                  "due_date": "2026-10-08", "external_service": True},
+            headers=mgr,
+        )
+    ).json()
+    res = await client.put(
+        f"/api/me/tasks/{task['id']}/worksheet",
+        json={"work_description": "Javitva.", "technician_name": "Kiss Bela",
+              "works": [{"name": "Javitas", "cost_net": 12000}]},
+        headers=emp_hdr,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["technician_name"] == "Kiss Bela"
+
+    # atvetel (pickup) → bekerul a dij-osszesitobe
+    res = await client.post(
+        f"/api/tasks/{task['id']}/worksheet/picked-up", json={}, headers=mgr
+    )
+    # SMTP nincs a tesztben — a pickup 422-t adhat; a fees a picked_up-ra szur,
+    # ezert kozvetlenul allitjuk be.
+    if res.status_code != 200:
+        import app.db as app_db
+        from datetime import UTC as _UTC, datetime as _dt
+        from app.models import Worksheet as _W
+        from sqlalchemy import select as _sel
+        import uuid as _u
+
+        factory = app_db.get_session_factory()
+        async with factory() as session:
+            row = (
+                await session.execute(_sel(_W).where(_W.task_id == _u.UUID(task["id"])))
+            ).scalar_one()
+            row.picked_up_at = _dt.now(_UTC)
+            await session.commit()
+
+    fees = (await client.get("/api/tasks/service-handover/fees", headers=mgr)).json()
+    frow = next(r for r in fees if r["employee_id"] == str(emp.id))
+    assert frow["employee_name"] == "GepDoktor Kft."
+    assert frow["technicians"][0]["name"] == "Kiss Bela"
+    assert frow["technicians"][0]["fee_total"] == 12000
+
+
+async def test_task_list_client_and_overview_repairs(client, manager):
+    """077af934: a feladat-lista adja az ugyfel nevet; a partner-adatlap
+    overview-ja a javitas-elozmenyeket."""
+    from tests.conftest import make_employee_record, make_user
+    from tests.test_machine_settlement import _partner
+
+    _, mgr = manager
+    emp_user, _ = await make_user(email="overview-szerviz@example.com", role="szervizes")
+    emp = await make_employee_record(emp_user)
+    partner = await _partner(client, mgr, "Javitasos Bolt")
+    task = (
+        await client.post(
+            "/api/tasks",
+            json={"title": "Overview teszt javitas", "employee_id": str(emp.id),
+                  "due_date": "2026-10-08", "external_service": True,
+                  "client_name": "Javitasos Bolt"},
+            headers=mgr,
+        )
+    ).json()
+    rows = (await client.get("/api/tasks", headers=mgr)).json()
+    trow = next(r for r in rows if r["id"] == task["id"])
+    assert trow["client_name"] == "Javitasos Bolt"
+
+    ov = (await client.get(f"/api/partners/{partner['id']}/overview", headers=mgr)).json()
+    assert any(r["task_id"] == task["id"] for r in ov["repairs"])

@@ -106,6 +106,12 @@ export default function GepekPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [search, setSearch] = useState("");
+  // ?q=<vonalkód> — más oldalakról (feladatok, Telegram-link) ide ugorva a
+  // kereső előtöltve nyílik, egyből a gép adatlap-sorával (077af934).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearch(q);
+  }, []);
   const [statusFilter, setStatusFilter] = useState("");
   const [partnerFilter, setPartnerFilter] = useState("");
   const [scanMsg, setScanMsg] = useState<{ text: string; ok: boolean } | null>(null);

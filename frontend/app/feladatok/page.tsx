@@ -3,8 +3,10 @@
 /** Feladatok (vezetői): online munkalap kiállítása dolgozóra
  * (opcionális skill-szűréssel + AI javaslattal), státuszok, kommentek, PDF. */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import PartnerInfo from "@/components/PartnerInfo";
 import ScanAssetButton from "@/components/ScanAssetButton";
 import SearchSelect from "@/components/SearchSelect";
 import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
@@ -44,6 +46,8 @@ interface TaskOut {
   worksheet_photos: string[];
   worksheet_onsite: boolean;
   worksheet_loaner: string | null;
+  client_name: string | null;
+  asset: { name?: string | null; barcode?: string | null; partner_name?: string | null } | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -98,6 +102,24 @@ export default function FeladatokPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Ügyfél-adatlap: a kártyán az ügyfél neve kattintható — ha van partner-
+  // törzsadat ezen a néven, a PartnerInfo nyílik (077af934).
+  const [infoPartner, setInfoPartner] = useState<string | null>(null);
+  const partnersCache = useRef<{ id: string; name: string }[] | null>(null);
+  async function openClient(name: string) {
+    try {
+      if (!partnersCache.current) {
+        partnersCache.current = await api.get<{ id: string; name: string }[]>("/api/partners");
+      }
+      const hit = partnersCache.current.find(
+        (p) => p.name.trim().toLowerCase() === name.trim().toLowerCase(),
+      );
+      if (hit) setInfoPartner(hit.id);
+      else toast(t("tasks.clientNoPartner", { name }), "info");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   // Mas oldalrol (pl. Szerelo-atadas, Telegram) erkezo ?task= - kinyitjuk
   // es odagorgetjuk a konkret feladatot.
@@ -666,6 +688,29 @@ export default function FeladatokPage() {
                     </span>
                   )}
                 </div>
+                {(task.client_name || task.asset) && (
+                  <p className="text-sm">
+                    {task.client_name && (
+                      <button
+                        onClick={() => void openClient(task.client_name!)}
+                        title={t("tasks.clientInfoHint")}
+                        className="font-medium text-indigo-700 hover:underline"
+                      >
+                        👤 {task.client_name}
+                      </button>
+                    )}
+                    {task.client_name && task.asset && <span className="text-slate-400"> · </span>}
+                    {task.asset && (
+                      <Link
+                        href={`/gepek?q=${encodeURIComponent(task.asset.barcode ?? task.asset.name ?? "")}`}
+                        title={t("tasks.assetLinkHint")}
+                        className="font-medium text-indigo-700 hover:underline"
+                      >
+                        ☕ {task.asset.name}{task.asset.barcode ? ` (${task.asset.barcode})` : ""}
+                      </Link>
+                    )}
+                  </p>
+                )}
                 <p className="text-sm text-slate-500">
                   {task.employee_name} · {task.due_date}
                   {task.comments.length > 0 && ` · ${t("tasks.comments", { count: task.comments.length })}`}
@@ -1236,6 +1281,7 @@ export default function FeladatokPage() {
         </div>
       )}
 
+      <PartnerInfo partnerId={infoPartner} onClose={() => setInfoPartner(null)} />
       {loanerFor && (
         <div
           onMouseDown={(e) => { if (e.target === e.currentTarget) setLoanerFor(null); }}
