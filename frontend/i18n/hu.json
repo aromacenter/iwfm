@@ -881,7 +881,10 @@
     "agentSortHint": "Kattints a képviselő szerinti rendezéshez",
     "allAgents": "Minden képviselő",
     "noAgent": "Nincs képviselő",
-    "contactEmailHint": "Több cím vesszővel elválasztva — minden számla és értesítés az összes címre megy."
+    "contactEmailHint": "Több cím vesszővel elválasztva — minden számla és értesítés az összes címre megy.",
+    "statusActive": "Aktív",
+    "statusInactive": "Inaktív",
+    "statusAll": "Összes"
   },
   "account": {
     "password": "Jelszó módosítása",
@@ -1910,7 +1913,8 @@
     "viewShot": "Képernyőkép megnyitása",
     "group": "Kötegelés",
     "groupPrompt": "Javítási köteg neve (üresen: kivétel a kötegből):",
-    "resolveNotePrompt": "Megjegyzés a bejelentőnek (mi és hogyan javult):"
+    "resolveNotePrompt": "Megjegyzés a bejelentőnek (mi és hogyan javult):",
+    "captureBlank": "A fotózás üres képet adott — használd a 📎 gombot: készíts képernyőképet a telefonnal és csatold azt."
   },
   "license": {
     "title": "Licenc és előfizetés",

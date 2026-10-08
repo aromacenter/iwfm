@@ -881,7 +881,10 @@
     "agentSortHint": "Click to sort by agent",
     "allAgents": "All agents",
     "noAgent": "No agent",
-    "contactEmailHint": "Multiple addresses separated by commas — every invoice and notice goes to all."
+    "contactEmailHint": "Multiple addresses separated by commas — every invoice and notice goes to all.",
+    "statusActive": "Active",
+    "statusInactive": "Inactive",
+    "statusAll": "All"
   },
   "account": {
     "password": "Change password",
@@ -1910,7 +1913,8 @@
     "viewShot": "Open screenshot",
     "group": "Batch",
     "groupPrompt": "Fix batch name (empty: remove from batch):",
-    "resolveNotePrompt": "Note to the reporter (what was fixed and how):"
+    "resolveNotePrompt": "Note to the reporter (what was fixed and how):",
+    "captureBlank": "Capture came back blank — use the 📎 button to attach a screenshot instead."
   },
   "license": {
     "title": "Licence & subscription",

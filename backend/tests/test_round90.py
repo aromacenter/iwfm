@@ -235,3 +235,14 @@ async def test_expense_self_without_perm(client, manager):
     res = await client.get("/api/stats/cash/suppliers", headers=szerviz_hdr)
     assert res.status_code == 200
     assert "Csavar Kft" in res.json()
+
+
+def test_merge_emails_dedup():
+    """a3ea5d99: cimlistak egyesitese duplikatum nelkul — az atvetelin
+    rogzitett cim a kezi/ajanlat-cim melle kerul."""
+    from app.api.tasks import _merge_emails
+
+    assert _merge_emails("kezi@x.hu", "atvetel@y.hu") == "kezi@x.hu, atvetel@y.hu"
+    assert _merge_emails("a@x.hu; b@y.hu", "A@X.HU") == "a@x.hu, b@y.hu"
+    assert _merge_emails(None, "csak@atvetel.hu") == "csak@atvetel.hu"
+    assert _merge_emails(None, None) == ""

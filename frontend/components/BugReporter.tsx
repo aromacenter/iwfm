@@ -94,6 +94,34 @@ export default function BugReporter() {
     reader.readAsDataURL(file);
   }
 
+  // A kész kép ellenőrzése: ha szinte teljesen egyszínű-sötét, a fotózás
+  // nem sikerült (pl. mobil sötét témán átlátszó háttér) — 64×64-es mintán.
+  function isMostlyBlank(dataUrl: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement("canvas");
+          c.width = 64;
+          c.height = 64;
+          const cx = c.getContext("2d");
+          if (!cx) return resolve(false);
+          cx.drawImage(img, 0, 0, 64, 64);
+          const d = cx.getImageData(0, 0, 64, 64).data;
+          let dark = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i] < 16 && d[i + 1] < 16 && d[i + 2] < 16) dark++;
+          }
+          resolve(dark / (d.length / 4) > 0.9);
+        } catch {
+          resolve(false);
+        }
+      };
+      img.onerror = () => resolve(false);
+      img.src = dataUrl;
+    });
+  }
+
   // VALÓDI képernyőkép a böngésző képmegosztásával (asztali gépen): a
   // felugró ablakok, dátumválasztók, minden pixelre pontosan látszik. A
   // böngésző egyszer rákérdez, melyik lapot osztod meg — az aktuálisat
@@ -149,12 +177,27 @@ export default function BugReporter() {
         return;
       }
       const { toJpeg } = await import("html-to-image");
-      const vh = window.innerHeight;
+      // Elrendezési viewport (görgetősáv nélkül) — telefonos "asztali nézet"
+      // és nagyított oldal esetén is a helyes méretet adja.
+      const vw = document.documentElement.clientWidth || window.innerWidth;
+      const vh = document.documentElement.clientHeight || window.innerHeight;
+      // Sötét témában a body háttere gyakran átlátszó (a szín egy wrapperen
+      // van) — átlátszó háttér a JPEG-ben FEKETE lett (3cd915aa), ezért a
+      // számított hátteret (vagy téma szerinti alapszínt) kényszerítjük.
+      let bodyBg = "";
+      for (const el of [document.body, document.documentElement]) {
+        const bg = getComputedStyle(el).backgroundColor;
+        if (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") { bodyBg = bg; break; }
+      }
+      if (!bodyBg) {
+        bodyBg = document.documentElement.classList.contains("dark") ? "#0f172a" : "#f8fafc";
+      }
       const dataUrl = await toJpeg(document.body, {
         quality: 0.85,
         pixelRatio: 1,
-        width: window.innerWidth,
+        width: vw,
         height: vh,
+        backgroundColor: bodyBg,
         skipFonts: true,
         style: {
           transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
@@ -174,6 +217,12 @@ export default function BugReporter() {
           return true;
         },
       });
+      // Üres (szinte teljesen egyszínű-sötét) kép = a fotózás nem sikerült —
+      // ilyenkor nem a fekete képet adjuk, hanem a 📎 csatolást ajánljuk.
+      if (await isMostlyBlank(dataUrl)) {
+        toast(t("bugs.captureBlank"), "error");
+        return;
+      }
       openAnnotator(dataUrl);
     } catch {
       toast(t("bugs.captureFailed"), "error");

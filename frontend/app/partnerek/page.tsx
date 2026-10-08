@@ -121,6 +121,8 @@ export default function PartnerekPage() {
   // Képviselő-szűrő ("" = mind, "none" = nincs képviselő, user_id = övé) +
   // képviselő-oszlop szerinti rendezés (b05bc541).
   const [agentFilter, setAgentFilter] = useState<string>("");
+  // Állapot-szűrő: alapértelmezésben CSAK az aktív partnerek (002de7c6)
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "">("active");
   const [sortByAgent, setSortByAgent] = useState(false);
   const agentName = useMemo(
     () => Object.fromEntries(agents.map((a) => [a.id, a.display_name])),
@@ -137,6 +139,8 @@ export default function PartnerekPage() {
       if (companyFilter && companyFilter !== "none" && p.invoicing_company !== companyFilter) return false;
       if (agentFilter === "none" && p.agent_user_id) return false;
       if (agentFilter && agentFilter !== "none" && p.agent_user_id !== agentFilter) return false;
+      if (statusFilter === "active" && !p.is_active) return false;
+      if (statusFilter === "inactive" && p.is_active) return false;
       if (!q) return true;
       return (
         p.name.toLowerCase().includes(q) ||
@@ -155,7 +159,7 @@ export default function PartnerekPage() {
       });
     }
     return rows;
-  }, [partners, search, typeFilter, companyFilter, kindFilter, agentFilter, sortByAgent, agentName]);
+  }, [partners, search, typeFilter, companyFilter, kindFilter, agentFilter, statusFilter, sortByAgent, agentName]);
 
   async function copyPortalLink(p: Partner) {
     try {
@@ -583,6 +587,21 @@ export default function PartnerekPage() {
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
                 kindFilter === key
                   ? "bg-indigo-600 text-white"
+                  : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1.5">
+          {([["active", t("partners.statusActive")], ["inactive", t("partners.statusInactive")], ["", t("partners.statusAll")]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setStatusFilter(key as "active" | "inactive" | "")}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                statusFilter === key
+                  ? "bg-emerald-600 text-white"
                   : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
               }`}
             >

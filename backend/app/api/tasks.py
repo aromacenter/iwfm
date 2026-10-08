@@ -300,6 +300,40 @@ async def _next_worksheet_serial(db: AsyncSession, external: bool = False) -> st
     return f"{prefix}-{year}-{count + 1:04d}"
 
 
+async def _intake_client_email(db: AsyncSession, ws: Worksheet) -> str | None:
+    """A gép LEGUTÓBBI átvételi elismervényén rögzített ügyfél-e-mail — az
+    ügyfél-értesítőknek erre a címre MINDIG menniük kell (a3ea5d99)."""
+    if ws.asset_id is None:
+        return None
+    return (
+        await db.execute(
+            select(MachineIntake.client_email)
+            .where(
+                MachineIntake.asset_id == ws.asset_id,
+                MachineIntake.client_email.is_not(None),
+                MachineIntake.client_email != "",
+            )
+            .order_by(MachineIntake.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+def _merge_emails(*values: str | None) -> str:
+    """Címlisták egyesítése duplikátum nélkül, vesszős listává (a küldő a
+    vesszős listát minden címre kézbesíti)."""
+    from app.services.wfm.email_service import split_addresses
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for v in values:
+        for p in split_addresses(v):
+            if p.lower() not in seen:
+                seen.add(p.lower())
+                out.append(p)
+    return ", ".join(out)
+
+
 async def _suggest_quote_email(db: AsyncSession, ws: Worksheet) -> str | None:
     """Az ajánlat-/értesítő-küldő előtöltéséhez ajánlott ügyfél-e-mail: a
     munkalapon már megadott cím, ennek híján a gép legutóbbi átvételi
@@ -1965,12 +1999,14 @@ async def send_worksheet_quote(
         "Üdvözlettel,",
         "X-Presso szerviz",
     ]
-    ok = await send_email(smtp, str(body.to), f"Javítási árajánlat — {ws.serial}", "\n".join(lines))
+    # Az árajánlat is megy az átvételi lapon rögzített címre is (a3ea5d99).
+    quote_to = _merge_emails(str(body.to), await _intake_client_email(db, ws))
+    ok = await send_email(smtp, quote_to, f"Javítási árajánlat — {ws.serial}", "\n".join(lines))
     if not ok:
         raise HTTPException(status_code=502, detail={"code": "settings.email_send_failed"})
     await record_audit(
         db, actor=actor, action="worksheet.quote_sent", entity_type="worksheet",
-        entity_id=ws.serial, detail={"to": str(body.to), "options": len(options)},
+        entity_id=ws.serial, detail={"to": quote_to, "options": len(options)},
         request=request,
     )
     await db.commit()
@@ -2196,7 +2232,12 @@ async def worksheet_picked_up(
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
     if ws.picked_up_at is not None:
         raise HTTPException(status_code=422, detail={"code": "worksheet.already_picked_up"})
-    to = (str(body.to) if body.to else None) or ws.quote_email
+    # Az átvételi lapon rögzített címre MINDIG megy az értesítő — a kézzel
+    # megadott / korábbi ajánlat-cím mellett (a3ea5d99).
+    to = _merge_emails(
+        (str(body.to) if body.to else None) or ws.quote_email,
+        await _intake_client_email(db, ws),
+    )
     if not to:
         raise HTTPException(status_code=422, detail={"code": "worksheet.pickup_no_email"})
 
