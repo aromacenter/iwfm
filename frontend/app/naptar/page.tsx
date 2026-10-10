@@ -20,6 +20,7 @@ interface CalTask {
   description?: string | null;
   worksheet_serial?: string | null;
   worksheet_completed?: boolean;
+  client_name?: string | null;
   asset?: { name?: string | null; barcode?: string | null; partner_name?: string | null } | null;
 }
 
@@ -128,6 +129,11 @@ export default function NaptarPage() {
                       title={task.title + (task.employee_name ? ` — ${task.employee_name}` : "")}
                     >
                       {task.title}
+                      {(task.asset?.partner_name || task.client_name) && (
+                        <span className="block truncate text-[10px] font-medium opacity-90">
+                          📍 {task.asset?.partner_name ?? task.client_name}
+                        </span>
+                      )}
                       {canAll && task.employee_name && (
                         <span className="block truncate text-[10px] opacity-70">{task.employee_name}</span>
                       )}
@@ -210,6 +216,9 @@ export default function NaptarPage() {
                       {task.employee_name && <p>👤 {task.employee_name}</p>}
                       {task.asset?.name && (
                         <p>☕ {task.asset.name}{task.asset.barcode ? ` (${task.asset.barcode})` : ""}</p>
+                      )}
+                      {(task.asset?.partner_name || task.client_name) && (
+                        <p className="font-medium">📍 {task.asset?.partner_name ?? task.client_name}</p>
                       )}
                       {task.worksheet_serial && (
                         <p>🧾 {task.worksheet_serial}{task.worksheet_completed ? " ✓" : ""}</p>

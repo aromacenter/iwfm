@@ -347,3 +347,49 @@ async def test_task_list_client_and_overview_repairs(client, manager):
 
     ov = (await client.get(f"/api/partners/{partner['id']}/overview", headers=mgr)).json()
     assert any(r["task_id"] == task["id"] for r in ov["repairs"])
+
+
+async def test_quote_history_endpoint(client, manager, admin):
+    """d925d451: az ajanlat-elozmeny (osszes opcio + ki/mikor dontott)
+    visszanezheto a dontes utan is."""
+    from tests.conftest import make_employee_record, make_user
+
+    _, mgr = manager
+    emp_user, emp_hdr = await make_user(email="elozmeny@example.com", role="szervizes")
+    emp = await make_employee_record(emp_user)
+    task = (
+        await client.post(
+            "/api/tasks",
+            json={"title": "Elozmeny teszt", "employee_id": str(emp.id),
+                  "due_date": "2026-10-10", "external_service": True},
+            headers=mgr,
+        )
+    ).json()
+    res = await client.put(
+        f"/api/me/tasks/{task['id']}/worksheet",
+        json={"work_description": "Bevizsgalva.",
+              "repair_options": [
+                  {"name": "Olcso javitas", "cost_net": 5000, "price_net": 15000},
+                  {"name": "Teljes felujitas", "cost_net": 20000, "price_net": 45000},
+              ]},
+        headers=emp_hdr,
+    )
+    assert res.status_code == 200, res.text
+
+    # dontes elott: 404
+    res = await client.get(f"/api/tasks/{task['id']}/worksheet/quote-history", headers=mgr)
+    assert res.status_code == 404
+
+    res = await client.post(
+        f"/api/tasks/{task['id']}/quote/accept-internal",
+        json={"option_name": "Olcso javitas"},
+        headers=mgr,
+    )
+    assert res.status_code == 200, res.text
+
+    hist = (await client.get(f"/api/tasks/{task['id']}/worksheet/quote-history", headers=mgr)).json()
+    assert hist["status"] == "accepted"
+    assert hist["selected"] == "Olcso javitas"
+    assert "belső döntés" in hist["accepted_by"]
+    names = [o["name"] for o in hist["options"]]
+    assert "Olcso javitas" in names and "Teljes felujitas" in names

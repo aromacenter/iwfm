@@ -102,10 +102,12 @@ async def _cash_register(
     cash_revenue = float((await db.execute(rev_q)).scalar_one() or 0.0)
 
     exp_q = select(AgentExpense).where(AgentExpense.user_id == user_id)
+    # FIGYELEM: a GROUP BY kötelező — SQLite elnézi nélküle, a Postgres NEM
+    # (GroupingError → 500 a teljes kasszára; 3398b0d7 blokkoló oka volt).
     sum_q = select(
         AgentExpense.entry_type,
         sa_func.coalesce(sa_func.sum(AgentExpense.amount_gross), 0.0),
-    ).where(AgentExpense.user_id == user_id)
+    ).where(AgentExpense.user_id == user_id).group_by(AgentExpense.entry_type)
     if date_from:
         exp_q = exp_q.where(AgentExpense.expense_date >= date_from)
         sum_q = sum_q.where(AgentExpense.expense_date >= date_from)
@@ -243,6 +245,7 @@ class MapPartnerOut(BaseModel):
     lng: float | None
     machines: int
     revenue: float  # összes elszámolás-bevétel (bruttó)
+    agent_user_id: str | None = None  # felelős képviselő (szűréshez)
 
 
 @router.get(
@@ -287,6 +290,7 @@ async def stats_map(
         out.append(MapPartnerOut(
             id=str(p.id), name=p.name, city=p.address_city, zip=p.address_zip,
             lat=p.lat, lng=p.lng, machines=machines, revenue=_money(revenue),
+            agent_user_id=str(p.agent_user_id) if p.agent_user_id else None,
         ))
     return out
 

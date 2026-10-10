@@ -319,6 +319,29 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             c.drawRightString(right, y, f"Összesen (nettó): {total:,.0f} Ft".replace(",", " "))
             y -= 5 * mm
 
+    # ─── Ajánlat-előzmény (belső példány): felkínált konstrukciók + döntés ───
+    qh = data.get("quote_history")
+    if qh:
+        section("Ajánlat-előzmény")
+        c.setFont(FONT, 9)
+        decision = (
+            f"Elfogadva: {qh.get('selected') or '—'}"
+            if qh.get("status") == "accepted"
+            else "A javítást az ügyfél NEM kérte"
+        )
+        who = qh.get("accepted_by") or "—"
+        when = (qh.get("accepted_at") or "")[:16].replace("T", " ")
+        wrapped(f"{decision} — {who}{f' ({when})' if when else ''}")
+        for opt in (qh.get("options") or [])[:12]:
+            mark = "✓" if opt.get("name") == qh.get("selected") else "·"
+            price = opt.get("price_net")
+            line_text = f"  {mark} {str(opt.get('name') or '')[:90]}"
+            c.setFont(FONT, 8.5)
+            c.drawString(left, y, line_text)
+            if price is not None:
+                c.drawRightString(right, y, f"{float(price):,.0f} Ft".replace(",", " "))
+            y -= 4.2 * mm
+
     # ─── Megjegyzés (ügyfél-példány: a képviselő megjegyzése külön szakaszban,
     # NEM az "Elvégzett munka" alatt — b83391bc) ───
     remark = (data.get("remark") or "").strip()

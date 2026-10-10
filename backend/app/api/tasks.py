@@ -1210,8 +1210,15 @@ async def _build_worksheet_pdf(
             f"{work_description}\n{loaner_line}" if work_description else loaner_line
         )
 
+    # Ajánlat-előzmény a BELSŐ példányon: mik voltak az opciók, ki/mikor
+    # melyiket fogadta el (d925d451) — az ügyfél-példányra nem kerül rá.
+    quote_history = None
+    if variant != "customer":
+        quote_history = await _quote_history(db, ws)
+
     pdf = build_worksheet_pdf(
         {
+            "quote_history": quote_history,
             "extra_footer": extra_footer,
             "handover_url": handover_url,
             "serial": serial,
@@ -1735,6 +1742,10 @@ async def quote_accept_internal(
     )
     if chosen is None:
         raise HTTPException(status_code=422, detail={"code": "quote.bad_option"})
+    all_options = [
+        {"name": w.get("name"), "price_net": w.get("price_net")}
+        for w in (ws.repair_options or [])
+    ]
     ws.repair_options = [chosen]
     ws.quote_status = "accepted"
     ws.quote_selected_name = chosen.get("name")
@@ -1743,7 +1754,8 @@ async def quote_accept_internal(
     await record_audit(
         db, actor=actor, action="worksheet.quote_accept_internal",
         entity_type="worksheet", entity_id=ws.serial,
-        detail={"option": chosen.get("name")}, request=request,
+        detail={"option": chosen.get("name"), "all_options": all_options},
+        request=request,
     )
     await db.commit()
     # Szervizes értesítése (ár nélkül) — kattintható linkkel
@@ -2225,6 +2237,24 @@ class PickupBody(BaseModel):
     to: EmailStr | None = None  # None → a munkalapon tárolt ajánlat-email
 
 
+@router.get("/{task_id}/worksheet/quote-history")
+async def worksheet_quote_history(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("tasks")),
+):
+    """Az ajánlat teljes előzménye: felkínált konstrukciók + ki/mikor/melyiket
+    fogadta el (d925d451). 404, ha még nincs döntés."""
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    history = await _quote_history(db, ws)
+    if history is None:
+        raise HTTPException(status_code=404, detail={"code": "quote.no_history"})
+    return history
+
+
 @router.post("/{task_id}/worksheet/picked-up", response_model=WorksheetOut)
 async def worksheet_picked_up(
     task_id: str,
@@ -2369,6 +2399,45 @@ async def _handover_row(db: AsyncSession, task: Task, ws: Worksheet) -> dict:
         "items": items,
         "total_net": total,
         "total_gross": round(total * 1.27, 0),
+    }
+
+
+async def _quote_history(db: AsyncSession, ws: Worksheet) -> dict | None:
+    """Ajánlat-előzmény (d925d451): az ÖSSZES felkínált konstrukció + ki,
+    mikor, melyiket fogadta el. A publikus elfogadás után a munkalapon már
+    csak a kiválasztott opció marad — a teljes lista az audit-eseményből."""
+    if (ws.quote_status or "none") not in ("accepted", "declined"):
+        return None
+    ev = (
+        await db.execute(
+            select(AuditEvent)
+            .where(
+                AuditEvent.entity_type == "worksheet",
+                AuditEvent.entity_id == ws.serial,
+                AuditEvent.action.in_((
+                    "worksheet.quote_accepted",
+                    "worksheet.quote_declined",
+                    "worksheet.quote_accept_internal",
+                )),
+            )
+            .order_by(AuditEvent.created_at.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+    options = None
+    if ev is not None and isinstance(ev.detail, dict):
+        options = ev.detail.get("all_options")
+    if not options:  # belső elfogadásnál a munkalapon megvan az összes opció
+        options = [
+            {"name": w.get("name"), "price_net": w.get("price_net")}
+            for w in (ws.repair_options or [])
+        ]
+    return {
+        "status": ws.quote_status,
+        "selected": ws.quote_selected_name,
+        "accepted_by": ws.quote_accepted_by,
+        "accepted_at": ws.quote_accepted_at.isoformat() if ws.quote_accepted_at else None,
+        "options": options,
     }
 
 

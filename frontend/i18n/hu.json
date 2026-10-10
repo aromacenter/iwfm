@@ -1308,7 +1308,11 @@
     "loanerFromIntakeFailed": "Az átvételkor megadott cseregépet ({code}) nem sikerült rögzíteni — add meg a feladatnál kézzel.",
     "clientNoPartner": "'{name}' néven nincs partner-törzsadat — az ügyfél adatlapja a Partnerek menüben vehető fel.",
     "clientInfoHint": "Ügyfél-adatlap: minden adat, korábbi tranzakciók és javítások",
-    "assetLinkHint": "Ugrás a gép adatlapjára"
+    "assetLinkHint": "Ugrás a gép adatlapjára",
+    "assetAtPartnerHint": "Itt van kihelyezve a gép",
+    "quoteHistoryTitle": "Ajánlat-előzmény",
+    "quoteHistoryAccepted": "Elfogadta: {by} — {at}",
+    "quoteHistoryDeclined": "A javítást nem kérte: {by} — {at}"
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1842,7 +1846,8 @@
     "contract.tier_overlap": "Az ársávok átfedik egymást.",
     "contract.too_many_tiers": "Legfeljebb 20 ársáv adható meg.",
     "partner.bad_email": "Hibás e-mail cím a listában — több címet vesszővel válassz el.",
-    "asset.rented_xor_customer": "A gép nem lehet egyszerre bérelt és az ügyfél saját gépe."
+    "asset.rented_xor_customer": "A gép nem lehet egyszerre bérelt és az ügyfél saját gépe.",
+    "quote.no_history": "Ehhez a munkalaphoz még nincs ajánlat-döntés."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2240,7 +2245,8 @@
     "tiersHint": "Az elszámolt adagszám sávja adja az adagárat (pl. 0–100 adag: 60 Ft, 101-től: 40 Ft). Üres felső határ = nincs plafon. A kézi ár-átírás ezt is felülírja.",
     "tierPortions": "adag, ár",
     "tierAdd": "Sáv hozzáadása",
-    "tiersSummary": "sávos ár ({n} sáv)"
+    "tiersSummary": "sávos ár ({n} sáv)",
+    "editFromList": "Szerződés szerkesztése (a partner szerződés-ablaka nyílik)"
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",

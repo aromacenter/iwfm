@@ -281,7 +281,16 @@ export default function SzerzodesekPage() {
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="border-b border-slate-100 align-top last:border-0">
-                  <td className="px-4 py-2.5">{partnerBtn(c.partner_id, c.partner_name, c.partner_active)}</td>
+                  <td className="px-4 py-2.5">
+                    {partnerBtn(c.partner_id, c.partner_name, c.partner_active)}
+                    <a
+                      href={`/partnerek?contracts=${c.partner_id}`}
+                      title={t("contracts.editFromList")}
+                      className="ml-2 rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+                    >
+                      ✏️
+                    </a>
+                  </td>
                   <td className="whitespace-nowrap px-4 py-2.5">
                     <span className={`mr-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[c.status] ?? ""}`}>
                       {t(`contracts.status_${c.status}`)}

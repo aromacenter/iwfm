@@ -1308,7 +1308,11 @@
     "loanerFromIntakeFailed": "Could not record the loaner ({code}) from intake — set it on the task manually.",
     "clientNoPartner": "No partner record named '{name}'.",
     "clientInfoHint": "Client page: all data, transactions and repairs",
-    "assetLinkHint": "Open the machine's page"
+    "assetLinkHint": "Open the machine's page",
+    "assetAtPartnerHint": "The machine is deployed here",
+    "quoteHistoryTitle": "Quote history",
+    "quoteHistoryAccepted": "Accepted by {by} — {at}",
+    "quoteHistoryDeclined": "Declined by {by} — {at}"
   },
   "myTasks": {
     "title": "My tasks",
@@ -1842,7 +1846,8 @@
     "contract.tier_overlap": "Price tiers overlap.",
     "contract.too_many_tiers": "At most 20 tiers.",
     "partner.bad_email": "Invalid e-mail address in the list.",
-    "asset.rented_xor_customer": "A machine cannot be both rented and customer-owned."
+    "asset.rented_xor_customer": "A machine cannot be both rented and customer-owned.",
+    "quote.no_history": "No quote decision yet."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2240,7 +2245,8 @@
     "tiersHint": "The billed portion count's band sets the per-portion price. Empty upper bound = no cap. Manual price override still wins.",
     "tierPortions": "portions, price",
     "tierAdd": "Add tier",
-    "tiersSummary": "tiered pricing ({n} tiers)"
+    "tiersSummary": "tiered pricing ({n} tiers)",
+    "editFromList": "Edit contract (opens the partner's contract modal)"
   },
   "delivery": {
     "title": "Delivery (delivery note)",

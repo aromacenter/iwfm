@@ -22,6 +22,7 @@ interface MapPartner {
   lng: number | null;
   machines: number;
   revenue: number;
+  agent_user_id: string | null;
 }
 
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
@@ -41,12 +42,16 @@ export default function TerkepPage() {
   const [rows, setRows] = useState<MapPartner[]>([]);
   const [ready, setReady] = useState(false);
   const [bp, setBp] = useState<"" | "buda" | "pest">("");
+  // Képviselő-szűrő (8f78ba71 reopened) — alapból minden AKTÍV partner látszik
+  const [agentFilter, setAgentFilter] = useState("");
+  const [agents, setAgents] = useState<{ id: string; display_name: string }[]>([]);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
   const divRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.get<MapPartner[]>("/api/stats/map").then(setRows).catch((e) => toast(errorMessage(e), "error"));
+    api.get<{ id: string; display_name: string }[]>("/api/quotes/agents").then(setAgents).catch(() => {});
     // Leaflet betöltése CDN-ről (css + js), utána indul a térkép
     if ((window as any).L) { setReady(true); return; }
     const css = document.createElement("link");
@@ -62,8 +67,14 @@ export default function TerkepPage() {
   }, []);
 
   const filtered = useMemo(
-    () => rows.filter((r) => !bp || budaPest(r.zip) === bp),
-    [rows, bp],
+    () =>
+      rows.filter((r) => {
+        if (bp && budaPest(r.zip) !== bp) return false;
+        if (agentFilter === "none" && r.agent_user_id) return false;
+        if (agentFilter && agentFilter !== "none" && r.agent_user_id !== agentFilter) return false;
+        return true;
+      }),
+    [rows, bp, agentFilter],
   );
 
   const cities = useMemo(() => {
@@ -105,6 +116,10 @@ export default function TerkepPage() {
         maxZoom: 19,
         attribution: "© OpenStreetMap",
       }).addTo(mapRef.current);
+      // Mobilon a konténer mérete az első render után áll be — enélkül a
+      // térkép üresnek látszik (8f78ba71 reopened).
+      setTimeout(() => mapRef.current?.invalidateSize(), 150);
+      window.addEventListener("resize", () => mapRef.current?.invalidateSize());
     }
     if (layerRef.current) layerRef.current.remove();
     const layer = L.layerGroup().addTo(mapRef.current);
@@ -152,6 +167,17 @@ export default function TerkepPage() {
             </button>
           ))}
         </div>
+        <select
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm"
+        >
+          <option value="">{t("partners.allAgents")}</option>
+          <option value="none">{t("partners.noAgent")}</option>
+          {agents.map((a) => (
+            <option key={a.id} value={a.id}>💼 {a.display_name}</option>
+          ))}
+        </select>
         <div className="ml-auto flex flex-wrap gap-2 text-sm">
           <span className="rounded-lg bg-slate-100 px-3 py-1.5">🤝 {totals.partners} {t("map.partners")}</span>
           <span className="rounded-lg bg-slate-100 px-3 py-1.5">☕ {totals.machines} {t("map.machines")}</span>
@@ -164,7 +190,7 @@ export default function TerkepPage() {
         </p>
       )}
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <div ref={divRef} className="h-[70vh] rounded-2xl border border-slate-200 shadow-sm" />
+        <div ref={divRef} className="h-[60vh] min-h-80 w-full rounded-2xl border border-slate-200 shadow-sm lg:h-[70vh]" />
         <div className="max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead>

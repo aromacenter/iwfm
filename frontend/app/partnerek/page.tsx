@@ -333,6 +333,20 @@ export default function PartnerekPage() {
       .catch(() => {});
   }, []);
   const [contractsFor, setContractsFor] = useState<{ id: string; name: string } | null>(null);
+  // /szerzodesek "Szerkesztés" gombja: ?contracts=<partner_id> → a partner
+  // szerződés-modálja automatikusan megnyílik (9f806390).
+  const contractsParamDone = useRef(false);
+  useEffect(() => {
+    if (contractsParamDone.current || partners.length === 0) return;
+    const pid = new URLSearchParams(window.location.search).get("contracts");
+    if (!pid) { contractsParamDone.current = true; return; }
+    const p = partners.find((x) => x.id === pid);
+    if (p) {
+      contractsParamDone.current = true;
+      void openContracts({ id: p.id, name: p.name });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partners]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [cForm, setCForm] = useState<{
     id: string; valid_from: string; valid_to: string; min_portions: string;

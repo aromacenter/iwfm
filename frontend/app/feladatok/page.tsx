@@ -449,11 +449,23 @@ export default function FeladatokPage() {
     }
   }
 
+  // Ajánlat-előzmény: felkínált konstrukciók + ki/mikor fogadta el (d925d451)
+  const [quoteHistory, setQuoteHistory] = useState<{
+    status: string; selected: string | null; accepted_by: string | null;
+    accepted_at: string | null; options: { name: string; price_net: number | null }[];
+  } | null>(null);
   const [priceEdit, setPriceEdit] = useState<{ task: TaskOut; ws: WsData; prices: string[]; workPrices: string[]; repairPrices: string[]; fee: string; discount: boolean; customerNote: string } | null>(null);
 
   async function openPriceEdit(task: TaskOut) {
     try {
       const raw = await api.get<WsData>(`/api/tasks/${task.id}/worksheet`);
+      setQuoteHistory(null);
+      if (raw.quote_status === "accepted" || raw.quote_status === "declined") {
+        api
+          .get<typeof quoteHistory>(`/api/tasks/${task.id}/worksheet/quote-history`)
+          .then(setQuoteHistory)
+          .catch(() => {});
+      }
       // Az ügyfél döntése után CSAK a kiválasztott konstrukció jelenik meg
       const options =
         raw.quote_status === "accepted" && raw.quote_selected_name
@@ -708,6 +720,14 @@ export default function FeladatokPage() {
                       >
                         ☕ {task.asset.name}{task.asset.barcode ? ` (${task.asset.barcode})` : ""}
                       </Link>
+                    )}
+                    {task.asset?.partner_name && (
+                      <span
+                        title={t("tasks.assetAtPartnerHint")}
+                        className="ml-1 rounded bg-indigo-50 px-1.5 py-0.5 text-xs font-medium text-indigo-700"
+                      >
+                        📍 {task.asset.partner_name}
+                      </span>
                     )}
                   </p>
                 )}
@@ -1215,6 +1235,31 @@ export default function FeladatokPage() {
               />
               <span className="mt-0.5 block text-xs text-slate-400">{t("tasks.customerNoteHint")}</span>
             </label>
+            {/* Ajánlat-előzmény: mik voltak az opciók, ki/mikor döntött */}
+            {quoteHistory && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p className="mb-1 font-medium text-slate-700">🕘 {t("tasks.quoteHistoryTitle")}</p>
+                <p className="mb-1.5 text-xs text-slate-500">
+                  {quoteHistory.status === "accepted"
+                    ? t("tasks.quoteHistoryAccepted", {
+                        by: quoteHistory.accepted_by ?? "—",
+                        at: (quoteHistory.accepted_at ?? "").slice(0, 16).replace("T", " "),
+                      })
+                    : t("tasks.quoteHistoryDeclined", {
+                        by: quoteHistory.accepted_by ?? "—",
+                        at: (quoteHistory.accepted_at ?? "").slice(0, 16).replace("T", " "),
+                      })}
+                </p>
+                <ul className="space-y-0.5">
+                  {quoteHistory.options.map((o, i) => (
+                    <li key={i} className={`flex justify-between gap-3 ${o.name === quoteHistory.selected ? "font-semibold text-emerald-700" : "text-slate-600"}`}>
+                      <span className="min-w-0 flex-1">{o.name === quoteHistory.selected ? "✓ " : "· "}{o.name}</span>
+                      {o.price_net != null && <span className="tabular-nums">{Math.round(o.price_net).toLocaleString("hu-HU")} Ft</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {/* Árajánlat az ügyfélnek: linkes kiválasztás + jóváhagyás */}
             {(priceEdit.ws.repair_options ?? []).length > 0 && (
               <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">

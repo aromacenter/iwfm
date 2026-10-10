@@ -458,7 +458,9 @@ export default function TamogatasPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    setOrderItems([...orderItems, { product_id: info.products[0]?.id ?? "", quantity: "1" }])
+                    // Az új sor is ÜRES szabadszavas keresővel indul — nem az
+                    // első termékkel előtöltve (c79eba9b reopened)
+                    setOrderItems([...orderItems, { product_id: "", quantity: "1" }])
                   }
                   className="text-sm font-medium text-emerald-700 hover:underline"
                 >
