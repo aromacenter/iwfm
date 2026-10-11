@@ -25,8 +25,12 @@ interface MapPartner {
   agent_user_id: string | null;
 }
 
-const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+// Több CDN-tartalék: mobilneten az unpkg gyakran nem érhető el (790165df)
+const LEAFLET_SOURCES = [
+  { js: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js", css: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" },
+  { js: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js", css: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" },
+  { js: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js", css: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" },
+];
 // Budai kerületek (I., II., III., XI., XII., XXII.) — az irányítószám 2-3.
 // számjegye a kerület.
 const BUDA_DISTRICTS = new Set(["01", "02", "03", "11", "12", "22"]);
@@ -52,17 +56,25 @@ export default function TerkepPage() {
   useEffect(() => {
     api.get<MapPartner[]>("/api/stats/map").then(setRows).catch((e) => toast(errorMessage(e), "error"));
     api.get<{ id: string; display_name: string }[]>("/api/quotes/agents").then(setAgents).catch(() => {});
-    // Leaflet betöltése CDN-ről (css + js), utána indul a térkép
+    // Leaflet betöltése CDN-ről (css + js) — hiba esetén a következő CDN jön
     if ((window as any).L) { setReady(true); return; }
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = LEAFLET_CSS;
-    document.head.appendChild(css);
-    const js = document.createElement("script");
-    js.src = LEAFLET_JS;
-    js.onload = () => setReady(true);
-    js.onerror = () => toast(t("map.loadFailed"), "error");
-    document.head.appendChild(js);
+    const tryLoad = (idx: number) => {
+      if (idx >= LEAFLET_SOURCES.length) {
+        toast(t("map.loadFailed"), "error");
+        return;
+      }
+      const src = LEAFLET_SOURCES[idx];
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = src.css;
+      document.head.appendChild(css);
+      const js = document.createElement("script");
+      js.src = src.js;
+      js.onload = () => setReady(true);
+      js.onerror = () => { js.remove(); css.remove(); tryLoad(idx + 1); };
+      document.head.appendChild(js);
+    };
+    tryLoad(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

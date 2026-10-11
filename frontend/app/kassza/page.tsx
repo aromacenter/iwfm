@@ -84,6 +84,9 @@ export default function KasszaPage() {
   const [period, setPeriod] = useState<"all" | "year" | "month" | "custom">("all");
   const [mine, setMine] = useState<Register | null>(null);
   const [meId, setMeId] = useState<string>("");
+  const [meRole, setMeRole] = useState<string | null>(null);
+  // Központi címzettek a "Pénz leadása" gombhoz (admin + manager lista)
+  const [centralTargets, setCentralTargets] = useState<{ user_id: string; name: string; role: string }[]>([]);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [agents, setAgents] = useState<{ user_id: string | null; name: string }[]>([]);
   const [transferForm, setTransferForm] = useState<{ to: string; amount: string; note: string } | null>(null);
@@ -124,7 +127,8 @@ export default function KasszaPage() {
     api.get<{ user_id: string | null; name: string }[]>("/api/settlements/agents")
       .then((rows) => setAgents(rows.filter((a) => a.user_id)))
       .catch(() => {});
-    api.get<{ id: string }>("/api/auth/me").then((m) => setMeId(m.id)).catch(() => {});
+    api.get<{ id: string; role?: string }>("/api/auth/me").then((m) => { setMeId(m.id); setMeRole(m.role ?? null); }).catch(() => {});
+    api.get<{ user_id: string; name: string; role: string }[]>("/api/stats/cash/central-recipients").then(setCentralTargets).catch(() => {});
     if (canManage) {
       api.get<Overview>(`/api/stats/cash/overview?${params()}`).then(setOverview).catch(() => {});
     }
@@ -239,19 +243,19 @@ export default function KasszaPage() {
             </div>
             <p className="mb-2 text-xs text-orange-800">{t("cash.contractorHint")}</p>
             <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-              <div className="rounded-xl bg-white/70 px-3 py-2">
+              <div className="rounded-xl bg-orange-100 px-3 py-2">
                 <p className="text-xs text-slate-500">{t("cash.contractorFees", { n: r.contractor.worksheets })}</p>
                 <p className="font-semibold">{ft(r.contractor.fee_total)}</p>
               </div>
-              <div className="rounded-xl bg-white/70 px-3 py-2">
+              <div className="rounded-xl bg-orange-100 px-3 py-2">
                 <p className="text-xs text-slate-500">{t("svcHo.costsCol")}</p>
                 <p className="font-semibold text-orange-800">+{ft(r.contractor.costs)}</p>
               </div>
-              <div className="rounded-xl bg-white/70 px-3 py-2">
+              <div className="rounded-xl bg-orange-100 px-3 py-2">
                 <p className="text-xs text-slate-500">{t("svcHo.payoutsCol")}</p>
                 <p className="font-semibold text-emerald-800">−{ft(r.contractor.payouts)}</p>
               </div>
-              <div className="rounded-xl bg-white/70 px-3 py-2">
+              <div className="rounded-xl bg-orange-100 px-3 py-2">
                 <p className="text-xs text-slate-500">{t("svcHo.balance")}</p>
                 <p className="font-semibold">{ft(r.contractor.balance)}</p>
               </div>
@@ -326,6 +330,21 @@ export default function KasszaPage() {
         >
           🤝 {t("cash.transferBtn")}
         </button>
+        {centralTargets.length > 0 && meRole !== "admin" && (
+          <button
+            onClick={() =>
+              setTransferForm({
+                to: centralTargets[0].user_id,
+                amount: "",
+                note: t("cash.handInNote"),
+              })
+            }
+            title={t("cash.handInHint")}
+            className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+          >
+            💰 {t("cash.handInBtn")}
+          </button>
+        )}
         <button
           onClick={() => setForm({ entry_type: "expense", amount: "", note: "", supplier: "", receipt_no: "", user_id: "" })}
           className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700"
@@ -371,6 +390,11 @@ export default function KasszaPage() {
             ⏳ {t("cash.transferPendingOut", { name: tr.to_name ?? "?", amount: Math.round(tr.amount).toLocaleString("hu-HU") })}
           </p>
         ))}
+        {meRole === "admin" && (
+          <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            ℹ️ {t("cash.adminSinkHint")}
+          </p>
+        )}
         {mine && registerCard(mine, t("cash.myRegister"))}
 
         {canManage && overview && (

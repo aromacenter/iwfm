@@ -165,7 +165,8 @@
     "cashbox": "Kassza",
     "stats": "Statisztika",
     "serviceHandover": "Szerelő-átadás",
-    "stocktake": "Leltár"
+    "stocktake": "Leltár",
+    "myWarehouse": "Saját raktár"
   },
   "roles": {
     "admin": "Admin",
@@ -1847,7 +1848,11 @@
     "contract.too_many_tiers": "Legfeljebb 20 ársáv adható meg.",
     "partner.bad_email": "Hibás e-mail cím a listában — több címet vesszővel válassz el.",
     "asset.rented_xor_customer": "A gép nem lehet egyszerre bérelt és az ügyfél saját gépe.",
-    "quote.no_history": "Ehhez a munkalaphoz még nincs ajánlat-döntés."
+    "quote.no_history": "Ehhez a munkalaphoz még nincs ajánlat-döntés.",
+    "stockreq.no_warehouse": "Nincs hozzád rendelt raktár — az adminisztrátor tud autó-raktárt rendelni hozzád.",
+    "stockreq.not_found": "Az igénylés nem található.",
+    "stockreq.decided": "Ezt az igénylést már elbírálták.",
+    "stockreq.pick_source": "Több telephely-raktár van — válaszd ki, melyikből megy az áru."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2621,7 +2626,11 @@
     "transferDeclined": "Átadás elutasítva.",
     "contractorTitle": "Szerelő-folyószámla (ennyivel tartozunk neked)",
     "contractorHint": "Az elhozott munkalapjaid visszaigazolt díjai + saját pénzből vett alkatrészeid − átvett kifizetések. Pozitív egyenleg = még járandóság.",
-    "contractorFees": "Javítási díjak ({n} munkalap)"
+    "contractorFees": "Javítási díjak ({n} munkalap)",
+    "handInBtn": "Pénz leadása",
+    "handInHint": "Készpénz leadása a központnak (admin/manager) — a címzettnek el kell fogadnia.",
+    "handInNote": "Készpénz leadása",
+    "adminSinkHint": "Admin-kasszaként a hozzád LEADOTT (elfogadott) pénz nem növeli az egyenleged — a leadással a pénz a céghez megérkezettnek számít, és nem duplázódik a forgalomban."
   },
   "stats": {
     "title": "Statisztika",
@@ -2649,7 +2658,11 @@
     "portions": "Adag",
     "items": "tétel",
     "empty": "Nincs adat az időszakban.",
-    "mapBtn": "Térkép-nézet"
+    "mapBtn": "Térkép-nézet",
+    "drillRevenueHint": "Kattints a mögötte lévő elszámolásokért",
+    "drillExpenseHint": "Kattints a kiadás-tételekért",
+    "drillRevenueTitle": "elszámolások",
+    "drillExpenseTitle": "kassza-tételek"
   },
   "svcHo": {
     "title": "Szerelő-átadás",
@@ -2724,5 +2737,36 @@
     "city": "Település",
     "missingGeo": "{n} partnernek még nincs térkép-koordinátája (geokódolás folyamatban) — ők csak a táblázatban látszanak.",
     "loadFailed": "A térkép betöltése nem sikerült — ellenőrizd az internetkapcsolatot."
+  },
+  "streq": {
+    "title": "Saját raktár és igénylés",
+    "subtitle": "A saját raktárad készlete, áru-igénylés a központból, és a beérkező átadások elfogadása.",
+    "noWarehouse": "Nincs hozzád rendelt raktár — kérj egyet az adminisztrátortól (Raktár menü → autó-raktár hozzárendelés).",
+    "myStock": "Saját készlet",
+    "emptyStock": "A raktárad üres.",
+    "qty": "Mennyiség",
+    "newRequest": "Áru-igénylés a központi raktárból",
+    "productPh": "Termék keresése (név, cikkszám)…",
+    "notePh": "megjegyzés (opcionális)",
+    "send": "Igénylés elküldése",
+    "sent": "Igénylés elküldve — a vezetők Telegram-értesítést kaptak, a vezérlőpulton hagyják jóvá.",
+    "flowHint": "Jóváhagyás után az áru függő átadásként érkezik — itt fent kell ELFOGADNOD, csak akkor kerül a raktáradba.",
+    "myRequests": "Igényléseim",
+    "noRequests": "Még nincs igénylésed.",
+    "status": {
+      "pending": "függőben",
+      "approved": "jóváhagyva",
+      "declined": "elutasítva"
+    },
+    "accept": "Elfogadom",
+    "reject": "Elutasítom",
+    "transferAccepted": "Átvétel elfogadva — az áru a raktáradba került.",
+    "transferRejected": "Átadás elutasítva — az áru visszakerül a forrásra.",
+    "dashTitle": "Áru-igénylések (jóváhagyásra várnak)",
+    "dashHint": "Jóváhagyáskor az áru függő átadásként megy ki a központi raktárból — a készlet nem mehet negatívba, és az igénylőnek el kell fogadnia.",
+    "approve": "Jóváhagyás",
+    "decline": "Elutasítás",
+    "approved": "Igénylés jóváhagyva — függő átadás létrehozva, az igénylő értesítést kapott.",
+    "declined": "Igénylés elutasítva."
   }
 }

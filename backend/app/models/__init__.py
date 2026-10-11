@@ -57,6 +57,7 @@ from app.models.models import (  # noqa: F401
     TimeEntry,
     Stocktake,
     StocktakeLine,
+    StockRequest,
     TimeOffRequest,
     User,
     Warehouse,

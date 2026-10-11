@@ -165,7 +165,8 @@
     "cashbox": "Cash register",
     "stats": "Statistics",
     "serviceHandover": "Technician handover",
-    "stocktake": "Stocktake"
+    "stocktake": "Stocktake",
+    "myWarehouse": "My warehouse"
   },
   "roles": {
     "admin": "Admin",
@@ -1847,7 +1848,11 @@
     "contract.too_many_tiers": "At most 20 tiers.",
     "partner.bad_email": "Invalid e-mail address in the list.",
     "asset.rented_xor_customer": "A machine cannot be both rented and customer-owned.",
-    "quote.no_history": "No quote decision yet."
+    "quote.no_history": "No quote decision yet.",
+    "stockreq.no_warehouse": "No warehouse assigned to you.",
+    "stockreq.not_found": "Request not found.",
+    "stockreq.decided": "Already decided.",
+    "stockreq.pick_source": "Multiple site warehouses — pick the source."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2621,7 +2626,11 @@
     "transferDeclined": "Transfer declined.",
     "contractorTitle": "Technician ledger (what we owe you)",
     "contractorHint": "Confirmed fees + your own costs − payouts received.",
-    "contractorFees": "Repair fees ({n} worksheets)"
+    "contractorFees": "Repair fees ({n} worksheets)",
+    "handInBtn": "Hand in cash",
+    "handInHint": "Hand your cash to the center — the recipient must accept.",
+    "handInNote": "Cash hand-in",
+    "adminSinkHint": "As admin, accepted hand-ins do not increase your balance — the money has reached the company."
   },
   "stats": {
     "title": "Statistics",
@@ -2649,7 +2658,11 @@
     "portions": "Portions",
     "items": "items",
     "empty": "No data in this period.",
-    "mapBtn": "Map view"
+    "mapBtn": "Map view",
+    "drillRevenueHint": "Click for the settlements behind it",
+    "drillExpenseHint": "Click for the expense entries",
+    "drillRevenueTitle": "settlements",
+    "drillExpenseTitle": "cash entries"
   },
   "svcHo": {
     "title": "Technician handover",
@@ -2724,5 +2737,36 @@
     "city": "City",
     "missingGeo": "{n} partners have no coordinates yet.",
     "loadFailed": "Map failed to load."
+  },
+  "streq": {
+    "title": "My warehouse & requests",
+    "subtitle": "Your own stock, requests from the central warehouse, and incoming transfers.",
+    "noWarehouse": "No warehouse assigned to you yet.",
+    "myStock": "My stock",
+    "emptyStock": "Your warehouse is empty.",
+    "qty": "Quantity",
+    "newRequest": "Request goods from central",
+    "productPh": "Search product…",
+    "notePh": "note (optional)",
+    "send": "Send request",
+    "sent": "Request sent — managers were notified.",
+    "flowHint": "After approval the goods arrive as a pending transfer — accept it above.",
+    "myRequests": "My requests",
+    "noRequests": "No requests yet.",
+    "status": {
+      "pending": "pending",
+      "approved": "approved",
+      "declined": "declined"
+    },
+    "accept": "Accept",
+    "reject": "Reject",
+    "transferAccepted": "Accepted — goods are in your warehouse.",
+    "transferRejected": "Rejected — goods return to the source.",
+    "dashTitle": "Stock requests awaiting approval",
+    "dashHint": "On approval a pending transfer is created from the central warehouse.",
+    "approve": "Approve",
+    "decline": "Decline",
+    "approved": "Approved — pending transfer created.",
+    "declined": "Request declined."
   }
 }

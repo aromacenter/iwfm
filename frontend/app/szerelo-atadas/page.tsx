@@ -305,7 +305,7 @@ export default function SzereloAtadasPage() {
               {/* Alvállalkozó cég: szerelőnkénti bontás — a díjak a cég közös
                   folyószámláján maradnak, de látszik, ki mit csinált (c7ef9ce9) */}
               {(f.technicians ?? []).map((tr) => (
-                <tr key={`${f.employee_id}-${tr.name}`} className="bg-violet-50/50 text-xs">
+                <tr key={`${f.employee_id}-${tr.name}`} className="bg-violet-50 text-xs">
                   <td className="py-1 pl-6 pr-2 text-violet-800">👷 {tr.name}</td>
                   <td className="py-1 pr-2 text-right tabular-nums text-violet-800">{ft(tr.fee_total)}</td>
                   <td colSpan={3} />

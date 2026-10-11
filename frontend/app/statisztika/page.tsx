@@ -7,8 +7,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { useUI } from "@/lib/ui";
 
 interface Stats {
   categories: Record<string, { net: number; count: number }>;
@@ -31,7 +32,26 @@ function iso(d: Date): string {
 }
 
 export default function StatisztikaPage() {
+  // Összeg-részletező (84452fba): bevételre kattintva a mögötte lévő
+  // elszámolások, kiadásra kattintva a kassza-tételek.
+  interface DrillRevenue { id: string; created_at: string; partner_name: string; total_net: number; total_gross: number; payment_method: string; invoiced: boolean }
+  interface DrillExpense { expense_date: string; amount_gross: number; entry_type: string; note: string | null; supplier: string | null; receipt_no: string | null }
   const { t, lang } = useT();
+  const { toast } = useUI();
+  const [drill, setDrill] = useState<{ kind: "revenue" | "expense"; name: string; rows: (DrillRevenue | DrillExpense)[] } | null>(null);
+  async function openDrill(kind: "revenue" | "expense", name: string) {
+    try {
+      const params = new URLSearchParams({ kind, name });
+      const [from, to] = range();
+      if (from) params.set("date_from", from);
+      if (to) params.set("date_to", to);
+      const rows = await api.get<(DrillRevenue | DrillExpense)[]>(`/api/stats/business/drill?${params}`);
+      setDrill({ kind, name, rows });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   const ft = (n: number) => `${Math.round(n).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
 
   const [period, setPeriod] = useState<"day" | "week" | "month" | "year" | "custom">("month");
@@ -149,8 +169,12 @@ export default function StatisztikaPage() {
                   {stats.by_employee.map((r, i) => (
                     <tr key={i} className="border-t border-slate-100">
                       <td className="py-1.5 pr-2 font-medium">{r.name}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.net)}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{ft(r.gross)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">
+                        <button onClick={() => void openDrill("revenue", r.name)} title={t("stats.drillRevenueHint")} className="text-indigo-700 hover:underline">{ft(r.net)}</button>
+                      </td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">
+                        <button onClick={() => void openDrill("revenue", r.name)} title={t("stats.drillRevenueHint")} className="hover:underline">{ft(r.gross)}</button>
+                      </td>
                       <td className="py-1.5 text-right tabular-nums text-slate-400">{r.count}</td>
                     </tr>
                   ))}
@@ -176,7 +200,9 @@ export default function StatisztikaPage() {
                   {stats.costs_by_user.map((r, i) => (
                     <tr key={i} className="border-t border-slate-100">
                       <td className="py-1.5 pr-2 font-medium">{r.name ?? "?"}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums text-rose-700">{ft(r.expense)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">
+                        <button onClick={() => r.name && void openDrill("expense", r.name)} title={t("stats.drillExpenseHint")} className="text-rose-700 hover:underline">{ft(r.expense)}</button>
+                      </td>
                       <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-700">{ft(r.deposit)}</td>
                       <td className="py-1.5 text-right tabular-nums text-amber-700">{ft(r.withdrawal)}</td>
                     </tr>
@@ -219,6 +245,75 @@ export default function StatisztikaPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Összeg-részletező modal (84452fba) */}
+      {drill && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setDrill(null); }}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+        >
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="font-semibold">
+                {drill.kind === "revenue" ? "💰" : "💸"} {drill.name} —{" "}
+                {drill.kind === "revenue" ? t("stats.drillRevenueTitle") : t("stats.drillExpenseTitle")}
+              </h2>
+              <button onClick={() => setDrill(null)} className="rounded px-2 py-1 text-lg leading-none text-slate-400 hover:text-slate-700">✕</button>
+            </div>
+            {drill.rows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-400">{t("stats.empty")}</p>
+            ) : drill.kind === "revenue" ? (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="py-1.5 pr-2">{t("cons.debtDate")}</th>
+                    <th className="py-1.5 pr-2">{t("cons.partner")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("stats.net")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("stats.gross")}</th>
+                    <th className="py-1.5">{t("cons.payment")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(drill.rows as { id: string; created_at: string; partner_name: string; total_net: number; total_gross: number; payment_method: string; invoiced: boolean }[]).map((r) => (
+                    <tr key={r.id} className="border-t border-slate-100">
+                      <td className="py-1.5 pr-2 whitespace-nowrap text-slate-500">{new Date(r.created_at).toLocaleDateString("hu-HU")}</td>
+                      <td className="py-1.5 pr-2 font-medium">{r.partner_name}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.total_net)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{ft(r.total_gross)}</td>
+                      <td className="py-1.5 text-xs text-slate-500">
+                        {t(`cons.payments.${r.payment_method}`)}
+                        {r.invoiced && <span className="ml-1 rounded bg-emerald-100 px-1 text-emerald-800">✓</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="py-1.5 pr-2">{t("cash.date")}</th>
+                    <th className="py-1.5 pr-2">{t("cash.type")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("cash.amount")}</th>
+                    <th className="py-1.5">{t("cash.details")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(drill.rows as { expense_date: string; amount_gross: number; entry_type: string; note: string | null; supplier: string | null; receipt_no: string | null }[]).map((r, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="py-1.5 pr-2 whitespace-nowrap text-slate-500">{r.expense_date}</td>
+                      <td className="py-1.5 pr-2 text-xs">{t(`cash.types.${r.entry_type}`)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.amount_gross)}</td>
+                      <td className="py-1.5 text-xs text-slate-500">
+                        {[r.note, r.supplier, r.receipt_no && `#${r.receipt_no}`].filter(Boolean).join(" · ")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}

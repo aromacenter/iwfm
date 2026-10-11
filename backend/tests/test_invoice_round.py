@@ -371,8 +371,9 @@ async def test_cash_transfer_flow(client, manager, admin):
     assert deny.status_code == 403
     acc = await client.post(f"/api/stats/cash/transfers/{tid}/decide?accept=true", headers=adm)
     assert acc.status_code == 200, acc.text
+    # Admin címzettnél a leadás végállomás: nem növeli a saját kasszáját (b5a36526)
     reg = (await client.get("/api/stats/cash/me", headers=adm)).json()
-    assert reg["transfers_in"] == 5000
+    assert reg["transfers_in"] == 0
     reg2 = (await client.get("/api/stats/cash/me", headers=mgr)).json()
     assert reg2["transfers_out"] == 5000
     del me

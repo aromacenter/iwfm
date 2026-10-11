@@ -91,6 +91,7 @@ class CashRegisterOut(BaseModel):
 async def _cash_register(
     db: AsyncSession, user_id: uuid.UUID, user_name: str | None,
     date_from: date | None, date_to: date | None, with_entries: bool,
+    user_role: str | None = None,
 ) -> CashRegisterOut:
     rev_q = select(
         sa_func.coalesce(sa_func.sum(Settlement.total_gross), 0.0)
@@ -143,6 +144,11 @@ async def _cash_register(
             CashTransfer.decided_at, date_from, date_to,
         )
     )).scalar_one() or 0.0)
+    # ADMIN címzettnél az elfogadott pénz-leadás a VÉGÁLLOMÁS (b5a36526): a
+    # pénz "megérkezett a céghez", az admin kasszáját nem növeli — így nem is
+    # duplázódhat a cég forgalmában. Managernél marad az átadás-logika.
+    if user_role == "admin":
+        t_in = 0.0
 
     out_entries: list[CashEntryOut] = []
     if with_entries:
@@ -189,7 +195,7 @@ async def my_cash_register(
     """A bejelentkezett dolgozó saját kasszája, tételesen. Külsős szerelőnél
     a szerelő-folyószámla is (járó díjak + költései − kifizetések) — így a
     szerelő a saját kasszáján látja, mennyivel tartozunk neki (53af6761)."""
-    out = await _cash_register(db, actor.id, actor.display_name, date_from, date_to, True)
+    out = await _cash_register(db, actor.id, actor.display_name, date_from, date_to, True, user_role=actor.role)
     out.contractor = await _contractor_ledger(db, actor.id)
     return out
 
@@ -257,8 +263,23 @@ async def stats_map(
     _: User = Depends(require_perm("agent_report")),
 ):
     """Térkép-nézet adatai (8f78ba71): partnerenként a kihelyezett gépek száma
-    és az összes bevétel — a kliens városonként összesíti és rajzolja ki."""
-    from app.models import Asset, Partner
+    és az összes bevétel — a kliens városonként összesíti és rajzolja ki.
+    CSAK az aktív, MA ÉRVÉNYES szerződésű, géppel rendelkező partnerek
+    (8908b10e) — a régi/ügyfél-státuszúak nem."""
+    from app.models import Asset, Partner, PartnerContract
+
+    today_ = date.today()
+    contracted_ids = set(
+        (
+            await db.execute(
+                select(PartnerContract.partner_id).where(
+                    PartnerContract.valid_from <= today_,
+                    (PartnerContract.valid_to.is_(None))
+                    | (PartnerContract.valid_to >= today_),
+                )
+            )
+        ).scalars().all()
+    )
 
     mach = {
         pid: int(n or 0)
@@ -285,7 +306,8 @@ async def stats_map(
     ).scalars().all():
         machines = mach.get(p.id, 0)
         revenue = rev.get(p.id, 0.0)
-        if machines == 0 and revenue <= 0:
+        # csak kihelyezett gépes, élő szerződéses partner kerül a térképre
+        if machines == 0 or p.id not in contracted_ids:
             continue
         out.append(MapPartnerOut(
             id=str(p.id), name=p.name, city=p.address_city, zip=p.address_zip,
@@ -373,18 +395,20 @@ async def cash_overview(
         except ValueError:
             raise HTTPException(status_code=404, detail={"code": "user.not_found"})
     names: dict = {}
+    roles: dict = {}
     if all_ids:
         for u in (
             await db.execute(select(User).where(User.id.in_(all_ids)))
         ).scalars():
             names[u.id] = u.display_name
+            roles[u.id] = u.role
 
     registers = []
     for uid in sorted(all_ids, key=lambda x: (names.get(x) or "").lower()):
         registers.append(
             await _cash_register(
                 db, uid, names.get(uid), date_from, date_to,
-                with_entries=bool(user_id),
+                with_entries=bool(user_id), user_role=roles.get(uid),
             )
         )
 
@@ -548,6 +572,95 @@ async def business_stats(
         "expenses_total": _money(expenses_total),
         "revenue_total_net": _money(revenue_total),
     }
+
+
+@router.get("/business/drill", dependencies=[Depends(require_module("stats"))])
+async def business_drill(
+    kind: str = Query(pattern="^(revenue|expense)$"),
+    name: str = Query(min_length=1, max_length=256),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """A statisztika dolgozónkénti összegei mögötti tételek (84452fba):
+    kind=revenue → a dolgozó elszámolásai; kind=expense → a kassza-tételei."""
+    matrix = await get_permission_matrix(db)
+    perms = permissions_for(actor.role, matrix)
+    if "invoicing" not in perms and "agent_report" not in perms:
+        raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+
+    if kind == "revenue":
+        from app.models import Partner
+
+        q = (
+            select(Settlement, Partner.name)
+            .join(Partner, Partner.id == Settlement.partner_id)
+            .where(Settlement.settled_by_name == name)
+            .order_by(Settlement.created_at.desc())
+            .limit(300)
+        )
+        q = _range_filter(q, Settlement.created_at, date_from, date_to)
+        return [
+            {
+                "id": str(s.id),
+                "created_at": s.created_at.isoformat(),
+                "partner_name": pname,
+                "total_net": _money(s.total_net),
+                "total_gross": _money(s.total_gross),
+                "payment_method": s.payment_method,
+                "invoiced": s.invoiced,
+            }
+            for s, pname in (await db.execute(q)).all()
+        ]
+
+    uid = (
+        await db.execute(select(User.id).where(User.display_name == name))
+    ).scalars().first()
+    if uid is None:
+        return []
+    q = (
+        select(AgentExpense)
+        .where(AgentExpense.user_id == uid)
+        .order_by(AgentExpense.expense_date.desc())
+        .limit(300)
+    )
+    if date_from:
+        q = q.where(AgentExpense.expense_date >= date_from)
+    if date_to:
+        q = q.where(AgentExpense.expense_date <= date_to)
+    return [
+        {
+            "expense_date": e.expense_date.isoformat(),
+            "amount_gross": _money(e.amount_gross),
+            "entry_type": e.entry_type or "expense",
+            "note": e.note,
+            "supplier": e.supplier,
+            "receipt_no": e.receipt_no,
+        }
+        for e in (await db.execute(q)).scalars().all()
+    ]
+
+
+@router.get(
+    "/cash/central-recipients",
+    dependencies=[Depends(require_module("cashbox"))],
+)
+async def central_recipients(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """A "Pénz leadása" címzettjei: admin és manager felhasználók — az
+    adminnál landolt pénz leadottnak számít (b5a36526)."""
+    rows = (
+        await db.execute(
+            select(User).where(User.role.in_(("admin", "manager")), User.is_active.is_(True))
+        )
+    ).scalars().all()
+    return [
+        {"user_id": str(u.id), "name": u.display_name, "role": u.role}
+        for u in sorted(rows, key=lambda x: (x.role != "admin", x.display_name))
+    ]
 
 
 # ─── Pénz-átadás képviselők között (elfogadással) ────────────────────────────

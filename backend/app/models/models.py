@@ -2036,6 +2036,38 @@ class WarehouseMovement(Base):
     )
 
 
+class StockRequest(Base):
+    """Áru-igénylés a központi raktárból (7bd7dbd8): a dolgozó a saját
+    (autó-)raktárába kér terméket; a vezető a vezérlőpulton hagyja jóvá —
+    ekkor függő raktár-átadás jön létre, amit a dolgozó elfogadhat."""
+
+    __tablename__ = "stock_requests"
+    __table_args__ = (Index("ix_stock_requests_status", "status", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE", name="fk_streq_user"), nullable=False
+    )
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("warehouses.id", ondelete="CASCADE", name="fk_streq_wh"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="CASCADE", name="fk_streq_product"), nullable=False
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )  # pending | approved | declined
+    requester_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    decided_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    transfer_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class WarehouseTransfer(Base):
     """Függő raktár-átadás (telephely↔autó): a mozgást a FOGADÓ félnek jóvá
     kell hagynia. Indításkor a forrásról lekerül a mennyiség (úton van), a

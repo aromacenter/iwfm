@@ -182,7 +182,7 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
 @router.get("", response_model=list[IntakeOut])
 async def list_intakes(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_any_perm("service", "intake")),
+    actor: User = Depends(require_any_perm("service", "intake")),
 ):
     rows = list(
         (
@@ -191,6 +191,30 @@ async def list_intakes(
             )
         ).scalars()
     )
+    # Külsős szervizes (szervizes szerep): CSAK a saját átvételei — amit ő
+    # rögzített, vagy aminek a feladata hozzá van kiosztva (eef46eb6).
+    if actor.role == "szervizes":
+        from app.models import Employee, Task
+
+        own_emp_id = (
+            await db.execute(select(Employee.id).where(Employee.user_id == actor.id))
+        ).scalars().first()
+        own_intake_ids: set = set()
+        if own_emp_id is not None:
+            own_intake_ids = set(
+                (
+                    await db.execute(
+                        select(Task.intake_id).where(
+                            Task.employee_id == own_emp_id,
+                            Task.intake_id.is_not(None),
+                        )
+                    )
+                ).scalars().all()
+            )
+        rows = [
+            r for r in rows
+            if r.created_by == actor.id or r.id in own_intake_ids
+        ]
     return await _out_rows(db, rows)
 
 

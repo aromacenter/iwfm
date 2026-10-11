@@ -85,6 +85,11 @@ export default function VezerlopultPage() {
   const [performance, setPerformance] = useState<PartnerPerformance | null>(null);
   const [coverage, setCoverage] = useState<CoverageRow[]>([]);
   const [receivables, setReceivables] = useState<ReceivablesStats | null>(null);
+  // Áru-igénylések a központi raktárból (7bd7dbd8) — jóváhagyás itt
+  const [stockReqs, setStockReqs] = useState<{
+    id: string; product_name: string | null; unit: string | null; quantity: number;
+    note: string | null; status: string; requester_name: string | null; created_at: string;
+  }[]>([]);
   const [infoPartner, setInfoPartner] = useState<string | null>(null);
   const { t, lang } = useT();
   const { toast } = useUI();
@@ -95,11 +100,22 @@ export default function VezerlopultPage() {
     api.get<PartnerPerformance>("/api/dashboard/partner-performance").then(setPerformance).catch(() => {});
     api.get<CoverageRow[]>("/api/dashboard/coverage").then(setCoverage).catch(() => {});
     api.get<ReceivablesStats>("/api/dashboard/receivables-stats").then(setReceivables).catch(() => {});
+    api.get<typeof stockReqs>("/api/stock-requests").then((rows) => setStockReqs(rows.filter((r) => r.status === "pending"))).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
   // Egész forintra kerekítve — tizedesek csak az ár-megadásnál kellenek (682834bc)
   const ft = (n: number) => `${Math.round(n).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
+
+  async function decideStockReq(id: string, approve: boolean) {
+    try {
+      await api.post(`/api/stock-requests/${id}/${approve ? "approve" : "decline"}`, {});
+      toast(approve ? t("streq.approved") : t("streq.declined"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   async function decide(id: string, status: "approved" | "rejected") {
     try {
@@ -123,6 +139,39 @@ export default function VezerlopultPage() {
       <h1 className="mb-4 text-xl font-bold">{t("dash.title")}</h1>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        {/* Áru-igénylések a központi raktárból — jóváhagyás */}
+        {stockReqs.length > 0 && (
+          <section className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm lg:col-span-2">
+            <h2 className="mb-3 font-semibold text-emerald-900">📦 {t("streq.dashTitle")}</h2>
+            <div className="space-y-2">
+              {stockReqs.map((r) => (
+                <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-white px-3 py-2 text-sm shadow-sm">
+                  <span className="font-medium">{r.requester_name ?? "?"}</span>
+                  <span>
+                    {r.quantity.toLocaleString("hu-HU")} {r.unit ?? ""} {r.product_name ?? "?"}
+                  </span>
+                  {r.note && <span className="text-xs text-slate-500">({r.note})</span>}
+                  <span className="text-xs text-slate-400">{new Date(r.created_at).toLocaleDateString("hu-HU")}</span>
+                  <div className="ml-auto flex gap-2">
+                    <button
+                      onClick={() => void decideStockReq(r.id, true)}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white"
+                    >
+                      ✔ {t("streq.approve")}
+                    </button>
+                    <button
+                      onClick={() => void decideStockReq(r.id, false)}
+                      className="rounded-lg border border-rose-300 px-3 py-1.5 text-xs text-rose-700"
+                    >
+                      ✕ {t("streq.decline")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-emerald-800">{t("streq.dashHint")}</p>
+          </section>
+        )}
         {/* Függő kérelmek */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
           <h2 className="mb-3 font-semibold">
