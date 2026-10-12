@@ -168,7 +168,10 @@
     "serviceHandover": "Szerelő-átadás",
     "stocktake": "Leltár",
     "myWarehouse": "Saját raktár",
-    "saferpay": "QR-fizetések"
+    "saferpay": "QR-fizetések",
+    "vendingTelemetry": "Telemetria",
+    "expand": "Kinyitás",
+    "collapse": "Összecsukás"
   },
   "roles": {
     "admin": "Admin",
@@ -1872,7 +1875,11 @@
     "saferpay.api_error": "Saferpay hiba — próbáld újra, vagy nézd meg a beállításokat.",
     "saferpay.product_not_found": "A termék nem található vagy inaktív.",
     "saferpay.missing_product": "Termék vagy összeg szükséges a rendeléshez.",
-    "saferpay.order_not_found": "A rendelés nem található."
+    "saferpay.order_not_found": "A rendelés nem található.",
+    "vending.machine_not_found": "A gép nem található.",
+    "vending.code_taken": "Ez a gép-kód már foglalt.",
+    "vending.bad_key": "Érvénytelen gép-kód vagy API-kulcs.",
+    "vending.payload_too_big": "A telemetria-csomag túl nagy."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2855,5 +2862,31 @@
     "active": "aktív",
     "inactive": "inaktív",
     "deleteConfirm": "Törlöd a(z) {name} terméket a gép-menüből?"
+  },
+  "vtel": {
+    "title": "Vending telemetria",
+    "subtitle": "A kávégépek állapota és jelentései — a gép az API-kulcsával küld adatot.",
+    "addMachine": "Új gép",
+    "editMachine": "Gép szerkesztése",
+    "empty": "Még nincs felvett gép — kezdd az elsővel.",
+    "name": "Gép neve",
+    "code": "Gép-kód (a gép ezzel jelentkezik)",
+    "note": "Megjegyzés (pl. helyszín)",
+    "activeLabel": "aktív (fogadjuk a jelentéseit)",
+    "state.online": "🟢 online",
+    "state.stale": "🟡 régen jelentkezett",
+    "state.offline": "🔴 offline",
+    "lastSeen": "Utoljára jelentkezett: {at}",
+    "neverSeen": "Még sosem jelentkezett",
+    "todayStats": "ma {n} fizetés",
+    "history": "Előzmények",
+    "noHistory": "Még nincs telemetria-bejegyzés.",
+    "copyKey": "API-kulcs másolása",
+    "keyCopied": "API-kulcs a vágólapon — ezt kell a gépre felvinni.",
+    "regenKey": "Új kulcs",
+    "regenConfirm": "Új API-kulcsot generálsz a(z) {name} gépnek? A régi azonnal érvénytelen lesz.",
+    "keyRegenerated": "Új API-kulcs generálva — vidd fel a gépre.",
+    "deleteConfirm": "Törlöd a(z) {name} gépet a telemetria-nyilvántartásból?",
+    "apiHint": "A gép a POST /api/pay/telemetry végpontra jelent (machine_code + key + data) — a kulcsot innen másold a gépre. Az 5 percen belül jelentkező gép online."
   }
 }

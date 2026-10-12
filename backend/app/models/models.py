@@ -878,6 +878,53 @@ class PaymentProduct(Base):
     )
 
 
+class VendingMachine(Base):
+    """Vending (kávé-) gép nyilvántartás + telemetria-pillanatkép. A gép a
+    saját API-kulcsával jelent a /api/pay/telemetry végpontra; a kulcsot az
+    admin generálja és viszi fel a gépre."""
+
+    __tablename__ = "vending_machines"
+    __table_args__ = (
+        UniqueConstraint("machine_code", name="uq_vending_machine_code"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    api_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    telemetry: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # utolsó pillanatkép
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(UTC)
+    )
+
+
+class VendingTelemetry(Base):
+    """Telemetria-napló: a gépek beküldött jelentései időrendben (trendhez,
+    hibakereséshez — a friss állapot a gép-soron van)."""
+
+    __tablename__ = "vending_telemetry"
+    __table_args__ = (
+        Index("ix_vending_telemetry_machine", "machine_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("vending_machines.id", ondelete="CASCADE", name="fk_vtel_machine"),
+        nullable=False,
+    )
+    data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class PaymentOrder(Base):
     """QR-fizetéses rendelés (kávégép, Saferpay Payment Page folyamat):
     a gép-oldali kiadás-engedély erre a sorra épül majd. Életút:

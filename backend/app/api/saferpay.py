@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, record_audit, require_perm
 from app.core.config import get_settings
 from app.db import get_db
-from app.models import PaymentOrder, PaymentProduct, User
+from app.models import PaymentOrder, PaymentProduct, User, VendingMachine, VendingTelemetry
 from app.services.wfm import saferpay_service
 from app.services.wfm.license import require_module
 from app.services.wfm.saferpay_service import ORDER_TTL_MINUTES, SaferpayError
@@ -335,6 +335,247 @@ async def machine_menu(machine: str | None = None, db: AsyncSession = Depends(ge
         {"id": str(p.id), "name": p.name, "price_huf": p.price_huf}
         for p in out.values()
     ]
+
+
+# ─── Vending telemetria: gép-nyilvántartás + a gépek jelentései ──────────────
+
+
+class MachineBody(BaseModel):
+    machine_code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=256)
+    note: str | None = Field(default=None, max_length=512)
+    is_active: bool = True
+
+
+class MachineOut(BaseModel):
+    id: str
+    machine_code: str
+    name: str
+    note: str | None
+    api_key: str | None
+    is_active: bool
+    last_seen_at: datetime | None
+    telemetry: dict | None
+    paid_today: int = 0
+    revenue_today: float = 0.0
+
+
+def _machine_out(m: VendingMachine, paid_today: int = 0, revenue_today: float = 0.0) -> MachineOut:
+    return MachineOut(
+        id=str(m.id), machine_code=m.machine_code, name=m.name, note=m.note,
+        api_key=m.api_key, is_active=m.is_active, last_seen_at=m.last_seen_at,
+        telemetry=m.telemetry, paid_today=paid_today, revenue_today=revenue_today,
+    )
+
+
+async def _machine_or_404(db: AsyncSession, machine_id: str) -> VendingMachine:
+    try:
+        mid = uuid.UUID(machine_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "vending.machine_not_found"})
+    m = (
+        await db.execute(select(VendingMachine).where(VendingMachine.id == mid))
+    ).scalar_one_or_none()
+    if m is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.machine_not_found"})
+    return m
+
+
+@router.get(
+    "/machines", response_model=list[MachineOut],
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def list_machines(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """Gépek + utolsó telemetria + mai fizetett forgalom gépenként."""
+    from sqlalchemy import func as sa_func
+
+    rows = (
+        await db.execute(
+            select(VendingMachine).order_by(VendingMachine.name)
+        )
+    ).scalars().all()
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    stats = {
+        code: (int(cnt or 0), float(total or 0.0))
+        for code, cnt, total in (
+            await db.execute(
+                select(
+                    PaymentOrder.machine_code,
+                    sa_func.count(),
+                    sa_func.coalesce(sa_func.sum(PaymentOrder.amount_huf), 0.0),
+                )
+                .where(
+                    PaymentOrder.status == "paid",
+                    PaymentOrder.created_at >= today_start,
+                    PaymentOrder.machine_code.is_not(None),
+                )
+                .group_by(PaymentOrder.machine_code)
+            )
+        ).all()
+    }
+    return [
+        _machine_out(m, *(stats.get(m.machine_code, (0, 0.0))))
+        for m in rows
+    ]
+
+
+@router.post(
+    "/machines", response_model=MachineOut, status_code=201,
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def create_machine(
+    body: MachineBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    dupe = (
+        await db.execute(
+            select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
+        )
+    ).scalar_one_or_none()
+    if dupe is not None:
+        raise HTTPException(status_code=409, detail={"code": "vending.code_taken"})
+    m = VendingMachine(
+        machine_code=body.machine_code.strip(), name=body.name.strip(),
+        note=(body.note or "").strip() or None, is_active=body.is_active,
+        api_key=uuid.uuid4().hex,  # ezt kell a gépre felvinni
+    )
+    db.add(m)
+    await record_audit(
+        db, actor=actor, action="vending.machine_created", entity_type="vending_machine",
+        entity_id=m.machine_code, detail={"name": m.name}, request=request,
+    )
+    await db.commit()
+    return _machine_out(m)
+
+
+@router.put(
+    "/machines/{machine_id}", response_model=MachineOut,
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def update_machine(
+    machine_id: str,
+    body: MachineBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    if body.machine_code.strip() != m.machine_code:
+        dupe = (
+            await db.execute(
+                select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
+            )
+        ).scalar_one_or_none()
+        if dupe is not None:
+            raise HTTPException(status_code=409, detail={"code": "vending.code_taken"})
+    m.machine_code = body.machine_code.strip()
+    m.name = body.name.strip()
+    m.note = (body.note or "").strip() or None
+    m.is_active = body.is_active
+    await record_audit(
+        db, actor=actor, action="vending.machine_updated", entity_type="vending_machine",
+        entity_id=m.machine_code, detail={"name": m.name, "active": m.is_active},
+        request=request,
+    )
+    await db.commit()
+    return _machine_out(m)
+
+
+@router.post(
+    "/machines/{machine_id}/regen-key", response_model=MachineOut,
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def regen_machine_key(
+    machine_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    """Új API-kulcs a gépnek — a régi azonnal érvénytelen."""
+    m = await _machine_or_404(db, machine_id)
+    m.api_key = uuid.uuid4().hex
+    await record_audit(
+        db, actor=actor, action="vending.machine_key_regen", entity_type="vending_machine",
+        entity_id=m.machine_code, detail={}, request=request,
+    )
+    await db.commit()
+    return _machine_out(m)
+
+
+@router.delete(
+    "/machines/{machine_id}",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def delete_machine(
+    machine_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    await record_audit(
+        db, actor=actor, action="vending.machine_deleted", entity_type="vending_machine",
+        entity_id=m.machine_code, detail={"name": m.name}, request=request,
+    )
+    await db.delete(m)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get(
+    "/machines/{machine_id}/telemetry",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def machine_telemetry_history(
+    machine_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    rows = (
+        await db.execute(
+            select(VendingTelemetry)
+            .where(VendingTelemetry.machine_id == m.id)
+            .order_by(VendingTelemetry.created_at.desc())
+            .limit(50)
+        )
+    ).scalars().all()
+    return [{"created_at": r.created_at, "data": r.data} for r in rows]
+
+
+class TelemetryBody(BaseModel):
+    machine_code: str = Field(min_length=1, max_length=64)
+    key: str = Field(min_length=8, max_length=64)
+    data: dict = Field(default_factory=dict)
+
+
+@public_router.post("/telemetry")
+async def report_telemetry(body: TelemetryBody, db: AsyncSession = Depends(get_db)):
+    """A GÉP jelent ide (heartbeat + mérések) a saját API-kulcsával. A friss
+    pillanatkép a gép-sorra kerül, a napló trendhez/hibakereséshez marad."""
+    m = (
+        await db.execute(
+            select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
+        )
+    ).scalar_one_or_none()
+    if m is None or not m.is_active or not m.api_key or m.api_key != body.key:
+        # nem áruljuk el, hogy a gép vagy a kulcs hibás-e
+        raise HTTPException(status_code=403, detail={"code": "vending.bad_key"})
+    # a payload szigorúan ADAT — méret-korlát a napló-hízás ellen
+    data = body.data if isinstance(body.data, dict) else {}
+    if len(str(data)) > 8000:
+        raise HTTPException(status_code=422, detail={"code": "vending.payload_too_big"})
+    m.last_seen_at = datetime.now(UTC)
+    m.telemetry = data
+    if data:  # üres heartbeat nem kerül a naplóba
+        db.add(VendingTelemetry(machine_id=m.id, data=data))
+    await db.commit()
+    return {"ok": True}
 
 
 async def _order_or_404(db: AsyncSession, order_id: str) -> PaymentOrder:

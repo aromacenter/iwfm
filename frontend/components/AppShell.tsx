@@ -77,6 +77,7 @@ const NAV_GROUPS: NavGroup[] = [
     labelKey: "nav.groups.vending",
     items: [
       { href: "/kave-fizetes", key: "nav.saferpay", perm: "invoicing", icon: "📲", module: "saferpay" },
+      { href: "/vending-telemetria", key: "nav.vendingTelemetry", perm: "invoicing", icon: "📡", module: "saferpay" },
     ],
   },
   {
@@ -159,6 +160,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // Felhasználónkénti szekció-sorrend (▲▼ a csoportcímeken).
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  // Összecsukott szekciók (a címre kattintva nyílik/csukódik, mentve)
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   useEffect(() => {
     if (!user) return;
     try {
@@ -167,7 +170,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     } catch {
       /* sérült mentés — marad az alap sorrend */
     }
+    try {
+      const saved = localStorage.getItem(`iwfm-nav-collapsed:${user.id}`);
+      if (saved) setCollapsedGroups(JSON.parse(saved) as Record<string, boolean>);
+    } catch {
+      /* sérült mentés — minden nyitva marad */
+    }
   }, [user]);
+
+  function toggleGroup(labelKey: string) {
+    if (!user) return;
+    setCollapsedGroups((c) => {
+      const next = { ...c, [labelKey]: !c[labelKey] };
+      try {
+        localStorage.setItem(`iwfm-nav-collapsed:${user.id}`, JSON.stringify(next));
+      } catch {
+        /* tárhely-hiba nem kritikus */
+      }
+      return next;
+    });
+  }
 
   // A mentett sorrend a LÁTHATÓ szekciókra vonatkozik; az újak a végére kerülnek.
   function sortBySaved(visible: string[]): string[] {
@@ -251,54 +273,69 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <BrandLogo size="md" />
       </div>
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
-        {groups.map((group, gi) => (
-          <div key={group.labelKey} className="group/nav">
-            <p className="flex items-center justify-between px-3 pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              <span>{t(group.labelKey)}</span>
-              <span className="flex gap-0.5 opacity-60 transition-opacity sm:opacity-0 sm:group-hover/nav:opacity-100">
-                {gi > 0 && (
-                  <button
-                    onClick={() => moveGroup(keys, group.labelKey, -1)}
-                    title={t("nav.moveUp")}
-                    className="rounded px-1 leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                  >
-                    ▲
-                  </button>
-                )}
-                {gi < groups.length - 1 && (
-                  <button
-                    onClick={() => moveGroup(keys, group.labelKey, 1)}
-                    title={t("nav.moveDown")}
-                    className="rounded px-1 leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                  >
-                    ▼
-                  </button>
-                )}
-              </span>
-            </p>
-            <div className="space-y-0.5">
-              {group.items.map((item) => {
-                const active = pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                      active
-                        ? "bg-indigo-50 text-indigo-700"
-                        : "text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span aria-hidden className={`w-5 text-center text-base leading-none ${active ? "" : "opacity-80 grayscale-[35%]"}`}>
-                      {item.icon}
-                    </span>
-                    {t(item.key)}
-                  </Link>
-                );
-              })}
+        {groups.map((group, gi) => {
+          const collapsed = !!collapsedGroups[group.labelKey];
+          const hasActive = group.items.some((item) => pathname.startsWith(item.href));
+          return (
+            <div key={group.labelKey} className="group/nav">
+              <p className="flex items-center justify-between px-3 pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <button
+                  onClick={() => toggleGroup(group.labelKey)}
+                  title={collapsed ? t("nav.expand") : t("nav.collapse")}
+                  className="flex items-center gap-1 uppercase tracking-wide hover:text-slate-600"
+                >
+                  <span aria-hidden className="w-3 text-[10px] leading-none">{collapsed ? "▸" : "▾"}</span>
+                  <span>{t(group.labelKey)}</span>
+                  {/* csukott csoportban is látszik, ha ott az aktív oldal */}
+                  {collapsed && hasActive && <span aria-hidden className="ml-1 h-1.5 w-1.5 rounded-full bg-indigo-500" />}
+                </button>
+                <span className="flex gap-0.5 opacity-60 transition-opacity sm:opacity-0 sm:group-hover/nav:opacity-100">
+                  {gi > 0 && (
+                    <button
+                      onClick={() => moveGroup(keys, group.labelKey, -1)}
+                      title={t("nav.moveUp")}
+                      className="rounded px-1 leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      ▲
+                    </button>
+                  )}
+                  {gi < groups.length - 1 && (
+                    <button
+                      onClick={() => moveGroup(keys, group.labelKey, 1)}
+                      title={t("nav.moveDown")}
+                      className="rounded px-1 leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      ▼
+                    </button>
+                  )}
+                </span>
+              </p>
+              {!collapsed && (
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const active = pathname.startsWith(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                          active
+                            ? "bg-indigo-50 text-indigo-700"
+                            : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span aria-hidden className={`w-5 text-center text-base leading-none ${active ? "" : "opacity-80 grayscale-[35%]"}`}>
+                          {item.icon}
+                        </span>
+                        {t(item.key)}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
       <div className="space-y-3 border-t border-slate-200 px-5 py-4">
         <div className="flex items-center justify-between gap-2">

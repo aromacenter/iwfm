@@ -168,7 +168,10 @@
     "serviceHandover": "Technician handover",
     "stocktake": "Stocktake",
     "myWarehouse": "My warehouse",
-    "saferpay": "QR payments"
+    "saferpay": "QR payments",
+    "vendingTelemetry": "Telemetry",
+    "expand": "Expand",
+    "collapse": "Collapse"
   },
   "roles": {
     "admin": "Admin",
@@ -1872,7 +1875,11 @@
     "saferpay.api_error": "Saferpay error — try again or check the settings.",
     "saferpay.product_not_found": "Product not found or inactive.",
     "saferpay.missing_product": "A product or an amount is required for the order.",
-    "saferpay.order_not_found": "Order not found."
+    "saferpay.order_not_found": "Order not found.",
+    "vending.machine_not_found": "Machine not found.",
+    "vending.code_taken": "This machine code is already taken.",
+    "vending.bad_key": "Invalid machine code or API key.",
+    "vending.payload_too_big": "Telemetry payload too large."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2855,5 +2862,31 @@
     "active": "active",
     "inactive": "inactive",
     "deleteConfirm": "Delete {name} from the machine menu?"
+  },
+  "vtel": {
+    "title": "Vending telemetry",
+    "subtitle": "Coffee machine status and reports — machines send data with their API key.",
+    "addMachine": "New machine",
+    "editMachine": "Edit machine",
+    "empty": "No machines yet — add the first one.",
+    "name": "Machine name",
+    "code": "Machine code (the machine reports with this)",
+    "note": "Note (e.g. location)",
+    "activeLabel": "active (reports accepted)",
+    "state.online": "🟢 online",
+    "state.stale": "🟡 seen a while ago",
+    "state.offline": "🔴 offline",
+    "lastSeen": "Last seen: {at}",
+    "neverSeen": "Never reported yet",
+    "todayStats": "{n} payment(s) today",
+    "history": "History",
+    "noHistory": "No telemetry entries yet.",
+    "copyKey": "Copy API key",
+    "keyCopied": "API key copied — install it on the machine.",
+    "regenKey": "New key",
+    "regenConfirm": "Generate a new API key for {name}? The old one becomes invalid immediately.",
+    "keyRegenerated": "New API key generated — install it on the machine.",
+    "deleteConfirm": "Delete {name} from the telemetry registry?",
+    "apiHint": "Machines report to POST /api/pay/telemetry (machine_code + key + data) — copy the key from here to the machine. A machine seen within 5 minutes counts as online."
   }
 }

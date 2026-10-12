@@ -192,6 +192,62 @@ async def test_products_and_menu(client, admin, fake_saferpay):
     assert all(r["id"] != espresso["id"] for r in rows)
 
 
+async def test_vending_telemetry(client, admin):
+    """Gép-nyilvántartás + telemetria: a gép a saját kulcsával jelent, rossz
+    kulccsal nem; a pillanatkép és a napló is megvan."""
+    _, adm = admin
+    m = (
+        await client.post(
+            "/api/saferpay/machines",
+            json={"machine_code": "174226", "name": "Jetinno JL30 — iroda"},
+            headers=adm,
+        )
+    ).json()
+    assert m["api_key"] and len(m["api_key"]) == 32
+
+    # duplikált gép-kód: 409
+    res = await client.post(
+        "/api/saferpay/machines",
+        json={"machine_code": "174226", "name": "Másik"},
+        headers=adm,
+    )
+    assert res.status_code == 409
+
+    # rossz kulcs → 403, jó kulcs → pillanatkép + last_seen
+    res = await client.post(
+        "/api/pay/telemetry",
+        json={"machine_code": "174226", "key": "x" * 32, "data": {"viz": "OK"}},
+    )
+    assert res.status_code == 403
+    res = await client.post(
+        "/api/pay/telemetry",
+        json={"machine_code": "174226", "key": m["api_key"],
+              "data": {"viz": "OK", "bab_g": 480, "hiba": None, "verzio": "1.2"}},
+    )
+    assert res.status_code == 200, res.text
+
+    rows = (await client.get("/api/saferpay/machines", headers=adm)).json()
+    row = next(r for r in rows if r["machine_code"] == "174226")
+    assert row["last_seen_at"] is not None
+    assert row["telemetry"]["bab_g"] == 480
+
+    hist = (
+        await client.get(f"/api/saferpay/machines/{m['id']}/telemetry", headers=adm)
+    ).json()
+    assert len(hist) == 1 and hist[0]["data"]["viz"] == "OK"
+
+    # kulcs-csere után a régi kulcs érvénytelen
+    m2 = (
+        await client.post(f"/api/saferpay/machines/{m['id']}/regen-key", headers=adm)
+    ).json()
+    assert m2["api_key"] != m["api_key"]
+    res = await client.post(
+        "/api/pay/telemetry",
+        json={"machine_code": "174226", "key": m["api_key"], "data": {}},
+    )
+    assert res.status_code == 403
+
+
 async def test_order_fail_and_not_configured(client, admin, fake_saferpay):
     _, adm = admin
     # beállítás nélkül: 422
