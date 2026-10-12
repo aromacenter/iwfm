@@ -59,6 +59,7 @@ const SETTINGS_TABS = [
   ["printer", "🖨️"],
   ["billing", "💳"],
   ["cashbook", "📚"],
+  ["saferpay", "📲"],
   ["gls", "📦"],
   ["mpl", "📮"],
   ["foxpost", "🦊"],
@@ -78,6 +79,7 @@ const SETTINGS_TABS = [
 const TAB_MODULE: Record<string, string> = {
   billing: "billing|szamlazz",
   cashbook: "cashbook",
+  saferpay: "saferpay",
   gls: "gls",
   mpl: "mpl",
   foxpost: "foxpost",
@@ -92,7 +94,7 @@ const TAB_MODULE: Record<string, string> = {
 const TAB_GROUPS: { labelKey: string; tabs: string[] }[] = [
   { labelKey: "company", tabs: ["worksheet", "printer"] },
   { labelKey: "couriers", tabs: ["gls", "mpl", "foxpost", "dpd"] },
-  { labelKey: "finance", tabs: ["billing", "cashbook"] },
+  { labelKey: "finance", tabs: ["billing", "cashbook", "saferpay"] },
   { labelKey: "comms", tabs: ["email", "notifications"] },
   { labelKey: "customer", tabs: ["support", "ai"] },
   { labelKey: "team", tabs: ["skills", "permissions"] },
@@ -244,6 +246,48 @@ export default function BeallitasokPage() {
       setGlsMsg(errorMessage(err));
     } finally {
       setGlsBusy(false);
+    }
+  }
+
+  // --- Saferpay (kávégépes QR-fizetés) ---
+  interface SaferpayForm {
+    customer_id: string; terminal_id: string; api_username: string;
+    api_password: string; test_mode: boolean;
+  }
+  const [sp, setSp] = useState<SaferpayForm>({
+    customer_id: "", terminal_id: "", api_username: "", api_password: "", test_mode: true,
+  });
+  const [spHasPw, setSpHasPw] = useState(false);
+  const [spBusy, setSpBusy] = useState(false);
+  const [spMsg, setSpMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<Omit<SaferpayForm, "api_password"> & { has_password: boolean }>("/api/settings/saferpay")
+      .then((s) => {
+        setSp({
+          customer_id: s.customer_id ?? "", terminal_id: s.terminal_id ?? "",
+          api_username: s.api_username ?? "", api_password: "", test_mode: s.test_mode,
+        });
+        setSpHasPw(s.has_password);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function saveSaferpay(e: React.FormEvent) {
+    e.preventDefault();
+    setSpBusy(true);
+    setSpMsg(null);
+    try {
+      const res = await api.put<{ has_password: boolean }>("/api/settings/saferpay", {
+        ...sp, api_password: sp.api_password || null,
+      });
+      setSpHasPw(res.has_password);
+      setSp((s) => ({ ...s, api_password: "" }));
+      setSpMsg(t("common.saved"));
+    } catch (err) {
+      setSpMsg(errorMessage(err));
+    } finally {
+      setSpBusy(false);
     }
   }
 
@@ -1458,6 +1502,47 @@ export default function BeallitasokPage() {
           )}
           <p className="whitespace-pre-line text-xs text-slate-500">{t("settings.printerSetupHint")}</p>
         </div>
+
+        {/* Saferpay — kávégépes QR-fizetés */}
+        <form
+          onSubmit={saveSaferpay}
+          className={cardCls("saferpay", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
+        >
+          <h2 className="font-semibold">📲 {t("settings.saferpayTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.saferpayHint")}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              CustomerId
+              <input value={sp.customer_id} onChange={(e) => setSp({ ...sp, customer_id: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              TerminalId
+              <input value={sp.terminal_id} onChange={(e) => setSp({ ...sp, terminal_id: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              {t("settings.saferpayUser")}
+              <input value={sp.api_username} onChange={(e) => setSp({ ...sp, api_username: e.target.value })} className={inputCls} />
+            </label>
+            <label className="block text-sm">
+              {t("settings.saferpayPassword")} {spHasPw && <span className="text-emerald-600">✓</span>}
+              <input
+                type="password"
+                value={sp.api_password}
+                onChange={(e) => setSp({ ...sp, api_password: e.target.value })}
+                placeholder={spHasPw ? "••••••••" : ""}
+                className={inputCls}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={sp.test_mode} onChange={(e) => setSp({ ...sp, test_mode: e.target.checked })} className="h-4 w-4" />
+              {t("settings.saferpayTestMode")}
+            </label>
+          </div>
+          {spMsg && <p className="text-sm text-slate-600">{spMsg}</p>}
+          <button disabled={spBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            {spBusy ? t("common.saving") : t("common.save")}
+          </button>
+        </form>
 
         {/* GLS (MyGLS) csomagfeladás */}
         <form

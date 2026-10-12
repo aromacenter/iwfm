@@ -277,6 +277,11 @@ def create_app() -> FastAPI:
     app.include_router(
         stock_requests_api.router, prefix="/api/stock-requests", tags=["stock-requests"]
     )
+    from app.api import saferpay as saferpay_api
+
+    app.include_router(saferpay_api.router, prefix="/api/saferpay", tags=["saferpay"])
+    # Publikus: a vevő telefonja (return) és a Saferpay (notify) hívja
+    app.include_router(saferpay_api.public_router, prefix="/api/pay", tags=["saferpay"])
     app.include_router(delivery_api.router, prefix="/api/deliveries", tags=["deliveries"])
     app.include_router(quotes_api.router, prefix="/api/quotes", tags=["quotes"])
     app.include_router(quotes_api.public_router, prefix="/api/public", tags=["quotes"])

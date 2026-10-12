@@ -74,6 +74,12 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    labelKey: "nav.groups.vending",
+    items: [
+      { href: "/kave-fizetes", key: "nav.saferpay", perm: "invoicing", icon: "📲", module: "saferpay" },
+    ],
+  },
+  {
     labelKey: "nav.groups.system",
     items: [
       { href: "/import-export", key: "nav.importExport", perm: "import_export", icon: "🔄" },

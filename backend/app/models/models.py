@@ -838,6 +838,85 @@ class CourierSettings(Base):
     )
 
 
+class SaferpaySettings(Base):
+    """Saferpay (Worldline) QR-fizetés beállításai — egyetlen sor (id=1).
+    Az API-jelszó Fernet-titkosítva, write-only. A kávégépes QR-fizetés
+    (saferpay licenc-modul) hitelesítő adatai."""
+
+    __tablename__ = "saferpay_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    customer_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    terminal_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    api_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    api_password_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="HUF")
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(UTC)
+    )
+
+
+class PaymentProduct(Base):
+    """QR-fizetéses kávégép-menü: terméknév + ár, opcionálisan egy gépre
+    szűkítve (üres machine_code = minden gép). A gép a /api/pay/menu
+    végpontról olvassa; rendelésnél az ár INNEN jön, nem a géptől."""
+
+    __tablename__ = "payment_products"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    price_huf: Mapped[float] = mapped_column(Float, nullable=False)
+    machine_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(UTC)
+    )
+
+
+class PaymentOrder(Base):
+    """QR-fizetéses rendelés (kávégép, Saferpay Payment Page folyamat):
+    a gép-oldali kiadás-engedély erre a sorra épül majd. Életút:
+    created → paid | failed | expired | cancelled."""
+
+    __tablename__ = "payment_orders"
+    __table_args__ = (
+        Index("ix_payment_orders_status", "status", "created_at"),
+        Index("ix_payment_orders_machine", "machine_code", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    order_no: Mapped[str] = mapped_column(String(32), nullable=False)  # QR-2026-0001
+    machine_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("assets.id", ondelete="SET NULL", name="fk_payorder_asset"),
+        nullable=True,
+    )
+    product_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    amount_huf: Mapped[float] = mapped_column(Float, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="created")
+    token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    redirect_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    transaction_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payment_means: Mapped[str | None] = mapped_column(String(64), nullable=True)  # pl. VISA
+    error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_payorder_user"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class GlsParcel(Base):
     """Feladott csomag (történeti okból gls_parcels a tábla, de minden futár
     ide kerül): címzett, utánvét, csomagszám és a címke-PDF."""

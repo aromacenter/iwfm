@@ -153,7 +153,8 @@
       "masterData": "Törzsadatok",
       "billing": "Elszámolás",
       "system": "Rendszer",
-      "personal": "Saját"
+      "personal": "Saját",
+      "vending": "Vending"
     },
     "warehouse": "Raktár",
     "contracts": "Szerződések",
@@ -166,7 +167,8 @@
     "stats": "Statisztika",
     "serviceHandover": "Szerelő-átadás",
     "stocktake": "Leltár",
-    "myWarehouse": "Saját raktár"
+    "myWarehouse": "Saját raktár",
+    "saferpay": "QR-fizetések"
   },
   "roles": {
     "admin": "Admin",
@@ -1633,7 +1635,12 @@
     "glsSenderName": "Feladó neve",
     "glsTest": "Mentés + kapcsolat-teszt",
     "glsTestOkTest": "Sikeres kapcsolat ✓ — a MyGLS elfogadta a belépési adatokat (teszt-szerver).",
-    "glsTestOkProd": "Sikeres kapcsolat ✓ — a MyGLS elfogadta a belépési adatokat (éles szerver)."
+    "glsTestOkProd": "Sikeres kapcsolat ✓ — a MyGLS elfogadta a belépési adatokat (éles szerver).",
+    "saferpayTitle": "Saferpay — kávégépes QR-fizetés",
+    "saferpayHint": "A Worldline Saferpay fiók API-adatai. A QR a gépek kijelzőjén jelenik meg — itt csak a bekötés és az adminisztráció történik. Teszt-módban a test.saferpay.com felé megy minden hívás.",
+    "saferpayUser": "API felhasználó (JSON API basic auth)",
+    "saferpayPassword": "API jelszó",
+    "saferpayTestMode": "Teszt-mód (test.saferpay.com)"
   },
   "kiosk": {
     "title": "Munkaidő-terminál",
@@ -1860,7 +1867,12 @@
     "stockreq.decided": "Ezt az igénylést már elbírálták.",
     "stockreq.pick_source": "Több telephely-raktár van — válaszd ki, melyikből megy az áru.",
     "auth.reset_invalid": "A link érvénytelen vagy lejárt — kérj újat az admintól.",
-    "auth.throttled": "Túl sok próbálkozás — várj 15 percet."
+    "auth.throttled": "Túl sok próbálkozás — várj 15 percet.",
+    "saferpay.not_configured": "A Saferpay nincs beállítva — add meg az API-adatokat a Beállításokban.",
+    "saferpay.api_error": "Saferpay hiba — próbáld újra, vagy nézd meg a beállításokat.",
+    "saferpay.product_not_found": "A termék nem található vagy inaktív.",
+    "saferpay.missing_product": "Termék vagy összeg szükséges a rendeléshez.",
+    "saferpay.order_not_found": "A rendelés nem található."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2810,5 +2822,38 @@
     "hint": "A QR-oldali bejelentés önmagában még NEM elszámolás — nyisd meg, ellenőrizd az állásokat, és mentsd el: pénz csak akkor könyvelődik.",
     "counter": "számláló",
     "open": "Elszámolás megnyitása"
+  },
+  "spay": {
+    "title": "Kávégépes QR-fizetések",
+    "subtitle": "A gépeken indított Saferpay-fizetések és a gépek termék-/árlistája.",
+    "todayPaid": "ma {n} fizetés",
+    "allStatuses": "Minden állapot",
+    "allMachines": "Minden gép",
+    "allMachinesShort": "minden gép",
+    "empty": "Még nincs QR-fizetés.",
+    "colWhen": "Mikor",
+    "colOrder": "Rendelés",
+    "colProduct": "Termék",
+    "colAmount": "Összeg",
+    "colMachine": "Gép",
+    "colMeans": "Fizetés",
+    "colStatus": "Állapot",
+    "status.created": "függőben",
+    "status.paid": "fizetve",
+    "status.failed": "sikertelen",
+    "status.expired": "lejárt",
+    "status.cancelled": "visszavonva",
+    "machineHint": "A gép a /api/pay/menu végpontról olvassa a termékeket és árakat, a rendelés QR-jét a backend adja — a gép-oldali bekötés (automatikus italkiadás) a következő ütem.",
+    "productsTitle": "Termékek és árak",
+    "productsHint": "Ezt a listát kapja a gép: név + ár. Gép-kóddal egy adott gépre szűkíthető (az felülírja az azonos nevű általános tételt).",
+    "noProducts": "Még nincs termék — vedd fel az elsőt.",
+    "addProduct": "Új termék",
+    "editProduct": "Termék szerkesztése",
+    "priceLabel": "Ár (Ft, bruttó)",
+    "machineLabel": "Gép-kód (opcionális)",
+    "machineLabelPh": "üresen minden gépre érvényes",
+    "active": "aktív",
+    "inactive": "inaktív",
+    "deleteConfirm": "Törlöd a(z) {name} terméket a gép-menüből?"
   }
 }

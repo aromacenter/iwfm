@@ -843,6 +843,78 @@ async def update_gls_settings(
     return _gls_out(row)
 
 
+# ─── Saferpay (kávégépes QR-fizetés) ────────────────────────────────────────
+
+
+class SaferpaySettingsBody(BaseModel):
+    customer_id: str | None = Field(default=None, max_length=32)
+    terminal_id: str | None = Field(default=None, max_length=32)
+    api_username: str | None = Field(default=None, max_length=128)
+    api_password: str | None = Field(default=None, max_length=256)  # üres: marad; "-": törlés
+    test_mode: bool = True
+
+
+class SaferpaySettingsOut(BaseModel):
+    customer_id: str | None
+    terminal_id: str | None
+    api_username: str | None
+    has_password: bool
+    test_mode: bool
+
+
+def _saferpay_out(row) -> SaferpaySettingsOut:
+    return SaferpaySettingsOut(
+        customer_id=row.customer_id,
+        terminal_id=row.terminal_id,
+        api_username=row.api_username,
+        has_password=row.api_password_encrypted is not None,
+        test_mode=row.test_mode,
+    )
+
+
+@router.get(
+    "/saferpay", response_model=SaferpaySettingsOut,
+    dependencies=[Depends(license_service.require_module("saferpay"))],
+)
+async def get_saferpay_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    from app.services.wfm.saferpay_service import get_settings_row
+
+    return _saferpay_out(await get_settings_row(db))
+
+
+@router.put(
+    "/saferpay", response_model=SaferpaySettingsOut,
+    dependencies=[Depends(license_service.require_module("saferpay"))],
+)
+async def update_saferpay_settings(
+    body: SaferpaySettingsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    from app.services.wfm.saferpay_service import get_settings_row
+
+    row = await get_settings_row(db)
+    row.customer_id = (body.customer_id or "").strip() or None
+    row.terminal_id = (body.terminal_id or "").strip() or None
+    row.api_username = (body.api_username or "").strip() or None
+    row.test_mode = body.test_mode
+    if body.api_password:  # üres = nem változik; "-" = törlés
+        row.api_password_encrypted = (
+            None if body.api_password.strip() == "-"
+            else encrypt_pii(body.api_password.strip())
+        )
+    await record_audit(
+        db, actor=actor, action="settings.saferpay_update", entity_type="settings",
+        entity_id="saferpay", detail={"test_mode": body.test_mode}, request=request,
+    )
+    await db.commit()
+    return _saferpay_out(row)
+
+
 # ─── Futár-beállítások (MPL / FoxPost / DPD) ────────────────────────────────
 
 

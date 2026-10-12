@@ -153,7 +153,8 @@
       "masterData": "Master data",
       "billing": "Settlement",
       "system": "System",
-      "personal": "Personal"
+      "personal": "Personal",
+      "vending": "Vending"
     },
     "warehouse": "Warehouse",
     "contracts": "Contracts",
@@ -166,7 +167,8 @@
     "stats": "Statistics",
     "serviceHandover": "Technician handover",
     "stocktake": "Stocktake",
-    "myWarehouse": "My warehouse"
+    "myWarehouse": "My warehouse",
+    "saferpay": "QR payments"
   },
   "roles": {
     "admin": "Admin",
@@ -1633,7 +1635,12 @@
     "glsSenderName": "Sender name",
     "glsTest": "Save + test connection",
     "glsTestOkTest": "Connection OK ✓ — MyGLS accepted the credentials (test server).",
-    "glsTestOkProd": "Connection OK ✓ — MyGLS accepted the credentials (live server)."
+    "glsTestOkProd": "Connection OK ✓ — MyGLS accepted the credentials (live server).",
+    "saferpayTitle": "Saferpay — coffee machine QR payments",
+    "saferpayHint": "Worldline Saferpay account API credentials. The QR appears on the machines' screens — this is only the integration and administration. In test mode every call goes to test.saferpay.com.",
+    "saferpayUser": "API user (JSON API basic auth)",
+    "saferpayPassword": "API password",
+    "saferpayTestMode": "Test mode (test.saferpay.com)"
   },
   "kiosk": {
     "title": "Time clock terminal",
@@ -1860,7 +1867,12 @@
     "stockreq.decided": "Already decided.",
     "stockreq.pick_source": "Multiple site warehouses — pick the source.",
     "auth.reset_invalid": "The link is invalid or expired — ask the admin for a new one.",
-    "auth.throttled": "Too many attempts — wait 15 minutes."
+    "auth.throttled": "Too many attempts — wait 15 minutes.",
+    "saferpay.not_configured": "Saferpay is not configured — enter the API credentials in Settings.",
+    "saferpay.api_error": "Saferpay error — try again or check the settings.",
+    "saferpay.product_not_found": "Product not found or inactive.",
+    "saferpay.missing_product": "A product or an amount is required for the order.",
+    "saferpay.order_not_found": "Order not found."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2810,5 +2822,38 @@
     "hint": "A QR-page report is NOT a settlement by itself — open it, check the readings and save: money is only booked then.",
     "counter": "counter",
     "open": "Open settlement"
+  },
+  "spay": {
+    "title": "Coffee machine QR payments",
+    "subtitle": "Saferpay payments started on the machines, and the machines' product/price list.",
+    "todayPaid": "{n} payment(s) today",
+    "allStatuses": "All statuses",
+    "allMachines": "All machines",
+    "allMachinesShort": "all machines",
+    "empty": "No QR payments yet.",
+    "colWhen": "When",
+    "colOrder": "Order",
+    "colProduct": "Product",
+    "colAmount": "Amount",
+    "colMachine": "Machine",
+    "colMeans": "Paid with",
+    "colStatus": "Status",
+    "status.created": "pending",
+    "status.paid": "paid",
+    "status.failed": "failed",
+    "status.expired": "expired",
+    "status.cancelled": "cancelled",
+    "machineHint": "Machines read products and prices from /api/pay/menu; the order QR comes from the backend — the machine-side hookup (automatic dispensing) is the next phase.",
+    "productsTitle": "Products & prices",
+    "productsHint": "This is the list the machine gets: name + price. A machine code narrows it to one machine (overriding the generic item of the same name).",
+    "noProducts": "No products yet — add the first one.",
+    "addProduct": "New product",
+    "editProduct": "Edit product",
+    "priceLabel": "Price (HUF, gross)",
+    "machineLabel": "Machine code (optional)",
+    "machineLabelPh": "empty = valid for every machine",
+    "active": "active",
+    "inactive": "inactive",
+    "deleteConfirm": "Delete {name} from the machine menu?"
   }
 }
