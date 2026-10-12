@@ -295,6 +295,14 @@ export default function ElszamolasPage() {
   const [showDue, setShowDue] = useState(true);
   const [lowStock, setLowStock] = useState<LowStock[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  // Feldolgozatlan QR-s számláló-bejelentések (0df8e8ea): a bejelentés
+  // önmagában NEM elszámolás — itt vár a képviselőre, kattintásra betöltődik.
+  const [pendingReports, setPendingReports] = useState<{
+    id: string; partner_id: string | null; partner_name: string | null;
+    asset_name: string | null; barcode: string | null; counters: number[] | null;
+    total: number | null; stock_kg: number | null; reporter_name: string | null;
+    created_at: string;
+  }[]>([]);
   const [signing, setSigning] = useState<Settlement | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
   const [signEmail, setSignEmail] = useState("");
@@ -558,6 +566,7 @@ export default function ElszamolasPage() {
     api.get<DuePartner[]>("/api/settlements/due?days=30").then(setDue).catch(() => {});
     api.get<LowStock[]>("/api/products/low-stock").then(setLowStock).catch(() => {});
     api.get<Order[]>("/api/orders?status=open").then(setOrders).catch(() => {});
+    api.get<typeof pendingReports>("/api/settlements/pending-reports").then(setPendingReports).catch(() => {});
     api
       .get<{ id: string; name: string; kind: string; user_id: string | null; is_active: boolean }[]>("/api/warehouses")
       .then((rows) => setSrcWarehouses(rows.filter((w) => w.is_active)))
@@ -1574,6 +1583,38 @@ export default function ElszamolasPage() {
         <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-semibold">👤 {t("cons.customerBanner")}</p>
           <p className="mt-1 text-xs">{t("cons.customerBannerHint")}</p>
+        </div>
+      )}
+
+      {/* Feldolgozatlan számláló-bejelentések (0df8e8ea): amíg itt látszik,
+          NINCS elszámolás belőle — kattintásra betöltődik a partner, a
+          bejelentett állásokkal előtöltve, és a mentés dolgozza fel. */}
+      {!partnerId && pendingReports.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-sky-300 bg-sky-50 p-4 shadow-sm">
+          <p className="mb-1 font-semibold text-sky-900">📥 {t("creport.title", { count: pendingReports.length })}</p>
+          <p className="mb-2 text-xs text-sky-800">{t("creport.hint")}</p>
+          <div className="space-y-1.5">
+            {pendingReports.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm">
+                <span className="text-xs text-slate-400">{fmt(r.created_at)}</span>
+                <span className="font-medium">{r.partner_name ?? "?"}</span>
+                <span className="text-slate-500">
+                  {r.asset_name ?? ""} {r.barcode ? `(${r.barcode})` : ""} · {t("creport.counter")}: {r.total?.toLocaleString("hu-HU") ?? "?"}
+                  {r.counters && r.counters.length > 1 ? ` (${r.counters.join(" + ")})` : ""}
+                  {r.stock_kg != null ? ` · ~${r.stock_kg} kg` : ""}
+                </span>
+                {r.reporter_name && <span className="text-xs text-slate-400">— {r.reporter_name}</span>}
+                {r.partner_id && (
+                  <button
+                    onClick={() => setPartnerId(r.partner_id!)}
+                    className="ml-auto rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-700"
+                  >
+                    ▶ {t("creport.open")}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -7,6 +7,7 @@ visszavéve (in_stock). Minden mozgás az asset_movements táblába kerül
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, date, datetime
 
@@ -179,10 +180,41 @@ class PartnerOut(BaseModel):
     asset_count: int = 0
     # Kihelyezett TÁRGYI ESZKÖZ gépeink száma — 0 = ügyfél (csak vásárol /
     # javíttat), >0 = elszámolós partner. A megkülönböztetés ebből származik.
+    # FIZIKAI gépek (0e8c6908): az Xpresso-importban számlálónként képzett
+    # -A/-B… utótagos sorok egy gépnek számítanak.
     placed_machine_count: int = 0
+    # Számláló-sorok száma (érdekesség / elszámolási nézet — a régi "gépszám")
+    counter_count: int = 0
 
 
-def _partner_out(p: Partner, asset_count: int = 0, placed_machine_count: int = 0) -> PartnerOut:
+_COUNTER_SUFFIX_RE = re.compile(r"-[A-Za-z]$")
+
+
+def machine_base_barcode(barcode: str | None) -> str:
+    """Fizikai gép kulcsa: a számlálónként képzett -A/-B/… utótag nélküli
+    vonalkód (0e8c6908) — az elszámolás soronként továbbra is külön kezeli."""
+    return _COUNTER_SUFFIX_RE.sub("", (barcode or "").strip())
+
+
+def physical_machine_counts(rows) -> tuple[dict, dict]:
+    """(partner_id → fizikai gépek száma, partner_id → számláló-sorok száma)
+    a (partner_id, barcode) sorokból."""
+    phys: dict = {}
+    counters: dict = {}
+    seen: set = set()
+    for pid, bc in rows:
+        counters[pid] = counters.get(pid, 0) + 1
+        key = (pid, machine_base_barcode(bc))
+        if key not in seen:
+            seen.add(key)
+            phys[pid] = phys.get(pid, 0) + 1
+    return phys, counters
+
+
+def _partner_out(
+    p: Partner, asset_count: int = 0, placed_machine_count: int = 0,
+    counter_count: int = 0,
+) -> PartnerOut:
     return PartnerOut(
         id=str(p.id),
         partner_code=p.partner_code,
@@ -220,6 +252,7 @@ def _partner_out(p: Partner, asset_count: int = 0, placed_machine_count: int = 0
         is_active=p.is_active,
         asset_count=asset_count,
         placed_machine_count=placed_machine_count,
+        counter_count=counter_count,
     )
 
 
@@ -411,22 +444,24 @@ async def list_partners(
         ).all()
     )
     # Kihelyezett TÁRGYI ESZKÖZ gépek partnerenként — ebből tudja a felület,
-    # hogy ki elszámolós partner és ki csak ügyfél.
-    placed = dict(
-        (
-            await db.execute(
-                select(Asset.partner_id, func.count())
-                .where(
-                    Asset.partner_id.is_not(None),
-                    Asset.tangible.is_(True),
-                    Asset.customer_owned.is_(False),
-                )
-                .group_by(Asset.partner_id)
+    # hogy ki elszámolós partner és ki csak ügyfél. FIZIKAI gépet számolunk
+    # (0e8c6908), a számláló-sorok száma külön mezőben megy.
+    placed_rows = (
+        await db.execute(
+            select(Asset.partner_id, Asset.barcode)
+            .where(
+                Asset.partner_id.is_not(None),
+                Asset.tangible.is_(True),
+                Asset.customer_owned.is_(False),
             )
-        ).all()
-    )
+        )
+    ).all()
+    placed, counter_rows = physical_machine_counts(placed_rows)
     return [
-        _partner_out(p, int(counts.get(p.id, 0)), int(placed.get(p.id, 0)))
+        _partner_out(
+            p, int(counts.get(p.id, 0)), int(placed.get(p.id, 0)),
+            int(counter_rows.get(p.id, 0)),
+        )
         for p in partners
     ]
 

@@ -2645,6 +2645,50 @@ async def settlement_agents(
     ]
 
 
+class PendingReportOut(BaseModel):
+    id: str
+    partner_id: str | None
+    partner_name: str | None
+    asset_name: str | None
+    barcode: str | None
+    counters: list[int] | None
+    total: int | None
+    stock_kg: float | None
+    reporter_name: str | None
+    created_at: datetime
+
+
+@settlements_router.get("/pending-reports", response_model=list[PendingReportOut])
+async def pending_counter_reports(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """Feldolgozatlan (még el nem számolt) számláló-bejelentések (0df8e8ea):
+    a QR-oldali bejelentés ÖNMAGÁBAN nem elszámolás — itt látszik, hogy mi
+    vár a képviselőre, és egy kattintással tölthető be az elszámolásba."""
+    from app.models import Asset as _Asset, CounterReport
+
+    rows = (
+        await db.execute(
+            select(CounterReport, Partner.name, _Asset.name)
+            .outerjoin(Partner, Partner.id == CounterReport.partner_id)
+            .outerjoin(_Asset, _Asset.id == CounterReport.asset_id)
+            .where(CounterReport.processed_at.is_(None))
+            .order_by(CounterReport.created_at.desc())
+            .limit(100)
+        )
+    ).all()
+    return [
+        PendingReportOut(
+            id=str(r.id), partner_id=str(r.partner_id) if r.partner_id else None,
+            partner_name=pname, asset_name=aname, barcode=r.barcode,
+            counters=r.counters, total=r.total, stock_kg=r.stock_kg,
+            reporter_name=r.reporter_name, created_at=r.created_at,
+        )
+        for r, pname, aname in rows
+    ]
+
+
 def _payment_filters(query, settled_by, date_from, date_to):
     if settled_by:
         try:

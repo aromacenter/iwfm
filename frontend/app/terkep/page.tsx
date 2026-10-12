@@ -3,9 +3,12 @@
 /** Térkép-nézet (8f78ba71): kihelyezett gépek és bevétel városonként, a
  * városra kattintva az egyes partnerek a település térképén. Budapesten
  * Buda/Pest szűrő (kerület az irányítószámból). A Statisztika oldalról
- * új ablakban nyílik. Leaflet + OpenStreetMap (CDN-ről töltve). */
+ * új ablakban nyílik. A Leaflet a saját buildünkből jön (790165df reopened:
+ * a CDN-ek mobilneten rendre elérhetetlenek voltak) — csak az OSM-csempék
+ * külsők. */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import "leaflet/dist/leaflet.css";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -21,16 +24,10 @@ interface MapPartner {
   lat: number | null;
   lng: number | null;
   machines: number;
+  counters: number;
   revenue: number;
   agent_user_id: string | null;
 }
-
-// Több CDN-tartalék: mobilneten az unpkg gyakran nem érhető el (790165df)
-const LEAFLET_SOURCES = [
-  { js: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js", css: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" },
-  { js: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js", css: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" },
-  { js: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js", css: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" },
-];
 // Budai kerületek (I., II., III., XI., XII., XXII.) — az irányítószám 2-3.
 // számjegye a kerület.
 const BUDA_DISTRICTS = new Set(["01", "02", "03", "11", "12", "22"]);
@@ -51,30 +48,17 @@ export default function TerkepPage() {
   const [agents, setAgents] = useState<{ id: string; display_name: string }[]>([]);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
+  const LRef = useRef<any>(null);
   const divRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.get<MapPartner[]>("/api/stats/map").then(setRows).catch((e) => toast(errorMessage(e), "error"));
     api.get<{ id: string; display_name: string }[]>("/api/quotes/agents").then(setAgents).catch(() => {});
-    // Leaflet betöltése CDN-ről (css + js) — hiba esetén a következő CDN jön
-    if ((window as any).L) { setReady(true); return; }
-    const tryLoad = (idx: number) => {
-      if (idx >= LEAFLET_SOURCES.length) {
-        toast(t("map.loadFailed"), "error");
-        return;
-      }
-      const src = LEAFLET_SOURCES[idx];
-      const css = document.createElement("link");
-      css.rel = "stylesheet";
-      css.href = src.css;
-      document.head.appendChild(css);
-      const js = document.createElement("script");
-      js.src = src.js;
-      js.onload = () => setReady(true);
-      js.onerror = () => { js.remove(); css.remove(); tryLoad(idx + 1); };
-      document.head.appendChild(js);
-    };
-    tryLoad(0);
+    // A Leaflet a bundle részeként töltődik (dinamikus import, mert a
+    // modul window-t vár, SSR alatt nem futhat) — hálózat nem kell hozzá.
+    import("leaflet")
+      .then((mod: any) => { LRef.current = mod.default ?? mod; setReady(true); })
+      .catch(() => toast(t("map.loadFailed"), "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -109,8 +93,8 @@ export default function TerkepPage() {
 
   const totals = useMemo(
     () => filtered.reduce(
-      (acc, r) => ({ partners: acc.partners + 1, machines: acc.machines + r.machines, revenue: acc.revenue + r.revenue }),
-      { partners: 0, machines: 0, revenue: 0 },
+      (acc, r) => ({ partners: acc.partners + 1, machines: acc.machines + r.machines, counters: acc.counters + (r.counters || 0), revenue: acc.revenue + r.revenue }),
+      { partners: 0, machines: 0, counters: 0, revenue: 0 },
     ),
     [filtered],
   );
@@ -120,7 +104,7 @@ export default function TerkepPage() {
   // Térkép felépítése / frissítése
   useEffect(() => {
     if (!ready || !divRef.current) return;
-    const L = (window as any).L;
+    const L = LRef.current;
     if (!L) return;
     if (!mapRef.current) {
       mapRef.current = L.map(divRef.current).setView([47.3, 19.1], 8);
@@ -152,7 +136,7 @@ export default function TerkepPage() {
   }, [ready, filtered]);
 
   function zoomCity(city: string) {
-    const L = (window as any).L;
+    const L = LRef.current;
     if (!L || !mapRef.current) return;
     const pts = filtered.filter((r) => (r.city || "?") === city && r.lat != null && r.lng != null);
     if (pts.length === 0) return;
@@ -192,7 +176,12 @@ export default function TerkepPage() {
         </select>
         <div className="ml-auto flex flex-wrap gap-2 text-sm">
           <span className="rounded-lg bg-slate-100 px-3 py-1.5">🤝 {totals.partners} {t("map.partners")}</span>
-          <span className="rounded-lg bg-slate-100 px-3 py-1.5">☕ {totals.machines} {t("map.machines")}</span>
+          <span className="rounded-lg bg-slate-100 px-3 py-1.5">
+            ☕ {totals.machines} {t("map.machines")}
+            {totals.counters > totals.machines && (
+              <span className="text-slate-400"> · {totals.counters} {t("map.counters")}</span>
+            )}
+          </span>
           <span className="rounded-lg bg-emerald-50 px-3 py-1.5 font-medium text-emerald-800">💰 {ft(totals.revenue)}</span>
         </div>
       </div>

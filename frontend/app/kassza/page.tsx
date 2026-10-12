@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import SuggestInput from "@/components/SuggestInput";
 import { api, errorMessage } from "@/lib/api";
 import { COMPANY_SHORT } from "@/lib/companies";
 import { useT } from "@/lib/i18n";
@@ -80,8 +81,11 @@ export default function KasszaPage() {
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  // Gyors-szűrők: teljes idő (alap) / aktuális év / aktuális hónap / egyedi
-  const [period, setPeriod] = useState<"all" | "year" | "month" | "custom">("all");
+  // Gyors-szűrők: teljes idő (alap) / nap / hét / hónap / év / egyedi —
+  // a "teljes idő" a 2026-10-12-i kassza-újraindítástól értendő (30ea42b2).
+  const [period, setPeriod] = useState<"all" | "day" | "week" | "month" | "year" | "custom">("all");
+  // Admin-archívum: az újraindítás ELŐTTI tételek (csak megtekintés)
+  const [archiveMode, setArchiveMode] = useState(false);
   const [mine, setMine] = useState<Register | null>(null);
   const [meId, setMeId] = useState<string>("");
   const [meRole, setMeRole] = useState<string | null>(null);
@@ -109,17 +113,29 @@ export default function KasszaPage() {
 
   const params = useCallback(() => {
     const p = new URLSearchParams();
+    if (archiveMode) {
+      // Az archívum a teljes régi időszak — a gyors-szűrők itt nem élnek.
+      p.set("archive", "true");
+      return p;
+    }
     const now = new Date();
     const iso = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    if (period === "year") p.set("date_from", `${now.getFullYear()}-01-01`);
+    if (period === "day") p.set("date_from", iso(now));
+    else if (period === "week") {
+      // Hétfőtől máig (hu: a hét hétfőn indul)
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+      p.set("date_from", iso(monday));
+    }
+    else if (period === "year") p.set("date_from", `${now.getFullYear()}-01-01`);
     else if (period === "month") p.set("date_from", iso(new Date(now.getFullYear(), now.getMonth(), 1)));
     else if (period === "custom") {
       if (dateFrom) p.set("date_from", dateFrom);
       if (dateTo) p.set("date_to", dateTo);
     }
     return p;
-  }, [period, dateFrom, dateTo]);
+  }, [period, dateFrom, dateTo, archiveMode]);
 
   const load = useCallback(() => {
     api.get<Register>(`/api/stats/cash/me?${params()}`).then(setMine).catch(() => {});
@@ -304,18 +320,29 @@ export default function KasszaPage() {
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">💰 {t("cash.title")}</h1>
-        <div className="flex gap-1.5">
-          {([["all", t("cash.periodAll")], ["year", t("stats.year")], ["month", t("stats.month")], ["custom", t("stats.custom")]] as const).map(([key, label]) => (
+        <div className="flex flex-wrap gap-1.5">
+          {([["all", t("cash.periodAll")], ["day", t("cash.periodDay")], ["week", t("cash.periodWeek")], ["month", t("stats.month")], ["year", t("stats.year")], ["custom", t("stats.custom")]] as const).map(([key, label]) => (
             <button
               key={key}
-              onClick={() => setPeriod(key)}
+              onClick={() => { setPeriod(key); setArchiveMode(false); }}
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                period === key ? "bg-indigo-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                period === key && !archiveMode ? "bg-indigo-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
               }`}
             >
               {label}
             </button>
           ))}
+          {meRole === "admin" && (
+            <button
+              onClick={() => setArchiveMode((a) => !a)}
+              title={t("cash.archiveHint")}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                archiveMode ? "bg-slate-700 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              📦 {t("cash.archiveBtn")}
+            </button>
+          )}
         </div>
         {period === "custom" && (
           <>
@@ -390,12 +417,17 @@ export default function KasszaPage() {
             ⏳ {t("cash.transferPendingOut", { name: tr.to_name ?? "?", amount: Math.round(tr.amount).toLocaleString("hu-HU") })}
           </p>
         ))}
-        {meRole === "admin" && (
+        {meRole === "admin" && !archiveMode && (
           <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
             ℹ️ {t("cash.adminSinkHint")}
           </p>
         )}
-        {mine && registerCard(mine, t("cash.myRegister"))}
+        {archiveMode && (
+          <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            📦 {t("cash.archiveBanner")}
+          </p>
+        )}
+        {mine && registerCard(mine, archiveMode ? t("cash.myRegisterArchive") : t("cash.myRegister"))}
 
         {canManage && overview && (
           <div className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm">
@@ -467,9 +499,22 @@ export default function KasszaPage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
               >
                 <option value="">{t("tasks.choose")}</option>
-                {agents.filter((a) => a.user_id && a.user_id !== meId).map((a) => (
-                  <option key={a.user_id} value={a.user_id!}>{a.name}</option>
-                ))}
+                {agents
+                  .filter((a) => a.user_id && a.user_id !== meId)
+                  // Admin nem átadás-címzett (78dfd3e1): felé a "Pénz
+                  // leadása" gomb az út (az marad előválasztva), ott a
+                  // leadás végállomás.
+                  .filter((a) =>
+                    a.user_id === transferForm.to
+                    || !centralTargets.some((c) => c.user_id === a.user_id && c.role === "admin"))
+                  .map((a) => (
+                    <option key={a.user_id} value={a.user_id!}>{a.name}</option>
+                  ))}
+                {/* Előválasztott központi címzett, ha nem elszámoló (nincs az agents-ben) */}
+                {transferForm.to && !agents.some((a) => a.user_id === transferForm.to) &&
+                  centralTargets.filter((c) => c.user_id === transferForm.to).map((c) => (
+                    <option key={c.user_id} value={c.user_id}>{c.name}</option>
+                  ))}
               </select>
             </label>
             <label className="block text-sm">
@@ -524,12 +569,11 @@ export default function KasszaPage() {
               <>
                 <label className="block text-sm">
                   {t("cash.supplier")}
-                  <input list="cash-suppliers" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-                  <datalist id="cash-suppliers">
-                    {suppliers.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
+                  <SuggestInput
+                    value={form.supplier}
+                    onChange={(v) => setForm({ ...form, supplier: v })}
+                    options={suppliers}
+                  />
                 </label>
                 <label className="block text-sm">
                   {t("cash.receiptNo")}

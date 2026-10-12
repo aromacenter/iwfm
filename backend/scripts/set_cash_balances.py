@@ -26,7 +26,7 @@ TARGETS = {
     "Jäger Mátyás": 11_908,
     "Szabó László": 0,
 }
-NOTE = "Kassza-nyitóegyenleg beállítása (2026-10-11, kézi korrekció a vezető kérésére)"
+NOTE = "Kassza-nyitóegyenleg (2026-10-12, kassza-újraindítás — a vezető kérésére)"
 
 
 async def main():

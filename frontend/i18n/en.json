@@ -901,7 +901,13 @@
     "changed": "Password changed.",
     "resetPassword": "Reset password",
     "resetConfirm": "Set a new temporary password for this employee? Their existing sessions will end.",
-    "resetDone": "New temporary password (hand it to the employee): {password}"
+    "resetDone": "New temporary password (hand it to the employee): {password}",
+    "resetLink": "Password-setup link",
+    "resetLinkTitle": "Password-setup link — {name}",
+    "resetLinkHint": "Send it to the employee (e.g. via Telegram or SMS): they set their own password on the link. Valid for 24 hours, single use.",
+    "linkCopied": "Link copied!",
+    "linkCopyFailed": "Copy failed — select it manually.",
+    "copy": "Copy"
   },
   "login": {
     "title": "Sign in",
@@ -1852,7 +1858,9 @@
     "stockreq.no_warehouse": "No warehouse assigned to you.",
     "stockreq.not_found": "Request not found.",
     "stockreq.decided": "Already decided.",
-    "stockreq.pick_source": "Multiple site warehouses — pick the source."
+    "stockreq.pick_source": "Multiple site warehouses — pick the source.",
+    "auth.reset_invalid": "The link is invalid or expired — ask the admin for a new one.",
+    "auth.throttled": "Too many attempts — wait 15 minutes."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2630,7 +2638,13 @@
     "handInBtn": "Hand in cash",
     "handInHint": "Hand your cash to the center — the recipient must accept.",
     "handInNote": "Cash hand-in",
-    "adminSinkHint": "As admin, accepted hand-ins do not increase your balance — the money has reached the company."
+    "adminSinkHint": "As admin, accepted hand-ins do not increase your balance — the money has reached the company.",
+    "periodDay": "Today",
+    "periodWeek": "This week",
+    "archiveBtn": "Archive",
+    "archiveHint": "Entries from BEFORE the 2026-10-12 cash restart (admin only)",
+    "archiveBanner": "Archive — entries from before the cash restart on 12 Oct 2026. These no longer count toward the live balance.",
+    "myRegisterArchive": "My register — archive"
   },
   "stats": {
     "title": "Statistics",
@@ -2736,7 +2750,8 @@
     "machinesShort": "machines",
     "city": "City",
     "missingGeo": "{n} partners have no coordinates yet.",
-    "loadFailed": "Map failed to load."
+    "loadFailed": "Map failed to load.",
+    "counters": "counters"
   },
   "streq": {
     "title": "My warehouse & requests",
@@ -2767,6 +2782,33 @@
     "approve": "Approve",
     "decline": "Decline",
     "approved": "Approved — pending transfer created.",
-    "declined": "Request declined."
+    "declined": "Request declined.",
+    "giveTitle": "Hand over stock from here",
+    "giveProductPh": "Product from your own stock…",
+    "giveToPh": "Where to? (central warehouse / another van)",
+    "giveSend": "Send hand-over",
+    "giveHint": "The recipient must accept it — until then it's pending, already deducted from your stock.",
+    "giveSent": "Hand-over started — waiting for the recipient to accept.",
+    "giveCancelled": "Hand-over cancelled — the quantity was returned.",
+    "giveCancel": "Cancel",
+    "outgoingTitle": "My pending outgoing hand-overs"
+  },
+  "pwreset": {
+    "title": "Set a new password",
+    "newPassword": "New password (at least 10 characters)",
+    "again": "New password again",
+    "hint": "The link is single-use and valid for 24 hours.",
+    "tooShort": "The password must be at least 10 characters.",
+    "mismatch": "The two passwords don't match.",
+    "noToken": "Missing or invalid link — ask the admin for a new one.",
+    "submit": "Save password",
+    "done": "Password set!",
+    "doneHint": "Redirecting to login…"
+  },
+  "creport": {
+    "title": "{count} counter report(s) waiting to be processed",
+    "hint": "A QR-page report is NOT a settlement by itself — open it, check the readings and save: money is only booked then.",
+    "counter": "counter",
+    "open": "Open settlement"
   }
 }

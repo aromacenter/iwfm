@@ -215,6 +215,89 @@ async def me(
     return _user_out(user, permissions_for(user.role, matrix))
 
 
+# ─── Jelszó-visszaállítás admin által küldött linkkel (b3640159) ─────────────
+# Publikus "elfelejtett jelszó" oldal NINCS: a linket kizárólag az admin
+# generálja és juttatja el a dolgozónak. A jelszót maga a dolgozó adja meg.
+
+
+@router.post("/users/{user_id}/reset-link")
+async def create_reset_link(
+    user_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    import uuid as _uuid
+
+    from app.core.security import RESET_TOKEN_HOURS, mint_reset_token
+
+    if actor.role != "admin":
+        raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+    try:
+        uid = _uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+    user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+    token = mint_reset_token(user_id=user.id, token_version=user.token_version)
+    url = f"{get_settings().frontend_origin.rstrip('/')}/jelszo?token={token}"
+    await record_audit(
+        db, actor=actor, action="auth.reset_link", entity_type="user",
+        entity_id=str(user.id), detail={"for": user.display_name}, request=request,
+    )
+    await db.commit()
+    return {"url": url, "expires_hours": RESET_TOKEN_HOURS, "name": user.display_name}
+
+
+class ResetPasswordBody(BaseModel):
+    token: str = Field(min_length=10, max_length=2048)
+    password: str = Field(min_length=10, max_length=128)
+
+
+@router.post("/reset-password")
+async def reset_password(
+    body: ResetPasswordBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Új jelszó beállítása a visszaállító linkről. A token egyszer
+    használatos: a mentés lépteti a token_version-t, ami magát a linket és
+    minden korábbi munkamenetet is érvénytelenít."""
+    import uuid as _uuid
+
+    import jwt as _pyjwt
+
+    from app.core.security import decode_token
+
+    ip = request.client.host if request.client else "?"
+    if _throttled(f"pwreset:{ip}"):
+        raise HTTPException(status_code=429, detail={"code": "auth.throttled"})
+    try:
+        payload = decode_token(body.token)
+        if payload.get("purpose") != "pwreset":
+            raise _pyjwt.PyJWTError("wrong purpose")
+        uid = _uuid.UUID(payload["sub"])
+    except (_pyjwt.PyJWTError, KeyError, ValueError):
+        _record_failure(f"pwreset:{ip}")
+        raise HTTPException(status_code=422, detail={"code": "auth.reset_invalid"})
+    user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+    if (
+        user is None or not user.is_active
+        or int(payload.get("tv", -1)) != user.token_version
+    ):
+        _record_failure(f"pwreset:{ip}")
+        raise HTTPException(status_code=422, detail={"code": "auth.reset_invalid"})
+    user.password_hash = hash_password(body.password)
+    user.token_version += 1  # a link és minden régi munkamenet érvénytelen
+    await record_audit(
+        db, actor=None, action="auth.password_reset", entity_type="user",
+        entity_id=str(user.id), detail={"name": user.display_name}, request=request,
+    )
+    await db.commit()
+    return {"ok": True}
+
+
 class SignatureSampleBody(BaseModel):
     signature: str | None = None  # None/üres = a minta törlése
 

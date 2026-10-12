@@ -323,6 +323,31 @@ export default function DolgozokPage() {
     }
   }
 
+  // Jelszó-beállító link (b3640159): az admin elküldi, a dolgozó MAGA ad új
+  // jelszót — így a jelszó senki másnál nem jár.
+  const [resetLink, setResetLink] = useState<{ name: string; url: string } | null>(null);
+
+  async function requestResetLink(emp: EmployeeOut) {
+    try {
+      const res = await api.post<{ url: string; name: string }>(
+        `/api/auth/users/${emp.user_id}/reset-link`, {},
+      );
+      setResetLink({ name: res.name, url: res.url });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function copyResetLink() {
+    if (!resetLink) return;
+    try {
+      await navigator.clipboard.writeText(resetLink.url);
+      toast(t("account.linkCopied"), "success");
+    } catch {
+      toast(t("account.linkCopyFailed"), "error");
+    }
+  }
+
   return (
     <AppShell>
       <div className="mb-4 flex items-center justify-between">
@@ -358,6 +383,7 @@ export default function DolgozokPage() {
             { icon: "👁", label: t("emp.reveal") },
             { icon: "✏️", label: t("common.edit") },
             { icon: "🔑", label: t("account.resetPassword") },
+            { icon: "🔗", label: t("account.resetLink") },
           ]}
         />
       )}
@@ -493,6 +519,15 @@ export default function DolgozokPage() {
                         >
                           🔑
                         </button>
+                        {emp.user_id && emp.status === "active" && (
+                          <button
+                            onClick={() => void requestResetLink(emp)}
+                            title={t("account.resetLink")}
+                            className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                          >
+                            🔗
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>
@@ -836,6 +871,35 @@ export default function DolgozokPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Jelszó-beállító link modal (b3640159) */}
+      {resetLink && (
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setResetLink(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">🔗 {t("account.resetLinkTitle", { name: resetLink.name })}</h2>
+            <p className="text-sm text-slate-600">{t("account.resetLinkHint")}</p>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={resetLink.url}
+                onFocus={(e) => e.target.select()}
+                className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs"
+              />
+              <button
+                onClick={() => void copyResetLink()}
+                className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              >
+                📋 {t("account.copy")}
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setResetLink(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+                {t("common.close")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </AppShell>

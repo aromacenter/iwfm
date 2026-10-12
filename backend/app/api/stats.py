@@ -88,11 +88,19 @@ class CashRegisterOut(BaseModel):
     entries: list[CashEntryOut] = []
 
 
-async def _cash_register(
-    db: AsyncSession, user_id: uuid.UUID, user_name: str | None,
-    date_from: date | None, date_to: date | None, with_entries: bool,
-    user_role: str | None = None,
-) -> CashRegisterOut:
+# A kassza 2026-10-12-én tiszta lappal újraindult (30ea42b2): az alap-nézet
+# és az egyenleg CSAK az ettől a naptól rögzített tételekből számol. A
+# korábbi (migrált + próbaidőszakos) tételek az admin Archívum nézetében
+# maradnak visszakereshetők.
+CASH_EPOCH = date(2026, 10, 12)
+
+
+async def _cash_sums(
+    db: AsyncSession, user_id: uuid.UUID,
+    date_from: date | None, date_to: date | None, user_role: str | None,
+) -> dict:
+    """Nyers kassza-összegek egy időszakra (bevétel, betét/kivét/költség,
+    elfogadott átadások)."""
     rev_q = select(
         sa_func.coalesce(sa_func.sum(Settlement.total_gross), 0.0)
     ).where(
@@ -102,7 +110,6 @@ async def _cash_register(
     rev_q = _range_filter(rev_q, Settlement.created_at, date_from, date_to)
     cash_revenue = float((await db.execute(rev_q)).scalar_one() or 0.0)
 
-    exp_q = select(AgentExpense).where(AgentExpense.user_id == user_id)
     # FIGYELEM: a GROUP BY kötelező — SQLite elnézi nélküle, a Postgres NEM
     # (GroupingError → 500 a teljes kasszára; 3398b0d7 blokkoló oka volt).
     sum_q = select(
@@ -110,20 +117,10 @@ async def _cash_register(
         sa_func.coalesce(sa_func.sum(AgentExpense.amount_gross), 0.0),
     ).where(AgentExpense.user_id == user_id).group_by(AgentExpense.entry_type)
     if date_from:
-        exp_q = exp_q.where(AgentExpense.expense_date >= date_from)
         sum_q = sum_q.where(AgentExpense.expense_date >= date_from)
     if date_to:
-        exp_q = exp_q.where(AgentExpense.expense_date <= date_to)
         sum_q = sum_q.where(AgentExpense.expense_date <= date_to)
-    entries = (
-        await db.execute(exp_q.order_by(AgentExpense.expense_date.desc()).limit(300))
-    ).scalars().all()
-    # Az összegek SQL-aggregátumból jönnek — a tétel-lista 300-as limitje
-    # (megjelenítés) nem torzíthatja az egyenleget (import utáni nagy történet!).
     sums = {(t or "expense"): float(v or 0.0) for t, v in (await db.execute(sum_q)).all()}
-    deposits = sums.get("deposit", 0.0)
-    withdrawals = sums.get("withdrawal", 0.0)
-    expenses = sums.get("expense", 0.0)
 
     # Elfogadott pénz-átadások: bejövő +, kimenő −
     from app.models import CashTransfer
@@ -149,6 +146,57 @@ async def _cash_register(
     # duplázódhat a cég forgalmában. Managernél marad az átadás-logika.
     if user_role == "admin":
         t_in = 0.0
+    return {
+        "revenue": cash_revenue,
+        "deposits": sums.get("deposit", 0.0),
+        "withdrawals": sums.get("withdrawal", 0.0),
+        "expenses": sums.get("expense", 0.0),
+        "t_in": t_in,
+        "t_out": t_out,
+    }
+
+
+def _balance_of(s: dict) -> float:
+    return (s["revenue"] + s["deposits"] + s["t_in"]
+            - s["t_out"] - s["withdrawals"] - s["expenses"])
+
+
+async def _cash_register(
+    db: AsyncSession, user_id: uuid.UUID, user_name: str | None,
+    date_from: date | None, date_to: date | None, with_entries: bool,
+    user_role: str | None = None,
+    archive: bool = False,
+) -> CashRegisterOut:
+    # Alapnézet: minden az epoch-tól indul; archívum: minden az epoch ELŐTT.
+    if archive:
+        arch_end = CASH_EPOCH - timedelta(days=1)
+        eff_from = date_from
+        eff_to = min(date_to, arch_end) if date_to else arch_end
+    else:
+        eff_from = max(date_from, CASH_EPOCH) if date_from else CASH_EPOCH
+        eff_to = date_to
+
+    sums = await _cash_sums(db, user_id, eff_from, eff_to, user_role)
+    # Az EGYENLEG mindig a teljes göngyölt időszak (epoch → ma, archívumban a
+    # teljes régi történet) — a gyors-szűrők csak a részösszegeket és a
+    # tétel-listát szűkítik, az egyenleget nem írhatják át (b5a36526 reopen).
+    full_from = None if archive else CASH_EPOCH
+    full_to = (CASH_EPOCH - timedelta(days=1)) if archive else None
+    if (eff_from, eff_to) == (full_from, full_to):
+        bal_sums = sums
+    else:
+        bal_sums = await _cash_sums(db, user_id, full_from, full_to, user_role)
+
+    exp_q = select(AgentExpense).where(AgentExpense.user_id == user_id)
+    if eff_from:
+        exp_q = exp_q.where(AgentExpense.expense_date >= eff_from)
+    if eff_to:
+        exp_q = exp_q.where(AgentExpense.expense_date <= eff_to)
+    entries = (
+        await db.execute(exp_q.order_by(AgentExpense.expense_date.desc()).limit(300))
+    ).scalars().all()
+    # Az összegek SQL-aggregátumból jönnek — a tétel-lista 300-as limitje
+    # (megjelenítés) nem torzíthatja az egyenleget (import utáni nagy történet!).
 
     out_entries: list[CashEntryOut] = []
     if with_entries:
@@ -171,13 +219,11 @@ async def _cash_register(
         ]
     return CashRegisterOut(
         user_id=str(user_id), user_name=user_name,
-        cash_revenue=_money(cash_revenue),
-        deposits=_money(deposits), withdrawals=_money(withdrawals),
-        expenses=_money(expenses),
-        transfers_in=_money(t_in), transfers_out=_money(t_out),
-        balance=_money(
-            cash_revenue + deposits + t_in - t_out - withdrawals - expenses
-        ),
+        cash_revenue=_money(sums["revenue"]),
+        deposits=_money(sums["deposits"]), withdrawals=_money(sums["withdrawals"]),
+        expenses=_money(sums["expenses"]),
+        transfers_in=_money(sums["t_in"]), transfers_out=_money(sums["t_out"]),
+        balance=_money(_balance_of(bal_sums)),
         entries=out_entries,
     )
 
@@ -189,13 +235,20 @@ async def _cash_register(
 async def my_cash_register(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
+    archive: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
     """A bejelentkezett dolgozó saját kasszája, tételesen. Külsős szerelőnél
     a szerelő-folyószámla is (járó díjak + költései − kifizetések) — így a
-    szerelő a saját kasszáján látja, mennyivel tartozunk neki (53af6761)."""
-    out = await _cash_register(db, actor.id, actor.display_name, date_from, date_to, True, user_role=actor.role)
+    szerelő a saját kasszáján látja, mennyivel tartozunk neki (53af6761).
+    ``archive=true`` (csak admin): a 2026-10-12-i újraindítás ELŐTTI tételek."""
+    if archive and actor.role != "admin":
+        raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+    out = await _cash_register(
+        db, actor.id, actor.display_name, date_from, date_to, True,
+        user_role=actor.role, archive=archive,
+    )
     out.contractor = await _contractor_ledger(db, actor.id)
     return out
 
@@ -249,7 +302,8 @@ class MapPartnerOut(BaseModel):
     zip: str | None
     lat: float | None
     lng: float | None
-    machines: int
+    machines: int  # FIZIKAI gépek (0e8c6908)
+    counters: int = 0  # számláló-sorok ("régi gépszám", érdekesség)
     revenue: float  # összes elszámolás-bevétel (bruttó)
     agent_user_id: str | None = None  # felelős képviselő (szűréshez)
 
@@ -281,16 +335,16 @@ async def stats_map(
         ).scalars().all()
     )
 
-    mach = {
-        pid: int(n or 0)
-        for pid, n in (
-            await db.execute(
-                select(Asset.partner_id, sa_func.count())
-                .where(Asset.status == "deployed", Asset.partner_id.is_not(None))
-                .group_by(Asset.partner_id)
-            )
-        ).all()
-    }
+    # Fizikai gépek + számláló-sorok partnerenként (0e8c6908)
+    from app.api.inventory import physical_machine_counts
+
+    mach_rows = (
+        await db.execute(
+            select(Asset.partner_id, Asset.barcode)
+            .where(Asset.status == "deployed", Asset.partner_id.is_not(None))
+        )
+    ).all()
+    mach, counter_rows = physical_machine_counts(mach_rows)
     rev = {
         pid: float(v or 0.0)
         for pid, v in (
@@ -311,7 +365,8 @@ async def stats_map(
             continue
         out.append(MapPartnerOut(
             id=str(p.id), name=p.name, city=p.address_city, zip=p.address_zip,
-            lat=p.lat, lng=p.lng, machines=machines, revenue=_money(revenue),
+            lat=p.lat, lng=p.lng, machines=machines,
+            counters=int(counter_rows.get(p.id, 0)), revenue=_money(revenue),
             agent_user_id=str(p.agent_user_id) if p.agent_user_id else None,
         ))
     return out
@@ -359,11 +414,19 @@ async def cash_overview(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     user_id: str | None = Query(default=None),  # egy dolgozó tételesen
+    archive: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("invoicing")),
+    actor: User = Depends(require_perm("invoicing")),
 ):
     """Központi kassza: minden dolgozó egyenlege + cégenkénti és fizetési
-    módonkénti bontás. ``user_id`` megadásával egy kassza tételesen."""
+    módonkénti bontás. ``user_id`` megadásával egy kassza tételesen.
+    ``archive=true`` (csak admin): a kassza-újraindítás előtti világ (30ea42b2)."""
+    if archive:
+        if actor.role != "admin":
+            raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+        # Az archívum a teljes régi időszak — a gyors-szűrők itt nem élnek.
+        date_from = None
+        date_to = CASH_EPOCH - timedelta(days=1)
     # Minden user, akinek készpénz-bevétele VAGY kassza-tétele van
     rev_rows_q = select(
         Settlement.settled_by_user_id,
@@ -407,8 +470,9 @@ async def cash_overview(
     for uid in sorted(all_ids, key=lambda x: (names.get(x) or "").lower()):
         registers.append(
             await _cash_register(
-                db, uid, names.get(uid), date_from, date_to,
-                with_entries=bool(user_id), user_role=roles.get(uid),
+                db, uid, names.get(uid), date_from if not archive else None, date_to,
+                with_entries=bool(user_id) or archive, user_role=roles.get(uid),
+                archive=archive,
             )
         )
 
@@ -419,7 +483,9 @@ async def cash_overview(
         sa_func.coalesce(sa_func.sum(Settlement.total_gross), 0.0),
         sa_func.count(),
     ).group_by(Settlement.invoicing_company, Settlement.payment_method)
-    st_q = _range_filter(st_q, Settlement.created_at, date_from, date_to)
+    # A cégenkénti/fizetési módos bontás is az újraindított kasszát követi.
+    st_from = date_from if archive else max(date_from or CASH_EPOCH, CASH_EPOCH)
+    st_q = _range_filter(st_q, Settlement.created_at, st_from, date_to)
     by_company: dict = {}
     by_payment: dict = {}
     for comp, pm, gross, cnt in (await db.execute(st_q)).all():

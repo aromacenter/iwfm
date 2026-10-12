@@ -8,6 +8,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import SuggestInput from "@/components/SuggestInput";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -57,6 +58,11 @@ export default function SzereloAtadasPage() {
     employee_id: string; employee_name: string;
     amount: string; note: string; supplier: string; receipt_no: string;
   } | null>(null);
+  // Beszállító-javaslatok a korábbi tételekből (szabad szavas marad, 75cd2925)
+  const [suppliers, setSuppliers] = useState<string[]>([]);
+  useEffect(() => {
+    api.get<string[]>("/api/stats/cash/suppliers").then(setSuppliers).catch(() => {});
+  }, []);
 
   const load = useCallback(() => {
     api.get<Row[]>("/api/tasks/service-handover/list").then(setRows).catch(() => {});
@@ -336,7 +342,11 @@ export default function SzereloAtadasPage() {
             </label>
             <label className="block text-sm">
               {t("cash.supplier")}
-              <input value={costForm.supplier} onChange={(e) => setCostForm({ ...costForm, supplier: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              <SuggestInput
+                value={costForm.supplier}
+                onChange={(v) => setCostForm({ ...costForm, supplier: v })}
+                options={suppliers}
+              />
             </label>
             <label className="block text-sm">
               {t("cash.receiptNo")}

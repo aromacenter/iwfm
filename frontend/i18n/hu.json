@@ -901,7 +901,13 @@
     "changed": "A jelszó megváltozott.",
     "resetPassword": "Jelszó visszaállítása",
     "resetConfirm": "Új ideiglenes jelszót állítasz be ennek a dolgozónak? A régi munkamenetei megszűnnek.",
-    "resetDone": "Az új ideiglenes jelszó (add át a dolgozónak): {password}"
+    "resetDone": "Az új ideiglenes jelszó (add át a dolgozónak): {password}",
+    "resetLink": "Jelszó-beállító link",
+    "resetLinkTitle": "Jelszó-beállító link — {name}",
+    "resetLinkHint": "Küldd el a dolgozónak (pl. Telegramon vagy SMS-ben): a linken ő maga ad meg új jelszót. 24 óráig érvényes és egyszer használható.",
+    "linkCopied": "Link a vágólapon!",
+    "linkCopyFailed": "Nem sikerült másolni — jelöld ki kézzel.",
+    "copy": "Másolás"
   },
   "login": {
     "title": "Bejelentkezés",
@@ -1852,7 +1858,9 @@
     "stockreq.no_warehouse": "Nincs hozzád rendelt raktár — az adminisztrátor tud autó-raktárt rendelni hozzád.",
     "stockreq.not_found": "Az igénylés nem található.",
     "stockreq.decided": "Ezt az igénylést már elbírálták.",
-    "stockreq.pick_source": "Több telephely-raktár van — válaszd ki, melyikből megy az áru."
+    "stockreq.pick_source": "Több telephely-raktár van — válaszd ki, melyikből megy az áru.",
+    "auth.reset_invalid": "A link érvénytelen vagy lejárt — kérj újat az admintól.",
+    "auth.throttled": "Túl sok próbálkozás — várj 15 percet."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2630,7 +2638,13 @@
     "handInBtn": "Pénz leadása",
     "handInHint": "Készpénz leadása a központnak (admin/manager) — a címzettnek el kell fogadnia.",
     "handInNote": "Készpénz leadása",
-    "adminSinkHint": "Admin-kasszaként a hozzád LEADOTT (elfogadott) pénz nem növeli az egyenleged — a leadással a pénz a céghez megérkezettnek számít, és nem duplázódik a forgalomban."
+    "adminSinkHint": "Admin-kasszaként a hozzád LEADOTT (elfogadott) pénz nem növeli az egyenleged — a leadással a pénz a céghez megérkezettnek számít, és nem duplázódik a forgalomban.",
+    "periodDay": "Nap",
+    "periodWeek": "Hét",
+    "archiveBtn": "Archívum",
+    "archiveHint": "A 2026-10-12-i kassza-újraindítás ELŐTTI tételek (csak admin)",
+    "archiveBanner": "Archívum — a kassza 2026. 10. 12-i újraindítása előtti tételek. Ezek az élő egyenlegbe már nem számítanak bele.",
+    "myRegisterArchive": "Saját kasszám — archívum"
   },
   "stats": {
     "title": "Statisztika",
@@ -2736,7 +2750,8 @@
     "machinesShort": "gép",
     "city": "Település",
     "missingGeo": "{n} partnernek még nincs térkép-koordinátája (geokódolás folyamatban) — ők csak a táblázatban látszanak.",
-    "loadFailed": "A térkép betöltése nem sikerült — ellenőrizd az internetkapcsolatot."
+    "loadFailed": "A térkép betöltése nem sikerült — ellenőrizd az internetkapcsolatot.",
+    "counters": "számláló"
   },
   "streq": {
     "title": "Saját raktár és igénylés",
@@ -2767,6 +2782,33 @@
     "approve": "Jóváhagyás",
     "decline": "Elutasítás",
     "approved": "Igénylés jóváhagyva — függő átadás létrehozva, az igénylő értesítést kapott.",
-    "declined": "Igénylés elutasítva."
+    "declined": "Igénylés elutasítva.",
+    "giveTitle": "Áru átadása innen",
+    "giveProductPh": "Termék a saját készletből…",
+    "giveToPh": "Hová? (központi raktár / másik autó)",
+    "giveSend": "Átadás elküldése",
+    "giveHint": "A fogadó félnek el kell fogadnia — addig függőben van, a te készletedből már levonva.",
+    "giveSent": "Átadás elindítva — a fogadó elfogadására vár.",
+    "giveCancelled": "Átadás visszavonva — a mennyiség visszakerült.",
+    "giveCancel": "Visszavonás",
+    "outgoingTitle": "Függő kimenő átadásaim"
+  },
+  "pwreset": {
+    "title": "Új jelszó beállítása",
+    "newPassword": "Új jelszó (legalább 10 karakter)",
+    "again": "Új jelszó még egyszer",
+    "hint": "A link egyszer használatos és 24 óráig érvényes.",
+    "tooShort": "A jelszó legalább 10 karakter legyen.",
+    "mismatch": "A két jelszó nem egyezik.",
+    "noToken": "Hiányzó vagy hibás link — kérj újat az admintól.",
+    "submit": "Jelszó mentése",
+    "done": "Jelszó beállítva!",
+    "doneHint": "Átirányítunk a bejelentkezéshez…"
+  },
+  "creport": {
+    "title": "{count} számláló-bejelentés vár feldolgozásra",
+    "hint": "A QR-oldali bejelentés önmagában még NEM elszámolás — nyisd meg, ellenőrizd az állásokat, és mentsd el: pénz csak akkor könyvelődik.",
+    "counter": "számláló",
+    "open": "Elszámolás megnyitása"
   }
 }

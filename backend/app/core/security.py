@@ -53,3 +53,23 @@ def decode_token(token: str) -> dict:
     """Raises jwt.PyJWTError on invalid/expired tokens."""
     settings = get_settings()
     return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+
+
+RESET_TOKEN_HOURS = 24
+
+
+def mint_reset_token(*, user_id: uuid.UUID, token_version: int) -> str:
+    """Egyszer használatos jelszó-visszaállító token (b3640159): a
+    token_version-t hordozza, így a jelszó beállítása (ami lépteti a
+    verziót) azonnal érvényteleníti — adatbázis-mező nem kell hozzá."""
+    settings = get_settings()
+    now = datetime.now(UTC)
+    payload = {
+        "sub": str(user_id),
+        "purpose": "pwreset",
+        "tv": token_version,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(hours=RESET_TOKEN_HOURS)).timestamp()),
+        "jti": uuid.uuid4().hex,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
