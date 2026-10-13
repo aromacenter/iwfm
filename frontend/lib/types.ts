@@ -37,6 +37,7 @@ export interface EmployeeOut {
   is_contractor: boolean;
   is_company?: boolean;
   company_name?: string | null;
+  company_technicians?: string[] | null;
   company_tax_number: string | null;
   // Bérszámfejtés alapja: blokkolás (attendance) vagy beosztás (schedule)
   payroll_source: "attendance" | "schedule";

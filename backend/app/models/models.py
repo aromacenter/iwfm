@@ -166,6 +166,9 @@ class Employee(Base):
     )
     # Az alvállalkozó CÉG neve — a vezeték-/keresztnév a kapcsolattartóé.
     company_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Alvállalkozó CÉG szerelő-névsora (d8bde9e6): a munkalapon ebből választ,
+    # az új beírt név automatikusan felkerül.
+    company_technicians: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Alvállalkozó adószáma (ha számlaképes) — nem titkosított, céges adat.
     company_tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Heti elérhetőség a beosztás-generáláshoz: {"0": ["08:00","16:00"], …}

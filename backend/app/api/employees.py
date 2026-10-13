@@ -63,7 +63,21 @@ class EmployeeBase(BaseModel):
     is_contractor: bool = False
     is_company: bool = False  # alvállalkozó CÉG — saját dolgozókkal
     company_name: str | None = Field(default=None, max_length=256)
+    # A cég szerelő-névsora (d8bde9e6) — a munkalapon ebből választanak
+    company_technicians: list[str] | None = None
     company_tax_number: str | None = Field(default=None, max_length=32)
+
+    @field_validator("company_technicians")
+    @classmethod
+    def _clean_technicians(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        out: list[str] = []
+        for name in v:
+            name = (name or "").strip()[:128]
+            if name and name not in out:
+                out.append(name)
+        return out[:50]
     # Bérszámfejtés alapja: blokkolás (attendance) vagy beosztás (schedule).
     payroll_source: str = "attendance"
 
@@ -173,9 +187,22 @@ class EmployeeUpdate(BaseModel):
     is_contractor: bool | None = None
     is_company: bool | None = None
     company_name: str | None = None
+    company_technicians: list[str] | None = None
     company_tax_number: str | None = None
     payroll_source: str | None = None
     availability: dict[str, list[str]] | None = None
+
+    @field_validator("company_technicians")
+    @classmethod
+    def _clean_technicians(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        out: list[str] = []
+        for name in v:
+            name = (name or "").strip()[:128]
+            if name and name not in out:
+                out.append(name)
+        return out[:50]
 
     @field_validator("payroll_source")
     @classmethod
@@ -325,6 +352,7 @@ def _employee_out(emp: Employee, email: str | None = None, role: str | None = No
         is_contractor=emp.is_contractor,
         is_company=emp.is_company,
         company_name=emp.company_name,
+        company_technicians=emp.company_technicians,
         company_tax_number=emp.company_tax_number,
         payroll_source=emp.payroll_source or "attendance",
         availability=emp.availability,

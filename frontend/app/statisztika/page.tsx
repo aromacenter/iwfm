@@ -42,9 +42,13 @@ export default function StatisztikaPage() {
   async function openDrill(kind: "revenue" | "expense", name: string) {
     try {
       const params = new URLSearchParams({ kind, name });
-      const [from, to] = range();
-      if (from) params.set("date_from", from);
-      if (to) params.set("date_to", to);
+      if (archiveMode) {
+        params.set("archive", "true");
+      } else {
+        const [from, to] = range();
+        if (from) params.set("date_from", from);
+        if (to) params.set("date_to", to);
+      }
       const rows = await api.get<(DrillRevenue | DrillExpense)[]>(`/api/stats/business/drill?${params}`);
       setDrill({ kind, name, rows });
     } catch (err) {
@@ -58,6 +62,13 @@ export default function StatisztikaPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [stats, setStats] = useState<Stats | null>(null);
+  // Archívum (30ea42b2): a statisztika is a 2026-10-12-i újraindítástól
+  // számol — a régi világ csak adminnak, külön nézetben.
+  const [archiveMode, setArchiveMode] = useState(false);
+  const [meRole, setMeRole] = useState<string | null>(null);
+  useEffect(() => {
+    api.get<{ role?: string }>("/api/auth/me").then((m) => setMeRole(m.role ?? null)).catch(() => {});
+  }, []);
 
   const range = useCallback((): [string, string] => {
     const now = new Date();
@@ -74,12 +85,16 @@ export default function StatisztikaPage() {
   }, [period, dateFrom, dateTo]);
 
   useEffect(() => {
-    const [from, to] = range();
     const p = new URLSearchParams();
-    if (from) p.set("date_from", from);
-    if (to) p.set("date_to", to);
+    if (archiveMode) {
+      p.set("archive", "true");
+    } else {
+      const [from, to] = range();
+      if (from) p.set("date_from", from);
+      if (to) p.set("date_to", to);
+    }
     api.get<Stats>(`/api/stats/business?${p}`).then(setStats).catch(() => {});
-  }, [range]);
+  }, [range, archiveMode]);
 
   const maxCat = stats
     ? Math.max(1, ...Object.values(stats.categories).map((c) => c.net))
@@ -101,15 +116,31 @@ export default function StatisztikaPage() {
           {([["day", t("stats.day")], ["week", t("stats.week")], ["month", t("stats.month")], ["year", t("stats.year")], ["custom", t("stats.custom")]] as const).map(([key, label]) => (
             <button
               key={key}
-              onClick={() => setPeriod(key)}
+              onClick={() => { setPeriod(key); setArchiveMode(false); }}
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                period === key ? "bg-indigo-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                period === key && !archiveMode ? "bg-indigo-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
               }`}
             >
               {label}
             </button>
           ))}
+          {meRole === "admin" && (
+            <button
+              onClick={() => setArchiveMode((a) => !a)}
+              title={t("cash.archiveHint")}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                archiveMode ? "bg-slate-700 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              📦 {t("cash.archiveBtn")}
+            </button>
+          )}
         </div>
+        {archiveMode && (
+          <p className="w-full rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            📦 {t("cash.archiveBanner")}
+          </p>
+        )}
         {period === "custom" && (
           <>
             <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />

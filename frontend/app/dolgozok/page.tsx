@@ -94,6 +94,8 @@ export default function DolgozokPage() {
   const [contractor, setContractor] = useState(false);
   const [isCompany, setIsCompany] = useState(false);
   const [companyName, setCompanyName] = useState("");
+  // Alvállalkozó CÉG szerelő-névsora (d8bde9e6) — egy név soronként
+  const [companyTechs, setCompanyTechs] = useState("");
   const [companyTax, setCompanyTax] = useState("");
   const [avail, setAvail] = useState<Record<string, AvailDay>>(emptyAvail());
   const [showArchived, setShowArchived] = useState(false);
@@ -145,6 +147,7 @@ export default function DolgozokPage() {
     setContractor(false);
     setIsCompany(false);
     setCompanyName("");
+    setCompanyTechs("");
     setCompanyTax("");
     setAvail(emptyAvail());
     setError(null);
@@ -183,6 +186,7 @@ export default function DolgozokPage() {
     setContractor(emp.is_contractor);
     setIsCompany(emp.is_company ?? false);
     setCompanyName(emp.company_name ?? "");
+    setCompanyTechs((emp.company_technicians ?? []).join("\n"));
     setCompanyTax(emp.company_tax_number ?? "");
     const av = emptyAvail();
     for (const [day, iv] of Object.entries(emp.availability ?? {})) {
@@ -227,6 +231,9 @@ export default function DolgozokPage() {
           is_contractor: contractor,
           is_company: contractor && isCompany,
           company_name: contractor && isCompany ? (companyName.trim() || null) : null,
+          company_technicians: contractor && isCompany
+            ? companyTechs.split("\n").map((x) => x.trim()).filter(Boolean)
+            : null,
           company_tax_number: contractor ? (companyTax.trim() || null) : null,
           // Munkaviszony megszüntetése: archivált (inactive) státusz + dátum;
           // visszavonva újra aktív, a dátum törlődik.
@@ -248,6 +255,9 @@ export default function DolgozokPage() {
           is_contractor: contractor,
           is_company: contractor && isCompany,
           company_name: contractor && isCompany ? (companyName.trim() || null) : null,
+          company_technicians: contractor && isCompany
+            ? companyTechs.split("\n").map((x) => x.trim()).filter(Boolean)
+            : null,
           company_tax_number: contractor ? (companyTax.trim() || null) : null,
           availability: availToApi(avail),
           skill_ids: skillIds,
@@ -584,7 +594,7 @@ export default function DolgozokPage() {
               </label>
             )}
             {contractor && isCompany && (
-              <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+              <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
                 <label className="block text-sm font-medium text-violet-900">
                   🏢 {t("emp.companyName")} *
                   <input
@@ -596,6 +606,18 @@ export default function DolgozokPage() {
                   />
                 </label>
                 <p className="mt-1 text-xs text-violet-700">{t("emp.companyContactHint")}</p>
+                {/* A cég szerelő-névsora (d8bde9e6): a munkalapon ebből választanak */}
+                <label className="mt-3 block text-sm font-medium text-violet-900">
+                  🔧 {t("emp.companyTechs")}
+                  <textarea
+                    value={companyTechs}
+                    onChange={(e) => setCompanyTechs(e.target.value)}
+                    rows={4}
+                    placeholder={t("emp.companyTechsPh")}
+                    className={inputCls}
+                  />
+                </label>
+                <p className="mt-1 text-xs text-violet-700">{t("emp.companyTechsHint")}</p>
               </div>
             )}
 

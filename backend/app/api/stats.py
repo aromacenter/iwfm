@@ -345,15 +345,13 @@ async def stats_map(
         )
     ).all()
     mach, counter_rows = physical_machine_counts(mach_rows)
-    rev = {
-        pid: float(v or 0.0)
-        for pid, v in (
-            await db.execute(
-                select(Settlement.partner_id, sa_func.sum(Settlement.total_gross))
-                .group_by(Settlement.partner_id)
-            )
-        ).all()
-    }
+    # A bevétel itt is az újraindítástól számol (30ea42b2) — a régi (migrált)
+    # forgalom csak az admin statisztika-archívumban él.
+    rev_q = select(Settlement.partner_id, sa_func.sum(Settlement.total_gross)).group_by(
+        Settlement.partner_id
+    )
+    rev_q = _range_filter(rev_q, Settlement.created_at, CASH_EPOCH, None)
+    rev = {pid: float(v or 0.0) for pid, v in (await db.execute(rev_q)).all()}
     out: list[MapPartnerOut] = []
     for p in (
         await db.execute(select(Partner).where(Partner.is_active.is_(True)))
@@ -520,16 +518,26 @@ async def cash_overview(
 async def business_stats(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
+    archive: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
     """Bevétel/költség kimutatás: kategóriára (kávé, egyéb áru, szerviz,
     üzemeltetés), dolgozóra és gépre bontva, tetszőleges időszakra.
-    invoicing VAGY agent_report jog kell hozzá."""
+    invoicing VAGY agent_report jog kell hozzá.
+    A statisztika is a 2026-10-12-i újraindítástól számol (30ea42b2) —
+    ``archive=true`` (csak admin) a régi világot mutatja."""
     matrix = await get_permission_matrix(db)
     perms = permissions_for(actor.role, matrix)
     if "invoicing" not in perms and "agent_report" not in perms:
         raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+    if archive:
+        if actor.role != "admin":
+            raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+        date_from = None
+        date_to = min(date_to, CASH_EPOCH - timedelta(days=1)) if date_to else CASH_EPOCH - timedelta(days=1)
+    else:
+        date_from = max(date_from or CASH_EPOCH, CASH_EPOCH)
 
     # Elszámolás-sorok termékkel: kávé vs egyéb áru vs üzemeltetés (termék
     # nélküli sorok: bérleti díj, minimum-különbözet, készlethiány).
@@ -646,6 +654,7 @@ async def business_drill(
     name: str = Query(min_length=1, max_length=256),
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
+    archive: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
@@ -655,6 +664,14 @@ async def business_drill(
     perms = permissions_for(actor.role, matrix)
     if "invoicing" not in perms and "agent_report" not in perms:
         raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+    # A drill is az újraindítástól számol (30ea42b2) — archívumban a régi világ.
+    if archive:
+        if actor.role != "admin":
+            raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+        date_from = None
+        date_to = min(date_to, CASH_EPOCH - timedelta(days=1)) if date_to else CASH_EPOCH - timedelta(days=1)
+    else:
+        date_from = max(date_from or CASH_EPOCH, CASH_EPOCH)
 
     if kind == "revenue":
         from app.models import Partner

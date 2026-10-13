@@ -1079,7 +1079,10 @@
     "companyName": "Cégnév",
     "companyNamePh": "pl. GépDoktor Szerviz Kft.",
     "companyContactHint": "A fenti vezeték- és keresztnév itt a KAPCSOLATTARTÓT jelenti — a listákban és a kiosztásnál a cégnév jelenik meg.",
-    "contactShort": "kapcsolattartó"
+    "contactShort": "kapcsolattartó",
+    "companyTechs": "A cég szerelői (egy név soronként)",
+    "companyTechsPh": "Kiss Péter\nNagy Gábor",
+    "companyTechsHint": "A munkalapon ebből a névsorból választható a szerelő — az ott beírt új név automatikusan felkerül ide."
   },
   "sched": {
     "title": "Beosztás",
@@ -2887,6 +2890,9 @@
     "regenConfirm": "Új API-kulcsot generálsz a(z) {name} gépnek? A régi azonnal érvénytelen lesz.",
     "keyRegenerated": "Új API-kulcs generálva — vidd fel a gépre.",
     "deleteConfirm": "Törlöd a(z) {name} gépet a telemetria-nyilvántartásból?",
-    "apiHint": "A gép a POST /api/pay/telemetry végpontra jelent (machine_code + key + data) — a kulcsot innen másold a gépre. Az 5 percen belül jelentkező gép online."
+    "apiHint": "A gép a POST /api/pay/telemetry végpontra jelent (machine_code + key + data) — a kulcsot innen másold a gépre. Az 5 percen belül jelentkező gép online.",
+    "generateCode": "Új 11 jegyű azonosító generálása",
+    "pickAsset": "…vagy válassz meglévő gépet a Gépek modulból (a vonalkódja lesz a kód):",
+    "pickAssetPh": "Gép keresése (név, vonalkód)…"
   }
 }

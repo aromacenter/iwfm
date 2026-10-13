@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import SignatureCanvas from "@/components/SignatureCanvas";
+import SuggestInput from "@/components/SuggestInput";
 import Link from "next/link";
 import { api, errorMessage, shareOrDownloadFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -142,6 +143,11 @@ export default function FeladataimPage() {
   const [wsPhotoBusy, setWsPhotoBusy] = useState(false);
   // Ügyfél-árajánlat állapota (a szervizes árakat nem lát, csak státuszt)
   const [wsQuote, setWsQuote] = useState<{ status: string; selected: string | null }>({ status: "none", selected: null });
+  // A cég szerelő-névsora a Szerelő mező súgójához (d8bde9e6)
+  const [myTechs, setMyTechs] = useState<string[]>([]);
+  useEffect(() => {
+    api.get<string[]>("/api/tasks/my-technicians").then(setMyTechs).catch(() => {});
+  }, []);
   const { t } = useT();
   const { toast, prompt } = useUI();
 
@@ -893,11 +899,13 @@ export default function FeladataimPage() {
 
             <label className="block text-sm">
               👷 {t("myTasks.wsTechnician")}
-              <input
+              {/* A cég névsorából súg (d8bde9e6); új név beírható — mentéskor
+                  automatikusan felkerül a listára. */}
+              <SuggestInput
                 value={ws.technician_name}
-                onChange={(e) => setWs({ ...ws, technician_name: e.target.value })}
+                onChange={(v) => setWs({ ...ws, technician_name: v })}
+                options={myTechs}
                 placeholder={t("myTasks.wsTechnicianPh")}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               />
               <span className="mt-0.5 block text-xs text-slate-500">{t("myTasks.wsTechnicianHint")}</span>
             </label>
@@ -917,7 +925,7 @@ export default function FeladataimPage() {
                 value={ws.public_note}
                 onChange={(e) => setWs({ ...ws, public_note: e.target.value })}
                 rows={3}
-                className="mt-1 w-full rounded-lg border border-emerald-300 bg-emerald-50/40 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2"
                 placeholder={t("myTasks.wsPublicNotePh")}
               />
               <span className="mt-0.5 block text-xs text-emerald-700">{t("myTasks.wsPublicNoteHint")}</span>

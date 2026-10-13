@@ -246,9 +246,9 @@ async def approve_request(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("invoicing")),
 ):
-    """Jóváhagyás: függő raktár-átadás jön létre a központi raktárból — a
-    készlet a forrásról azonnal lekerül (nem mehet negatívba), a dolgozó a
-    Saját raktár oldalon fogadja el."""
+    """Jóváhagyás: az áru AZONNAL a dolgozó raktárába kerül (e2a7fb7a: ő
+    kérte, nem kell még egyszer elfogadnia) — a készlet a forrásról levonva
+    (nem mehet negatívba). Minden más raktár-mozgásnál marad az elfogadás."""
     req = await _get_req_or_404(db, request_id)
     if req.status != "pending":
         raise HTTPException(status_code=422, detail={"code": "stockreq.decided"})
@@ -290,20 +290,42 @@ async def approve_request(
         await db.execute(select(Warehouse).where(Warehouse.id == req.warehouse_id))
     ).scalar_one()
 
-    # Függő átadás — a meglévő elfogadás-gépezettel (transfer accept/reject)
+    # Azonnali átadás: a transfer rögtön elfogadott állapotú, a cél-raktár
+    # jóváíródik — az igénylő kérte, nem kell külön elfogadnia (e2a7fb7a).
     src_stock.quantity -= req.quantity
     transfer = WarehouseTransfer(
         from_warehouse_id=src.id, to_warehouse_id=dst.id,
         product_id=req.product_id, quantity=req.quantity,
         note=f"Igénylés jóváhagyva — {req.requester_name or ''}".strip(" —"),
-        status="pending", created_by=actor.id,
+        status="accepted", created_by=actor.id,
+        decided_by=actor.id, decided_at=datetime.now(UTC),
     )
     db.add(transfer)
     await db.flush()
     db.add(WarehouseMovement(
         warehouse_id=src.id, product_id=req.product_id, action="transfer_out",
         quantity_delta=-req.quantity, ref_id=dst.id,
-        note=f"függő átadás (igénylés) → {dst.name}",
+        note=f"igénylés jóváhagyva → {dst.name}",
+        actor_user_id=actor.id,
+    ))
+    dst_stock = (
+        await db.execute(
+            select(WarehouseStock).where(
+                WarehouseStock.warehouse_id == dst.id,
+                WarehouseStock.product_id == req.product_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if dst_stock is None:
+        dst_stock = WarehouseStock(
+            warehouse_id=dst.id, product_id=req.product_id, quantity=0.0
+        )
+        db.add(dst_stock)
+    dst_stock.quantity += req.quantity
+    db.add(WarehouseMovement(
+        warehouse_id=dst.id, product_id=req.product_id, action="transfer_in",
+        quantity_delta=req.quantity, ref_id=src.id,
+        note="igénylés jóváhagyva — automatikusan átvéve",
         actor_user_id=actor.id,
     ))
     req.status = "approved"
@@ -331,7 +353,7 @@ async def approve_request(
             await send_personal(
                 db, emp,
                 f"✅ Igénylésed jóváhagyva: {req.quantity:g} {product.unit} "
-                f"{product.name} — fogadd el a Saját raktár oldalon!\n🔗 {link}",
+                f"{product.name} — már a raktáradban van.\n🔗 {link}",
             )
     except Exception:  # pragma: no cover
         pass

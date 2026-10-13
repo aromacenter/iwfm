@@ -108,10 +108,29 @@ export default function TerkepPage() {
     if (!L) return;
     if (!mapRef.current) {
       mapRef.current = L.map(divRef.current).setView([47.3, 19.1], 8);
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "© OpenStreetMap",
-      }).addTo(mapRef.current);
+      // Csempe-források tartalékkal: ha az OSM nem elérhető (pl. mobilnet),
+      // átváltunk a Carto alaptérképre (9192f8d5). A CSP img-src engedi őket.
+      const TILE_SOURCES = [
+        { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "© OpenStreetMap" },
+        { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png", attribution: "© OpenStreetMap · © CARTO" },
+      ];
+      let tileIdx = 0;
+      let errCount = 0;
+      const addTiles = () => {
+        const src = TILE_SOURCES[tileIdx];
+        const layer = L.tileLayer(src.url, { maxZoom: 19, attribution: src.attribution });
+        layer.on("tileerror", () => {
+          errCount += 1;
+          if (errCount >= 3 && tileIdx + 1 < TILE_SOURCES.length) {
+            tileIdx += 1;
+            errCount = 0;
+            layer.remove();
+            addTiles();
+          }
+        });
+        layer.addTo(mapRef.current);
+      };
+      addTiles();
       // Mobilon a konténer mérete az első render után áll be — enélkül a
       // térkép üresnek látszik (8f78ba71 reopened).
       setTimeout(() => mapRef.current?.invalidateSize(), 150);
@@ -191,7 +210,8 @@ export default function TerkepPage() {
         </p>
       )}
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <div ref={divRef} className="h-[60vh] min-h-80 w-full rounded-2xl border border-slate-200 shadow-sm lg:h-[70vh]" />
+        {/* világos háttér: csempe-betöltés közben se legyen fekete (9192f8d5) */}
+        <div ref={divRef} className="h-[60vh] min-h-80 w-full rounded-2xl border border-slate-200 !bg-slate-200 shadow-sm lg:h-[70vh]" />
         <div className="max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead>

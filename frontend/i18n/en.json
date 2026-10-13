@@ -1079,7 +1079,10 @@
     "companyName": "Company name",
     "companyNamePh": "e.g. FixIt Service Ltd.",
     "companyContactHint": "The last/first name above is the CONTACT person — lists show the company name.",
-    "contactShort": "contact"
+    "contactShort": "contact",
+    "companyTechs": "The company's technicians (one name per line)",
+    "companyTechsPh": "Peter Smith\nGabor Nagy",
+    "companyTechsHint": "On the worksheet the technician is picked from this list — a new name typed there is added here automatically."
   },
   "sched": {
     "title": "Schedule",
@@ -2887,6 +2890,9 @@
     "regenConfirm": "Generate a new API key for {name}? The old one becomes invalid immediately.",
     "keyRegenerated": "New API key generated — install it on the machine.",
     "deleteConfirm": "Delete {name} from the telemetry registry?",
-    "apiHint": "Machines report to POST /api/pay/telemetry (machine_code + key + data) — copy the key from here to the machine. A machine seen within 5 minutes counts as online."
+    "apiHint": "Machines report to POST /api/pay/telemetry (machine_code + key + data) — copy the key from here to the machine. A machine seen within 5 minutes counts as online.",
+    "generateCode": "Generate a new 11-digit code",
+    "pickAsset": "…or pick an existing machine from the Machines module (its barcode becomes the code):",
+    "pickAssetPh": "Search machine (name, barcode)…"
   }
 }

@@ -244,7 +244,7 @@ export default function SajatRaktarPage() {
 
           {/* Áru átadása a saját raktárból (90b463c4) */}
           {wh?.warehouse_id && (
-            <form onSubmit={sendGive} className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 shadow-sm">
+            <form onSubmit={sendGive} className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
               <h2 className="mb-2 font-semibold text-indigo-900">🤝 {t("streq.giveTitle")}</h2>
               <div className="space-y-2">
                 <SearchSelect
@@ -329,7 +329,7 @@ export default function SajatRaktarPage() {
 
         {/* Igénylés + saját igénylések */}
         <div className="space-y-4">
-          <form onSubmit={sendRequest} className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm">
+          <form onSubmit={sendRequest} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
             <h2 className="mb-2 font-semibold text-emerald-900">➕ {t("streq.newRequest")}</h2>
             <div className="space-y-2">
               <SearchSelect

@@ -60,20 +60,16 @@ async def test_stock_request_flow(client, manager, admin):
     assert res.status_code == 422
     assert "insufficient" in res.text
 
-    # normal jovahagyas -> fuggo atadas, forras csokken
+    # jovahagyas -> az aru AZONNAL a kepviselo raktaraban (e2a7fb7a: o kerte,
+    # nem kell meg egyszer elfogadnia), forras csokken
     res = await client.post(f"/api/stock-requests/{req['id']}/approve", json={}, headers=adm)
     assert res.status_code == 200, res.text
     assert res.json()["status"] == "approved"
     site_stock = (await client.get(f"/api/warehouses/{site['id']}/stock", headers=mgr)).json()
     assert site_stock[0]["quantity"] == 15.0
 
-    # a kepviselo latja a bejovo atadast es elfogadja
     mywh = (await client.get("/api/stock-requests/my-warehouse", headers=rep_hdr)).json()
-    assert len(mywh["incoming"]) == 1
-    tr_id = mywh["incoming"][0]["id"]
-    res = await client.post(f"/api/warehouses/transfers/{tr_id}/accept", json={}, headers=rep_hdr)
-    assert res.status_code == 200, res.text
-    mywh = (await client.get("/api/stock-requests/my-warehouse", headers=rep_hdr)).json()
+    assert mywh["incoming"] == []  # nincs fuggo atadas
     assert mywh["stock"][0]["quantity"] == 5.0
 
 

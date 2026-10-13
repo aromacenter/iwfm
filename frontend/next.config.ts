@@ -17,7 +17,9 @@ const API_TARGET =
 // de blokkolja az iframe-be ágyazást és a külső kapcsolatokat.
 const CSP = [
   "default-src 'self'",
-  "img-src 'self' data: blob:",
+  // A térkép-csempék külső képek (9192f8d5/d8b2bbe3: az img-src 'self'
+  // némán blokkolta őket — ezért volt "vaktérkép"). OSM + Carto tartalék.
+  "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "connect-src 'self'",

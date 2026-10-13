@@ -141,7 +141,7 @@ export default function VezerlopultPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Áru-igénylések a központi raktárból — jóváhagyás */}
         {stockReqs.length > 0 && (
-          <section className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm lg:col-span-2">
+          <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm lg:col-span-2">
             <h2 className="mb-3 font-semibold text-emerald-900">📦 {t("streq.dashTitle")}</h2>
             <div className="space-y-2">
               {stockReqs.map((r) => (

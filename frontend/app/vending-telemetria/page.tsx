@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import SearchSelect from "@/components/SearchSelect";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -56,9 +57,12 @@ export default function VendingTelemetriaPage() {
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<{ machine: Machine; rows: TelemetryRow[] } | null>(null);
   const [keyShown, setKeyShown] = useState<string | null>(null); // machine id
+  // Meglévő gépek a Gépek modulból — a 11 jegyű vonalkód betöltéséhez (7dc9d3ce)
+  const [assets, setAssets] = useState<{ id: string; name: string; barcode: string }[]>([]);
 
   const load = useCallback(() => {
     api.get<Machine[]>("/api/saferpay/machines").then(setMachines).catch(() => {});
+    api.get<{ id: string; name: string; barcode: string }[]>("/api/assets").then(setAssets).catch(() => {});
   }, []);
   useEffect(() => {
     load();
@@ -226,8 +230,37 @@ export default function VendingTelemetriaPage() {
             </label>
             <label className="block text-sm">
               {t("vtel.code")} *
-              <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="pl. 174226" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              <div className="mt-1 flex gap-2">
+                <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="pl. 26959572663" className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                <button
+                  type="button"
+                  title={t("vtel.generateCode")}
+                  onClick={() =>
+                    api.get<{ barcode: string }>("/api/assets/generate-barcode")
+                      .then((r) => setForm((f) => (f ? { ...f, code: r.barcode } : f)))
+                      .catch((err) => toast(errorMessage(err), "error"))
+                  }
+                  className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+                >
+                  🎲
+                </button>
+              </div>
             </label>
+            {/* Meglévő gép kiválasztása a Gépek modulból → a vonalkódja lesz a kód */}
+            {assets.length > 0 && (
+              <div className="text-sm">
+                <p className="mb-1 text-xs text-slate-500">{t("vtel.pickAsset")}</p>
+                <SearchSelect
+                  items={assets.map((a) => ({ id: a.id, label: a.name, badge: a.barcode, keywords: a.barcode }))}
+                  value={assets.find((a) => a.barcode === form.code)?.id ?? ""}
+                  onChange={(id) => {
+                    const a = assets.find((x) => x.id === id);
+                    if (a) setForm((f) => (f ? { ...f, code: a.barcode, name: f.name || a.name } : f));
+                  }}
+                  placeholder={t("vtel.pickAssetPh")}
+                />
+              </div>
+            )}
             <label className="block text-sm">
               {t("vtel.note")}
               <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

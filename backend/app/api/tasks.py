@@ -396,6 +396,17 @@ async def _upsert_worksheet(
         raise HTTPException(status_code=422, detail={"code": "worksheet.empty"})
     ws.work_description = body.work_description.strip()
     ws.technician_name = (body.technician_name or "").strip() or None
+    # Alvállalkozó CÉGNÉL az új szerelő-név automatikusan felkerül a cég
+    # névsorára (d8bde9e6) — legközelebb már választható.
+    if ws.technician_name:
+        _emp = (
+            await db.execute(select(Employee).where(Employee.user_id == actor.id))
+        ).scalars().first()
+        if _emp is not None and _emp.is_company:
+            _techs = list(_emp.company_technicians or [])
+            if ws.technician_name not in _techs:
+                _techs.append(ws.technician_name)
+                _emp.company_technicians = _techs[:50]
     works = [w.model_dump() for w in body.works]
     repair_options = [w.model_dump() for w in body.repair_options]
     materials = [m.model_dump() for m in body.materials]
@@ -2474,6 +2485,21 @@ def _service_fee_total(ws: Worksheet) -> float:
                 qty = 1.0
             total += float(m["cost_net"]) * (qty if qty > 0 else 1.0)
     return round(total, 2)
+
+
+@router.get("/my-technicians")
+async def my_company_technicians(
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """A bejelentkezett alvállalkozó CÉG szerelő-névsora — a munkalap
+    Szerelő mezőjének javaslataihoz (d8bde9e6). Nem cégnél üres lista."""
+    emp = (
+        await db.execute(select(Employee).where(Employee.user_id == actor.id))
+    ).scalars().first()
+    if emp is None or not emp.is_company:
+        return []
+    return emp.company_technicians or []
 
 
 @router.get("/service-handover/list")

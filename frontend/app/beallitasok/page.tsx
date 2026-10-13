@@ -2671,7 +2671,7 @@ export default function BeallitasokPage() {
             </h2>
 
             {/* AI-generálás: leírás + esemény → kitölti az alábbi mezőket */}
-            <div className="space-y-2 rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+            <div className="space-y-2 rounded-xl border border-violet-200 bg-violet-50 p-3">
               <div className="text-sm font-medium text-violet-800">✨ {t("settings.tplAiTitle")}</div>
               <textarea
                 rows={2}
