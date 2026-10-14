@@ -1065,6 +1065,9 @@ class PrintSettings(Base):
     agent_last_seen: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # A futó ügynök jelentett verziója (X-Agent-Version) — ebből látszik,
+    # hogy az önfrissítés tényleg megtörtént-e (v3 pehelysúlyú mód).
+    agent_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Partner(Base):

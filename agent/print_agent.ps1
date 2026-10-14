@@ -1,19 +1,21 @@
-# Iwfm nyomtato-ugynok - Godex cimkenyomtatas + irodai PDF-nyomtatas
+# Iwfm nyomtato-ugynok v3 - Godex cimkenyomtatas + irodai PDF-nyomtatas
 #
-# 3 masodpercenkent lekeri a szerverrol a varakozo feladatokat:
-#  - cimke (EZPL): raw modban a Godex nyomtato 9100-as portjara megy
-#  - PDF (pl. elismerveny, munkalap): a Windows-on beallitott nyomtatora megy
-#    (igy TELEFONROL inditott nyomtatas is az irodai nyomtaton landol)
+# v3: PEHELYSULYU mukodes - a gep teljesitmenyet nem befolyasolja:
+#  - LONG-POLL: a szerver tartja a kerest max 25 mp-ig es azonnal valaszol,
+#    ha munka jon -> oriank ~100 keres a korabbi ~1200 helyett, a varakozas
+#    a halozaton "alszik", nem a processzoron
+#  - egyetlen ujrahasznositott HttpClient az Invoke-RestMethod helyett
+#    (nincs PSObject-varazslas es kapcsolat-ujraepites minden hivasnal)
+#  - BelowNormal prioritas + idonkenti szemetgyujtes (nem hizik a memoria)
+#  - az orszem-feladatot 15 percre ritkitja es -NoProfile inditasra allitja
+#
 # A beallitasok a szkript melletti print_agent.json-bol jonnek:
 #   { "server": "https://backend-....railway.app",
 #     "agent_key": "A BEALLITASOKBAN GENERALT KULCS",
 #     "printer_ip": "192.168.1.30", "printer_port": 9100,
-#     "pdf_printer": "Samsung ML-3310 Series",   <- ures/hianyzo = alapertelmezett nyomtato
-#     "sumatra_path": "" }                       <- opcionalis: SumatraPDF.exe teljes utja
-#
-# PDF-nyomtatashoz a legmegbizhatobb a SumatraPDF (ingyenes, hordozhato is jo):
-# ha telepitve van (vagy a sumatra_path meg van adva), azzal nyomtatunk;
-# kulonben az Adobe Reader "PrintTo" muveletevel probalkozunk.
+#     "pdf_printer": "Samsung ML-3310 Series",   <- ures = alapertelmezett
+#     "sumatra_path": "",                        <- opcionalis: SumatraPDF.exe utja
+#     "gls_printer": "" }                        <- GLS-cimkek kulon nyomtatoja
 #
 # Inditas kezzel:  powershell -ExecutionPolicy Bypass -File print_agent.ps1
 # Automatikus inditashoz futtasd egyszer a telepites.bat-ot.
@@ -21,7 +23,7 @@
 $ErrorActionPreference = "Stop"
 # ONFRISSITES: a szerver ennel nagyobb verziot hirdetve uj szkriptet ad,
 # az ugynok leallitja magat, az orszem pedig az ujjal inditja ujra.
-$script:AGENT_VERSION = 2
+$script:AGENT_VERSION = 3
 # Windows PowerShell 5.1 alapbol regi TLS-t hasznal - a szerverhez TLS 1.2 kell
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -39,25 +41,65 @@ function Log($msg) {
     Add-Content -Path $logPath -Value $line -Encoding utf8
 }
 
+# Egypeldanyos zar ELORE: ha mar fut egy ugynok, az orszem altal inditott uj
+# peldany a leheto legolcsobban, azonnal kilep (semmit nem tolt be).
+$script:mutex = New-Object System.Threading.Mutex($false, "Global\IwfmPrintAgent")
+if (-not $script:mutex.WaitOne(0)) { exit 0 }
+
 if (-not (Test-Path $configPath)) {
     Log "HIBA: nincs print_agent.json - masold a print_agent.json.minta alapjan!"
     exit 1
 }
-
-# Egypeldanyos zar: ha mar fut egy ugynok, ez a peldany csendben kilep
-# (ket peldany minden cimket ketszer nyomtatna).
-$script:mutex = New-Object System.Threading.Mutex($false, "Global\IwfmPrintAgent")
-if (-not $script:mutex.WaitOne(0)) {
-    Log "Mar fut egy ugynok-peldany - ez a peldany kilep."
-    exit 0
-}
 $cfg = Get-Content $configPath -Raw | ConvertFrom-Json
 if (-not $cfg.agent_key) { Log "HIBA: ures agent_key a print_agent.json-ban"; exit 1 }
-$headers = @{ "X-Agent-Key" = $cfg.agent_key }
 $port = if ($cfg.printer_port) { [int]$cfg.printer_port } else { 9100 }
+
+# A gep teljesitmenyet nem vesszuk el: hatterbe soroljuk magunkat.
+try { (Get-Process -Id $PID).PriorityClass = "BelowNormal" } catch {}
+
+# Egyetlen, ujrahasznositott HTTP-kliens (keep-alive) - ez a v3 lelke.
+Add-Type -AssemblyName System.Net.Http
+$script:http = New-Object System.Net.Http.HttpClient
+$script:http.Timeout = [TimeSpan]::FromSeconds(45)
+[void]$script:http.DefaultRequestHeaders.TryAddWithoutValidation("X-Agent-Key", [string]$cfg.agent_key)
+# Verzio-jelentes: a szerveren latszik, hogy a frissites letelepult-e
+[void]$script:http.DefaultRequestHeaders.TryAddWithoutValidation("X-Agent-Version", [string]$script:AGENT_VERSION)
+
+function Http-GetJson([string]$url) {
+    $resp = $script:http.GetAsync($url).GetAwaiter().GetResult()
+    try {
+        if (-not $resp.IsSuccessStatusCode) { throw ("HTTP {0}" -f [int]$resp.StatusCode) }
+        $text = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        return ($text | ConvertFrom-Json)
+    } finally { $resp.Dispose() }
+}
+
+function Http-PostJson([string]$url, [string]$json) {
+    $content = New-Object System.Net.Http.StringContent($json, [Text.Encoding]::UTF8, "application/json")
+    $resp = $script:http.PostAsync($url, $content).GetAwaiter().GetResult()
+    try {
+        if (-not $resp.IsSuccessStatusCode) { throw ("HTTP {0}" -f [int]$resp.StatusCode) }
+    } finally { $resp.Dispose(); $content.Dispose() }
+}
 
 Log ("Ugynok elindult (v{0}) - szerver: {1}, nyomtato: {2}:{3}" -f $script:AGENT_VERSION, $cfg.server, $cfg.printer_ip, $port)
 $script:lastUpdateCheck = Get-Date
+$script:lastGc = Get-Date
+
+# Az utemezett feladatok korszerusitese (best effort): -NoProfile inditas +
+# az orszem 5 perc helyett 15 percenkent - igy a watchdog-inditasok sem
+# terhelik a gepet. Ha nincs hozza jog, marad a regi (nem hiba).
+function Ensure-Tasks {
+    try {
+        $tr = 'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $PSCommandPath
+        schtasks /create /f /tn "Iwfm nyomtato-ugynok" /sc onlogon /tr $tr 2>$null | Out-Null
+        schtasks /create /f /tn "Iwfm nyomtato-ugynok orszem" /sc minute /mo 15 /tr $tr 2>$null | Out-Null
+        Log "Utemezett feladatok frissitve (-NoProfile, orszem 15 percenkent)."
+    } catch {
+        Log ("Feladat-frissites kihagyva (nem gond): {0}" -f $_.Exception.Message)
+    }
+}
+Ensure-Tasks
 
 # SumatraPDF keresese: config-utvonal, majd a szokasos telepitesi helyek
 function Find-Sumatra {
@@ -75,8 +117,7 @@ function Find-Sumatra {
 function Print-Pdf([string]$payloadB64, [string]$label) {
     $tmp = Join-Path $env:TEMP ("iwfm-print-" + [guid]::NewGuid().ToString("N") + ".pdf")
     [IO.File]::WriteAllBytes($tmp, [Convert]::FromBase64String($payloadB64))
-    # GLS-cimke kulon nyomtatora mehet (pl. Brother cimkezo): "gls_printer" a
-    # print_agent.json-ban; uresen a szokasos pdf_printer / alapertelmezett.
+    # GLS-cimke kulon nyomtatora mehet (pl. Brother cimkezo)
     $target = $cfg.pdf_printer
     if ($label -like "GLS*" -and $cfg.gls_printer) { $target = $cfg.gls_printer }
     try {
@@ -89,10 +130,8 @@ function Print-Pdf([string]$payloadB64, [string]$label) {
             }
             Start-Sleep -Seconds 3
         } else {
-            # tartalek: a .pdf-hez tarsitott program PrintTo/Print muvelete.
-            # A megnyitott olvaso-folyamatot a nyomtatas utan LEZARJUK -
-            # kulonben minden nyomtatas utan ott maradna egy Adobe Reader,
-            # ami iden mar lassithatja a gepet.
+            # tartalek: a .pdf-hez tarsitott program PrintTo/Print muvelete;
+            # a megnyitott olvaso-folyamatot a nyomtatas utan LEZARJUK.
             $p = $null
             if ($target) {
                 $p = Start-Process -FilePath $tmp -Verb PrintTo -ArgumentList ('"{0}"' -f $target) -WindowStyle Hidden -PassThru
@@ -111,12 +150,11 @@ function Print-Pdf([string]$payloadB64, [string]$label) {
 
 function Check-SelfUpdate {
     # Onfrissites: ha a szerveren ujabb verzioju szkript van, letoltjuk,
-    # a sajat fajlunkat lecsereljuk es kilepunk - az orszem (watchdog)
-    # 5 percen belul az UJ szkripttel indit ujra. Biztonsag: csak ervenyes,
-    # ugynok-jelzovel ellatott tartalmat irunk ki, ideiglenes fajlon at.
+    # a sajat fajlunkat lecsereljuk es kilepunk - az orszem az UJ szkripttel
+    # indit ujra. Biztonsag: csak ervenyes, ugynok-jelzovel ellatott
+    # tartalmat irunk ki, ideiglenes fajlon at.
     try {
-        $info = Invoke-RestMethod -Uri "$($cfg.server)/api/print-agent/script" `
-            -Headers $headers -Method Get -TimeoutSec 20
+        $info = Http-GetJson "$($cfg.server)/api/print-agent/script"
         if (-not $info.version -or [int]$info.version -le $script:AGENT_VERSION) { return }
         $content = $info.script
         if (-not $content -or $content.Length -lt 1000 -or $content -notlike "*IwfmPrintAgent*") {
@@ -160,8 +198,10 @@ Check-SelfUpdate
 
 while ($true) {
     try {
-        $resp = Invoke-RestMethod -Uri "$($cfg.server)/api/print-agent/jobs" `
-            -Headers $headers -Method Get -TimeoutSec 15
+        # LONG-POLL: a szerver max 25 mp-ig tartja a kerest, es AZONNAL
+        # valaszol, ha munka erkezik - kozben ez a folyamat a halozaton
+        # varakozik, processzort nem hasznal.
+        $resp = Http-GetJson "$($cfg.server)/api/print-agent/jobs?wait=25"
         foreach ($job in $resp.jobs) {
             $ok = $true; $err = $null
             try {
@@ -174,8 +214,8 @@ while ($true) {
             } catch {
                 $err = $_.Exception.Message
                 if ($err -like "*nem erheto el*") {
-                    # a nyomtato most nincs elerheto halozaton - a feladat a
-                    # sorban marad, kesobb ujraprobaljuk (nem jelezzuk hibanak)
+                    # a nyomtato most nincs halozaton - a feladat a sorban
+                    # marad, kesobb ujraprobaljuk (nem jelezzuk hibanak)
                     Log ("Nyomtato nem erheto el - a sorban marad: {0}" -f $job.label)
                     Start-Sleep -Seconds 30
                     continue
@@ -184,18 +224,23 @@ while ($true) {
                 Log ("NYOMTATASI HIBA: {0} - {1}" -f $job.label, $err)
             }
             $body = @{ ok = $ok; error = $err } | ConvertTo-Json
-            Invoke-RestMethod -Uri "$($cfg.server)/api/print-agent/jobs/$($job.id)" `
-                -Headers $headers -Method Post -ContentType "application/json" `
-                -Body $body -TimeoutSec 15 | Out-Null
+            Http-PostJson "$($cfg.server)/api/print-agent/jobs/$($job.id)" $body
         }
     } catch {
         Log ("Szerver-hiba (ujraprobalom): {0}" -f $_.Exception.Message)
         Start-Sleep -Seconds 20
     }
-    # Onfrissites-ellenorzes 10 percenkent (indulaskor is lefutott)
-    if (((Get-Date) - $script:lastUpdateCheck).TotalMinutes -ge 10) {
+    # Onfrissites-ellenorzes 30 percenkent (indulaskor is lefutott)
+    if (((Get-Date) - $script:lastUpdateCheck).TotalMinutes -ge 30) {
         $script:lastUpdateCheck = Get-Date
         Check-SelfUpdate
     }
-    Start-Sleep -Seconds 3
+    # Memoria-takaritas 10 percenkent - a hosszan futo PowerShell ne hizzon.
+    if (((Get-Date) - $script:lastGc).TotalMinutes -ge 10) {
+        $script:lastGc = Get-Date
+        [GC]::Collect()
+        [GC]::WaitForPendingFinalizers()
+    }
+    # A szerver mar vart 25 mp-ot - ket keres kozott eleg egy pici szunet.
+    Start-Sleep -Seconds 1
 }

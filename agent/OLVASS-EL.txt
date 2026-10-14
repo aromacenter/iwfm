@@ -50,3 +50,16 @@ Raadasok a v2-ben:
  - a log 5 MB felett rotalodik (nem telik meg a gep),
  - az Adobe Reader-es tartalek-nyomtatas utan a megnyitott olvaso-folyamat
    automatikusan bezarul (nem gyulnek a hatterben a processzek).
+
+--- FRISSITES 4: PEHELYSULYU v3 (a gep nem lassul tole) ---
+A v2 3 masodpercenkent kerdezgette a szervert, es az orszem 5 percenkent
+uj PowerShellt inditott - ez egyutt erezhetoen lassitotta az uzleti PC-t.
+A v3 mar "ugyeletes tuzolto" modban megy:
+ - a szerver TARTJA a kerest es azonnal szol, ha nyomtatnivalo van
+   (long-poll) - a gep processzorat varakozas kozben NEM hasznalja,
+ - egyetlen ujrahasznositott HTTP-kapcsolat (nem epit ujat hivasonkent),
+ - hatterbe sorolt prioritas + rendszeres memoria-takaritas,
+ - az orszem 15 percenkent es -NoProfile modban fut (maga az ugynok
+   allitja at indulaskor - kezzel semmit nem kell csinalni).
+A v3 az onfrissitessel magatol kerul a gepre; a nyomtatas tovabbra is
+azonnali (sot: long-poll-lal meg gyorsabb, mint a 3 mp-es kerdezgetessel).

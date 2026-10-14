@@ -163,13 +163,21 @@ async def generate_agent_key(
 # ─── A helyi nyomtató-ügynök végpontjai (X-Agent-Key) ────────────────────────
 
 
-async def _agent_settings(db: AsyncSession, agent_key: str | None) -> PrintSettings:
+async def _agent_settings(
+    db: AsyncSession, agent_key: str | None, agent_version: str | None = None,
+) -> PrintSettings:
     st = await _get_or_create_settings(db)
     if not st.agent_key or not agent_key or not secrets.compare_digest(
         st.agent_key, agent_key
     ):
         raise HTTPException(status_code=401, detail={"code": "print.bad_agent_key"})
     st.agent_last_seen = datetime.now(UTC)
+    # Az ügynök jelentett verziója — ebből látszik, letelepült-e a frissítés.
+    if agent_version:
+        try:
+            st.agent_version = int(agent_version)
+        except ValueError:
+            pass
     return st
 
 
@@ -198,24 +206,44 @@ async def agent_script(
 
 @agent_router.get("/jobs")
 async def agent_poll(
+    wait: int = 0,
     db: AsyncSession = Depends(get_db),
     x_agent_key: str | None = Header(default=None),
+    x_agent_version: str | None = Header(default=None),
 ):
-    """A várakozó feladatok az ügynöknek (EZPL-lel együtt)."""
-    await _agent_settings(db, x_agent_key)
-    jobs = (
-        await db.execute(
-            select(PrintJob)
-            .where(PrintJob.status == "pending")
-            .order_by(PrintJob.created_at)
-            .limit(10)
-        )
-    ).scalars().all()
+    """A várakozó feladatok az ügynöknek (EZPL-lel együtt).
+
+    ``wait`` (0–25 mp): LONG-POLL — a kérés nyitva marad, és azonnal
+    visszatér, amint feladat érkezik. Így az ügynöknek nem kell 3
+    másodpercenként kopogtatnia (az üzleti PC-t lassította): üres sornál
+    percenként ~2 kérés elég, a várakozás a hálózaton történik."""
+    import asyncio
+
+    await _agent_settings(db, x_agent_key, x_agent_version)
+    await db.commit()  # agent_last_seen azonnal frissül (online-jelzés)
+
+    wait = max(0, min(int(wait or 0), 25))
+
+    async def _pending() -> list[PrintJob]:
+        return (
+            await db.execute(
+                select(PrintJob)
+                .where(PrintJob.status == "pending")
+                .order_by(PrintJob.created_at)
+                .limit(10)
+            )
+        ).scalars().all()
+
+    jobs = await _pending()
+    waited = 0.0
+    while not jobs and waited < wait:
+        await asyncio.sleep(2.0)
+        waited += 2.0
+        jobs = await _pending()
     out = [
         {"id": str(j.id), "kind": j.kind, "label": j.label, "payload": j.payload}
         for j in jobs
     ]
-    await db.commit()
     return {"jobs": out}
 
 
