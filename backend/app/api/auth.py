@@ -56,13 +56,15 @@ class BootstrapBody(BaseModel):
 
 
 class LoginBody(BaseModel):
-    email: EmailStr
+    # Email VAGY felhasználónév — a mező történelmi okból "email" néven jár.
+    email: str = Field(min_length=1, max_length=320)
     password: str = Field(min_length=1, max_length=128)
 
 
 class UserOut(BaseModel):
     id: str
-    email: str
+    email: str | None
+    username: str | None = None
     display_name: str
     role: str
     permissions: list[str] = []
@@ -73,6 +75,7 @@ def _user_out(user: User, permissions: list[str] | None = None) -> UserOut:
     return UserOut(
         id=str(user.id),
         email=user.email,
+        username=user.username,
         display_name=user.display_name,
         role=user.role,
         permissions=permissions or [],
@@ -144,15 +147,19 @@ async def login(
     ):
         raise HTTPException(status_code=429, detail={"code": "auth.rate_limited"})
 
+    # Belépés email-lel VAGY felhasználónévvel — ugyanabba a mezőbe írható.
+    ident = body.email.strip().lower()
     user = (
-        await db.execute(select(User).where(User.email == body.email.lower()))
+        await db.execute(
+            select(User).where((User.email == ident) | (User.username == ident))
+        )
     ).scalar_one_or_none()
     if user is None or not user.is_active or not verify_password(
         user.password_hash, body.password
     ):
         _record_failure(throttle_key)
         _record_failure(email_key)
-        # Egységes hibaüzenet — nem áruljuk el, hogy az email létezik-e.
+        # Egységes hibaüzenet — nem áruljuk el, hogy az azonosító létezik-e.
         raise HTTPException(status_code=401, detail={"code": "auth.bad_credentials"})
 
     _failed_logins.pop(throttle_key, None)

@@ -10,6 +10,7 @@ temporary password the admin hands over; the employee should change it later.
 
 from __future__ import annotations
 
+import re as _re
 import secrets
 import uuid
 from datetime import date
@@ -148,8 +149,26 @@ class SensitiveFields(BaseModel):
 LOGIN_ROLES = ("employee", "szervizes", "uzletkoto", "manager", "admin")
 
 
+_USERNAME_RE = _re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
+
+
+def _clean_username(v: str | None) -> str | None:
+    """Felhasználónév-normalizálás: kisbetű, 3–64 karakter, betű/szám/._-
+    (@ tilos, hogy ne keveredjen az email-lel)."""
+    if v is None:
+        return None
+    v = v.strip().lower()
+    if not v:
+        return None
+    if "@" in v or not _USERNAME_RE.match(v):
+        raise ValueError("employee.bad_username")
+    return v
+
+
 class EmployeeCreate(EmployeeBase, SensitiveFields):
-    email: EmailStr  # login fiók email
+    # Belépési azonosító: email VAGY felhasználónév — legalább az egyik kell.
+    email: EmailStr | None = None
+    username: str | None = Field(default=None, max_length=64)
     initial_password: str | None = Field(default=None, min_length=10, max_length=128)
     skill_ids: list[int] = Field(default_factory=list)
     role: str = "employee"  # a login-fiók szerepköre
@@ -161,10 +180,25 @@ class EmployeeCreate(EmployeeBase, SensitiveFields):
             raise ValueError("employee.bad_role")
         return v
 
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: str | None) -> str | None:
+        return _clean_username(v)
+
 
 class EmployeeUpdate(BaseModel):
     # Minden mező opcionális — csak a megadottak módosulnak.
     model_config = {"extra": "forbid"}
+    # Felhasználónév a login-fiókhoz ("-" = törlés); emailt nem módosítunk itt.
+    username: str | None = Field(default=None, max_length=64)
+
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: str | None) -> str | None:
+        if v is not None and v.strip() == "-":
+            return "-"
+        return _clean_username(v)
+
     last_name: str | None = Field(default=None, min_length=1, max_length=128)
     first_name: str | None = Field(default=None, min_length=1, max_length=128)
     birth_name: str | None = None
@@ -229,6 +263,7 @@ class EmployeeOut(EmployeeBase):
     id: str
     user_id: str
     email: str | None = None
+    username: str | None = None
     role: str | None = None  # a login-fiók szerepköre
     status: str
     tax_id_masked: str | None = None
@@ -323,11 +358,15 @@ async def _set_skills(db: AsyncSession, emp: Employee, skill_ids: list[int]) -> 
         db.add(EmployeeSkill(employee_id=emp.id, skill_id=sid))
 
 
-def _employee_out(emp: Employee, email: str | None = None, role: str | None = None) -> EmployeeOut:
+def _employee_out(
+    emp: Employee, email: str | None = None, role: str | None = None,
+    username: str | None = None,
+) -> EmployeeOut:
     return EmployeeOut(
         id=str(emp.id),
         user_id=str(emp.user_id),
         email=email,
+        username=username,
         role=role,
         status=emp.status,
         last_name=emp.last_name,
@@ -387,15 +426,15 @@ async def list_employees(
 ):
     rows = (
         await db.execute(
-            select(Employee, User.email, User.role)
+            select(Employee, User.email, User.role, User.username)
             .join(User, User.id == Employee.user_id)
             .order_by(Employee.last_name, Employee.first_name)
         )
     ).all()
-    skills_map = await _load_skills_map(db, [emp.id for emp, _, _ in rows])
+    skills_map = await _load_skills_map(db, [emp.id for emp, _, _, _ in rows])
     out = []
-    for emp, email, role in rows:
-        item = _employee_out(emp, email, role)
+    for emp, email, role, username in rows:
+        item = _employee_out(emp, email, role, username)
         item.skills = skills_map.get(emp.id, [])
         out.append(item)
     return out
@@ -415,15 +454,28 @@ async def create_employee(
 
     await check_capacity(db, new_users=1, new_employees=1)
 
-    existing = (
-        await db.execute(select(User).where(User.email == body.email.lower()))
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise HTTPException(status_code=409, detail={"code": "employee.email_taken"})
+    # Belépési azonosító: email VAGY felhasználónév — legalább az egyik kell.
+    email = body.email.lower() if body.email else None
+    username = body.username  # a validátor már normalizálta
+    if not email and not username:
+        raise HTTPException(status_code=422, detail={"code": "employee.login_id_required"})
+    if email:
+        existing = (
+            await db.execute(select(User).where(User.email == email))
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(status_code=409, detail={"code": "employee.email_taken"})
+    if username:
+        existing = (
+            await db.execute(select(User).where(User.username == username))
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(status_code=409, detail={"code": "employee.username_taken"})
 
     password = body.initial_password or secrets.token_urlsafe(12)
     user = User(
-        email=body.email.lower(),
+        email=email,
+        username=username,
         password_hash=hash_password(password),
         display_name=f"{body.last_name} {body.first_name}",
         role=body.role,
@@ -436,7 +488,7 @@ async def create_employee(
         employee_code=await generate_unique_employee_code(db),
         **body.model_dump(
             exclude={
-                "email", "initial_password", "tax_id", "taj",
+                "email", "username", "initial_password", "tax_id", "taj",
                 "bank_account", "wage_amount", "skill_ids", "role",
             }
         ),
@@ -452,7 +504,7 @@ async def create_employee(
         entity_id=str(emp.id), request=request,
     )
     await db.commit()
-    out = _employee_out(emp, user.email, user.role)
+    out = _employee_out(emp, user.email, user.role, user.username)
     out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
     if body.initial_password is None:
         out.generated_password = password  # egyszeri megjelenítés az adminnak
@@ -467,7 +519,10 @@ async def get_employee(
 ):
     emp = await _get_or_404(db, employee_id)
     user = (await db.execute(select(User).where(User.id == emp.user_id))).scalar_one_or_none()
-    out = _employee_out(emp, user.email if user else None, user.role if user else None)
+    out = _employee_out(
+        emp, user.email if user else None, user.role if user else None,
+        user.username if user else None,
+    )
     out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
     return out
 
@@ -482,6 +537,29 @@ async def update_employee(
 ):
     emp = await _get_or_404(db, employee_id)
     data = body.model_dump(exclude_unset=True)
+
+    # Felhasználónév a login-fiókon ("-" = törlés) — egyediség-ellenőrzéssel.
+    if "username" in data:
+        new_username = data.pop("username")
+        login_user = (
+            await db.execute(select(User).where(User.id == emp.user_id))
+        ).scalar_one_or_none()
+        if login_user is not None:
+            if new_username == "-" or new_username is None:
+                login_user.username = None
+            else:
+                dupe = (
+                    await db.execute(
+                        select(User).where(
+                            User.username == new_username, User.id != login_user.id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if dupe is not None:
+                    raise HTTPException(
+                        status_code=409, detail={"code": "employee.username_taken"}
+                    )
+                login_user.username = new_username
 
     new_role = data.pop("role", None)
     if new_role is not None:
@@ -525,7 +603,10 @@ async def update_employee(
     )
     await db.commit()
     user = (await db.execute(select(User).where(User.id == emp.user_id))).scalar_one_or_none()
-    out = _employee_out(emp, user.email if user else None, user.role if user else None)
+    out = _employee_out(
+        emp, user.email if user else None, user.role if user else None,
+        user.username if user else None,
+    )
     out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
     return out
 

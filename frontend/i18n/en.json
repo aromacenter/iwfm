@@ -925,7 +925,8 @@
     "create": "Create",
     "toBootstrap": "First run? Create admin account",
     "toLogin": "Back to sign in",
-    "kioskLink": "⏱ Time clock terminal (clock in with your code) →"
+    "kioskLink": "⏱ Time clock terminal (clock in with your code) →",
+    "identifier": "Email or username"
   },
   "dash": {
     "title": "Dashboard",
@@ -1082,7 +1083,11 @@
     "contactShort": "contact",
     "companyTechs": "The company's technicians (one name per line)",
     "companyTechsPh": "Peter Smith\nGabor Nagy",
-    "companyTechsHint": "On the worksheet the technician is picked from this list — a new name typed there is added here automatically."
+    "companyTechsHint": "On the worksheet the technician is picked from this list — a new name typed there is added here automatically.",
+    "username": "Username (works instead of email)",
+    "usernamePh": "e.g. kiss.peter",
+    "usernameHint": "3–64 chars: lowercase, digits, dot, dash, underscore",
+    "loginIdHint": "Email OR username is enough to log in — provide at least one."
   },
   "sched": {
     "title": "Schedule",
@@ -1882,7 +1887,10 @@
     "vending.machine_not_found": "Machine not found.",
     "vending.code_taken": "This machine code is already taken.",
     "vending.bad_key": "Invalid machine code or API key.",
-    "vending.payload_too_big": "Telemetry payload too large."
+    "vending.payload_too_big": "Telemetry payload too large.",
+    "employee.login_id_required": "Provide an email or a username for login.",
+    "employee.username_taken": "This username is already taken.",
+    "employee.bad_username": "Invalid username (3–64: lowercase, digits, . _ -)."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",

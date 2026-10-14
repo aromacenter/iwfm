@@ -26,6 +26,7 @@ const LOGIN_ROLES = ["employee", "szervizes", "uzletkoto", "manager", "admin"] a
 
 const EMPTY_FORM = {
   email: "",
+  username: "",
   role: "employee" as (typeof LOGIN_ROLES)[number],
   last_name: "",
   first_name: "",
@@ -159,6 +160,7 @@ export default function DolgozokPage() {
     setForm({
       ...EMPTY_FORM,
       email: emp.email ?? "",
+      username: emp.username ?? "",
       role: (emp.role as (typeof LOGIN_ROLES)[number]) ?? "employee",
       last_name: emp.last_name,
       first_name: emp.first_name,
@@ -206,6 +208,8 @@ export default function DolgozokPage() {
       const clean = (v: string) => (v.trim() === "" ? undefined : v.trim());
       if (editing) {
         const body: Record<string, unknown> = {
+          // Felhasználónév a login-fiókon ("-" = törlés)
+          username: clean(form.username)?.toLowerCase() ?? "-",
           last_name: form.last_name,
           first_name: form.first_name,
           birth_name: clean(form.birth_name) ?? null,
@@ -252,6 +256,9 @@ export default function DolgozokPage() {
           // Alvállalkozónál a munkaügyi mezők nem látszanak — a kötelező
           // hire_date a felvétel napja lesz.
           hire_date: form.hire_date || new Date().toISOString().slice(0, 10),
+          // Belépési azonosító: email VAGY felhasználónév (üres = nincs)
+          email: clean(form.email) ?? null,
+          username: clean(form.username)?.toLowerCase() ?? null,
           is_contractor: contractor,
           is_company: contractor && isCompany,
           company_name: contractor && isCompany ? (companyName.trim() || null) : null,
@@ -494,7 +501,7 @@ export default function DolgozokPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-slate-500">
-                    <div>{emp.email ?? "—"}</div>
+                    <div>{emp.email ?? (emp.username ? `👤 ${emp.username}` : "—")}</div>
                     <div className="text-xs text-slate-400">{t("emp.hireDate")}: {emp.hire_date}</div>
                   </td>
                   <td className="px-4 py-3 text-right">{emp.weekly_hours}h</td>
@@ -826,12 +833,26 @@ export default function DolgozokPage() {
               {!editing && (
                 <>
                   <Field label={t("emp.loginEmail")}>
-                    <input required type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inputCls} />
+                    <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inputCls} />
                   </Field>
                   <Field label={t("emp.initialPassword")}>
                     <input value={form.initial_password} onChange={(e) => set("initial_password", e.target.value)} minLength={form.initial_password ? 10 : undefined} className={inputCls} />
                   </Field>
                 </>
+              )}
+              {/* Felhasználónév: email helyett is elég (bármely szerepkörnél) */}
+              <Field label={t("emp.username")}>
+                <input
+                  value={form.username}
+                  onChange={(e) => set("username", e.target.value)}
+                  placeholder={t("emp.usernamePh")}
+                  pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{2,63}"
+                  title={t("emp.usernameHint")}
+                  className={inputCls}
+                />
+              </Field>
+              {!editing && (
+                <p className="text-xs text-slate-500 sm:col-span-2">{t("emp.loginIdHint")}</p>
               )}
               <Field label={t("emp.loginRole")}>
                 <select

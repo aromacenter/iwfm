@@ -49,6 +49,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
+        UniqueConstraint("username", name="uq_users_username"),
         CheckConstraint(
             "role IN ('admin','manager','uzletkoto','szervizes','employee')",
             name="ck_users_role",
@@ -56,7 +57,10 @@ class User(Base):
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
-    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    # Belépés email-lel VAGY sima felhasználónévvel — bármely szerepkörnél
+    # elég az egyik (email nélküli dolgozónak felhasználónév jár).
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
     display_name: Mapped[str] = mapped_column(String(256), nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="employee")

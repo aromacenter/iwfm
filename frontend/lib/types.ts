@@ -2,7 +2,8 @@ export type Role = "admin" | "manager" | "uzletkoto" | "szervizes" | "employee";
 
 export interface AuthUser {
   id: string;
-  email: string;
+  email: string | null;
+  username?: string | null;
   display_name: string;
   role: Role;
   permissions: string[];
@@ -12,6 +13,7 @@ export interface EmployeeOut {
   id: string;
   user_id: string;
   email: string | null;
+  username?: string | null;
   role: string | null;
   status: "active" | "inactive";
   last_name: string;

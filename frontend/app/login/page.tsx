@@ -67,10 +67,13 @@ export default function LoginPage() {
             </label>
           )}
           <label className="block text-sm">
-            {t("login.email")}
+            {mode === "bootstrap" ? t("login.email") : t("login.identifier")}
             <input
               required
-              type="email"
+              // belépés email-lel VAGY felhasználónévvel — type=email tiltaná
+              // a sima felhasználónevet (bootstrapnél marad a szigorú email)
+              type={mode === "bootstrap" ? "email" : "text"}
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"

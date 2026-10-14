@@ -925,7 +925,8 @@
     "create": "Létrehozás",
     "toBootstrap": "Első indítás? Admin fiók létrehozása",
     "toLogin": "Vissza a bejelentkezéshez",
-    "kioskLink": "⏱ Munkaidő-terminál (blokkolás törzsszámmal) →"
+    "kioskLink": "⏱ Munkaidő-terminál (blokkolás törzsszámmal) →",
+    "identifier": "Email vagy felhasználónév"
   },
   "dash": {
     "title": "Vezérlőpult",
@@ -1082,7 +1083,11 @@
     "contactShort": "kapcsolattartó",
     "companyTechs": "A cég szerelői (egy név soronként)",
     "companyTechsPh": "Kiss Péter\nNagy Gábor",
-    "companyTechsHint": "A munkalapon ebből a névsorból választható a szerelő — az ott beírt új név automatikusan felkerül ide."
+    "companyTechsHint": "A munkalapon ebből a névsorból választható a szerelő — az ott beírt új név automatikusan felkerül ide.",
+    "username": "Felhasználónév (email helyett is jó)",
+    "usernamePh": "pl. kiss.peter",
+    "usernameHint": "3–64 karakter: kisbetű, szám, pont, kötőjel, aláhúzás",
+    "loginIdHint": "Belépéshez elég az email VAGY a felhasználónév — legalább az egyiket add meg."
   },
   "sched": {
     "title": "Beosztás",
@@ -1882,7 +1887,10 @@
     "vending.machine_not_found": "A gép nem található.",
     "vending.code_taken": "Ez a gép-kód már foglalt.",
     "vending.bad_key": "Érvénytelen gép-kód vagy API-kulcs.",
-    "vending.payload_too_big": "A telemetria-csomag túl nagy."
+    "vending.payload_too_big": "A telemetria-csomag túl nagy.",
+    "employee.login_id_required": "Adj meg emailt vagy felhasználónevet a belépéshez.",
+    "employee.username_taken": "Ez a felhasználónév már foglalt.",
+    "employee.bad_username": "Érvénytelen felhasználónév (3–64: kisbetű, szám, . _ -)."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
