@@ -1418,7 +1418,11 @@
     "wsPhotosUploaded": "{count} photo(s) attached to the worksheet.",
     "wsTechnician": "Technician (within company, optional)",
     "wsTechnicianPh": "who did the work",
-    "wsTechnicianHint": "For subcontractor companies: which of your technicians did it."
+    "wsTechnicianHint": "For subcontractor companies: which of your technicians did it.",
+    "assignTech": "Technician (within company)",
+    "assignTechNone": "— not assigned —",
+    "techAssigned": "Assigned to {name}",
+    "techCleared": "Assignment cleared."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1890,7 +1894,8 @@
     "vending.payload_too_big": "Telemetry payload too large.",
     "employee.login_id_required": "Provide an email or a username for login.",
     "employee.username_taken": "This username is already taken.",
-    "employee.bad_username": "Invalid username (3–64: lowercase, digits, . _ -)."
+    "employee.bad_username": "Invalid username (3–64: lowercase, digits, . _ -).",
+    "stock.contracted_protected": "The contracted coffee cannot be deleted — a deployed machine's settlement depends on it."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2706,7 +2711,13 @@
     "drillRevenueHint": "Click for the settlements behind it",
     "drillExpenseHint": "Click for the expense entries",
     "drillRevenueTitle": "settlements",
-    "drillExpenseTitle": "cash entries"
+    "drillExpenseTitle": "cash entries",
+    "mhSettlements": "{n} settlement(s)",
+    "mhDate": "Date",
+    "mhPartner": "Partner",
+    "mhCounter": "Counter",
+    "mhService": "{n} service event(s)",
+    "mhNoService": "No service history."
   },
   "svcHo": {
     "title": "Technician handover",

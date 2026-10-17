@@ -148,6 +148,17 @@ export default function FeladataimPage() {
   useEffect(() => {
     api.get<string[]>("/api/tasks/my-technicians").then(setMyTechs).catch(() => {});
   }, []);
+
+  // Feladat kiadása a cég szerelőjének (87994b7c)
+  async function assignTechnician(taskId: string, name: string) {
+    try {
+      await api.post(`/api/me/tasks/${taskId}/technician`, { name: name || null });
+      toast(name ? t("myTasks.techAssigned", { name }) : t("myTasks.techCleared"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
   const { t } = useT();
   const { toast, prompt } = useUI();
 
@@ -568,6 +579,22 @@ export default function FeladataimPage() {
               </span>
             </div>
             <p className="text-xs text-slate-400">{t("myTasks.due", { date: task.due_date })}</p>
+            {/* Cégen belüli kiadás (87994b7c): melyik szerelő viszi a munkát */}
+            {myTechs.length > 0 && task.status !== "done" && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm">
+                <span className="font-medium text-violet-900">👷 {t("myTasks.assignTech")}:</span>
+                <select
+                  value={(task as { technician_name?: string | null }).technician_name ?? ""}
+                  onChange={(e) => void assignTechnician(task.id, e.target.value)}
+                  className="rounded-lg border border-violet-300 bg-white px-2 py-1 text-sm"
+                >
+                  <option value="">{t("myTasks.assignTechNone")}</option>
+                  {myTechs.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             {task.asset && (
               <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                 <p className="font-medium text-slate-700">☕ {task.asset.name}</p>

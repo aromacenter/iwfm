@@ -567,9 +567,22 @@ async def delete_partner_stock(
     actor: User = Depends(require_perm("settlements")),
 ):
     """Készlet-sor törlése a partner külső raktárából (pl. tévesen felvett
-    termék). A könyv szerinti mennyiség kivezetésre kerül (remove mozgás)."""
+    termék). A könyv szerinti mennyiség kivezetésre kerül (remove mozgás).
+    A SZERZŐDÖTT kávé (kihelyezett gép alapterméke) NEM törölhető (6b8271f4) —
+    az elszámolás erre épül."""
     partner = await _get_partner_or_404(db, partner_id)
     product = await _get_product_or_404(db, product_id)
+    protected = (
+        await db.execute(
+            select(Asset.id).where(
+                Asset.partner_id == partner.id,
+                Asset.status == "deployed",
+                Asset.default_product_id == product.id,
+            ).limit(1)
+        )
+    ).scalars().first()
+    if protected is not None:
+        raise HTTPException(status_code=422, detail={"code": "stock.contracted_protected"})
     stock = (
         await db.execute(
             select(PartnerStock).where(
@@ -844,10 +857,29 @@ async def settlement_context(
         for r in rep_rows:
             reports[r.asset_id] = r  # a legutóbbi marad
 
+    async def _effective_default_product(a: Asset) -> uuid.UUID | None:
+        """A gép kávéja: a beállított alaptermék, annak hiányában az UTOLSÓ
+        gép-soros elszámolás terméke (05881f0f: import után sok gépen üres a
+        mező — ne kelljen kézzel kiválasztani, amit eddig is számláztunk)."""
+        if a.default_product_id:
+            return a.default_product_id
+        return (
+            await db.execute(
+                select(SettlementMachine.product_id)
+                .where(
+                    SettlementMachine.asset_id == a.id,
+                    SettlementMachine.product_id.is_not(None),
+                )
+                .order_by(SettlementMachine.created_at.desc())
+                .limit(1)
+            )
+        ).scalars().first()
+
     machines = []
     for a in assets:
         prev, last_at = await _machine_prev_counter(db, a)
         rep = reports.get(a.id)
+        eff_product = await _effective_default_product(a)
         machines.append(SettlementCtxMachine(
             asset_id=str(a.id),
             barcode=a.barcode,
@@ -858,8 +890,8 @@ async def settlement_context(
             counter_prices=a.counter_prices,
             prev_counter=prev,
             last_settled_at=last_at,
-            default_product_id=str(a.default_product_id) if a.default_product_id else None,
-            product_name=product_names.get(a.default_product_id),
+            default_product_id=str(eff_product) if eff_product else None,
+            product_name=product_names.get(eff_product),
             reported_counters=(rep.counters if rep else None),
             reported_at=(rep.created_at if rep else None),
             reported_by=(rep.reporter_name if rep else None),

@@ -370,6 +370,72 @@ async def stats_map(
     return out
 
 
+@router.get("/machine-history", dependencies=[Depends(require_module("stats"))])
+async def machine_history(
+    barcode: str = Query(min_length=3, max_length=64),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """Egy gép TELJES elszámolás- és szerviz-története (5404e465) — a
+    statisztika gép-soraira kattintva nyílik. Szándékosan nem epoch-olt:
+    ez a gép életrajza, nem forgalmi statisztika."""
+    matrix = await get_permission_matrix(db)
+    perms = permissions_for(actor.role, matrix)
+    if "invoicing" not in perms and "agent_report" not in perms:
+        raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+    from app.models import Asset, Partner, ServiceTicket
+
+    asset = (
+        await db.execute(select(Asset).where(Asset.barcode == barcode.strip()))
+    ).scalar_one_or_none()
+
+    st_rows = (
+        await db.execute(
+            select(SettlementMachine, Settlement.created_at, Partner.name)
+            .join(Settlement, Settlement.id == SettlementMachine.settlement_id)
+            .outerjoin(Partner, Partner.id == Settlement.partner_id)
+            .where(SettlementMachine.barcode == barcode.strip())
+            .order_by(Settlement.created_at.desc())
+            .limit(100)
+        )
+    ).all()
+    settlements = [
+        {
+            "date": created_at,
+            "partner": pname,
+            "prev_counter": sm.prev_counter,
+            "new_counter": sm.new_counter,
+            "portions": sm.portions_billed,
+            "net": _money(sm.amount_net or 0.0),
+        }
+        for sm, created_at, pname in st_rows
+    ]
+    service: list[dict] = []
+    if asset is not None:
+        tickets = (
+            await db.execute(
+                select(ServiceTicket)
+                .where(ServiceTicket.asset_id == asset.id)
+                .order_by(ServiceTicket.created_at.desc())
+                .limit(50)
+            )
+        ).scalars().all()
+        service = [
+            {
+                "ticket_no": tk.ticket_no, "title": tk.title, "status": tk.status,
+                "created_at": tk.created_at, "partner": tk.partner_label,
+            }
+            for tk in tickets
+        ]
+    return {
+        "barcode": barcode.strip(),
+        "name": asset.name if asset else None,
+        "status": asset.status if asset else None,
+        "settlements": settlements,
+        "service": service,
+    }
+
+
 @router.get(
     "/cash/suppliers", response_model=list[str],
     dependencies=[Depends(require_module("cashbox"))],

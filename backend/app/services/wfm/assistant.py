@@ -215,6 +215,60 @@ async def _t_search_machines(db: AsyncSession, actor: User, args: dict):
     }, None
 
 
+async def _t_machine_history(db: AsyncSession, actor: User, args: dict):
+    """Gép mozgástörténete + audit-események (38be4231): ki, mikor, mit —
+    kihelyezés, visszavétel, szerkesztés, számláló-bejelentés."""
+    from app.models import AssetMovement, AuditEvent
+
+    a = await _find_asset(db, str(args.get("machine") or ""))
+    if a is None:
+        return None, "Nincs ilyen gép (vonalkód / gyári szám / név alapján)."
+    user_names = {
+        u.id: u.display_name
+        for u in (await db.execute(select(User))).scalars()
+    }
+    moves = (
+        await db.execute(
+            select(AssetMovement)
+            .where(AssetMovement.asset_id == a.id)
+            .order_by(AssetMovement.created_at.desc())
+            .limit(20)
+        )
+    ).scalars().all()
+    events = (
+        await db.execute(
+            select(AuditEvent)
+            .where(
+                AuditEvent.entity_type == "asset",
+                AuditEvent.entity_id == a.barcode,
+            )
+            .order_by(AuditEvent.created_at.desc())
+            .limit(20)
+        )
+    ).scalars().all()
+    return {
+        "machine": {"barcode": a.barcode, "name": a.name, "status": a.status},
+        "movements": [
+            {
+                "when": m.created_at.isoformat(timespec="minutes"),
+                "action": m.action,
+                "who": user_names.get(m.actor_user_id),
+                "detail": m.detail,
+            }
+            for m in moves
+        ],
+        "audit": [
+            {
+                "when": e.created_at.isoformat(timespec="minutes"),
+                "action": e.action,
+                "who": user_names.get(e.actor_user_id),
+                "detail": e.detail,
+            }
+            for e in events
+        ],
+    }, None
+
+
 async def _t_create_service_ticket(db: AsyncSession, actor: User, args: dict):
     from app.api.service import _next_ticket_no
 
@@ -709,6 +763,13 @@ TOOLS: list[dict] = [
         "description": "Gépek keresése vonalkódra, típusra, gyártóra vagy gyári számra. Max 10 találat.",
         "schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
         "run": _t_search_machines,
+    },
+    {
+        "name": "machine_history",
+        "feature": "machines",
+        "description": "Egy gép teljes mozgástörténete és esemény-naplója: KI és MIKOR helyezte ki / vette vissza / szerkesztette, számláló-bejelentések. A gép lehet vonalkód, gyári szám vagy név.",
+        "schema": {"type": "object", "properties": {"machine": {"type": "string"}}, "required": ["machine"]},
+        "run": _t_machine_history,
     },
     {
         "name": "create_service_ticket",

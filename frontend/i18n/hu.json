@@ -1418,7 +1418,11 @@
     "wsPhotosUploaded": "{count} fotó csatolva a munkalaphoz.",
     "wsTechnician": "Szerelő neve (cégen belül, opcionális)",
     "wsTechnicianPh": "ki végezte a munkát",
-    "wsTechnicianHint": "Alvállalkozó cégnél: melyik szerelőtök csinálta — a díj a cég közös folyószámláján marad, de a bontás látszik."
+    "wsTechnicianHint": "Alvállalkozó cégnél: melyik szerelőtök csinálta — a díj a cég közös folyószámláján marad, de a bontás látszik.",
+    "assignTech": "Szerelő (cégen belül)",
+    "assignTechNone": "— nincs kiadva —",
+    "techAssigned": "Kiadva: {name}",
+    "techCleared": "Kiadás törölve."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1890,7 +1894,8 @@
     "vending.payload_too_big": "A telemetria-csomag túl nagy.",
     "employee.login_id_required": "Adj meg emailt vagy felhasználónevet a belépéshez.",
     "employee.username_taken": "Ez a felhasználónév már foglalt.",
-    "employee.bad_username": "Érvénytelen felhasználónév (3–64: kisbetű, szám, . _ -)."
+    "employee.bad_username": "Érvénytelen felhasználónév (3–64: kisbetű, szám, . _ -).",
+    "stock.contracted_protected": "A szerződött kávé nem törölhető — kihelyezett gép elszámolása épül rá."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2706,7 +2711,13 @@
     "drillRevenueHint": "Kattints a mögötte lévő elszámolásokért",
     "drillExpenseHint": "Kattints a kiadás-tételekért",
     "drillRevenueTitle": "elszámolások",
-    "drillExpenseTitle": "kassza-tételek"
+    "drillExpenseTitle": "kassza-tételek",
+    "mhSettlements": "{n} elszámolás",
+    "mhDate": "Dátum",
+    "mhPartner": "Partner",
+    "mhCounter": "Számláló",
+    "mhService": "{n} szerviz-esemény",
+    "mhNoService": "Nincs szerviz-előzmény."
   },
   "svcHo": {
     "title": "Szerelő-átadás",

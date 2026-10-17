@@ -107,6 +107,7 @@ class CommentOut(BaseModel):
 
 class TaskOut(BaseModel):
     id: str
+    technician_name: str | None = None  # cégen belüli kiadás (87994b7c)
     title: str
     description: str | None
     employee_id: str
@@ -395,7 +396,11 @@ async def _upsert_worksheet(
     if not body.work_description.strip() and not body.works:
         raise HTTPException(status_code=422, detail={"code": "worksheet.empty"})
     ws.work_description = body.work_description.strip()
-    ws.technician_name = (body.technician_name or "").strip() or None
+    # Szerelő: a mentett érték, annak hiányában a feladat-szintű kiadás
+    # (87994b7c) — és a feladatra vissza is szinkronizáljuk.
+    ws.technician_name = (body.technician_name or "").strip() or task.technician_name or None
+    if ws.technician_name:
+        task.technician_name = ws.technician_name
     # Alvállalkozó CÉGNÉL az új szerelő-név automatikusan felkerül a cég
     # névsorára (d8bde9e6) — legközelebb már választható.
     if ws.technician_name:
@@ -790,6 +795,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             ticket_images=ticket_imgs.get(t.id, []),
             completed_at=t.completed_at,
             completed_by_name=t.completed_by_name,
+            technician_name=t.technician_name,
             intake_id=str(t.intake_id) if t.intake_id else None,
             intake_photos=intake_photo_ids.get(t.id, []),
             worksheet_photos=ws_photo_ids.get(t.id, []),
@@ -1613,6 +1619,38 @@ async def my_ticket_image(
     if att is None:
         raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
     return Response(content=att.data, media_type=att.mime)
+
+
+class TechnicianBody(BaseModel):
+    name: str | None = Field(default=None, max_length=256)  # üres = kiosztás törlése
+
+
+@me_router.post("/{task_id}/technician", response_model=TaskOut)
+async def my_assign_technician(
+    task_id: str,
+    body: TechnicianBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """Alvállalkozó CÉG: a feladat kiadása a cég egyik szerelőjének
+    (87994b7c). Az új név automatikusan felkerül a cég névsorára; a
+    munkalap Szerelő mezője ebből töltődik elő."""
+    task = await _own_task_or_404(db, emp, task_id)
+    name = (body.name or "").strip()[:256] or None
+    task.technician_name = name
+    if name and emp.is_company:
+        techs = list(emp.company_technicians or [])
+        if name not in techs:
+            techs.append(name)
+            emp.company_technicians = techs[:50]
+    await record_audit(
+        db, actor=user, action="task.technician_assigned", entity_type="task",
+        entity_id=str(task.id), detail={"technician": name}, request=request,
+    )
+    await db.commit()
+    return (await _tasks_out(db, [task]))[0]
 
 
 @me_router.post("/{task_id}/comment", response_model=TaskOut)

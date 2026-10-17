@@ -772,6 +772,7 @@ class MovementOut(BaseModel):
     partner_id: str | None
     partner_name: str | None
     detail: str | None
+    actor_name: str | None = None  # ki csinálta (230771e0)
     created_at: datetime
 
 
@@ -980,10 +981,26 @@ async def asset_type_defaults(
     ).scalar_one_or_none()
     if a is None:
         return None
+    # Számláló-nevek: a legutóbbi NEM üres névsorú azonos típusú gépről
+    # (54efbc9b) — a legfrissebb példányon gyakran még nincs kitöltve.
+    counter_names = a.counter_names
+    if not counter_names or not any(counter_names):
+        named = (
+            await db.execute(
+                select(Asset.counter_names)
+                .where(
+                    func.lower(Asset.name) == name.strip().lower(),
+                    Asset.counter_names.is_not(None),
+                )
+                .order_by(Asset.created_at.desc())
+                .limit(5)
+            )
+        ).scalars().all()
+        counter_names = next((n for n in named if n and any(n)), counter_names)
     return TypeDefaultsOut(
         manufacturer=a.manufacturer, article_number=a.article_number,
         norm=a.norm, norms=a.norms, counter_count=a.counter_count or 1,
-        counter_names=a.counter_names,
+        counter_names=counter_names,
     )
 
 
@@ -1221,6 +1238,14 @@ async def get_asset(
         .all()
     )
     move_names = await _partner_names(db, {m.partner_id for m in moves})
+    # Ki csinálta a mozgást (230771e0) — a felelősség a történetben látszik.
+    actor_ids = {m.actor_user_id for m in moves if m.actor_user_id}
+    actor_names: dict = {}
+    if actor_ids:
+        for u in (
+            await db.execute(select(User).where(User.id.in_(actor_ids)))
+        ).scalars():
+            actor_names[u.id] = u.display_name
     out.movements = [
         MovementOut(
             id=str(m.id),
@@ -1228,6 +1253,7 @@ async def get_asset(
             partner_id=str(m.partner_id) if m.partner_id else None,
             partner_name=move_names.get(m.partner_id),
             detail=m.detail,
+            actor_name=actor_names.get(m.actor_user_id),
             created_at=m.created_at,
         )
         for m in moves

@@ -314,6 +314,9 @@ class Task(Base):
     # Elvégzés pillanatképe: mikor és ki zárta le (status -> done).
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Alvállalkozó CÉGEN BELÜL kiadva ennek a szerelőnek (87994b7c) — a
+    # munkalap technician_name mezője ebből töltődik elő.
+    technician_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     employee_id: Mapped[uuid.UUID] = mapped_column(

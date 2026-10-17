@@ -34,6 +34,7 @@ interface Movement {
   action: string;
   partner_name: string | null;
   detail: string | null;
+  actor_name?: string | null;
   created_at: string;
 }
 
@@ -107,10 +108,15 @@ export default function GepekPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [search, setSearch] = useState("");
   // ?q=<vonalkód> — más oldalakról (feladatok, Telegram-link) ide ugorva a
-  // kereső előtöltve nyílik, egyből a gép adatlap-sorával (077af934).
+  // VONALKÓD-KERESŐ útvonalon megy a keresés (5bd27fe1): az pontos
+  // by-barcode találatot ad, és ismeretlen kódnál is értelmesen viselkedik.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("q");
-    if (q) setSearch(q);
+    if (!q) return;
+    // számszerű kódnál a vonalkód-lookup; másnál marad a szabad keresés
+    if (/^[0-9A-Za-z-]{6,}$/.test(q.trim())) void lookupCode(q.trim());
+    else setSearch(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [statusFilter, setStatusFilter] = useState("");
   const [partnerFilter, setPartnerFilter] = useState("");
@@ -1101,6 +1107,8 @@ export default function GepekPage() {
                     <div>
                       <span className="font-medium">{t(`inv.moves.${m.action}`)}</span>
                       {m.partner_name && <span className="text-slate-500"> → {m.partner_name}</span>}
+                      {/* ki csinálta (230771e0) */}
+                      {m.actor_name && <span className="ml-1 text-xs text-indigo-600">· 👤 {m.actor_name}</span>}
                       {m.detail && <div className="text-xs text-slate-400">{m.detail}</div>}
                     </div>
                     <span className="whitespace-nowrap text-xs text-slate-400">{fmt(m.created_at)}</span>

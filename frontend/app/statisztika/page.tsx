@@ -58,6 +58,24 @@ export default function StatisztikaPage() {
 
   const ft = (n: number) => `${Math.round(n).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
 
+  // Gép teljes története (5404e465): elszámolások + szerviz-jegyek
+  interface MachineHistory {
+    barcode: string;
+    name: string | null;
+    status: string | null;
+    settlements: { date: string; partner: string | null; prev_counter: number; new_counter: number; portions: number; net: number }[];
+    service: { ticket_no: string; title: string; status: string; created_at: string; partner: string | null }[];
+  }
+  const [machineHist, setMachineHist] = useState<MachineHistory | null>(null);
+  async function openMachine(barcode: string) {
+    try {
+      const h = await api.get<MachineHistory>(`/api/stats/machine-history?barcode=${encodeURIComponent(barcode)}`);
+      setMachineHist(h);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   const [period, setPeriod] = useState<"day" | "week" | "month" | "year" | "custom">("month");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -263,7 +281,15 @@ export default function StatisztikaPage() {
                 <tbody>
                   {stats.by_machine.map((r) => (
                     <tr key={r.barcode} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2 font-mono text-xs">{r.barcode}</td>
+                      {/* kattintható gép-sorszám → teljes történet (5404e465) */}
+                      <td className="py-1.5 pr-2 font-mono text-xs">
+                        <button
+                          onClick={() => void openMachine(r.barcode)}
+                          className="text-indigo-700 hover:underline"
+                        >
+                          {r.barcode}
+                        </button>
+                      </td>
                       <td className="py-1.5 pr-2">{r.name}</td>
                       <td className="py-1.5 pr-2 text-right tabular-nums">{r.portions.toLocaleString("hu-HU")}</td>
                       <td className="py-1.5 pr-2 text-right font-medium tabular-nums">{ft(r.net)}</td>
@@ -275,6 +301,74 @@ export default function StatisztikaPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Gép-történet modal (5404e465) */}
+      {machineHist && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setMachineHist(null); }}
+          className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+        >
+          <div className="my-8 w-full max-w-2xl space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">
+              ☕ {machineHist.name ?? "?"} <span className="font-mono text-sm text-slate-400">{machineHist.barcode}</span>
+            </h2>
+            <div>
+              <p className="mb-1 text-sm font-semibold text-slate-700">🧾 {t("stats.mhSettlements", { n: machineHist.settlements.length })}</p>
+              {machineHist.settlements.length === 0 ? (
+                <p className="py-2 text-sm text-slate-400">{t("stats.empty")}</p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase text-slate-500">
+                        <th className="py-1 pr-2">{t("stats.mhDate")}</th>
+                        <th className="py-1 pr-2">{t("stats.mhPartner")}</th>
+                        <th className="py-1 pr-2 text-right">{t("stats.mhCounter")}</th>
+                        <th className="py-1 pr-2 text-right">{t("stats.portions")}</th>
+                        <th className="py-1 text-right">{t("stats.net")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {machineHist.settlements.map((s, i) => (
+                        <tr key={i} className="border-t border-slate-100">
+                          <td className="whitespace-nowrap py-1 pr-2 text-xs">{new Date(s.date).toLocaleDateString("hu-HU")}</td>
+                          <td className="py-1 pr-2">{s.partner ?? "—"}</td>
+                          <td className="py-1 pr-2 text-right tabular-nums text-xs">{s.prev_counter.toLocaleString("hu-HU")} → {s.new_counter.toLocaleString("hu-HU")}</td>
+                          <td className="py-1 pr-2 text-right tabular-nums">{Math.round(s.portions).toLocaleString("hu-HU")}</td>
+                          <td className="py-1 text-right tabular-nums">{ft(s.net)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-semibold text-slate-700">🔧 {t("stats.mhService", { n: machineHist.service.length })}</p>
+              {machineHist.service.length === 0 ? (
+                <p className="py-2 text-sm text-slate-400">{t("stats.mhNoService")}</p>
+              ) : (
+                <div className="max-h-48 space-y-1 overflow-y-auto text-sm">
+                  {machineHist.service.map((tk) => (
+                    <div key={tk.ticket_no} className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-1">
+                      <span className="font-mono text-xs text-slate-400">{tk.ticket_no}</span>
+                      <span>{tk.title}</span>
+                      {tk.partner && <span className="text-xs text-slate-400">@ {tk.partner}</span>}
+                      <span className="ml-auto whitespace-nowrap text-xs text-slate-400">
+                        {new Date(tk.created_at).toLocaleDateString("hu-HU")} · {tk.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setMachineHist(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+                {t("common.close")}
+              </button>
             </div>
           </div>
         </div>
