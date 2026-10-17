@@ -3,7 +3,7 @@
 /** Feladataim (dolgozói, mobilra optimalizálva): kiosztott feladatok,
  * komment, státuszgombok, munkalap kitöltése aláírással. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import SuggestInput from "@/components/SuggestInput";
@@ -148,6 +148,18 @@ export default function FeladataimPage() {
   useEffect(() => {
     api.get<string[]>("/api/tasks/my-technicians").then(setMyTechs).catch(() => {});
   }, []);
+
+  // OFFLINE-előszinkron (841171f6): a nyitott feladatok munkalapjait a
+  // háttérben egyszer lekérjük — a service worker eltárolja, így térerő
+  // nélkül is megnyílnak a helyszínen.
+  const prefetched = useRef(false);
+  useEffect(() => {
+    if (prefetched.current || tasks.length === 0) return;
+    prefetched.current = true;
+    for (const task of tasks.filter((x) => x.status !== "done").slice(0, 25)) {
+      fetch(`/api/me/tasks/${task.id}/worksheet`, { credentials: "include" }).catch(() => {});
+    }
+  }, [tasks]);
 
   // Feladat kiadása a cég szerelőjének (87994b7c)
   async function assignTechnician(taskId: string, name: string) {

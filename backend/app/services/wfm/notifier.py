@@ -171,6 +171,17 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
         logging.getLogger(__name__).warning("telegram link poll failed", exc_info=True)
         tg_linked = 0
 
+    # Fix bérleti díjas automata számlázás (1b2a4153/8e843400) — best effort,
+    # havi őr (rental_last_billed) védi a duplázástól.
+    from app.services.wfm.rental_billing import run_fixed_rental_billing
+
+    try:
+        await run_fixed_rental_billing(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("fixed rental billing failed", exc_info=True)
+
     # Naptár- és Mt.-figyelés (AI, havi őrökkel, best-effort).
     from app.services.wfm.calendar_watch import ensure_next_year_calendar, monthly_mt_check
 

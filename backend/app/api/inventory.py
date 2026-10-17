@@ -1551,6 +1551,50 @@ async def swap_asset(
         detail={"replacement": new.barcode, "partner": partner.name if partner else None},
         request=request,
     )
+
+    # Gépcsere után AZONNAL nyílik egy tárgyi-eszköz munkalap a hibás gépre
+    # (b3149cb7): a cserélő képviselő feladata a hiba rögzítése. Tulajdonos
+    # = X-Presso (a create_task-kal azonos minta).
+    try:
+        from datetime import date as _date
+
+        from app.models import Employee, Task, Worksheet
+
+        swapper_emp = (
+            await db.execute(select(Employee).where(Employee.user_id == actor.id))
+        ).scalars().first()
+        if swapper_emp is not None:
+            from app.api.tasks import _next_worksheet_serial
+
+            swap_task = Task(
+                title=f"Gépcsere — hibafelvétel: {old.name} ({old.barcode})",
+                description=(
+                    "A gépet cseréled a(z) "
+                    f"{partner.name if partner else '?'} partnernél — rögzítsd a "
+                    "hibáját és a javítási konstrukciókat ezen a munkalapon."
+                ),
+                employee_id=swapper_emp.id,
+                due_date=_date.today(),
+                created_by=actor.id,
+            )
+            db.add(swap_task)
+            await db.flush()
+            db.add(Worksheet(
+                task_id=swap_task.id,
+                serial=await _next_worksheet_serial(db, False),
+                external_service=False,
+                asset_id=old.id,
+                maintenance_fee=old.maintenance_fee,
+                work_description="",
+                materials=[],
+                client_name="X-Presso Coffee Kft." if (old.tangible and not old.customer_owned) else None,
+                created_by=actor.id,
+            ))
+    except Exception:  # pragma: no cover — a csere a lényeg, a munkalap ráadás
+        import logging
+
+        logging.getLogger(__name__).warning("swap worksheet creation failed", exc_info=True)
+
     await db.commit()
     return _asset_out(new, partner.name if partner else None)
 

@@ -4,7 +4,7 @@
  *  fizikai leltár rögzítése → fogyás/összeg számítás → elszámolás mentése →
  *  „Kiszámlázott” gomb (Billingó). Az elszámoló a bejelentkezett user. */
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
@@ -637,6 +637,20 @@ export default function ElszamolasPage() {
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
   }, [flushQueue]);
+
+  // OFFLINE-előszinkron (841171f6): az esedékes partnerek elszámolási
+  // kontextusát és készletét a háttérben lekérjük — a service worker
+  // eltárolja, így térerő nélkül is kitölthető az elszámolás a helyszínen
+  // (a mentés az offline várólistára kerül, és online-ra érve beküldődik).
+  const duePrefetched = useRef(false);
+  useEffect(() => {
+    if (duePrefetched.current || due.length === 0) return;
+    duePrefetched.current = true;
+    for (const d of due.slice(0, 25)) {
+      fetch(`/api/partners/${d.partner_id}/settlement-context`, { credentials: "include" }).catch(() => {});
+      fetch(`/api/partners/${d.partner_id}/stock`, { credentials: "include" }).catch(() => {});
+    }
+  }, [due]);
 
   // Gép-soros élő előnézet: lefőzött adag (számláló-különbség) − szerviz,
   // kedvezménnyel árazva; termékenként összegződik a leltár-táblához.

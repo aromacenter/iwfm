@@ -1895,7 +1895,9 @@
     "employee.login_id_required": "Provide an email or a username for login.",
     "employee.username_taken": "This username is already taken.",
     "employee.bad_username": "Invalid username (3–64: lowercase, digits, . _ -).",
-    "stock.contracted_protected": "The contracted coffee cannot be deleted — a deployed machine's settlement depends on it."
+    "stock.contracted_protected": "The contracted coffee cannot be deleted — a deployed machine's settlement depends on it.",
+    "offline.no_cache": "No internet, and no saved copy of this data exists on this device yet.",
+    "quote.decided_admin_only": "The decision has been made — only an admin can override it."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2294,7 +2296,13 @@
     "tierPortions": "portions, price",
     "tierAdd": "Add tier",
     "tiersSummary": "tiered pricing ({n} tiers)",
-    "editFromList": "Edit contract (opens the partner's contract modal)"
+    "editFromList": "Edit contract (opens the partner's contract modal)",
+    "fixedRental": "Fixed rental construction",
+    "fixedRentalHint": "The partner pays a fixed monthly fee per machine regardless of traffic — the settlement AND invoice are generated on the given day without human action (item: Coffee machine / grinder rental fee, unit: month).",
+    "billingDay": "Billing day (1–28):",
+    "rentalMerge": "Same tax-number sites on ONE invoice",
+    "rentalMergeHint": "All sites of the company go on one invoice, each line noting the site. Unchecked: a separate invoice per site (partner).",
+    "rentalFeeHint": "Set the monthly fee per machine in the machine's rental fee field (Machines page). Payment method and terms come from the contract fields above. The +10% late surcharge is automatic after 30+ days of debt."
   },
   "delivery": {
     "title": "Delivery (delivery note)",

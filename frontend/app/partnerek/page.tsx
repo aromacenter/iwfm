@@ -310,6 +310,9 @@ export default function PartnerekPage() {
     payment_terms_days: number | null;
     no_minimum: boolean;
     auto_billing: boolean;
+    fixed_rental?: boolean;
+    billing_day?: number | null;
+    rental_merge_company?: boolean;
     phone_settlement: boolean;
     visit_weeks: number | null;
     price_tiers: { qty_from: number; qty_to: number | null; price: number }[] | null;
@@ -353,7 +356,7 @@ export default function PartnerekPage() {
     below_min_price: string; min_kg: string; below_min_price_kg: string;
     rent_if_below_min: boolean; settlement_weeks: string;
     payment_method: string; payment_terms_days: string;
-    no_minimum: boolean; auto_billing: boolean; phone_settlement: boolean; visit_weeks: string; tiers: { from: string; to: string; price: string }[]; invoice_norma: string; default_product_id: string; note: string;
+    no_minimum: boolean; auto_billing: boolean; fixed_rental: boolean; billing_day: string; rental_merge_company: boolean; phone_settlement: boolean; visit_weeks: string; tiers: { from: string; to: string; price: string }[]; invoice_norma: string; default_product_id: string; note: string;
   } | null>(null);
   const [cError, setCError] = useState<string | null>(null);
   const [cBusy, setCBusy] = useState(false);
@@ -422,7 +425,7 @@ export default function PartnerekPage() {
       min_portions: "", below_min_price: "", min_kg: "", below_min_price_kg: "",
       rent_if_below_min: false, settlement_weeks: "4",
       payment_method: "", payment_terms_days: "",
-      no_minimum: false, auto_billing: false, phone_settlement: false, visit_weeks: "", tiers: [], invoice_norma: "", default_product_id: "", note: "",
+      no_minimum: false, auto_billing: false, fixed_rental: false, billing_day: "", rental_merge_company: false, phone_settlement: false, visit_weeks: "", tiers: [], invoice_norma: "", default_product_id: "", note: "",
     });
   }
 
@@ -440,6 +443,9 @@ export default function PartnerekPage() {
       payment_terms_days: c.payment_terms_days != null ? String(c.payment_terms_days) : "",
       no_minimum: c.no_minimum,
       auto_billing: c.auto_billing,
+      fixed_rental: c.fixed_rental ?? false,
+      billing_day: c.billing_day != null ? String(c.billing_day) : "",
+      rental_merge_company: c.rental_merge_company ?? false,
       phone_settlement: c.phone_settlement,
       visit_weeks: c.visit_weeks != null ? String(c.visit_weeks) : "",
       tiers: (c.price_tiers || []).map((tr) => ({
@@ -470,6 +476,9 @@ export default function PartnerekPage() {
         payment_terms_days: cForm.payment_terms_days ? Number(cForm.payment_terms_days) : null,
         no_minimum: cForm.no_minimum,
         auto_billing: cForm.auto_billing,
+        fixed_rental: cForm.fixed_rental,
+        billing_day: cForm.fixed_rental && cForm.billing_day ? Number(cForm.billing_day) : null,
+        rental_merge_company: cForm.fixed_rental && cForm.rental_merge_company,
         phone_settlement: cForm.phone_settlement,
         visit_weeks: cForm.phone_settlement && cForm.visit_weeks ? Number(cForm.visit_weeks) : null,
         price_tiers: cForm.tiers.filter((tr) => tr.price !== "").length
@@ -1193,6 +1202,37 @@ export default function PartnerekPage() {
                     <span className="block text-xs text-violet-700">{t("contracts.autoBillingHint")}</span>
                   </span>
                 </label>
+                {/* Fix bérleti díjas konstrukció (1b2a4153/8e843400) */}
+                <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+                  <label className="flex items-start gap-2">
+                    <input type="checkbox" checked={cForm.fixed_rental} onChange={(e) => setCForm({ ...cForm, fixed_rental: e.target.checked })} className="mt-0.5 h-4 w-4" />
+                    <span>
+                      🏷️ {t("contracts.fixedRental")}
+                      <span className="block text-xs text-sky-700">{t("contracts.fixedRentalHint")}</span>
+                    </span>
+                  </label>
+                  {cForm.fixed_rental && (
+                    <div className="mt-2 space-y-2 pl-6">
+                      <label className="block text-xs text-sky-900">
+                        {t("contracts.billingDay")}
+                        <input
+                          type="number" min={1} max={28} required
+                          value={cForm.billing_day}
+                          onChange={(e) => setCForm({ ...cForm, billing_day: e.target.value })}
+                          className="ml-2 w-20 rounded-lg border border-sky-300 px-2 py-1"
+                        />
+                      </label>
+                      <label className="flex items-start gap-2 text-xs text-sky-900">
+                        <input type="checkbox" checked={cForm.rental_merge_company} onChange={(e) => setCForm({ ...cForm, rental_merge_company: e.target.checked })} className="mt-0.5 h-4 w-4" />
+                        <span>
+                          {t("contracts.rentalMerge")}
+                          <span className="block text-sky-700">{t("contracts.rentalMergeHint")}</span>
+                        </span>
+                      </label>
+                      <p className="text-xs text-sky-700">{t("contracts.rentalFeeHint")}</p>
+                    </div>
+                  )}
+                </div>
                 <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm">
                   <label className="flex items-start gap-2">
                     <input type="checkbox" checked={cForm.phone_settlement} onChange={(e) => setCForm({ ...cForm, phone_settlement: e.target.checked })} className="mt-0.5 h-4 w-4" />

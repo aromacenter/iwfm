@@ -75,6 +75,13 @@ class ContractBody(BaseModel):
     # Automata számlázás: a diktált számláló-állásokból mentett elszámolás
     # után a számla azonnal, emberi kattintás nélkül kiállítódik.
     auto_billing: bool = False
+    # FIX BÉRLETI DÍJAS konstrukció (1b2a4153/8e843400): havi automata
+    # elszámolás+számla a billing_day napon, gépenkénti fix díjjal
+    # (Asset.rent_fee); rental_merge_company = azonos adószámú címek egy
+    # számlán (tétel-megjegyzésben a cím), különben címenként külön.
+    fixed_rental: bool = False
+    billing_day: int | None = Field(default=None, ge=1, le=28)
+    rental_merge_company: bool = False
     # Telefonos elszámolás: az útvonal-tervezés kihagyja a partnert;
     # visit_weeks megadásával ritkább (karbantartó) látogatás mégis ütemeződik.
     phone_settlement: bool = False
@@ -144,6 +151,10 @@ class ContractOut(BaseModel):
     payment_terms_days: int | None
     no_minimum: bool
     auto_billing: bool = False
+    fixed_rental: bool = False
+    billing_day: int | None = None
+    rental_merge_company: bool = False
+    rental_last_billed: str | None = None
     phone_settlement: bool = False
     visit_weeks: int | None = None
     price_tiers: list[dict] | None = None
@@ -193,6 +204,10 @@ def _out(c: PartnerContract, product_name: str | None = None) -> ContractOut:
         payment_terms_days=c.payment_terms_days,
         no_minimum=c.no_minimum,
         auto_billing=c.auto_billing,
+        fixed_rental=c.fixed_rental,
+        billing_day=c.billing_day,
+        rental_merge_company=c.rental_merge_company,
+        rental_last_billed=c.rental_last_billed.isoformat() if c.rental_last_billed else None,
         phone_settlement=c.phone_settlement,
         visit_weeks=c.visit_weeks,
         price_tiers=c.price_tiers,

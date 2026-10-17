@@ -1895,7 +1895,9 @@
     "employee.login_id_required": "Adj meg emailt vagy felhasználónevet a belépéshez.",
     "employee.username_taken": "Ez a felhasználónév már foglalt.",
     "employee.bad_username": "Érvénytelen felhasználónév (3–64: kisbetű, szám, . _ -).",
-    "stock.contracted_protected": "A szerződött kávé nem törölhető — kihelyezett gép elszámolása épül rá."
+    "stock.contracted_protected": "A szerződött kávé nem törölhető — kihelyezett gép elszámolása épül rá.",
+    "offline.no_cache": "Nincs internet, és ehhez az adathoz még nincs mentett példány ezen az eszközön.",
+    "quote.decided_admin_only": "A döntés már megszületett — felülírni csak admin tudja."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2294,7 +2296,13 @@
     "tierPortions": "adag, ár",
     "tierAdd": "Sáv hozzáadása",
     "tiersSummary": "sávos ár ({n} sáv)",
-    "editFromList": "Szerződés szerkesztése (a partner szerződés-ablaka nyílik)"
+    "editFromList": "Szerződés szerkesztése (a partner szerződés-ablaka nyílik)",
+    "fixedRental": "Fix bérleti díjas konstrukció",
+    "fixedRentalHint": "A partner forgalomtól függetlenül fix havi díjat fizet gépenként — az elszámolás ÉS a számla a megadott napon emberi beavatkozás nélkül készül el (tétel: Kávéfőző gép / daráló bérleti díj, egység: hónap).",
+    "billingDay": "Számlázás napja (1–28):",
+    "rentalMerge": "Azonos adószámú címek EGY számlán",
+    "rentalMergeHint": "A cég összes üzemelési címének gépei egy számlára kerülnek, tételenként a cím nevével. Kikapcsolva címenként (partnerenként) külön számla készül.",
+    "rentalFeeHint": "A havi díjat gépenként a Gépek oldalon, a gép bérleti díj mezőjében állítod. Fizetési mód és határidő: a fenti szerződés-mezőkből. 30+ napos tartozásnál a +10% felár automatikus."
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",

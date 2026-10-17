@@ -105,6 +105,17 @@ async def settlement_invoice_items(db: AsyncSession, settlement: Settlement) -> 
             continue
         if line.portions <= 0:
             continue
+        # Fix bérleti díjas tétel (1b2a4153): mennyiségi egysége HÓNAP
+        if line.product_id is None and line.product_name.startswith("Kávéfőző gép / daráló bérleti díj"):
+            items.append({
+                "name": line.product_name,
+                "unit_price": line.price_per_portion,
+                "unit_price_type": "net",
+                "quantity": round(line.portions, 2),
+                "unit": "hónap",
+                "vat": _vat_label(line.vat_percent),
+            })
+            continue
         portion_based = (
             line.product_id in consignment_ids
             and not line.product_name.startswith("Készlethiány")

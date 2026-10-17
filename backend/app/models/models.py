@@ -2011,6 +2011,19 @@ class PartnerContract(Base):
     auto_billing: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # FIX BÉRLETI DÍJAS konstrukció (1b2a4153/8e843400): a partner forgalomtól
+    # függetlenül fix havi díjat fizet gépenként (Asset.rent_fee). A megadott
+    # napon az elszámolás ÉS a számla emberi beavatkozás nélkül készül el.
+    fixed_rental: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    billing_day: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1–28
+    # Azonos adószámú partnerek (üzemelési címek) gépei EGY számlára — a
+    # tétel-megjegyzésben a címmel; False = címenként (partnerenként) külön.
+    rental_merge_company: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    rental_last_billed: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Telefonos elszámolás: a partnert NEM kell útvonalba tervezni — az
     # állásokat telefonon/QR-en diktálja. Ha visit_weeks is be van állítva,
     # ritkább (pl. karbantartó) látogatás mégis ütemeződik.

@@ -348,6 +348,13 @@ async def _suggest_quote_email(db: AsyncSession, ws: Worksheet) -> str | None:
         return ws.quote_email
     if ws.asset_id is None:
         return None
+    # Tárgyi eszköz (saját) gépnél az ajánlatok a szerviz-postafiókra mennek
+    # (ab1c33d7) — az ügyfél itt MI vagyunk.
+    _own = (
+        await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+    ).scalar_one_or_none()
+    if _own is not None and _own.tangible and not _own.customer_owned:
+        return "szerviz@x-presso.hu"
     intake_email = (
         await db.execute(
             select(MachineIntake.client_email)
@@ -389,6 +396,7 @@ async def _upsert_worksheet(
     had_both_signatures = (
         ws is not None and ws.employee_signature is not None and ws.client_signature is not None
     )
+    had_repair_options = ws is not None and bool(ws.repair_options)
     if ws is None:
         ws = Worksheet(task_id=task.id, serial=await _next_worksheet_serial(db), created_by=actor.id)
         db.add(ws)
@@ -529,6 +537,46 @@ async def _upsert_worksheet(
             import logging
 
             logging.getLogger(__name__).warning("worksheet.signed event failed", exc_info=True)
+
+    # SAJÁT (tárgyi eszköz) gép konstrukciói elkészültek (ab1c33d7): minden
+    # képviselő/manager/admin Telegram-értesítést kap kattintható linkkel,
+    # hogy BELSŐ döntéssel elfogadhassa valamelyiket (ár-részletek nélkül).
+    if (
+        not had_repair_options
+        and bool(ws.repair_options)
+        and (ws.quote_status or "none") == "none"
+        and ws.asset_id is not None
+    ):
+        try:
+            _a = (
+                await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+            ).scalar_one_or_none()
+            if _a is not None and _a.tangible and not _a.customer_owned:
+                from app.core.config import get_settings as _gsq
+                from app.services.wfm.telegram import send_personal
+
+                link = f"{_gsq().frontend_origin.rstrip('/')}/feladatok"
+                deciders = (
+                    await db.execute(
+                        select(Employee)
+                        .join(User, User.id == Employee.user_id)
+                        .where(
+                            User.is_active.is_(True),
+                            User.role.in_(("admin", "manager", "uzletkoto")),
+                        )
+                    )
+                ).scalars().all()
+                msg = (
+                    f"🔧 SAJÁT gép javítási konstrukciói elkészültek: {ws.serial} "
+                    f"— {_a.name} ({_a.barcode}). Válassz és fogadd el belső "
+                    f"döntéssel a Feladatok oldalon!\n🔗 {link}"
+                )
+                for d_emp in deciders:
+                    await send_personal(db, d_emp, msg)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("internal quote notify failed", exc_info=True)
 
     # KSZ-karbantartás: mindkét aláírás megvan és nincs kedvezmény → a díjról
     # automatikusan számla készül és e-mailben kimegy az ügyfélnek a
@@ -922,6 +970,11 @@ async def create_task(
 
     # A feladattal együtt azonnal kiáll az online munkalap (ML-sorszámmal);
     # az elvégzett munkát/anyagokat/aláírást a dolgozó tölti ki később.
+    # Tárgyi eszköz gépnél a "tulajdonos" MI vagyunk (ab1c33d7): az
+    # ügyfél-mezők automatikusan az X-Presso adataival töltődnek.
+    client_name = (body.client_name or "").strip() or None
+    if client_name is None and ws_asset is not None and ws_asset.tangible and not ws_asset.customer_owned:
+        client_name = "X-Presso Coffee Kft."
     ws = Worksheet(
         task_id=task.id,
         serial=await _next_worksheet_serial(db, body.external_service),
@@ -931,7 +984,7 @@ async def create_task(
         maintenance_fee=ws_asset.maintenance_fee if ws_asset else None,
         work_description="",
         materials=[],
-        client_name=(body.client_name or "").strip() or None,
+        client_name=client_name,
         client_location=(body.client_location or "").strip() or None,
         created_by=actor.id,
     )
@@ -1780,11 +1833,33 @@ async def quote_accept_internal(
     ws = await _get_worksheet(db, task.id)
     if ws is None:
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
-    if (ws.quote_status or "none") in ("accepted", "declined"):
-        raise HTTPException(status_code=422, detail={"code": "quote.already_accepted"})
+    options = list(ws.repair_options or [])
+    override = (ws.quote_status or "none") in ("accepted", "declined")
+    if override:
+        # Döntés után CSAK az admin írhatja felül (ab1c33d7) — a korábbi
+        # teljes opció-lista az audit-naplóból áll vissza.
+        if actor.role != "admin":
+            raise HTTPException(status_code=403, detail={"code": "quote.decided_admin_only"})
+        prev = (
+            await db.execute(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.action.in_(
+                        ("worksheet.quote_accept_internal", "worksheet.quote_accepted")
+                    ),
+                    AuditEvent.entity_id == ws.serial,
+                )
+                .order_by(AuditEvent.created_at.desc())
+                .limit(1)
+            )
+        ).scalars().first()
+        saved = (prev.detail or {}).get("all_options") if prev else None
+        if saved:
+            names = {(w.get("name") or "").strip() for w in options}
+            options += [w for w in saved if (w.get("name") or "").strip() not in names]
     chosen = next(
         (
-            w for w in (ws.repair_options or [])
+            w for w in options
             if (w.get("name") or "").strip() == body.option_name.strip()
         ),
         None,
@@ -1793,7 +1868,7 @@ async def quote_accept_internal(
         raise HTTPException(status_code=422, detail={"code": "quote.bad_option"})
     all_options = [
         {"name": w.get("name"), "price_net": w.get("price_net")}
-        for w in (ws.repair_options or [])
+        for w in options
     ]
     ws.repair_options = [chosen]
     ws.quote_status = "accepted"
