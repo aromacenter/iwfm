@@ -9,7 +9,7 @@
  *  - minden más GET (oldalak): network-first, offline tartalék-cache-sel.
  */
 
-const CACHE = "iwfm-v2";
+const CACHE = "iwfm-v3";
 const API_CACHE = "iwfm-api-v1";
 
 self.addEventListener("install", (event) => {
@@ -40,6 +40,12 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET") {
     return; // mutációk: mindig hálózat, az app várólistázik, ha kell
+  }
+  // IDEGEN domain (pl. térkép-csempék): a SW NEM nyúl hozzá (790165df) —
+  // a worker saját CSP-je (connect-src 'self') blokkolná a benne futó
+  // fetch-et; a böngésző natívan tölti, az oldal img-src szabálya szerint.
+  if (url.origin !== self.location.origin) {
+    return;
   }
 
   if (url.pathname.startsWith("/api")) {
