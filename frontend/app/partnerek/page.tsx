@@ -857,8 +857,10 @@ export default function PartnerekPage() {
       </div>
 
       {form && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setForm(null); }} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-          <form onSubmit={save} className="my-8 w-full max-w-2xl space-y-4 rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+          <form onSubmit={save} className="relative my-8 w-full max-w-2xl space-y-4 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setForm(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">
               {form.id ? t("partners.editTitle") : t("partners.newTitle")}
               {form.partner_code && (
@@ -1032,10 +1034,11 @@ export default function PartnerekPage() {
 
       {contractsFor && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setContractsFor(null); }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <div className="my-8 w-full max-w-2xl space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative my-8 w-full max-w-2xl space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setContractsFor(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">📜 {t("contracts.titleFor", { name: contractsFor.name })}</h2>
               <button onClick={() => setContractsFor(null)} className="text-sm text-slate-500 hover:underline">

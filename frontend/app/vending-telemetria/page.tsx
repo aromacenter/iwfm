@@ -221,8 +221,10 @@ export default function VendingTelemetriaPage() {
 
       {/* Gép-űrlap modal */}
       {form && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setForm(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={saveMachine} className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={saveMachine} className="relative w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setForm(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">🤖 {form.id ? t("vtel.editMachine") : t("vtel.addMachine")}</h2>
             <label className="block text-sm">
               {t("vtel.name")} *
@@ -281,8 +283,10 @@ export default function VendingTelemetriaPage() {
 
       {/* Telemetria-előzmények modal */}
       {history && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setHistory(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[80vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative max-h-[80vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setHistory(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">📜 {history.machine.name} — {t("vtel.history")}</h2>
             {history.rows.length === 0 ? (
               <p className="py-6 text-center text-sm text-slate-400">{t("vtel.noHistory")}</p>

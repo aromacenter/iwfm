@@ -2893,10 +2893,11 @@ export default function ElszamolasPage() {
 
       {prices && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setPrices(null); }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
         >
-          <div className="max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setPrices(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("prices.title")}</h2>
             <p className="text-sm text-slate-500">{t("prices.hint")}</p>
             <table className="w-full text-sm">
@@ -2950,11 +2951,9 @@ export default function ElszamolasPage() {
       )}
 
       {signing && (
-        <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) { setSigning(null); setSignature(null); } }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        >
-          <div className="max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <button type="button" onClick={() => { setSigning(null); setSignature(null); }} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("cons.signTitle")}</h2>
             <p className="text-sm text-slate-600">
               {signing.partner_name} · {ft(signing.total_gross)} · {fmt(signing.created_at)}
@@ -3003,10 +3002,11 @@ export default function ElszamolasPage() {
 
       {delivery && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setDelivery(null); }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <form onSubmit={saveDelivery} className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={saveDelivery} className="relative my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setDelivery(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">🚚 {t("delivery.title")}</h2>
             <p className="text-xs text-slate-500">{t("delivery.hint")}</p>
             {delivery.lines.map((line, i) => (
@@ -3117,10 +3117,11 @@ export default function ElszamolasPage() {
           bruttó áron, azonnali számlával és opcionális GLS-feladással. */}
       {instantSale && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setInstantSale(null); }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <div className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setInstantSale(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">💰 {t("instant.title")}</h2>
             <p className="text-xs text-slate-500">{t("instant.hint")}</p>
             <div className="space-y-2">
@@ -3257,10 +3258,11 @@ export default function ElszamolasPage() {
 
       {replenish && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setReplenish(null); }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
         >
-          <form onSubmit={doReplenish} className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={doReplenish} className="relative max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setReplenish(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("cons.replenishTitle")}</h2>
             <label className="block text-sm">
               {t("cons.name")}
@@ -3334,8 +3336,10 @@ export default function ElszamolasPage() {
 
       {/* Készlet-visszavét modal: partnertől a képviselő raktárába/autójába */}
       {stockReturn && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setStockReturn(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setStockReturn(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">↩ {t("cons.returnTitle")}</h2>
             <p className="text-xs text-slate-500">{t("cons.returnHint")}</p>
             <label className="block text-sm">

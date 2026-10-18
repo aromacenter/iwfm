@@ -643,10 +643,11 @@ export default function UzletkotoPage() {
       {/* Elszámolás-részletek: tételek + gépsorok (az összegre kattintva) */}
       {detail && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setDetail(null); }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <div className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setDetail(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">
               {detail.partner_name} · {fmt(detail.created_at)}
             </h2>
@@ -699,10 +700,11 @@ export default function UzletkotoPage() {
       {/* Számla-műveletek (a Kiszámlázva / Nincs számlázva jelvényre kattintva) */}
       {invoiceFor && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setInvoiceFor(null); }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
         >
-          <div className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setInvoiceFor(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">🧾 {t("uzk.invoiceTitle")}</h2>
             <p className="text-sm text-slate-500">
               {invoiceFor.partner_name} · {ft(invoiceFor.total_gross)} · {fmt(invoiceFor.created_at)}

@@ -172,10 +172,11 @@ export default function NaptarPage() {
       {/* Nap-részletező: a kiválasztott nap teendői nagyban */}
       {openDay && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setOpenDay(null); }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
         >
-          <div className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+          <div className="relative max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setOpenDay(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold capitalize">
                 {new Date(`${openDay}T00:00:00`).toLocaleDateString(locale, {

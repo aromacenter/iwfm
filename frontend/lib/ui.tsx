@@ -107,10 +107,11 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
       {/* Megerősítő dialógus */}
       {confirmState && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) closeConfirm(false); }}
           className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4"
         >
-          <div className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => closeConfirm(false)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <p className="whitespace-pre-line text-sm text-slate-700">{confirmState.text}</p>
             <div className="flex justify-end gap-2">
               <button
@@ -132,14 +133,12 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
 
       {/* Szöveg-bekérő (prompt) dialógus */}
       {promptState && (
-        <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) closePrompt(null); }}
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4"
-        >
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4">
           <form
             onSubmit={(e) => { e.preventDefault(); closePrompt(promptState.value.trim() || null); }}
-            className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl"
+            className="relative w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl"
           >
+            <button type="button" onClick={() => closePrompt(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <label className="block text-sm text-slate-700">
               {promptState.text}
               <input

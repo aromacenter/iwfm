@@ -854,8 +854,10 @@ export default function GepekPage() {
 
       {/* Eszköz űrlap */}
       {assetForm && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setAssetForm(null); }} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-          <form onSubmit={saveAsset} className="my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+          <form onSubmit={saveAsset} className="relative my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setAssetForm(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{assetForm.id ? t("inv.editAssetTitle") : t("inv.newAssetTitle")}</h2>
             <label className="block text-sm">
               {t("inv.barcode")} *
@@ -1039,8 +1041,10 @@ export default function GepekPage() {
 
       {/* Kihelyezés */}
       {deployFor && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setDeployFor(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={doDeploy} className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={doDeploy} className="relative max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setDeployFor(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("inv.deployTitle")}</h2>
             <p className="text-sm text-slate-500">{deployFor.name} · <span className="font-mono">{deployFor.barcode}</span></p>
             <label className="block text-sm">
@@ -1095,8 +1099,10 @@ export default function GepekPage() {
 
       {/* Mozgástörténet */}
       {historyFor && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setHistoryFor(null); }} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-          <div className="my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+          <div className="relative my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setHistoryFor(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("inv.historyTitle", { name: historyFor.name })}</h2>
             {(historyFor.movements ?? []).length === 0 ? (
               <p className="text-sm text-slate-400">{t("inv.noHistory")}</p>
@@ -1157,8 +1163,10 @@ export default function GepekPage() {
 
       {/* Gépcsere */}
       {swapFor && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setSwapFor(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={doSwap} className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={doSwap} className="relative max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setSwapFor(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("inv.swapTitle")}</h2>
             <p className="text-sm text-slate-500">
               {swapFor.name} · <span className="font-mono">{swapFor.barcode}</span> → {swapFor.partner_name}

@@ -739,10 +739,11 @@ export default function RaktarPage() {
 
       {whForm && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setWhForm(null); }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <form onSubmit={saveWarehouse} className="my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={saveWarehouse} className="relative my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setWhForm(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{whForm.id ? t("wh.edit") : t("wh.new")}</h2>
             <label className="block text-sm">
               {t("cons.name")} *
@@ -788,10 +789,11 @@ export default function RaktarPage() {
 
       {addProduct && selected && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setAddProduct(null); }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <form onSubmit={saveAddProduct} className="my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={saveAddProduct} className="relative my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setAddProduct(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("wh.addProduct")} — {selected.name}</h2>
             <p className="text-xs text-slate-500">{t("wh.addProductHint")}</p>
             <label className="block text-sm">
@@ -820,10 +822,11 @@ export default function RaktarPage() {
 
       {action && selected && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setAction(null); }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <form onSubmit={runAction} className="my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={runAction} className="relative my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setAction(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">
               {t(`wh.${action.kind}`)} — {selected.name}
             </h2>
@@ -888,10 +891,11 @@ export default function RaktarPage() {
 
       {poForm && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setPoForm(null); }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <form onSubmit={savePo} className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={savePo} className="relative my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setPoForm(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("po.new")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block text-sm">

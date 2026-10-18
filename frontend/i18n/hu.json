@@ -520,7 +520,10 @@
     "pending": "{count} függő offline elszámolás — kattints az újraküldéshez",
     "retryHint": "Újraküldés most",
     "flushed": "{count} offline elszámolás sikeresen beküldve.",
-    "dropped": "Egy offline elszámolás nem küldhető be ({name}): {reason}"
+    "dropped": "Egy offline elszámolás nem küldhető be ({name}): {reason}",
+    "wsPending": "{count} munkalap vár beküldésre (offline mentve) — koppints az újrapróbáláshoz",
+    "wsDropped": "A(z) {title} munkalapot a szerver elutasította: {reason}",
+    "wsFlushed": "{count} offline munkalap beküldve."
   },
   "support": {
     "notFound": "Ez a támogatási link érvénytelen. Kérjük, olvassa be újra a gépen lévő QR-kódot.",
@@ -2302,7 +2305,8 @@
     "billingDay": "Számlázás napja (1–28):",
     "rentalMerge": "Azonos adószámú címek EGY számlán",
     "rentalMergeHint": "A cég összes üzemelési címének gépei egy számlára kerülnek, tételenként a cím nevével. Kikapcsolva címenként (partnerenként) külön számla készül.",
-    "rentalFeeHint": "A havi díjat gépenként a Gépek oldalon, a gép bérleti díj mezőjében állítod. Fizetési mód és határidő: a fenti szerződés-mezőkből. 30+ napos tartozásnál a +10% felár automatikus."
+    "rentalFeeHint": "A havi díjat gépenként a Gépek oldalon, a gép bérleti díj mezőjében állítod. Fizetési mód és határidő: a fenti szerződés-mezőkből. 30+ napos tartozásnál a +10% felár automatikus.",
+    "editLink": "Szerződés szerkesztése"
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",

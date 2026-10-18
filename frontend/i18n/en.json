@@ -520,7 +520,10 @@
     "pending": "{count} pending offline settlement(s) — click to retry",
     "retryHint": "Retry now",
     "flushed": "{count} offline settlement(s) submitted successfully.",
-    "dropped": "An offline settlement could not be submitted ({name}): {reason}"
+    "dropped": "An offline settlement could not be submitted ({name}): {reason}",
+    "wsPending": "{count} worksheet(s) queued offline — tap to retry",
+    "wsDropped": "Worksheet {title} was rejected by the server: {reason}",
+    "wsFlushed": "{count} offline worksheet(s) submitted."
   },
   "support": {
     "notFound": "This support link is invalid. Please scan the QR code on the machine again.",
@@ -2302,7 +2305,8 @@
     "billingDay": "Billing day (1–28):",
     "rentalMerge": "Same tax-number sites on ONE invoice",
     "rentalMergeHint": "All sites of the company go on one invoice, each line noting the site. Unchecked: a separate invoice per site (partner).",
-    "rentalFeeHint": "Set the monthly fee per machine in the machine's rental fee field (Machines page). Payment method and terms come from the contract fields above. The +10% late surcharge is automatic after 30+ days of debt."
+    "rentalFeeHint": "Set the monthly fee per machine in the machine's rental fee field (Machines page). Payment method and terms come from the contract fields above. The +10% late surcharge is automatic after 30+ days of debt.",
+    "editLink": "Edit contract"
   },
   "delivery": {
     "title": "Delivery (delivery note)",

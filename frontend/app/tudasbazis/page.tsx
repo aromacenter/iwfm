@@ -218,10 +218,11 @@ export default function TudasbazisPage() {
 
       {form && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setForm(null); }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <form onSubmit={save} className="my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <form onSubmit={save} className="relative my-8 w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setForm(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{form.id ? t("kb.editTitle") : t("kb.newTitle")}</h2>
             <label className="block text-sm">
               {t("kb.machine")} *

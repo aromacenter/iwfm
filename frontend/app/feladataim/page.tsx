@@ -8,7 +8,7 @@ import AppShell from "@/components/AppShell";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import SuggestInput from "@/components/SuggestInput";
 import Link from "next/link";
-import { api, errorMessage, shareOrDownloadFile } from "@/lib/api";
+import { api, ApiError, errorMessage, shareOrDownloadFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -173,6 +173,56 @@ export default function FeladataimPage() {
   }
   const { t } = useT();
   const { toast, prompt } = useUI();
+
+  // Offline munkalap-várólista (841171f6): hálózat nélkül mentett munkalapok
+  // helyben tárolódnak, és online-ra érve magától beküldődnek.
+  interface WsQueueItem { task_id: string; title: string; body: unknown; queued_at: string }
+  const WS_QUEUE_KEY = "iwfm-ws-queue";
+  function readWsQueue(): WsQueueItem[] {
+    try { return JSON.parse(localStorage.getItem(WS_QUEUE_KEY) ?? "[]") as WsQueueItem[]; }
+    catch { return []; }
+  }
+  function writeWsQueue(q: WsQueueItem[]) {
+    try { localStorage.setItem(WS_QUEUE_KEY, JSON.stringify(q)); } catch { /* tárhely-hiba */ }
+  }
+  const [pendingWs, setPendingWs] = useState(0);
+  const flushWsQueue = useCallback(async () => {
+    let q = readWsQueue();
+    setPendingWs(q.length);
+    if (q.length === 0) return;
+    let sent = 0;
+    while (q.length > 0) {
+      const item = q[0];
+      try {
+        await api.put(`/api/me/tasks/${item.task_id}/worksheet`, item.body);
+        sent += 1;
+        q = q.slice(1);
+        writeWsQueue(q);
+      } catch (err) {
+        if (err instanceof ApiError) {
+          // a szerver elutasította — eldobjuk, jelezzük (ne ragadjon be a sor)
+          toast(t("offline.wsDropped", { title: item.title, reason: errorMessage(err) }), "error");
+          q = q.slice(1);
+          writeWsQueue(q);
+        } else {
+          break; // még mindig nincs hálózat — később újra
+        }
+      }
+    }
+    setPendingWs(q.length);
+    if (sent > 0) {
+      toast(t("offline.wsFlushed", { count: sent }), "success");
+      load();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast, t]);
+  useEffect(() => {
+    flushWsQueue();
+    const onOnline = () => flushWsQueue();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [flushWsQueue]);
+
 
   // Elmentett aláírás-minta: egy kattintással beszúrható a dolgozói aláíráshoz
   const [sigSample, setSigSample] = useState<string | null>(null);
@@ -432,8 +482,7 @@ export default function FeladataimPage() {
     }
     setWsBusy(true);
     setWsError(null);
-    try {
-      await api.put(`/api/me/tasks/${wsTask.id}/worksheet`, {
+    const wsBody = {
         work_description: ws.work_description,
         technician_name: ws.technician_name.trim() || null,
         works: workRows.map((w) => {
@@ -473,11 +522,31 @@ export default function FeladataimPage() {
             : null,
         fee_discount: wsTask.worksheet_external ? null : ws.fee_discount,
         total_loss: ws.total_loss,
-      });
+    };
+    try {
+      await api.put(`/api/me/tasks/${wsTask.id}/worksheet`, wsBody);
       setWsTask(null);
       load();
     } catch (err) {
-      setWsError(errorMessage(err));
+      if (!(err instanceof ApiError)) {
+        // Nincs hálózat (841171f6): a munkalap a helyi várólistára kerül,
+        // és online-ra érve magától beküldődik — a munka nem vész el.
+        const q = readWsQueue();
+        // feladatonként a LEGUTOLSÓ mentés él (a korábbi sorban lévőt lecseréli)
+        const next = q.filter((x) => x.task_id !== wsTask.id);
+        next.push({
+          task_id: wsTask.id,
+          title: wsTask.title,
+          body: wsBody,
+          queued_at: new Date().toISOString(),
+        });
+        writeWsQueue(next);
+        setPendingWs(next.length);
+        setWsTask(null);
+        toast(t("offline.queued"), "info");
+      } else {
+        setWsError(errorMessage(err));
+      }
     } finally {
       setWsBusy(false);
     }
@@ -496,6 +565,15 @@ export default function FeladataimPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-lg space-y-4">
+        {pendingWs > 0 && (
+          <button
+            onClick={() => void flushWsQueue()}
+            title={t("offline.retryHint")}
+            className="w-full rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900"
+          >
+            📴 {t("offline.wsPending", { count: pendingWs })}
+          </button>
+        )}
         <h1 className="text-xl font-bold">{t("myTasks.title")}</h1>
 
         {/* Státusz-szűrő: nyitott (alap) / befejezett / mind */}
@@ -788,8 +866,10 @@ export default function FeladataimPage() {
       </div>
 
       {wsTask && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setWsTask(null); }} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-          <div className="my-6 w-full max-w-lg space-y-3 rounded-2xl bg-white p-5 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+          <div className="relative my-6 w-full max-w-lg space-y-3 rounded-2xl bg-white p-5 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setWsTask(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("myTasks.wsTitle", { title: wsTask.title })}</h2>
             {wsTask.worksheet_serial && (
               <p className="text-xs text-slate-500">{t("myTasks.wsSerial", { serial: wsTask.worksheet_serial })}</p>

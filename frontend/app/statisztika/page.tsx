@@ -308,10 +308,11 @@ export default function StatisztikaPage() {
       {/* Gép-történet modal (5404e465) */}
       {machineHist && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setMachineHist(null); }}
           className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-4"
         >
-          <div className="my-8 w-full max-w-2xl space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative my-8 w-full max-w-2xl space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setMachineHist(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">
               ☕ {machineHist.name ?? "?"} <span className="font-mono text-sm text-slate-400">{machineHist.barcode}</span>
             </h2>
@@ -376,10 +377,11 @@ export default function StatisztikaPage() {
       {/* Összeg-részletező modal (84452fba) */}
       {drill && (
         <div
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setDrill(null); }}
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
         >
-          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+          <div className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setDrill(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="font-semibold">
                 {drill.kind === "revenue" ? "💰" : "💸"} {drill.name} —{" "}

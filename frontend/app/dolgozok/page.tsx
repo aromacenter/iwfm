@@ -563,11 +563,13 @@ export default function DolgozokPage() {
       </div>
 
       {showForm && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowForm(false); }} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
           <form
             onSubmit={submit}
-            className="my-8 w-full max-w-2xl space-y-4 rounded-2xl bg-white p-6 shadow-xl"
+            className="relative my-8 w-full max-w-2xl space-y-4 rounded-2xl bg-white p-6 shadow-xl"
           >
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setShowForm(false)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">
               {editing
                 ? t("emp.editTitle", { name: `${editing.last_name} ${editing.first_name}` })
@@ -919,8 +921,10 @@ export default function DolgozokPage() {
 
       {/* Jelszó-beállító link modal (b3640159) */}
       {resetLink && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setResetLink(null); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setResetLink(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">🔗 {t("account.resetLinkTitle", { name: resetLink.name })}</h2>
             <p className="text-sm text-slate-600">{t("account.resetLinkHint")}</p>
             <div className="flex gap-2">
