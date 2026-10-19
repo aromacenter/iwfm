@@ -2468,7 +2468,15 @@
     "today": "today",
     "dayEmpty": "Nothing planned for this day.",
     "week3": "In 2 weeks",
-    "week4": "In 3 weeks"
+    "week4": "In 3 weeks",
+    "viewMonth": "Month",
+    "viewTimeline": "Timeline",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "more": "+{n} more…",
+    "taskCount": "{n} task(s)",
+    "tlGap": "no tasks from {from} ({n} days)",
+    "tlEmpty": "No scheduled tasks in the next 4 weeks."
   },
   "worksheet": {
     "empty": "Provide a description or at least one work item.",

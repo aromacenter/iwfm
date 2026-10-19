@@ -2468,7 +2468,15 @@
     "today": "ma",
     "dayEmpty": "Erre a napra nincs betervezett teendő.",
     "week3": "2 hét múlva",
-    "week4": "3 hét múlva"
+    "week4": "3 hét múlva",
+    "viewMonth": "Hónap",
+    "viewTimeline": "Idővonal",
+    "prevMonth": "Előző hónap",
+    "nextMonth": "Következő hónap",
+    "more": "+{n} további…",
+    "taskCount": "{n} feladat",
+    "tlGap": "{from}-tól nincs feladat ({n} nap)",
+    "tlEmpty": "A következő 4 hétben nincs ütemezett feladat."
   },
   "worksheet": {
     "empty": "Adj meg leírást vagy legalább egy munkatételt.",

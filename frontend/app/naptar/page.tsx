@@ -1,8 +1,11 @@
 "use client";
 
-/** Naptár-főoldal: belépés után mindenki ezt látja — az aktuális hét és
- * alatta a következő hét, napokra bontva az esedékes teendőkkel. Vezetői
- * jogosultsággal az összes feladat, dolgozói nézetben a sajátok. */
+/** Naptár-főoldal: belépés után mindenki ezt látja. Két nézet (user-kérés):
+ *  - HÓNAP-RÁCS (alapértelmezett): klasszikus naptár, esemény-címkékkel,
+ *    hónap-léptetéssel; napra kattintva a nap részletei.
+ *  - IDŐVONAL: csak a feladatos napok, az üres időszakok egy sorrá
+ *    zsugorodnak — telefonon/terepen ez a kényelmes.
+ * Vezetői jogosultsággal az összes feladat, dolgozói nézetben a sajátok. */
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -27,7 +30,13 @@ interface CalTask {
 const STATUS_CHIP: Record<CalTask["status"], string> = {
   open: "bg-indigo-50 text-indigo-800 border-indigo-200",
   needs_more_work: "bg-amber-50 text-amber-800 border-amber-200",
-  done: "bg-emerald-50 text-emerald-700 border-emerald-200 line-through opacity-70",
+  done: "bg-emerald-50 text-emerald-700 border-emerald-200 opacity-75",
+};
+
+const STATUS_ICON: Record<CalTask["status"], string> = {
+  open: "🧾",
+  needs_more_work: "🔧",
+  done: "✅",
 };
 
 function iso(d: Date): string {
@@ -54,10 +63,40 @@ export default function NaptarPage() {
   const canAll = can("tasks");
   const canMine = can("my_tasks");
 
-  const thisMonday = useMemo(() => mondayOf(new Date()), []);
-  const todayIso = iso(new Date());
-  const rangeFrom = iso(thisMonday);
-  const rangeTo = iso(addDays(thisMonday, 27)); // 4 hét előre (18da8b3c)
+  // Nézet-váltó: hónap-rács (alap) / idővonal — a választás megmarad.
+  const [view, setView] = useState<"month" | "timeline">("month");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("iwfm-cal-view");
+      if (saved === "timeline") setView("timeline");
+    } catch { /* tárolás nélkül is megy */ }
+  }, []);
+  function switchView(v: "month" | "timeline") {
+    setView(v);
+    try { localStorage.setItem("iwfm-cal-view", v); } catch { /* nem kritikus */ }
+  }
+
+  // Hónap-léptetés (csak a rács-nézetben): 0 = aktuális hónap
+  const [monthOffset, setMonthOffset] = useState(0);
+  const today = useMemo(() => new Date(), []);
+  const todayIso = iso(today);
+  const monthStart = useMemo(
+    () => new Date(today.getFullYear(), today.getMonth() + monthOffset, 1),
+    [today, monthOffset],
+  );
+  // A rács első/utolsó látható napja (hétfő-kezdésű teljes hetek)
+  const gridStart = useMemo(() => mondayOf(monthStart), [monthStart]);
+  const gridEnd = useMemo(() => {
+    const lastDay = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    return addDays(mondayOf(lastDay), 6);
+  }, [monthStart]);
+
+  // Idővonal: mától 4 hét előre
+  const tlFrom = todayIso;
+  const tlTo = iso(addDays(today, 27));
+
+  const rangeFrom = view === "month" ? iso(gridStart) : tlFrom;
+  const rangeTo = view === "month" ? iso(gridEnd) : tlTo;
 
   useEffect(() => {
     if (canAll) {
@@ -91,56 +130,56 @@ export default function NaptarPage() {
   // Nap-részletező: napra kattintva nagyban mutatja az aznapi teendőket
   const [openDay, setOpenDay] = useState<string | null>(null);
 
-  function week(offsetDays: number, titleKey: string) {
-    const days = Array.from({ length: 7 }, (_, i) => addDays(thisMonday, offsetDays + i));
+  // ── HÓNAP-RÁCS nézet ────────────────────────────────────────────────────
+  function monthGrid() {
+    const days: Date[] = [];
+    for (let d = new Date(gridStart); d <= gridEnd; d = addDays(d, 1)) days.push(new Date(d));
+    const dayNames = Array.from({ length: 7 }, (_, i) =>
+      addDays(gridStart, i).toLocaleDateString(locale, { weekday: "short" }),
+    );
     return (
-      <section className="mb-6">
-        <h2 className="mb-2 font-semibold text-slate-700">{t(titleKey)}</h2>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-7">
+      <section>
+        <div className="mb-1 grid grid-cols-7 gap-1.5">
+          {dayNames.map((n) => (
+            <div key={n} className="px-1 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              {n}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
           {days.map((d) => {
             const key = iso(d);
             const isToday = key === todayIso;
+            const inMonth = d.getMonth() === monthStart.getMonth();
             const dayTasks = byDay.get(key) ?? [];
+            const shown = dayTasks.slice(0, 2);
             return (
               <div
                 key={key}
                 onClick={() => setOpenDay(key)}
-                className={`min-h-28 cursor-pointer rounded-2xl border p-2 shadow-sm transition hover:ring-2 hover:ring-indigo-200 ${
+                className={`min-h-[5.5rem] cursor-pointer rounded-xl border p-1.5 transition hover:ring-2 hover:ring-indigo-200 ${
                   isToday
-                    ? "border-indigo-400 bg-indigo-50 ring-2 ring-indigo-300"
+                    ? "border-indigo-400 bg-indigo-50 ring-1 ring-indigo-300"
                     : "border-slate-200 bg-white"
-                }`}
+                } ${inMonth ? "" : "opacity-40"}`}
               >
-                <div className="mb-1 flex items-baseline justify-between">
-                  <span className={`text-xs uppercase ${isToday ? "font-bold text-indigo-700" : "text-slate-400"}`}>
-                    {d.toLocaleDateString(locale, { weekday: "short" })}
-                  </span>
-                  <span className={`text-sm ${isToday ? "font-bold text-indigo-700" : "font-medium text-slate-600"}`}>
-                    {d.toLocaleDateString(locale, { month: "short", day: "numeric" })}
-                  </span>
+                <div className={`text-xs ${isToday ? "font-bold text-indigo-700" : "font-medium text-slate-500"}`}>
+                  {d.getDate()}
                 </div>
-                <div className="space-y-1">
-                  {dayTasks.map((task) => (
+                <div className="mt-1 space-y-1">
+                  {shown.map((task) => (
                     <Link
                       key={task.id}
                       href={taskHref}
                       onClick={(e) => e.stopPropagation()}
-                      className={`block truncate rounded-lg border px-1.5 py-1 text-xs hover:opacity-80 ${STATUS_CHIP[task.status]}`}
+                      className={`block truncate rounded-md border px-1 py-0.5 text-[10.5px] font-medium hover:opacity-80 ${STATUS_CHIP[task.status]}`}
                       title={task.title + (task.employee_name ? ` — ${task.employee_name}` : "")}
                     >
-                      {task.title}
-                      {(task.asset?.partner_name || task.client_name) && (
-                        <span className="block truncate text-[10px] font-medium opacity-90">
-                          📍 {task.asset?.partner_name ?? task.client_name}
-                        </span>
-                      )}
-                      {canAll && task.employee_name && (
-                        <span className="block truncate text-[10px] opacity-70">{task.employee_name}</span>
-                      )}
+                      {STATUS_ICON[task.status]} {task.title}
                     </Link>
                   ))}
-                  {dayTasks.length === 0 && (
-                    <p className="text-[11px] text-slate-300">{t("cal.noTasks")}</p>
+                  {dayTasks.length > 2 && (
+                    <p className="px-1 text-[10px] text-slate-400">{t("cal.more", { n: dayTasks.length - 2 })}</p>
                   )}
                 </div>
               </div>
@@ -151,10 +190,118 @@ export default function NaptarPage() {
     );
   }
 
+  // ── IDŐVONAL nézet: csak a feladatos napok, az üresek összezsugorodnak ──
+  function timeline() {
+    const rows: { kind: "day"; key: string; tasks: CalTask[] }[] = [];
+    const gaps: { afterIdx: number; from: string; to: string; days: number }[] = [];
+    let gapStart: Date | null = null;
+    for (let d = new Date(today); iso(d) <= tlTo; d = addDays(d, 1)) {
+      const key = iso(d);
+      const dayTasks = byDay.get(key) ?? [];
+      if (dayTasks.length > 0) {
+        if (gapStart) {
+          const days = Math.round((d.getTime() - gapStart.getTime()) / 86400000);
+          gaps.push({ afterIdx: rows.length - 1, from: iso(gapStart), to: iso(addDays(d, -1)), days });
+          gapStart = null;
+        }
+        rows.push({ kind: "day", key, tasks: dayTasks });
+      } else if (!gapStart) {
+        gapStart = new Date(d);
+      }
+    }
+    const gapByIdx = new Map(gaps.map((g) => [g.afterIdx, g]));
+    const fmtShort = (k: string) =>
+      new Date(`${k}T00:00:00`).toLocaleDateString(locale, { month: "short", day: "numeric", weekday: "long" });
+    return (
+      <section className="relative pl-7">
+        {/* függőleges vonal */}
+        <div aria-hidden className="absolute bottom-2 left-2 top-2 w-0.5 rounded bg-slate-200" />
+        {rows.length === 0 && (
+          <p className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-400">
+            {t("cal.tlEmpty")}
+          </p>
+        )}
+        {gapByIdx.has(-1) && (
+          <p className="mb-4 text-xs text-slate-400">
+            ◌ {t("cal.tlGap", { from: fmtShort(gapByIdx.get(-1)!.from), n: gapByIdx.get(-1)!.days })}
+          </p>
+        )}
+        {rows.map((row, i) => (
+          <div key={row.key} className="mb-5">
+            <div className="relative">
+              <span
+                aria-hidden
+                className={`absolute -left-[1.42rem] top-1 h-2.5 w-2.5 rounded-full ${
+                  row.key === todayIso ? "bg-indigo-500 ring-4 ring-indigo-100" : "bg-slate-300"
+                }`}
+              />
+              <button onClick={() => setOpenDay(row.key)} className="mb-2 text-left">
+                <span className="text-sm font-bold capitalize text-slate-700 hover:text-indigo-700">
+                  {row.key === todayIso && <span className="mr-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-indigo-700">{t("cal.today")}</span>}
+                  {fmtShort(row.key)}
+                </span>
+                <span className="ml-2 text-xs text-slate-400">{t("cal.taskCount", { n: row.tasks.length })}</span>
+              </button>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {row.tasks.map((task) => (
+                <Link
+                  key={task.id}
+                  href={taskHref}
+                  className={`block rounded-xl border p-2.5 text-sm hover:opacity-85 ${STATUS_CHIP[task.status]}`}
+                >
+                  <span className="font-semibold">{STATUS_ICON[task.status]} {task.title}</span>
+                  <span className="mt-0.5 block truncate text-xs opacity-80">
+                    {[
+                      (task.asset?.partner_name || task.client_name) && `📍 ${task.asset?.partner_name ?? task.client_name}`,
+                      canAll && task.employee_name && `👤 ${task.employee_name}`,
+                    ].filter(Boolean).join(" · ")}
+                  </span>
+                </Link>
+              ))}
+            </div>
+            {gapByIdx.has(i) && (
+              <p className="mt-4 text-xs text-slate-400">
+                ◌ {t("cal.tlGap", { from: fmtShort(gapByIdx.get(i)!.from), n: gapByIdx.get(i)!.days })}
+              </p>
+            )}
+          </div>
+        ))}
+      </section>
+    );
+  }
+
+  const monthLabel = monthStart.toLocaleDateString(locale, { year: "numeric", month: "long" });
+
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">📆 {t("cal.title")}</h1>
+        {/* nézet-váltó: hónap-rács (alap) / idővonal */}
+        <div className="flex overflow-hidden rounded-lg border border-slate-300 bg-white text-sm">
+          <button
+            onClick={() => switchView("month")}
+            className={`px-3 py-1.5 ${view === "month" ? "bg-indigo-600 font-medium text-white" : "text-slate-600 hover:bg-slate-50"}`}
+          >
+            🗓 {t("cal.viewMonth")}
+          </button>
+          <button
+            onClick={() => switchView("timeline")}
+            className={`px-3 py-1.5 ${view === "timeline" ? "bg-indigo-600 font-medium text-white" : "text-slate-600 hover:bg-slate-50"}`}
+          >
+            📜 {t("cal.viewTimeline")}
+          </button>
+        </div>
+        {view === "month" && (
+          <div className="flex items-center gap-1">
+            <button onClick={() => setMonthOffset((o) => o - 1)} title={t("cal.prevMonth")} className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm hover:bg-slate-100">‹</button>
+            <button onClick={() => setMonthOffset(0)} className={`rounded-lg border px-3 py-1.5 text-sm ${monthOffset === 0 ? "border-indigo-300 bg-indigo-50 font-medium text-indigo-700" : "border-slate-300 bg-white hover:bg-slate-100"}`}>
+              {t("cal.today")}
+            </button>
+            <button onClick={() => setMonthOffset((o) => o + 1)} title={t("cal.nextMonth")} className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm hover:bg-slate-100">›</button>
+            <span className="ml-2 text-sm font-semibold capitalize text-slate-700">{monthLabel}</span>
+          </div>
+        )}
         {(canAll || canMine) && (
           <Link
             href={taskHref}
@@ -164,16 +311,12 @@ export default function NaptarPage() {
           </Link>
         )}
       </div>
-      {week(0, "cal.thisWeek")}
-      {week(7, "cal.nextWeek")}
-      {week(14, "cal.week3")}
-      {week(21, "cal.week4")}
+
+      {view === "month" ? monthGrid() : timeline()}
 
       {/* Nap-részletező: a kiválasztott nap teendői nagyban */}
       {openDay && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="relative max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
             <button type="button" onClick={() => setOpenDay(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
