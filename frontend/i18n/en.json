@@ -2306,7 +2306,10 @@
     "rentalMerge": "Same tax-number sites on ONE invoice",
     "rentalMergeHint": "All sites of the company go on one invoice, each line noting the site. Unchecked: a separate invoice per site (partner).",
     "rentalFeeHint": "Set the monthly fee per machine in the machine's rental fee field (Machines page). Payment method and terms come from the contract fields above. The +10% late surcharge is automatic after 30+ days of debt.",
-    "editLink": "Edit contract"
+    "editLink": "Edit contract",
+    "sumFixedRental": "🏷️ fixed rental — auto-invoiced on day {day} of each month",
+    "sumRentalMerged": "same tax-number sites on ONE invoice",
+    "sumRentalPerSite": "separate invoice per site"
   },
   "delivery": {
     "title": "Delivery (delivery note)",

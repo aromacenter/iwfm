@@ -39,6 +39,9 @@ interface ContractRow {
   payment_method: string | null;
   payment_terms_days: number | null;
   no_minimum: boolean;
+  fixed_rental?: boolean;
+  billing_day?: number | null;
+  rental_merge_company?: boolean;
   note: string | null;
   machines: MachineRow[];
 }
@@ -121,6 +124,19 @@ export default function SzerzodesekPage() {
 
   const terms = (c: ContractRow) => {
     const parts: string[] = [];
+    // Fix bérleti díjas konstrukció (8e843400): a listán is látszik a mód
+    if (c.fixed_rental) {
+      parts.push(t("contracts.sumFixedRental", { day: c.billing_day ?? "?" }));
+      parts.push(
+        c.rental_merge_company
+          ? t("contracts.sumRentalMerged")
+          : t("contracts.sumRentalPerSite")
+      );
+      if (c.payment_method) parts.push(t(`cons.payments.${c.payment_method}`));
+      if (c.payment_terms_days != null)
+        parts.push(t("contracts.sumTerms", { days: c.payment_terms_days }));
+      return parts;
+    }
     parts.push(t("cons.dueEveryWeeks", { weeks: c.settlement_weeks || 4 }));
     if (c.payment_method) parts.push(t(`cons.payments.${c.payment_method}`));
     if (c.payment_terms_days != null)

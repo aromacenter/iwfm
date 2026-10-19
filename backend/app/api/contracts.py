@@ -334,6 +334,9 @@ class ContractRowOut(BaseModel):
     payment_method: str | None
     payment_terms_days: int | None
     no_minimum: bool
+    fixed_rental: bool = False
+    billing_day: int | None = None
+    rental_merge_company: bool = False
     note: str | None
     machines: list[dict]
 
@@ -437,7 +440,10 @@ async def contracts_overview(
             settlement_weeks=c.settlement_weeks,
             payment_method=c.payment_method,
             payment_terms_days=c.payment_terms_days,
-            no_minimum=c.no_minimum, note=c.note,
+            no_minimum=c.no_minimum,
+            fixed_rental=c.fixed_rental, billing_day=c.billing_day,
+            rental_merge_company=c.rental_merge_company,
+            note=c.note,
             machines=machines_by_partner.get(p.id, []),
         )
         for c, p in contracts

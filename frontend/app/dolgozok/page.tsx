@@ -404,14 +404,14 @@ export default function DolgozokPage() {
           ]}
         />
       )}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase text-slate-500">
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("emp.name")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("emp.email")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("emp.weeklyHours")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("emp.sensitiveCol")}</th>
+              <th className="sticky top-0 z-10 hidden border-b border-slate-200 bg-white px-4 py-3 text-right md:table-cell">{t("emp.weeklyHours")}</th>
+              <th className="sticky top-0 z-10 hidden border-b border-slate-200 bg-white px-4 py-3 md:table-cell">{t("emp.sensitiveCol")}</th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
             </tr>
           </thead>
@@ -504,8 +504,8 @@ export default function DolgozokPage() {
                     <div>{emp.email ?? (emp.username ? `👤 ${emp.username}` : "—")}</div>
                     <div className="text-xs text-slate-400">{t("emp.hireDate")}: {emp.hire_date}</div>
                   </td>
-                  <td className="px-4 py-3 text-right">{emp.weekly_hours}h</td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                  <td className="hidden px-4 py-3 text-right md:table-cell">{emp.weekly_hours}h</td>
+                  <td className="hidden px-4 py-3 font-mono text-xs text-slate-500 md:table-cell">
                     <div><span className="font-sans text-slate-400">{t("emp.taxId")}: </span>{rev?.tax_id ?? emp.tax_id_masked ?? "—"}</div>
                     <div><span className="font-sans text-slate-400">{t("emp.taj")}: </span>{rev?.taj ?? emp.taj_masked ?? "—"}</div>
                     <div><span className="font-sans text-slate-400">{t("emp.bankAccount")}: </span>{rev?.bank_account ?? emp.bank_account_masked ?? "—"}</div>

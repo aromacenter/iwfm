@@ -2306,7 +2306,10 @@
     "rentalMerge": "Azonos adószámú címek EGY számlán",
     "rentalMergeHint": "A cég összes üzemelési címének gépei egy számlára kerülnek, tételenként a cím nevével. Kikapcsolva címenként (partnerenként) külön számla készül.",
     "rentalFeeHint": "A havi díjat gépenként a Gépek oldalon, a gép bérleti díj mezőjében állítod. Fizetési mód és határidő: a fenti szerződés-mezőkből. 30+ napos tartozásnál a +10% felár automatikus.",
-    "editLink": "Szerződés szerkesztése"
+    "editLink": "Szerződés szerkesztése",
+    "sumFixedRental": "🏷️ fix bérleti díj — minden hónap {day}. napján, automata számlával",
+    "sumRentalMerged": "azonos adószámú címek EGY számlán",
+    "sumRentalPerSite": "címenként külön számla"
   },
   "delivery": {
     "title": "Kiszállítás (szállítólevél)",
