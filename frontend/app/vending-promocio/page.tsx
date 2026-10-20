@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { api, errorMessage } from "@/lib/api";
+import { API_URL, api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
 
@@ -39,6 +39,24 @@ interface Promo {
 interface PromoList {
   exclusive: { making: boolean; screensaver: boolean };
   items: Promo[];
+}
+
+interface MachineAsset { id: string; kind: string; name: string; content_type: string; size: number; created_at: string }
+
+/** Sütis auth miatt fetch + blob (az <img src> cross-origin nem vinné a sütit). */
+async function fetchBlobUrl(path: string): Promise<string> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return URL.createObjectURL(await res.blob());
+}
+
+async function downloadBlob(path: string, filename: string) {
+  const url = await fetchBlobUrl(path);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 const SLOTS = ["making", "screensaver"] as const;
@@ -142,6 +160,26 @@ export default function VendingPromocioPage() {
     }
   }
 
+  const [assets, setAssets] = useState<{ machine: Machine; rows: MachineAsset[]; thumbs: Record<string, string> } | null>(null);
+
+  async function openAssets(m: Machine) {
+    try {
+      const rows = await api.get<MachineAsset[]>(`/api/saferpay/machines/${m.id}/assets`);
+      setAssets({ machine: m, rows, thumbs: {} });
+      // bélyegképek lustán, egymás után (sütis fetch → blob URL)
+      const thumbs: Record<string, string> = {};
+      for (const r of rows) {
+        if (!r.content_type.startsWith("image/")) continue;
+        try {
+          thumbs[r.id] = await fetchBlobUrl(`/api/saferpay/machines/${m.id}/assets/${r.id}`);
+          setAssets((prev) => (prev && prev.machine.id === m.id ? { ...prev, thumbs: { ...thumbs } } : prev));
+        } catch { /* egy kép kimaradhat */ }
+      }
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function restoreFactory(m: Machine) {
     if (!(await confirm(t("vpromo.restoreFactoryConfirm", { name: m.name })))) return;
     try {
@@ -190,6 +228,12 @@ export default function VendingPromocioPage() {
                   {m.last_seen_at && (
                     <span className="ml-auto text-xs text-slate-400">{t("vtel.lastSeen", { at: fmt(m.last_seen_at) })}</span>
                   )}
+                  <button
+                    onClick={() => void openAssets(m)}
+                    className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100"
+                  >
+                    📥 {t("vpromo.assets")}
+                  </button>
                   <button
                     onClick={() => void restoreFactory(m)}
                     className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs text-amber-700 hover:bg-amber-50"
@@ -279,6 +323,72 @@ export default function VendingPromocioPage() {
         </div>
       )}
       <p className="mt-3 text-xs text-slate-400">{t("vpromo.deliveryHint")}</p>
+
+      {/* Gépen lévő képek modal — gyári reklámképek, ikonok; ZIP letöltés */}
+      {assets && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative max-h-[85vh] w-full max-w-4xl space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setAssets(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <div className="flex flex-wrap items-center gap-2 pr-8">
+              <h2 className="text-lg font-semibold">📥 {assets.machine.name} — {t("vpromo.assets")}</h2>
+              {assets.rows.length > 0 && (
+                <button
+                  onClick={() => void downloadBlob(`/api/saferpay/machines/${assets.machine.id}/assets.zip`, `gep-${assets.machine.machine_code}-kepek.zip`).catch((e) => toast(errorMessage(e), "error"))}
+                  className="ml-auto rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                >
+                  ⬇️ {t("vpromo.downloadZip")} ({Math.round(assets.rows.reduce((s, r) => s + r.size, 0) / 1024)} KB)
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">{t("vpromo.assetsHint")}</p>
+            {assets.rows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-400">{t("vpromo.assetsEmpty")}</p>
+            ) : (
+              ["making", "screensaver", "product_image", "other"].map((kind) => {
+                const rows = assets.rows.filter((r) => r.kind === kind);
+                if (rows.length === 0) return null;
+                return (
+                  <div key={kind}>
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">{t(`vpromo.kind.${kind}`)}</h3>
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">{rows.length}</span>
+                      <button
+                        onClick={() => void downloadBlob(`/api/saferpay/machines/${assets.machine.id}/assets.zip?kind=${kind}`, `gep-${assets.machine.machine_code}-${kind}.zip`).catch((e) => toast(errorMessage(e), "error"))}
+                        className="ml-auto text-xs text-indigo-600 hover:underline"
+                      >
+                        ⬇️ {t("vpromo.downloadZipKind")}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+                      {rows.map((r) => (
+                        <a
+                          key={r.id}
+                          href={assets.thumbs[r.id]}
+                          download={r.name}
+                          className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                          title={`${r.name} · ${Math.round(r.size / 1024)} KB`}
+                        >
+                          {assets.thumbs[r.id] ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={assets.thumbs[r.id]} alt={r.name} className="aspect-[16/10] w-full object-contain bg-white" />
+                          ) : (
+                            <div className="flex aspect-[16/10] items-center justify-center text-xl text-slate-300">{r.content_type.startsWith("video/") ? "🎬" : "🖼️"}</div>
+                          )}
+                          <p className="truncate px-1.5 py-1 text-[10px] text-slate-600">{r.name} · {Math.round(r.size / 1024)} KB</p>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div className="flex justify-end">
+              <button onClick={() => setAssets(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.close")}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

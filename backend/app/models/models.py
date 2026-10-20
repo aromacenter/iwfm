@@ -974,6 +974,36 @@ class AgentRelease(Base):
     )
 
 
+class VendingAsset(Base):
+    """A gépen lévő médiafájlok másolata (gyári reklámképek, termékikonok,
+    képernyővédő): az ügynök tölti fel binárisan, az admin listázza / ZIP-ben
+    letölti. Gépenként + fajtánként + névre egyedi (felülírás)."""
+
+    __tablename__ = "vending_assets"
+    __table_args__ = (
+        UniqueConstraint("machine_id", "kind", "name", name="uq_vending_asset"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("vending_machines.id", ondelete="CASCADE", name="fk_vasset_machine"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)  # making | screensaver | product_image | other
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(64), nullable=False, default="application/octet-stream")
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(UTC)
+    )
+
+
 class VendingRecipeEdit(Base):
     """Távoli recept-/ármódosítás egy gép egy italára (vagy „restore” = az
     eredeti Product/Recipe fájl visszaállítása). Az admin hozza létre, az ügynök

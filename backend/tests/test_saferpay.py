@@ -652,3 +652,50 @@ async def test_agent_publish_with_token(client, admin, monkeypatch):
     monkeypatch.setattr(settings, "agent_publish_token", "")
     res = await client.post("/api/pay/agent/publish", json=body, headers={"X-Publish-Token": ""})
     assert res.status_code == 403
+
+
+async def test_vending_assets_upload_list_zip(client, admin):
+    """A gép bináris fájlokat tölt fel (fejléces auth), azonos név felülír;
+    manifest a sha-kkal; admin lista, letöltés, ZIP mappánként."""
+    import io
+    import zipfile
+
+    _, adm = admin
+    m = (
+        await client.post(
+            "/api/saferpay/machines",
+            json={"machine_code": "174226", "name": "Jetinno JL30"},
+            headers=adm,
+        )
+    ).json()
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x11" * 300 + b"\xff\xd9"
+    hdr = {"X-Machine-Code": "174226", "X-Key": m["api_key"], "X-Kind": "making", "X-Name": "Kawa3_1280x800.jpg", "Content-Type": "image/jpeg"}
+    res = await client.post("/api/pay/assets", content=jpeg, headers={**hdr, "X-Key": "x" * 32})
+    assert res.status_code == 403
+    res = await client.post("/api/pay/assets", content=jpeg, headers={**hdr, "X-Kind": "virus"})
+    assert res.status_code == 422
+    res = await client.post("/api/pay/assets", content=jpeg, headers=hdr)
+    assert res.status_code == 200, res.text
+    sha = res.json()["sha256"]
+    # felülírás ugyanazzal a névvel
+    jpeg2 = jpeg + b"\x00"
+    res = await client.post("/api/pay/assets", content=jpeg2, headers=hdr)
+    assert res.status_code == 200 and res.json()["sha256"] != sha
+    res = await client.post("/api/pay/assets", content=b"\x89PNG" + b"\x00" * 50,
+                            headers={**hdr, "X-Kind": "product_image", "X-Name": "ic_Espresso.png", "Content-Type": "image/png"})
+    assert res.status_code == 200
+
+    man = (await client.post("/api/pay/assets/manifest", json={"machine_code": "174226", "key": m["api_key"]})).json()
+    assert {(i["kind"], i["name"]) for i in man["items"]} == {("making", "Kawa3_1280x800.jpg"), ("product_image", "ic_Espresso.png")}
+
+    lst = (await client.get(f"/api/saferpay/machines/{m['id']}/assets", headers=adm)).json()
+    assert len(lst) == 2 and lst[0]["size"] == len(jpeg2)
+    one = await client.get(f"/api/saferpay/machines/{m['id']}/assets/{lst[0]['id']}", headers=adm)
+    assert one.status_code == 200 and one.content == jpeg2 and one.headers["content-type"].startswith("image/jpeg")
+
+    z = await client.get(f"/api/saferpay/machines/{m['id']}/assets.zip", headers=adm)
+    assert z.status_code == 200 and z.headers["content-type"] == "application/zip"
+    names = zipfile.ZipFile(io.BytesIO(z.content)).namelist()
+    assert set(names) == {"making/Kawa3_1280x800.jpg", "product_image/ic_Espresso.png"}
+    z = await client.get(f"/api/saferpay/machines/{m['id']}/assets.zip?kind=making", headers=adm)
+    assert zipfile.ZipFile(io.BytesIO(z.content)).namelist() == ["making/Kawa3_1280x800.jpg"]

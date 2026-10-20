@@ -3015,6 +3015,15 @@
     "badImage": "Could not read image: {name}",
     "restoreFactoryPromo": "Restore factory images",
     "restoreFactoryConfirm": "Restore the factory ad images on {name}? Our images are removed from the machine.",
-    "restoreFactoryQueued": "Restore queued — the agent puts the factory images back on its next sync."
+    "restoreFactoryQueued": "Restore queued — the agent puts the factory images back on its next sync.",
+    "assets": "Images on machine",
+    "assetsHint": "The agent uploads the images found in the machine folders daily (factory ads, product icons). Files over 15 MB (e.g. the factory video) are skipped.",
+    "assetsEmpty": "No images from the machine yet — they arrive on the next report (or via the ☕ Catalog button on the machine).",
+    "downloadZip": "Download ZIP",
+    "downloadZipKind": "this folder only (ZIP)",
+    "kind.making": "While brewing (MakingImage)",
+    "kind.screensaver": "Screensaver (ScreenProtect)",
+    "kind.product_image": "Product icons (ProductImage)",
+    "kind.other": "Other"
   }
 }

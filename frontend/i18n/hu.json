@@ -3015,6 +3015,15 @@
     "badImage": "Nem sikerült beolvasni a képet: {name}",
     "restoreFactoryPromo": "Gyári képek visszaállítása",
     "restoreFactoryConfirm": "Visszaállítod a(z) {name} gépen a gyári reklámképeket? A mi képeink lekerülnek a gépről.",
-    "restoreFactoryQueued": "Visszaállítás elküldve — az ügynök a következő szinkronnál visszateszi a gyári képeket."
+    "restoreFactoryQueued": "Visszaállítás elküldve — az ügynök a következő szinkronnál visszateszi a gyári képeket.",
+    "assets": "Gépen lévő képek",
+    "assetsHint": "Az ügynök naponta felküldi a gép mappáiban lévő képeket (gyári reklámképek, termékikonok). A 15 MB feletti fájlok (pl. gyári videó) nem kerülnek fel.",
+    "assetsEmpty": "Még nem érkezett kép a gépről — a következő jelentéskor (vagy a gépen a ☕ Katalógus gombbal) jön.",
+    "downloadZip": "ZIP letöltése",
+    "downloadZipKind": "csak ez a mappa (ZIP)",
+    "kind.making": "Készítés közben (MakingImage)",
+    "kind.screensaver": "Képernyővédő (ScreenProtect)",
+    "kind.product_image": "Termékikonok (ProductImage)",
+    "kind.other": "Egyéb"
   }
 }

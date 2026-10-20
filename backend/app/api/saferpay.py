@@ -26,6 +26,7 @@ from app.models import (
     PaymentOrder,
     PaymentProduct,
     User,
+    VendingAsset,
     VendingError,
     VendingFile,
     VendingMachine,
@@ -939,6 +940,140 @@ async def promo_report(body: PromoReportBody, db: AsyncSession = Depends(get_db)
     m.last_seen_at = now
     await db.commit()
     return {"ok": True}
+
+
+# ─── Vending médiafájlok a gépről (gyári képek, ikonok) — lista, ZIP ─────────
+
+ASSET_KINDS = ("making", "screensaver", "product_image", "other")
+ASSET_MAX_BYTES = 15 * 1024 * 1024
+
+
+def _asset_out(a: VendingAsset) -> dict:
+    return {
+        "id": str(a.id), "kind": a.kind, "name": a.name, "content_type": a.content_type,
+        "size": a.size, "sha256": a.sha256, "created_at": a.created_at, "updated_at": a.updated_at,
+    }
+
+
+@public_router.post("/assets")
+async def upload_asset(request: Request, db: AsyncSession = Depends(get_db)):
+    """A GÉP tölt fel bináris fájlt (nyers törzs; fejlécek: X-Machine-Code,
+    X-Key, X-Kind, X-Name, Content-Type). Azonos név → felülírás."""
+    import hashlib
+
+    auth = MachineAuthBody(
+        machine_code=request.headers.get("x-machine-code", "").strip() or "-",
+        key=request.headers.get("x-key", "").strip() or "-" * 8,
+    )
+    m = await _machine_by_key(db, auth)
+    kind = request.headers.get("x-kind", "other").strip()
+    name = request.headers.get("x-name", "").strip().replace("/", "_").replace("\\", "_")[:256]
+    if kind not in ASSET_KINDS or not name:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_asset"})
+    raw = await request.body()
+    if not raw or len(raw) > ASSET_MAX_BYTES:
+        raise HTTPException(status_code=422, detail={"code": "vending.asset_too_big"})
+    sha = hashlib.sha256(raw).hexdigest()
+    a = (
+        await db.execute(
+            select(VendingAsset).where(
+                VendingAsset.machine_id == m.id, VendingAsset.kind == kind, VendingAsset.name == name
+            )
+        )
+    ).scalar_one_or_none()
+    if a is None:
+        a = VendingAsset(machine_id=m.id, kind=kind, name=name)
+        db.add(a)
+    a.content_type = (request.headers.get("content-type") or "application/octet-stream").split(";")[0][:64]
+    a.data = raw
+    a.sha256 = sha
+    a.size = len(raw)
+    m.last_seen_at = datetime.now(UTC)
+    await db.commit()
+    return {"ok": True, "sha256": sha, "size": len(raw)}
+
+
+@public_router.post("/assets/manifest")
+async def assets_manifest(body: MachineAuthBody, db: AsyncSession = Depends(get_db)):
+    """A GÉP kérdezi: mi van már fent (kind/name → sha256), hogy csak az újat küldje."""
+    m = await _machine_by_key(db, body)
+    rows = (await db.execute(select(VendingAsset).where(VendingAsset.machine_id == m.id))).scalars().all()
+    return {"items": [{"kind": a.kind, "name": a.name, "sha256": a.sha256} for a in rows]}
+
+
+@router.get(
+    "/machines/{machine_id}/assets",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def list_assets(
+    machine_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    rows = (
+        await db.execute(
+            select(VendingAsset).where(VendingAsset.machine_id == m.id).order_by(VendingAsset.kind, VendingAsset.name)
+        )
+    ).scalars().all()
+    return [_asset_out(a) for a in rows]
+
+
+@router.get(
+    "/machines/{machine_id}/assets/{asset_id}",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def get_asset(
+    machine_id: str,
+    asset_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    try:
+        aid = uuid.UUID(asset_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "vending.asset_not_found"})
+    a = (
+        await db.execute(select(VendingAsset).where(VendingAsset.id == aid, VendingAsset.machine_id == m.id))
+    ).scalar_one_or_none()
+    if a is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.asset_not_found"})
+    return Response(
+        content=bytes(a.data), media_type=a.content_type,
+        headers={"Content-Disposition": f'inline; filename="{a.name}"', "Cache-Control": "private, max-age=3600"},
+    )
+
+
+@router.get(
+    "/machines/{machine_id}/assets.zip",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def assets_zip(
+    machine_id: str,
+    kind: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """A gép médiafájljai egy ZIP-ben (mappánként: making/, screensaver/, product_image/)."""
+    import io
+    import zipfile
+
+    m = await _machine_or_404(db, machine_id)
+    q = select(VendingAsset).where(VendingAsset.machine_id == m.id)
+    if kind:
+        q = q.where(VendingAsset.kind == kind)
+    rows = (await db.execute(q.order_by(VendingAsset.kind, VendingAsset.name))).scalars().all()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for a in rows:
+            z.writestr(f"{a.kind}/{a.name}", bytes(a.data))
+    buf.seek(0)
+    fname = f"gep-{m.machine_code}-kepek{'-' + kind if kind else ''}.zip"
+    return Response(
+        content=buf.getvalue(), media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 # ─── Vending receptek: távoli adag-/ármódosítás, eredeti visszaállítása ──────
