@@ -34,6 +34,7 @@ from app.models.models import (  # noqa: F401
     PaymentProduct,
     SaferpaySettings,
     VendingMachine,
+    AgentRelease,
     VendingError,
     VendingFile,
     VendingPromo,

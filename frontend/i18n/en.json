@@ -2966,7 +2966,18 @@
     "source.exception": "exception log",
     "source.operation": "operator log",
     "seen": "{n}× · first: {first} · last: {last}",
-    "showResolved": "include resolved"
+    "showResolved": "include resolved",
+    "agent": "Agent version (X-admin config)",
+    "agentHint": "Upload the new APK: machines check daily, download it and install with one tap on their screen. The agent chip on the cards shows what each machine runs.",
+    "agentUpload": "+ Upload APK",
+    "agentVersionCode": "version code",
+    "agentVersionName": "version name",
+    "agentNote": "note",
+    "agentNoRelease": "No release uploaded yet.",
+    "agentUploaded": "Release uploaded: v{v}",
+    "agentDeleteConfirm": "Delete release v{v}?",
+    "agentLatest": "latest",
+    "agentBadApk": "This is not an APK file."
   },
   "vpromo": {
     "title": "Vending promotion",

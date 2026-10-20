@@ -2966,7 +2966,18 @@
     "source.exception": "kivétel-napló",
     "source.operation": "kezelői napló",
     "seen": "{n}× · első: {first} · utolsó: {last}",
-    "showResolved": "lezártak is"
+    "showResolved": "lezártak is",
+    "agent": "Ügynök-verzió (X-admin config)",
+    "agentHint": "Töltsd fel az új APK-t: a gépek naponta ellenőrzik, letöltik, és a képernyőjükön egy koppintással telepítik. A kártyákon az agent-chip mutatja, melyik gép mit futtat.",
+    "agentUpload": "+ APK feltöltése",
+    "agentVersionCode": "verziókód",
+    "agentVersionName": "verziónév",
+    "agentNote": "megjegyzés",
+    "agentNoRelease": "Még nincs feltöltött kiadás.",
+    "agentUploaded": "Kiadás feltöltve: v{v}",
+    "agentDeleteConfirm": "Törlöd a(z) v{v} kiadást?",
+    "agentLatest": "legújabb",
+    "agentBadApk": "Ez nem APK-fájl."
   },
   "vpromo": {
     "title": "Vending promóció",

@@ -954,6 +954,26 @@ class VendingPromo(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class AgentRelease(Base):
+    """A gépekre telepíthető X-admin config (ügynök) APK-k: az admin tölti fel,
+    a gép a saját kulcsával kérdezi a legújabbat és tölti le (online frissítés)."""
+
+    __tablename__ = "agent_releases"
+    __table_args__ = (UniqueConstraint("version_code", name="uq_agent_release_code"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    version_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_name: Mapped[str] = mapped_column(String(32), nullable=False)
+    filename: Mapped[str] = mapped_column(String(128), nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class VendingError(Base):
     """Gép által jelentett hiba (Exception-napló / kezelői napló figyelmeztetés),
     üzenet szerint összevonva: ujjlenyomat + darabszám + első/utolsó előfordulás.

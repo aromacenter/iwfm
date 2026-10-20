@@ -22,6 +22,7 @@ from app.api.deps import get_current_user, record_audit, require_perm
 from app.core.config import get_settings
 from app.db import get_db
 from app.models import (
+    AgentRelease,
     PaymentOrder,
     PaymentProduct,
     User,
@@ -935,6 +936,126 @@ async def promo_report(body: PromoReportBody, db: AsyncSession = Depends(get_db)
     m.last_seen_at = now
     await db.commit()
     return {"ok": True}
+
+
+# ─── Ügynök (X-admin config) APK-kiadások — online frissítés ────────────────
+
+AGENT_APK_MAX = 20 * 1024 * 1024
+
+
+def _release_out(r: AgentRelease) -> dict:
+    return {
+        "id": str(r.id), "version_code": r.version_code, "version_name": r.version_name,
+        "filename": r.filename, "sha256": r.sha256, "size": r.size, "note": r.note,
+        "created_at": r.created_at,
+    }
+
+
+async def _latest_release(db: AsyncSession) -> AgentRelease | None:
+    return (
+        await db.execute(select(AgentRelease).order_by(AgentRelease.version_code.desc()).limit(1))
+    ).scalar_one_or_none()
+
+
+@router.get("/agent/releases", dependencies=[Depends(require_module("saferpay"))])
+async def list_releases(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    rows = (
+        await db.execute(select(AgentRelease).order_by(AgentRelease.version_code.desc()).limit(20))
+    ).scalars().all()
+    return [_release_out(r) for r in rows]
+
+
+class ReleaseBody(BaseModel):
+    version_code: int = Field(ge=1, le=1_000_000)
+    version_name: str = Field(min_length=1, max_length=32)
+    filename: str = Field(min_length=1, max_length=128)
+    note: str | None = Field(default=None, max_length=512)
+    data_b64: str = Field(min_length=16, max_length=28_000_000)
+
+
+@router.post("/agent/releases", dependencies=[Depends(require_module("saferpay"))])
+async def create_release(
+    body: ReleaseBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_perm("invoicing")),
+):
+    """Új ügynök-APK feltöltése (a gépek a következő napi ellenőrzéskor letöltik,
+    a telepítést a gép képernyőjén egy koppintással erősítik meg)."""
+    import base64
+    import hashlib
+
+    try:
+        raw = base64.b64decode(body.data_b64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_apk"})
+    # APK = ZIP: "PK\x03\x04" fejléc
+    if len(raw) > AGENT_APK_MAX or not raw.startswith(b"PK\x03\x04"):
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_apk"})
+    dup = (
+        await db.execute(select(AgentRelease).where(AgentRelease.version_code == body.version_code))
+    ).scalar_one_or_none()
+    if dup is not None:
+        raise HTTPException(status_code=409, detail={"code": "vending.release_exists"})
+    r = AgentRelease(
+        version_code=body.version_code, version_name=body.version_name.strip(),
+        filename=body.filename.strip()[:128], data=raw, sha256=hashlib.sha256(raw).hexdigest(),
+        size=len(raw), note=(body.note or "").strip() or None,
+    )
+    db.add(r)
+    await record_audit(
+        db, actor=user, action="vending.agent_release_uploaded", entity_type="agent_release",
+        entity_id=str(body.version_code), detail={"version": r.version_name, "size": r.size},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(r)
+    return _release_out(r)
+
+
+@router.delete("/agent/releases/{release_id}", dependencies=[Depends(require_module("saferpay"))])
+async def delete_release(
+    release_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    try:
+        rid = uuid.UUID(release_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "vending.release_not_found"})
+    r = (await db.execute(select(AgentRelease).where(AgentRelease.id == rid))).scalar_one_or_none()
+    if r is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.release_not_found"})
+    await db.delete(r)
+    await db.commit()
+    return {"ok": True}
+
+
+@public_router.post("/agent/latest")
+async def agent_latest(body: MachineAuthBody, db: AsyncSession = Depends(get_db)):
+    """A GÉP kérdezi: mi a legújabb ügynök-verzió (404, ha nincs feltöltve)."""
+    await _machine_by_key(db, body)
+    r = await _latest_release(db)
+    if r is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.no_release"})
+    out = _release_out(r)
+    out.pop("id", None)
+    return out
+
+
+@public_router.post("/agent/download")
+async def agent_download(body: MachineAuthBody, db: AsyncSession = Depends(get_db)):
+    await _machine_by_key(db, body)
+    r = await _latest_release(db)
+    if r is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.no_release"})
+    return Response(
+        content=bytes(r.data), media_type="application/vnd.android.package-archive",
+        headers={"X-Sha256": r.sha256, "Content-Disposition": f'attachment; filename="{r.filename}"'},
+    )
 
 
 # ─── Vending hibajelentés ────────────────────────────────────────────────────

@@ -54,6 +54,17 @@ interface Catalog {
   files?: Record<string, string>;
 }
 interface MachineFile { id: string; kind: string; name: string; size: number; created_at: string; text?: string }
+interface AgentRelease { id: string; version_code: number; version_name: string; filename: string; size: number; note: string | null; created_at: string }
+
+/** Az APK verziókódja/neve a nevéből nem derül ki — a feltöltő adja meg (build.gradle). */
+function readFileB64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
 
 function onlineState(lastSeen: string | null): "online" | "stale" | "offline" {
   if (!lastSeen) return "offline";
@@ -86,13 +97,51 @@ export default function VendingTelemetriaPage() {
   const [catalog, setCatalog] = useState<{ machine: Machine; updated_at: string | null; catalog: Catalog | null } | null>(null);
   const [files, setFiles] = useState<{ machine: Machine; rows: MachineFile[]; open: MachineFile | null } | null>(null);
   const [errors, setErrors] = useState<{ machine: Machine; rows: MachineError[]; withResolved: boolean } | null>(null);
+  const [releases, setReleases] = useState<AgentRelease[]>([]);
+  const [relForm, setRelForm] = useState<{ file: File | null; code: string; name: string; note: string } | null>(null);
+  const [relBusy, setRelBusy] = useState(false);
   // Meglévő gépek a Gépek modulból — a 11 jegyű vonalkód betöltéséhez (7dc9d3ce)
   const [assets, setAssets] = useState<{ id: string; name: string; barcode: string }[]>([]);
 
   const load = useCallback(() => {
     api.get<Machine[]>("/api/saferpay/machines").then(setMachines).catch(() => {});
     api.get<{ id: string; name: string; barcode: string }[]>("/api/assets").then(setAssets).catch(() => {});
+    api.get<AgentRelease[]>("/api/saferpay/agent/releases").then(setReleases).catch(() => {});
   }, []);
+
+  async function uploadRelease(e: React.FormEvent) {
+    e.preventDefault();
+    if (!relForm?.file || !relForm.code.trim() || !relForm.name.trim()) return;
+    if (!relForm.file.name.toLowerCase().endsWith(".apk")) {
+      toast(t("vtel.agentBadApk"), "error");
+      return;
+    }
+    setRelBusy(true);
+    try {
+      const data_b64 = await readFileB64(relForm.file);
+      await api.post("/api/saferpay/agent/releases", {
+        version_code: Number(relForm.code), version_name: relForm.name.trim(),
+        filename: relForm.file.name, note: relForm.note.trim() || null, data_b64,
+      });
+      toast(t("vtel.agentUploaded", { v: relForm.name.trim() }), "success");
+      setRelForm(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setRelBusy(false);
+    }
+  }
+
+  async function deleteRelease(r: AgentRelease) {
+    if (!(await confirm(t("vtel.agentDeleteConfirm", { v: r.version_name })))) return;
+    try {
+      await api.delete(`/api/saferpay/agent/releases/${r.id}`);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
   useEffect(() => {
     load();
     const id = setInterval(load, 30_000);
@@ -334,6 +383,74 @@ export default function VendingTelemetriaPage() {
         </div>
       )}
       <p className="mt-3 text-xs text-slate-400">{t("vtel.apiHint")}</p>
+
+      {/* Ügynök-kiadások: APK feltöltése → a gépek online frissülnek */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-semibold">📦 {t("vtel.agent")}</h2>
+          <button
+            onClick={() => setRelForm({ file: null, code: "", name: "", note: "" })}
+            className="ml-auto rounded-lg border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100"
+          >
+            {t("vtel.agentUpload")}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">{t("vtel.agentHint")}</p>
+        {releases.length === 0 ? (
+          <p className="mt-3 text-xs text-slate-400">{t("vtel.agentNoRelease")}</p>
+        ) : (
+          <div className="mt-3 space-y-1 text-sm">
+            {releases.map((r, i) => (
+              <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 px-3 py-1.5">
+                <span className="font-medium">v{r.version_name}</span>
+                <span className="font-mono text-xs text-slate-400">#{r.version_code}</span>
+                {i === 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-800">{t("vtel.agentLatest")}</span>}
+                <span className="text-xs text-slate-400">{r.filename} · {Math.round(r.size / 1024)} KB · {fmt(r.created_at)}</span>
+                {r.note && <span className="text-xs text-slate-500">— {r.note}</span>}
+                <button onClick={() => void deleteRelease(r)} className="ml-auto rounded px-1.5 text-xs text-rose-600 hover:bg-rose-50">🗑</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* APK-feltöltő modal */}
+      {relForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={uploadRelease} className="relative w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setRelForm(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">📦 {t("vtel.agentUpload")}</h2>
+            <input
+              type="file"
+              accept=".apk,application/vnd.android.package-archive"
+              required
+              onChange={(e) => setRelForm({ ...relForm, file: e.target.files?.[0] ?? null })}
+              className="w-full text-sm"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block text-sm">
+                {t("vtel.agentVersionCode")} *
+                <input required type="number" min={1} value={relForm.code} onChange={(e) => setRelForm({ ...relForm, code: e.target.value })} placeholder="9" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+              <label className="block text-sm">
+                {t("vtel.agentVersionName")} *
+                <input required value={relForm.name} onChange={(e) => setRelForm({ ...relForm, name: e.target.value })} placeholder="2.5" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+            </div>
+            <label className="block text-sm">
+              {t("vtel.agentNote")}
+              <input value={relForm.note} onChange={(e) => setRelForm({ ...relForm, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setRelForm(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={relBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                {relBusy ? t("common.saving") : t("common.save")}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Gép-űrlap modal */}
       {form && (

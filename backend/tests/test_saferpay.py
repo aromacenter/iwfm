@@ -484,3 +484,57 @@ async def test_vending_errors(client, admin):
     assert res.json()["new"] == 1
     rows = (await client.get(f"/api/saferpay/machines/{m['id']}/errors", headers=adm)).json()
     assert len(rows) == 2
+
+
+async def test_agent_releases(client, admin):
+    """Ügynök-APK kiadások: feltöltés (csak ZIP/APK), duplikált verziókód 409,
+    a gép a kulcsával a legújabbat látja és tölti le; nincs kiadás → 404."""
+    import base64
+
+    _, adm = admin
+    m = (
+        await client.post(
+            "/api/saferpay/machines",
+            json={"machine_code": "174226", "name": "Jetinno JL30"},
+            headers=adm,
+        )
+    ).json()
+    auth = {"machine_code": "174226", "key": m["api_key"]}
+    res = await client.post("/api/pay/agent/latest", json=auth)
+    assert res.status_code == 404
+
+    apk = b"PK\x03\x04" + b"\x00" * 200
+    res = await client.post(
+        "/api/saferpay/agent/releases", headers=adm,
+        json={"version_code": 9, "version_name": "2.5", "filename": "XadminConfig.apk",
+              "data_b64": base64.b64encode(b"nem apk" * 10).decode()},
+    )
+    assert res.status_code == 422
+    res = await client.post(
+        "/api/saferpay/agent/releases", headers=adm,
+        json={"version_code": 9, "version_name": "2.5", "filename": "XadminConfig.apk",
+              "note": "promóció + frissítés", "data_b64": base64.b64encode(apk).decode()},
+    )
+    assert res.status_code == 200, res.text
+    rel = res.json()
+    assert rel["size"] == len(apk) and rel["version_code"] == 9
+    res = await client.post(
+        "/api/saferpay/agent/releases", headers=adm,
+        json={"version_code": 9, "version_name": "2.5b", "filename": "x.apk",
+              "data_b64": base64.b64encode(apk).decode()},
+    )
+    assert res.status_code == 409
+
+    latest = (await client.post("/api/pay/agent/latest", json=auth)).json()
+    assert latest["version_code"] == 9 and latest["sha256"] == rel["sha256"] and "id" not in latest
+    res = await client.post("/api/pay/agent/download", json=auth)
+    assert res.status_code == 200 and res.content == apk
+    assert res.headers["x-sha256"] == rel["sha256"]
+    res = await client.post("/api/pay/agent/download", json={"machine_code": "174226", "key": "x" * 32})
+    assert res.status_code == 403
+
+    rows = (await client.get("/api/saferpay/agent/releases", headers=adm)).json()
+    assert len(rows) == 1
+    res = await client.delete(f"/api/saferpay/agent/releases/{rel['id']}", headers=adm)
+    assert res.status_code == 200
+    assert (await client.post("/api/pay/agent/latest", json=auth)).status_code == 404
