@@ -1,6 +1,6 @@
 # Alkatrész-raktár (ERP-szintű készletezés) és munkaidő-mérés — terv
 
-Hibajegy: 1d553d2e (2026-10-20, Szabó László). Státusz: **tervezet, nincs implementálva.**
+Hibajegy: 1d553d2e (2026-10-20, Szabó László). Státusz: **A–D fázis implementálva és élesben (2026-10-20/21).**
 
 ## Alapelvek (a jegy és a megrendelő kérése alapján)
 
@@ -68,8 +68,16 @@ Külön, de ugyanebben a körben:
    - Kiadás-kérés: `parts_requests` tábla, `POST /api/parts/requests` → pending (Telegram `parts.request`), `…/issue` (settlements; helykódról `issue` mozgás − forrás / + autó, a készlet AZONNAL az autón), `…/decline`, `…/receive` (csak a kérő nyugtáz), `…/cancel` (csak a kérő, pending). Alkatrészek oldalon „Kérések” fül (nyitott darabszám a fülön, kiadás-modal helykód-előtöltéssel).
    - Min. készlet: `parts.low` Telegram-esemény, csak a küszöb ÁTLÉPÉSEKOR (céges összes < min, előtte ≥ min) — nem spamel.
    - A Feladataim munkalap-modalban „🔩 Beépített alkatrészek” blokk (SearchSelect az autó készletéből, azonnali könyvelés, 🗑 storno); a Feladatok ár-szerkesztőjében csak olvasható lista.
-3. **Fázis C (1 kör):** munkaidő-timer + szünet + statisztikák.
-4. **Fázis D:** leltár alkatrészekre, export/riportok.
+3. **Fázis C (1 kör) — KÉSZ (2026-10-21, 7b8c0d1e2f3a):** munkaidő-timer + szünet + statisztikák — külön `worktime` licenc-modul (Flotta-kapcsoló).
+   - `worksheet_timers` (munkalap × szerelő): `sessions` JSON [{start, end, pauses:[{p, r}]}], számított active/pause_seconds, first/last.
+   - `POST /api/worktime/{task_id}/start|pause|resume|stop` (idempotens; csak a saját feladatra), `GET /api/worktime/{task_id}` — a dolgozói válasz SZÁNDÉKOSAN csak állapot (running/paused/stopped) + kezdés + szünetek száma, idő-összeg nélkül („sunyi” mód).
+   - A Feladataim munkalap-modal megnyitása indítja (idempotens), „☕ Szünet / ▶ Folytatás” gomb, a mentés és a ✕ zár. A vezetői `GET /api/tasks/{id}/worksheet` `timer` összegzést ad (Feladatok ár-szerkesztőben egy sorban: kezdés → zárás, mért aktív, szünetek, írt óra, arány).
+   - `GET /api/worktime/stats/summary?from&to&employee_id` (agent_report): szerelőnként és munkalaponként írt óra vs. mért aktív idő, arány, szünet, idővonal-szegmensek; `/munkaido` oldal (nap/hét/hónap/időszak, KPI-k, két tábla, idővonal-sáv). Europe/Budapest nap-határok a timer első indulása szerint.
+4. **Fázis D — KÉSZ (2026-10-21):** leltár alkatrészekre + export.
+   - `GET /api/parts/stocktake/sheet?warehouse_id` (leltárív helykódonként), `POST /api/parts/stocktake` (csak az eltérő sorok → `adjust` mozgás, megjegyzés „leltár: …”), `POST /api/parts/my-stocktake` (a szerelő a saját autóján: „📋 Számoltam”, megjegyzés „leltár (szerelő)”).
+   - `GET /api/parts/export.csv?what=stock|movements|parts` — Excel-barát CSV (UTF-8 BOM, pontosvessző, tizedes vessző). Alkatrészek oldalon „Leltár” fül + „⬇ Export” menü.
+
+**Minden fázis kész — a 1d553d2e jegy lezárható.** Nyitott döntések lentebb (polcszint, külsős szervizes autós raktára).
 
 ## 6. Nyitott kérdések a megrendelőnek
 

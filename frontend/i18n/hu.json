@@ -175,7 +175,8 @@
     "collapse": "Összecsukás",
     "vendingPromo": "Promóció",
     "parts": "Alkatrészek",
-    "myParts": "Saját alkatrészeim"
+    "myParts": "Saját alkatrészeim",
+    "worktime": "Munkaidő-mérés"
   },
   "roles": {
     "admin": "Admin",
@@ -1351,7 +1352,13 @@
     "quoteHistoryTitle": "Ajánlat-előzmény",
     "quoteHistoryAccepted": "Elfogadta: {by} — {at}",
     "quoteHistoryDeclined": "A javítást nem kérte: {by} — {at}",
-    "usedParts": "🔩 Beépített alkatrészek (alkatrész-raktárból — az ár a cikktörzs szerint, a PDF-en tételként)"
+    "usedParts": "🔩 Beépített alkatrészek (alkatrész-raktárból — az ár a cikktörzs szerint, a PDF-en tételként)",
+    "timerMeasured": "Mért aktív idő",
+    "timerPauses": "szünet",
+    "timerWritten": "írt óra",
+    "timerRatio": "arány",
+    "timerRunning": "fut",
+    "timerPausedNow": "szünetel"
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1449,7 +1456,12 @@
     "wsPartsEmpty": "Még nincs beépített alkatrész.",
     "wsPartsNoVehicle": "Nincs autós alkatrész-raktárad — a Saját alkatrészeim menüben látod a részleteket.",
     "wsPartsRemove": "Visszavonod a beépítést? A készlet visszakerül az autóra.",
-    "wsPartsOnVehicle": "{qty} {unit} az autón"
+    "wsPartsOnVehicle": "{qty} {unit} az autón",
+    "timerRunning": "⏱ munkaidő-mérés fut",
+    "timerPaused": "⏸ szünet",
+    "timerHint": "a kezdés és a zárás a munkalaphoz rögzül",
+    "timerPause": "☕ Szünet",
+    "timerResume": "▶ Folytatás"
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1938,7 +1950,9 @@
     "parts.same_location": "A forrás és a cél ugyanaz.",
     "parts.sku_taken": "Ez a cikkszám már foglalt.",
     "parts.location_in_use": "Használt helykód — az oszlop/sor nem vehető ki.",
-    "parts.warehouse_not_empty": "A raktár nem üres, nem törölhető."
+    "parts.warehouse_not_empty": "A raktár nem üres, nem törölhető.",
+    "worktime.bad_range": "Hibás időszak (max. 400 nap).",
+    "worktime.bad_action": "Ismeretlen timer-művelet."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -3156,7 +3170,20 @@
     "req.declineConfirm": "Elutasítod a kérést?",
     "req.issuedToast": "Kiadva — a készlet a szerelő autóján.",
     "req.hint": "Kiadáskor a készlet AZONNAL a szerelő autójára kerül (issue mozgás), ő csak nyugtázza az átvételt.",
-    "req.status": "Állapot"
+    "req.status": "Állapot",
+    "tab.stocktake": "Leltár",
+    "st.hint": "Válassz raktárat, írd be a számolt mennyiségeket — csak az eltérő sorok könyvelődnek (korrekció a mozgásnaplóba).",
+    "st.expected": "Nyilvántartott",
+    "st.counted": "Számolt",
+    "st.note": "Leltár megjegyzése (pl. őszi leltár)",
+    "st.submit": "📋 Leltár könyvelése",
+    "st.empty": "Ebben a raktárban nincs nyilvántartott készlet.",
+    "st.done": "Leltár könyvelve: {n} korrekció.",
+    "st.noDiff": "Nincs eltérés — nem készült korrekció.",
+    "export": "⬇ Export",
+    "export.stock": "Készlet (CSV)",
+    "export.movements": "Mozgások (CSV)",
+    "export.parts": "Cikktörzs (CSV)"
   },
   "myParts": {
     "title": "Saját alkatrészeim",
@@ -3178,6 +3205,42 @@
     "min.ok": "OK",
     "min.low": "min. alatt",
     "min.out": "elfogyott",
-    "companyTotal": "céges összes"
+    "companyTotal": "céges összes",
+    "count": "📋 Számoltam",
+    "countTitle": "Leltár az autón",
+    "countHint": "Írd be, mennyit találtál — a különbség korrekcióként a mozgásnaplóba kerül, a vezető látja.",
+    "countDone": "Leltár könyvelve: {n} korrekció."
+  },
+  "worktime": {
+    "title": "Munkaidő-mérés — szerelőnként",
+    "subtitle": "A munkalapra írt órák vs. a ténylegesen mért aktív idő (timer, szünetek nélkül). A szerelő csak azt látja, hogy fut — a számok itt vannak.",
+    "day": "Nap",
+    "week": "Hét",
+    "month": "Hónap",
+    "range": "Időszak",
+    "allEmployees": "mind",
+    "kpi.written": "Munkalapra írt óra",
+    "kpi.active": "Mért aktív idő",
+    "kpi.ratio": "Arány (mért / írt)",
+    "kpi.pauses": "Szünetek",
+    "kpi.worksheets": "{n} munkalap",
+    "kpi.noBreaks": "szünetek nélkül",
+    "kpi.avgPause": "átlag {m} perc / munkalap",
+    "byEmployee": "👤 Szerelőnként",
+    "worksheets": "📋 Munkalapok",
+    "col.employee": "Szerelő",
+    "col.worksheets": "Munkalap",
+    "col.written": "Írt óra",
+    "col.active": "Mért aktív",
+    "col.ratio": "Arány",
+    "col.pause": "Szünet",
+    "col.worksheet": "Munkalap",
+    "col.startEnd": "Kezdés → zárás (valós)",
+    "col.timeline": "Idővonal",
+    "legend.work": "aktív",
+    "legend.pause": "szünet",
+    "legend.running": "még fut",
+    "empty": "Nincs mért munkalap ebben az időszakban.",
+    "noWritten": "—"
   }
 }

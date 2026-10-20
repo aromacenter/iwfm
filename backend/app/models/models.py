@@ -1128,6 +1128,37 @@ class PartsRequest(Base):
     )
 
 
+class WorksheetTimer(Base):
+    """Munkaidő-mérés munkalaponként és szerelőnként (worktime modul, C fázis).
+    sessions: [{start, end|None, pauses: [{p, r|None}]}] — a kiszámolt
+    összegek (active/pause_seconds, first/last) a gyors statisztikához."""
+
+    __tablename__ = "worksheet_timers"
+    __table_args__ = (
+        UniqueConstraint("worksheet_id", "user_id", name="uq_ws_timer_ws_user"),
+        Index("ix_ws_timers_started", "first_started_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    worksheet_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("worksheets.id", ondelete="CASCADE", name="fk_ws_timer_ws"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE", name="fk_ws_timer_user"), nullable=False
+    )
+    sessions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    active_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    pause_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    first_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class VendingAsset(Base):
     """A gépen lévő médiafájlok másolata (gyári reklámképek, termékikonok,
     képernyővédő): az ügynök tölti fel binárisan, az admin listázza / ZIP-ben

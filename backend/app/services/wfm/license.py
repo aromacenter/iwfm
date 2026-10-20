@@ -26,6 +26,7 @@ MODULES = (
     "cashbox", "stats", "tiered", "stocktake", "saferpay",
     "warehouse",  # raktár: saját raktár, átadások, raktármozgások (Flotta-kapcsoló)
     "parts",  # alkatrész-raktár (ERP-szerű helykódos készlet) — alapból KI
+    "worktime",  # munkaidő-mérés munkalaponként (timer + vezetői statisztika) — alapból KI
 )
 
 

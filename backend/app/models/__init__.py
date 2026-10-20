@@ -33,6 +33,7 @@ from app.models.models import (  # noqa: F401
     Part,
     PartsMovement,
     PartsRequest,
+    WorksheetTimer,
     PartsStock,
     PartsWarehouse,
     PaymentOrder,

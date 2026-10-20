@@ -72,6 +72,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/uzletkoto", key: "nav.agentReport", perm: "agent_report", icon: "💼" },
       { href: "/kassza", key: "nav.cashbox", perm: "always", icon: "💰", module: "cashbox" },
       { href: "/statisztika", key: "nav.stats", perm: "agent_report", icon: "📈", module: "stats" },
+      { href: "/munkaido", key: "nav.worktime", perm: "agent_report", icon: "⏱", module: "worktime" },
     ],
   },
   {

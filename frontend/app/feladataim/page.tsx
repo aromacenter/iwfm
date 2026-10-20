@@ -82,6 +82,8 @@ interface UsedPart {
   warehouse_name: string;
 }
 interface MyPartsStock { part_id: string; sku: string; name: string; unit: string; quantity: number }
+// Munkaidő-mérés (worktime modul): a dolgozó csak az állapotot látja, számokat nem.
+interface TimerState { state: "running" | "paused" | "stopped" | "none"; started_at: string | null; pause_count: number }
 
 interface WorkRow {
   name: string;
@@ -158,6 +160,7 @@ export default function FeladataimPage() {
   const [usedParts, setUsedParts] = useState<UsedPart[]>([]);
   const [partPick, setPartPick] = useState<{ part_id: string; quantity: string }>({ part_id: "", quantity: "1" });
   const [partsBusy, setPartsBusy] = useState(false);
+  const [timer, setTimer] = useState<TimerState | null>(null);
   const [wsError, setWsError] = useState<string | null>(null);
   const [wsBusy, setWsBusy] = useState(false);
   const [wsPhotoBusy, setWsPhotoBusy] = useState(false);
@@ -341,6 +344,9 @@ export default function FeladataimPage() {
     setWsTask(task);
     setUsedParts([]);
     setPartPick({ part_id: "", quantity: "1" });
+    // Munkaidő-mérés: a megnyitás indítja (idempotens); modul nélkül 403 → nincs sáv
+    setTimer(null);
+    api.post<TimerState>(`/api/worktime/${task.id}/start`, {}).then(setTimer).catch(() => setTimer(null));
     // saját autós alkatrész-készlet (parts modul nélkül / autó nélkül: nincs blokk)
     api.get<{ warehouse_id: string | null; stock: MyPartsStock[] }>("/api/parts/my-warehouse")
       .then((r) => setMyParts(r.warehouse_id ? r.stock : null))
@@ -553,7 +559,7 @@ export default function FeladataimPage() {
     };
     try {
       await api.put(`/api/me/tasks/${wsTask.id}/worksheet`, wsBody);
-      setWsTask(null);
+      closeWorksheet();
       load();
     } catch (err) {
       if (!(err instanceof ApiError)) {
@@ -570,13 +576,31 @@ export default function FeladataimPage() {
         });
         writeWsQueue(next);
         setPendingWs(next.length);
-        setWsTask(null);
+        closeWorksheet();
         toast(t("offline.queued"), "info");
       } else {
         setWsError(errorMessage(err));
       }
     } finally {
       setWsBusy(false);
+    }
+  }
+
+  // ── munkaidő-mérés: bezárás/mentés zár, Szünet/Folytatás ──
+  function closeWorksheet() {
+    if (wsTask && timer && (timer.state === "running" || timer.state === "paused")) {
+      void api.post(`/api/worktime/${wsTask.id}/stop`, {}).catch(() => {});
+    }
+    setTimer(null);
+    setWsTask(null);
+  }
+
+  async function toggleTimer() {
+    if (!wsTask || !timer) return;
+    try {
+      setTimer(await api.post<TimerState>(`/api/worktime/${wsTask.id}/${timer.state === "paused" ? "resume" : "pause"}`, {}));
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -930,10 +954,22 @@ export default function FeladataimPage() {
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
           <div className="relative my-6 w-full max-w-lg space-y-3 rounded-2xl bg-white p-5 shadow-xl">
             {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
-            <button type="button" onClick={() => setWsTask(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <button type="button" onClick={() => closeWorksheet()} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("myTasks.wsTitle", { title: wsTask.title })}</h2>
             {wsTask.worksheet_serial && (
               <p className="text-xs text-slate-500">{t("myTasks.wsSerial", { serial: wsTask.worksheet_serial })}</p>
+            )}
+            {timer && timer.state !== "none" && (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs text-white">
+                <span className={`h-2.5 w-2.5 rounded-full ${timer.state === "paused" ? "bg-amber-400" : timer.state === "running" ? "animate-pulse bg-emerald-400" : "bg-slate-500"}`} />
+                <span className="font-medium">{timer.state === "paused" ? t("myTasks.timerPaused") : t("myTasks.timerRunning")}</span>
+                <span className="text-slate-400">· {t("myTasks.timerHint")}</span>
+                {timer.state !== "stopped" && (
+                  <button type="button" onClick={() => void toggleTimer()} className="ml-auto rounded-lg bg-white/10 px-2.5 py-1 font-medium hover:bg-white/20">
+                    {timer.state === "paused" ? t("myTasks.timerResume") : t("myTasks.timerPause")}
+                  </button>
+                )}
+              </div>
             )}
             {wsQuote.status === "accepted" && (
               <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
@@ -1353,7 +1389,7 @@ export default function FeladataimPage() {
                 </>
               )}
               <button
-                onClick={() => setWsTask(null)}
+                onClick={() => closeWorksheet()}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
               >
                 {t("common.cancel")}

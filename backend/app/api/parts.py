@@ -10,7 +10,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func
 from sqlalchemy import select
@@ -1033,3 +1033,211 @@ async def cancel_parts_request(
     )
     await db.commit()
     return (await _requests_out(db, [req]))[0]
+
+
+# ─── D fázis: leltár + export ─────────────────────────────────────────────────
+
+
+class SheetRow(BaseModel):
+    part_id: str
+    sku: str
+    name: str
+    unit: str
+    location: str
+    expected: float
+
+
+class CountRow(BaseModel):
+    part_id: str
+    location: str = ""
+    quantity: float = Field(ge=0)
+
+
+class StocktakeBody(BaseModel):
+    warehouse_id: str
+    note: str | None = Field(default=None, max_length=512)
+    counts: list[CountRow] = Field(default_factory=list, max_length=2000)
+
+
+class StocktakeDiff(BaseModel):
+    part_id: str
+    sku: str
+    name: str
+    location: str
+    expected: float
+    counted: float
+    delta: float
+
+
+class StocktakeOut(BaseModel):
+    adjusted: int
+    diffs: list[StocktakeDiff]
+
+
+async def _sheet_rows(db: AsyncSession, wh: PartsWarehouse) -> list[SheetRow]:
+    rows = (
+        await db.execute(
+            select(PartsStock, Part)
+            .join(Part, Part.id == PartsStock.part_id)
+            .where(PartsStock.warehouse_id == wh.id, PartsStock.quantity > 0)
+            .order_by(PartsStock.location, Part.name)
+        )
+    ).all()
+    return [
+        SheetRow(part_id=str(p.id), sku=p.sku, name=p.name, unit=p.unit, location=s.location, expected=s.quantity)
+        for s, p in rows
+    ]
+
+
+async def _apply_counts(
+    db: AsyncSession, wh: PartsWarehouse, counts: list[CountRow], actor: User, note: str,
+) -> StocktakeOut:
+    """Minden számolt sor: ha eltér a nyilvántartástól → `adjust` mozgás a
+    különbséggel (append-only). Nem számolt sor érintetlen marad."""
+    diffs: list[StocktakeDiff] = []
+    for c in counts:
+        part = await _part_or_404(db, c.part_id)
+        loc = _validate_location(wh, c.location)
+        row = await _stock_row(db, wh.id, part.id, loc)
+        delta = round(c.quantity - row.quantity, 4)
+        if abs(delta) < 1e-9:
+            continue
+        expected = row.quantity
+        await _move(db, part=part, wh=wh, location=loc, kind="adjust", delta=delta, actor=actor, note=note)
+        diffs.append(StocktakeDiff(
+            part_id=str(part.id), sku=part.sku, name=part.name, location=loc,
+            expected=expected, counted=c.quantity, delta=delta,
+        ))
+    return StocktakeOut(adjusted=len(diffs), diffs=diffs)
+
+
+@router.get("/stocktake/sheet", response_model=list[SheetRow])
+async def stocktake_sheet(
+    warehouse_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """Leltárív: a raktár nyilvántartott sorai helykódonként (ezt számolják)."""
+    return await _sheet_rows(db, await _wh_or_404(db, warehouse_id))
+
+
+@router.post("/stocktake", response_model=StocktakeOut)
+async def stocktake(
+    body: StocktakeBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Leltár könyvelése egy raktárra: a számolt mennyiségek → korrekciók."""
+    wh = await _wh_or_404(db, body.warehouse_id)
+    note = f"leltár: {body.note.strip()}" if body.note and body.note.strip() else "leltár"
+    out = await _apply_counts(db, wh, body.counts, actor, note)
+    await record_audit(
+        db, actor=actor, action="parts.stocktake", entity_type="parts_warehouse", entity_id=str(wh.id),
+        detail={"adjusted": out.adjusted, "counted": len(body.counts)}, request=request,
+    )
+    await db.commit()
+    return out
+
+
+class MyStocktakeBody(BaseModel):
+    counts: list[CountRow] = Field(default_factory=list, max_length=500)
+
+
+@router.post("/my-stocktake", response_model=StocktakeOut)
+async def my_stocktake(
+    body: MyStocktakeBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """„📋 Számoltam” — a szerelő a SAJÁT autóján leltároz; a különbség
+    korrekcióként a mozgásnaplóba kerül (a vezető látja)."""
+    wh = await _own_vehicle(db, actor.id)
+    if wh is None:
+        raise HTTPException(status_code=422, detail={"code": "parts.no_vehicle"})
+    out = await _apply_counts(db, wh, body.counts, actor, "leltár (szerelő)")
+    await record_audit(
+        db, actor=actor, action="parts.stocktake", entity_type="parts_warehouse", entity_id=str(wh.id),
+        detail={"adjusted": out.adjusted, "counted": len(body.counts), "own": True}, request=request,
+    )
+    await db.commit()
+    return out
+
+
+def _csv(rows: list[list], header: list[str]) -> Response:
+    """Excel-barát CSV: UTF-8 BOM + pontosvessző; tizedes vesszővel."""
+    import csv
+    import io as _io
+
+    buf = _io.StringIO()
+    w = csv.writer(buf, delimiter=";", lineterminator="\r\n")
+    w.writerow(header)
+    for r in rows:
+        w.writerow([str(x).replace(".", ",") if isinstance(x, float) else ("" if x is None else x) for x in r])
+    return Response(content="\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8")
+
+
+@router.get("/export.csv")
+async def export_csv(
+    what: str = Query(default="stock", pattern="^(stock|movements|parts)$"),
+    warehouse_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """CSV export: készlet helykódonként | mozgásnapló | cikktörzs."""
+    if what == "parts":
+        totals = await _totals(db)
+        parts = (await db.execute(select(Part).order_by(Part.sku))).scalars().all()
+        resp = _csv(
+            [[p.sku, p.name, p.manufacturer_code, p.unit, float(totals.get(p.id, 0.0)), float(p.min_stock),
+              p.price_net, p.cost_net, p.supplier, "igen" if p.is_active else "nem"] for p in parts],
+            ["Cikkszám", "Megnevezés", "Gyártói kód", "Egység", "Készlet összesen", "Min. készlet",
+             "Eladási nettó", "Beszerzési nettó", "Beszállító", "Aktív"],
+        )
+        name = "alkatreszek"
+    elif what == "movements":
+        q = (
+            select(PartsMovement, Part, PartsWarehouse.name)
+            .join(Part, Part.id == PartsMovement.part_id)
+            .join(PartsWarehouse, PartsWarehouse.id == PartsMovement.warehouse_id)
+            .order_by(PartsMovement.created_at.desc())
+            .limit(20000)
+        )
+        if warehouse_id:
+            q = q.where(PartsMovement.warehouse_id == _uuid(warehouse_id, "parts.warehouse_not_found"))
+        rows = (await db.execute(q)).all()
+        wh_names = {w.id: w.name for w in (await db.execute(select(PartsWarehouse))).scalars().all()}
+        actor_ids = {m.actor_user_id for m, _, _ in rows if m.actor_user_id}
+        actors = {
+            u.id: (u.display_name or u.email or "")
+            for u in (await db.execute(select(User).where(User.id.in_(actor_ids)))).scalars().all()
+        } if actor_ids else {}
+        resp = _csv(
+            [[m.created_at.strftime("%Y-%m-%d %H:%M"), m.kind, p.sku, p.name, whn, m.location,
+              float(m.quantity_delta), p.unit, m.unit_cost, m.price_net,
+              wh_names.get(m.ref_warehouse_id, "") if m.ref_warehouse_id else "", m.ref_location,
+              m.document_no, m.note, actors.get(m.actor_user_id, "")] for m, p, whn in rows],
+            ["Mikor", "Mozgás", "Cikkszám", "Megnevezés", "Raktár", "Helykód", "Változás", "Egység",
+             "Egységár (beszerzés)", "Eladási ár", "Kapcsolódó raktár", "Kapcsolódó helykód", "Bizonylat",
+             "Megjegyzés", "Ki"],
+        )
+        name = "alkatresz_mozgasok"
+    else:
+        q = (
+            select(PartsStock, Part, PartsWarehouse.name)
+            .join(Part, Part.id == PartsStock.part_id)
+            .join(PartsWarehouse, PartsWarehouse.id == PartsStock.warehouse_id)
+            .where(PartsStock.quantity > 0)
+            .order_by(PartsWarehouse.name, PartsStock.location, Part.name)
+        )
+        if warehouse_id:
+            q = q.where(PartsStock.warehouse_id == _uuid(warehouse_id, "parts.warehouse_not_found"))
+        rows = (await db.execute(q)).all()
+        resp = _csv(
+            [[whn, s.location, p.sku, p.name, float(s.quantity), p.unit, p.price_net, p.cost_net] for s, p, whn in rows],
+            ["Raktár", "Helykód", "Cikkszám", "Megnevezés", "Mennyiség", "Egység", "Eladási nettó", "Beszerzési nettó"],
+        )
+        name = "alkatresz_keszlet"
+    resp.headers["Content-Disposition"] = f'attachment; filename="{name}_{datetime.now(UTC):%Y%m%d}.csv"'
+    return resp

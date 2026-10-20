@@ -175,7 +175,8 @@
     "collapse": "Collapse",
     "vendingPromo": "Promotion",
     "parts": "Parts",
-    "myParts": "My parts"
+    "myParts": "My parts",
+    "worktime": "Work time"
   },
   "roles": {
     "admin": "Admin",
@@ -1351,7 +1352,13 @@
     "quoteHistoryTitle": "Quote history",
     "quoteHistoryAccepted": "Accepted by {by} — {at}",
     "quoteHistoryDeclined": "Declined by {by} — {at}",
-    "usedParts": "🔩 Installed parts (from parts stock — price per catalogue, listed on the PDF)"
+    "usedParts": "🔩 Installed parts (from parts stock — price per catalogue, listed on the PDF)",
+    "timerMeasured": "Measured active time",
+    "timerPauses": "breaks",
+    "timerWritten": "written hours",
+    "timerRatio": "ratio",
+    "timerRunning": "running",
+    "timerPausedNow": "paused"
   },
   "myTasks": {
     "title": "My tasks",
@@ -1449,7 +1456,12 @@
     "wsPartsEmpty": "No parts installed yet.",
     "wsPartsNoVehicle": "You have no vehicle parts warehouse — see the My parts page for details.",
     "wsPartsRemove": "Undo this installation? The stock returns to the vehicle.",
-    "wsPartsOnVehicle": "{qty} {unit} on the vehicle"
+    "wsPartsOnVehicle": "{qty} {unit} on the vehicle",
+    "timerRunning": "⏱ work time is being recorded",
+    "timerPaused": "⏸ on break",
+    "timerHint": "start and end are stored with the worksheet",
+    "timerPause": "☕ Break",
+    "timerResume": "▶ Resume"
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1938,7 +1950,9 @@
     "parts.same_location": "Source and target are the same.",
     "parts.sku_taken": "This SKU is already taken.",
     "parts.location_in_use": "Bin in use — the column/row cannot be removed.",
-    "parts.warehouse_not_empty": "The warehouse is not empty and cannot be deleted."
+    "parts.warehouse_not_empty": "The warehouse is not empty and cannot be deleted.",
+    "worktime.bad_range": "Invalid range (max. 400 days).",
+    "worktime.bad_action": "Unknown timer action."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -3156,7 +3170,20 @@
     "req.declineConfirm": "Decline this request?",
     "req.issuedToast": "Issued — the stock is on the technician's vehicle.",
     "req.hint": "On issue the stock moves to the technician's vehicle IMMEDIATELY (issue movement); they only confirm receipt.",
-    "req.status": "Status"
+    "req.status": "Status",
+    "tab.stocktake": "Stocktake",
+    "st.hint": "Pick a warehouse and enter the counted quantities — only differing rows are booked (adjustment in the movement log).",
+    "st.expected": "Expected",
+    "st.counted": "Counted",
+    "st.note": "Stocktake note (e.g. autumn count)",
+    "st.submit": "📋 Book stocktake",
+    "st.empty": "No stock recorded in this warehouse.",
+    "st.done": "Stocktake booked: {n} adjustments.",
+    "st.noDiff": "No differences — nothing to adjust.",
+    "export": "⬇ Export",
+    "export.stock": "Stock (CSV)",
+    "export.movements": "Movements (CSV)",
+    "export.parts": "Parts list (CSV)"
   },
   "myParts": {
     "title": "My parts",
@@ -3178,6 +3205,42 @@
     "min.ok": "OK",
     "min.low": "below min.",
     "min.out": "out of stock",
-    "companyTotal": "company total"
+    "companyTotal": "company total",
+    "count": "📋 I counted",
+    "countTitle": "Stocktake on the vehicle",
+    "countHint": "Enter what you found — the difference goes to the movement log as an adjustment, visible to managers.",
+    "countDone": "Stocktake booked: {n} adjustments."
+  },
+  "worktime": {
+    "title": "Work time — per technician",
+    "subtitle": "Hours written on worksheets vs. the actually measured active time (timer, without breaks). The technician only sees that it runs — the numbers live here.",
+    "day": "Day",
+    "week": "Week",
+    "month": "Month",
+    "range": "Range",
+    "allEmployees": "all",
+    "kpi.written": "Hours written on worksheets",
+    "kpi.active": "Measured active time",
+    "kpi.ratio": "Ratio (measured / written)",
+    "kpi.pauses": "Breaks",
+    "kpi.worksheets": "{n} worksheets",
+    "kpi.noBreaks": "without breaks",
+    "kpi.avgPause": "avg {m} min / worksheet",
+    "byEmployee": "👤 Per technician",
+    "worksheets": "📋 Worksheets",
+    "col.employee": "Technician",
+    "col.worksheets": "Worksheets",
+    "col.written": "Written h",
+    "col.active": "Measured",
+    "col.ratio": "Ratio",
+    "col.pause": "Break",
+    "col.worksheet": "Worksheet",
+    "col.startEnd": "Start → end (actual)",
+    "col.timeline": "Timeline",
+    "legend.work": "active",
+    "legend.pause": "break",
+    "legend.running": "still running",
+    "empty": "No measured worksheets in this period.",
+    "noWritten": "—"
   }
 }

@@ -39,6 +39,7 @@ export default function SajatAlkatreszekPage() {
   const [wh, setWh] = useState<MyWarehouse | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<{ part_id: string; quantity: string; note: string } | null>(null);
+  const [count, setCount] = useState<Record<string, string> | null>(null);
 
   const load = useCallback(() => {
     api.get<MyWarehouse>("/api/parts/my-warehouse").then(setWh).catch((e) => toast(errorMessage(e), "error"));
@@ -59,6 +60,22 @@ export default function SajatAlkatreszekPage() {
       await api.post("/api/parts/requests", { part_id: form.part_id, quantity: Number(form.quantity.replace(",", ".")) || 0, note: form.note || null });
       toast(t("myParts.sent"), "success");
       setForm(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitCount() {
+    if (!count || !wh) return;
+    setBusy(true);
+    try {
+      const counts = wh.stock.map((s) => ({ part_id: s.part_id, quantity: Number((count[s.part_id] ?? String(s.quantity)).replace(",", ".")) || 0 }));
+      const res = await api.post<{ adjusted: number }>("/api/parts/my-stocktake", { counts });
+      toast(t("myParts.countDone", { n: res.adjusted }), "success");
+      setCount(null);
       load();
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -91,7 +108,10 @@ export default function SajatAlkatreszekPage() {
           <p className="text-sm text-slate-500">{t("myParts.subtitle")}</p>
         </div>
         {wh?.warehouse_id && (
-          <button onClick={() => setForm({ part_id: "", quantity: "1", note: "" })} className="ml-auto rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("myParts.newRequest")}</button>
+          <div className="ml-auto flex gap-2">
+            <button onClick={() => setCount(Object.fromEntries(wh.stock.map((s) => [s.part_id, String(s.quantity)])))} disabled={wh.stock.length === 0} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-50">{t("myParts.count")}</button>
+            <button onClick={() => setForm({ part_id: "", quantity: "1", note: "" })} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("myParts.newRequest")}</button>
+          </div>
         )}
       </div>
 
@@ -159,6 +179,39 @@ export default function SajatAlkatreszekPage() {
               </div>
             )}
           </section>
+        </div>
+      )}
+
+      {/* ── Számoltam (leltár az autón) modal ── */}
+      {count && wh && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setCount(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">{t("myParts.countTitle")}</h2>
+            <p className="text-xs text-slate-500">{t("myParts.countHint")}</p>
+            <table className="w-full text-sm">
+              <tbody>
+                {wh.stock.map((s) => {
+                  const v = Number((count[s.part_id] ?? "").replace(",", "."));
+                  const diff = Number.isFinite(v) ? v - s.quantity : 0;
+                  return (
+                    <tr key={s.part_id} className="border-b border-slate-100">
+                      <td className="py-1.5 pr-2"><span className="font-mono text-[11px] text-slate-400">{s.sku}</span> {s.name}<span className="block text-[11px] text-slate-400">{s.quantity} {s.unit}</span></td>
+                      <td className="py-1.5 text-right">
+                        <input type="number" min={0} step="any" value={count[s.part_id] ?? ""} onChange={(e) => setCount({ ...count, [s.part_id]: e.target.value })} className={`w-24 rounded-lg border px-2 py-1 text-right ${diff !== 0 ? "border-amber-400" : "border-slate-300"}`} />
+                        {diff !== 0 && <span className={`ml-1 text-xs font-semibold ${diff > 0 ? "text-emerald-700" : "text-rose-700"}`}>{diff > 0 ? "+" : ""}{diff}</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setCount(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={busy} onClick={() => void submitCount()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{busy ? t("common.saving") : t("myParts.count")}</button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -38,7 +38,9 @@ const REQ_CHIP: Record<PartsReq["status"], string> = {
   declined: "bg-rose-100 text-rose-800", cancelled: "bg-slate-100 text-slate-500",
 };
 
-type Tab = "stock" | "parts" | "warehouses" | "movements" | "requests";
+interface SheetRow { part_id: string; sku: string; name: string; unit: string; location: string; expected: number }
+
+type Tab = "stock" | "parts" | "warehouses" | "movements" | "requests" | "stocktake";
 type MoveKind = "receipt" | "transfer" | "adjust";
 
 const emptyPart = { sku: "", name: "", manufacturer_code: "", unit: "db", min_stock: "0", price_net: "", cost_net: "", supplier: "", notes: "", is_active: true };
@@ -60,6 +62,10 @@ export default function AlkatreszekPage() {
   const [requests, setRequests] = useState<PartsReq[]>([]);
   const [onlyOpen, setOnlyOpen] = useState(true);
   const [issue, setIssue] = useState<{ req: PartsReq; from_warehouse_id: string; from_location: string; quantity: string; note: string } | null>(null);
+  const [stWh, setStWh] = useState("");
+  const [sheet, setSheet] = useState<SheetRow[]>([]);
+  const [counts, setCounts] = useState<Record<string, string>>({});
+  const [stNote, setStNote] = useState("");
   const [q, setQ] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -203,6 +209,38 @@ export default function AlkatreszekPage() {
     }
   }
   const pendingCount = requests.filter((r) => r.status === "pending").length;
+
+  // ── leltár ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!stWh) { setSheet([]); setCounts({}); return; }
+    api.get<SheetRow[]>(`/api/parts/stocktake/sheet?warehouse_id=${stWh}`).then((rows) => {
+      setSheet(rows);
+      setCounts(Object.fromEntries(rows.map((r) => [`${r.part_id}|${r.location}`, String(r.expected)])));
+    }).catch((e) => toast(errorMessage(e), "error"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stWh]);
+
+  async function submitStocktake() {
+    if (!stWh) return;
+    setBusy(true);
+    try {
+      const body = {
+        warehouse_id: stWh, note: stNote || null,
+        counts: sheet.map((r) => ({ part_id: r.part_id, location: r.location, quantity: num(counts[`${r.part_id}|${r.location}`] ?? "") ?? r.expected })),
+      };
+      const res = await api.post<{ adjusted: number }>("/api/parts/stocktake", body);
+      toast(res.adjusted > 0 ? t("parts.st.done", { n: res.adjusted }) : t("parts.st.noDiff"), "success");
+      setStNote("");
+      load();
+      const rows = await api.get<SheetRow[]>(`/api/parts/stocktake/sheet?warehouse_id=${stWh}`);
+      setSheet(rows);
+      setCounts(Object.fromEntries(rows.map((r) => [`${r.part_id}|${r.location}`, String(r.expected)])));
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
   const shownRequests = onlyOpen ? requests.filter((r) => r.status === "pending" || r.status === "issued") : requests;
 
   const whById = (id: string) => warehouses.find((w) => w.id === id);
@@ -228,10 +266,18 @@ export default function AlkatreszekPage() {
           <button onClick={() => openMove("receipt")} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700">{t("parts.receipt")}</button>
           <button onClick={() => openMove("transfer")} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("parts.transfer")}</button>
           <button onClick={() => openMove("adjust")} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100">{t("parts.adjust")}</button>
+          <details className="relative">
+            <summary className="cursor-pointer list-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100">{t("parts.export")}</summary>
+            <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-lg">
+              <a href="/api/parts/export.csv?what=stock" className="block rounded-lg px-3 py-1.5 hover:bg-slate-100">{t("parts.export.stock")}</a>
+              <a href="/api/parts/export.csv?what=movements" className="block rounded-lg px-3 py-1.5 hover:bg-slate-100">{t("parts.export.movements")}</a>
+              <a href="/api/parts/export.csv?what=parts" className="block rounded-lg px-3 py-1.5 hover:bg-slate-100">{t("parts.export.parts")}</a>
+            </div>
+          </details>
         </div>
       </div>
       <div className="mb-4 flex overflow-hidden rounded-lg border border-slate-300 text-sm w-fit">
-        {tabBtn("stock", t("parts.tab.stock"))}{tabBtn("parts", t("parts.tab.parts"))}{tabBtn("warehouses", t("parts.tab.warehouses"))}{tabBtn("movements", t("parts.tab.movements"))}{tabBtn("requests", `${t("parts.tab.requests")}${pendingCount ? ` (${pendingCount})` : ""}`)}
+        {tabBtn("stock", t("parts.tab.stock"))}{tabBtn("parts", t("parts.tab.parts"))}{tabBtn("warehouses", t("parts.tab.warehouses"))}{tabBtn("movements", t("parts.tab.movements"))}{tabBtn("requests", `${t("parts.tab.requests")}${pendingCount ? ` (${pendingCount})` : ""}`)}{tabBtn("stocktake", t("parts.tab.stocktake"))}
       </div>
 
       {/* ── Készlet ── */}
@@ -396,6 +442,51 @@ export default function AlkatreszekPage() {
               </table>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Leltár ── */}
+      {tab === "stocktake" && (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">{t("parts.st.hint")}</p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-72 text-sm">
+              <p className="mb-1 text-xs text-slate-500">{t("parts.warehouse")}</p>
+              <SearchSelect items={whItems} value={stWh} onChange={setStWh} placeholder={t("parts.warehouse")} />
+            </div>
+            <label className="block flex-1 text-sm">{t("parts.st.note")}<input value={stNote} onChange={(e) => setStNote(e.target.value)} className={input} /></label>
+            <button disabled={busy || !stWh || sheet.length === 0} onClick={() => void submitStocktake()} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{t("parts.st.submit")}</button>
+          </div>
+          {stWh && (
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+              {sheet.length === 0 ? <p className="p-8 text-center text-sm text-slate-400">{t("parts.st.empty")}</p> : (
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2">{t("parts.location")}</th><th className="px-3 py-2">{t("parts.sku")}</th><th className="px-3 py-2">{t("parts.name")}</th><th className="px-3 py-2 text-right">{t("parts.st.expected")}</th><th className="px-3 py-2 text-right">{t("parts.st.counted")}</th>
+                  </tr></thead>
+                  <tbody>
+                    {sheet.map((r) => {
+                      const key = `${r.part_id}|${r.location}`;
+                      const counted = num(counts[key] ?? "");
+                      const diff = counted == null ? 0 : counted - r.expected;
+                      return (
+                        <tr key={key} className={`border-b border-slate-100 ${diff !== 0 ? "bg-amber-50" : ""}`}>
+                          <td className="px-3 py-2 font-mono text-xs">{r.location || "—"}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{r.sku}</td>
+                          <td className="px-3 py-2">{r.name}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-slate-500">{r.expected} {r.unit}</td>
+                          <td className="px-3 py-2 text-right">
+                            <input type="number" min={0} step="any" value={counts[key] ?? ""} onChange={(e) => setCounts({ ...counts, [key]: e.target.value })} className={`w-24 rounded-lg border px-2 py-1 text-right text-sm ${diff !== 0 ? "border-amber-400 bg-white" : "border-slate-300"}`} />
+                            {diff !== 0 && <span className={`ml-1 text-xs font-semibold ${diff > 0 ? "text-emerald-700" : "text-rose-700"}`}>{diff > 0 ? "+" : ""}{Math.round(diff * 1000) / 1000}</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
       )}
 

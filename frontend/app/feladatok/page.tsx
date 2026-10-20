@@ -406,6 +406,7 @@ export default function FeladatokPage() {
     maintenance_fee: number | null;
     fee_discount: boolean;
     invoiced: boolean;
+    timer?: { state: string; first_started_at: string | null; last_ended_at: string | null; active_seconds: number; pause_seconds: number; pause_count: number } | null;
     customer_note: string | null;
     quote_status: "none" | "sent" | "accepted" | "declined";
     quote_email: string | null;
@@ -1073,6 +1074,22 @@ export default function FeladatokPage() {
             <p className="text-xs text-slate-500">
               {priceEdit.task.worksheet_serial} · {t("tasks.priceEditHint")}
             </p>
+            {priceEdit.ws.timer && (() => {
+              const tmr = priceEdit.ws.timer;
+              const dur = (s: number) => { const h = Math.floor(s / 3600); const m = Math.round((s % 3600) / 60); return h > 0 ? `${h} ó ${String(m).padStart(2, "0")} p` : `${m} p`; };
+              const tm = (s: string | null) => (s ? new Date(s).toLocaleString("hu-HU", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "…");
+              const written = priceEdit.ws.hours_spent;
+              const ratio = written && written > 0 ? Math.round((tmr.active_seconds / 3600 / written) * 100) : null;
+              return (
+                <p className="rounded-xl bg-slate-900 px-3 py-2 text-xs text-white">
+                  ⏱ {tm(tmr.first_started_at)} → {tmr.state === "stopped" ? tm(tmr.last_ended_at) : <span className="text-emerald-300">{t(tmr.state === "paused" ? "tasks.timerPausedNow" : "tasks.timerRunning")}</span>}
+                  {" · "}{t("tasks.timerMeasured")}: <b>{dur(tmr.active_seconds)}</b>
+                  {tmr.pause_count > 0 && <> · {tmr.pause_count}× {t("tasks.timerPauses")} ({dur(tmr.pause_seconds)})</>}
+                  {written != null && <> · {t("tasks.timerWritten")}: {written} ó</>}
+                  {ratio != null && <> · {t("tasks.timerRatio")}: <b className={ratio < 70 ? "text-rose-300" : ratio < 85 ? "text-amber-300" : "text-emerald-300"}>{ratio} %</b></>}
+                </p>
+              );
+            })()}
             {!priceEdit.ws.work_description.trim() && (
               <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {t("tasks.priceEditNotFilled")}

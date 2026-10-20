@@ -43,6 +43,7 @@ from app.services.wfm.ai_service import generate_from_image
 from app.services.wfm.email_service import load_smtp_config, send_email
 from app.services.wfm.parts_service import UsedPartOut, used_parts_as_materials, used_parts_for_worksheet
 from app.services.wfm.worksheet_pdf import DEFAULT_CUSTOMER_FOOTER, build_worksheet_pdf
+from app.services.wfm.worktime_service import TimerSummary
 
 router = APIRouter()
 me_router = APIRouter()  # /api/me/tasks alá kerül
@@ -202,6 +203,9 @@ class WorksheetOut(BaseModel):
     # Beépített alkatrészek az alkatrész-raktárból (parts modul, B fázis) —
     # csak olvasható itt; a beépítés a /api/parts/use végponton történik.
     used_parts: list[UsedPartOut] = []
+    # Munkaidő-mérés összegzése (worktime modul) — CSAK a vezetői GET-en,
+    # a dolgozói kép sosem kap számokat.
+    timer: TimerSummary | None = None
     hours_spent: float | None
     client_name: str | None
     client_location: str | None
@@ -1153,7 +1157,14 @@ async def get_task_worksheet(
     ws = await _get_worksheet(db, task.id)
     if ws is None:
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
-    return _worksheet_out(ws, suggested_email=await _suggest_quote_email(db, ws), used_parts=await _used_parts(db, ws))
+    out = _worksheet_out(ws, suggested_email=await _suggest_quote_email(db, ws), used_parts=await _used_parts(db, ws))
+    from app.services.wfm.license import module_enabled
+
+    if await module_enabled(db, "worktime"):
+        from app.api.worktime import timer_summary_for_worksheet
+
+        out.timer = await timer_summary_for_worksheet(db, ws.id)
+    return out
 
 
 @router.put("/{task_id}/worksheet", response_model=WorksheetOut)
