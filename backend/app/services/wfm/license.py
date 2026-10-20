@@ -25,6 +25,7 @@ MODULES = (
     "mpl", "foxpost", "dpd", "bugreport", "cashbook", "szamlazz",
     "cashbox", "stats", "tiered", "stocktake", "saferpay",
     "warehouse",  # raktár: saját raktár, átadások, raktármozgások (Flotta-kapcsoló)
+    "parts",  # alkatrész-raktár (ERP-szerű helykódos készlet) — alapból KI
 )
 
 

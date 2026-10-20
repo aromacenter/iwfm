@@ -74,6 +74,12 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    labelKey: "nav.groups.parts",
+    items: [
+      { href: "/alkatreszek", key: "nav.parts", perm: "settlements", icon: "🔩", module: "parts" },
+    ],
+  },
+  {
     labelKey: "nav.groups.vending",
     items: [
       { href: "/kave-fizetes", key: "nav.saferpay", perm: "invoicing", icon: "📲", module: "saferpay" },

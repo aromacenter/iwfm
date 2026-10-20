@@ -974,6 +974,118 @@ class AgentRelease(Base):
     )
 
 
+# ─── Alkatrész-raktár (parts modul) — a termék-raktártól FÜGGETLEN ──────────
+
+
+class PartsWarehouse(Base):
+    """Alkatrész-raktár helykódos szerkezettel: oszlopok (A, B, C…) × sorok
+    (1..N). kind: central (telephely) | vehicle (szerelő autója, owner_user_id)."""
+
+    __tablename__ = "parts_warehouses"
+    __table_args__ = (
+        CheckConstraint("kind IN ('central','vehicle')", name="ck_parts_wh_kind"),
+        Index("ix_parts_warehouses_name", "name"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False, default="central")
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_parts_wh_owner"), nullable=True
+    )
+    columns: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # ["A","B",…]
+    rows: Mapped[int] = mapped_column(Integer, nullable=False, default=10)  # 1..rows (bővíthető)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Part(Base):
+    """Alkatrész-cikktörzs."""
+
+    __tablename__ = "parts"
+    __table_args__ = (
+        UniqueConstraint("sku", name="uq_parts_sku"),
+        Index("ix_parts_name", "name"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    sku: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    manufacturer_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    unit: Mapped[str] = mapped_column(String(16), nullable=False, default="db")
+    min_stock: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    price_net: Mapped[float | None] = mapped_column(Float, nullable=True)  # eladási nettó (ajánlatba)
+    cost_net: Mapped[float | None] = mapped_column(Float, nullable=True)  # beszerzési nettó
+    supplier: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PartsStock(Base):
+    """Aktuális készlet: alkatrész × raktár × helykód (oszlop+sor; autós
+    raktárnál a helykód üres). A mozgásokból újraszámolható."""
+
+    __tablename__ = "parts_stock"
+    __table_args__ = (
+        UniqueConstraint("warehouse_id", "part_id", "location", name="uq_parts_stock"),
+        Index("ix_parts_stock_wh", "warehouse_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts_warehouses.id", ondelete="CASCADE", name="fk_parts_stock_wh"), nullable=False
+    )
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts.id", ondelete="CASCADE", name="fk_parts_stock_part"), nullable=False
+    )
+    location: Mapped[str] = mapped_column(String(16), nullable=False, default="")  # pl. "B-12"
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PartsMovement(Base):
+    """Alkatrész-mozgás (append-only): receipt (vételezés) | issue (kiadás
+    szerelőnek) | use (beépítés munkalapra) | transfer (áthelyezés) |
+    adjust (leltári korrekció). A készlet ebből számolódik."""
+
+    __tablename__ = "parts_movements"
+    __table_args__ = (
+        CheckConstraint("kind IN ('receipt','issue','use','transfer','adjust')", name="ck_parts_mv_kind"),
+        Index("ix_parts_movements_wh", "warehouse_id", "created_at"),
+        Index("ix_parts_movements_part", "part_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts.id", ondelete="CASCADE", name="fk_parts_mv_part"), nullable=False
+    )
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts_warehouses.id", ondelete="CASCADE", name="fk_parts_mv_wh"), nullable=False
+    )
+    location: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    quantity_delta: Mapped[float] = mapped_column(Float, nullable=False)  # + be, − ki
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)  # vételezésnél
+    # áthelyezésnél a másik raktár / hely; beépítésnél a munkalap
+    ref_warehouse_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    ref_location: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    worksheet_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    document_no: Mapped[str | None] = mapped_column(String(64), nullable=True)  # szállítólevél
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class VendingAsset(Base):
     """A gépen lévő médiafájlok másolata (gyári reklámképek, termékikonok,
     képernyővédő): az ügynök tölti fel binárisan, az admin listázza / ZIP-ben
