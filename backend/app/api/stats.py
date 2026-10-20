@@ -306,6 +306,7 @@ class MapPartnerOut(BaseModel):
     counters: int = 0  # számláló-sorok ("régi gépszám", érdekesség)
     revenue: float  # összes elszámolás-bevétel (bruttó)
     agent_user_id: str | None = None  # felelős képviselő (szűréshez)
+    contracted: bool = True  # ma érvényes szerződése van (d650f1d5: a gép nélküliek is látszanak)
 
 
 @router.get(
@@ -358,16 +359,47 @@ async def stats_map(
     ).scalars().all():
         machines = mach.get(p.id, 0)
         revenue = rev.get(p.id, 0.0)
-        # csak kihelyezett gépes, élő szerződéses partner kerül a térképre
-        if machines == 0 or p.id not in contracted_ids:
-            continue
+        # d650f1d5: MINDEN aktív partner a térképre kerül; a gép nélküli /
+        # szerződés nélküli jelölten (a kliens szürkén rajzolja, szűrhető)
         out.append(MapPartnerOut(
             id=str(p.id), name=p.name, city=p.address_city, zip=p.address_zip,
             lat=p.lat, lng=p.lng, machines=machines,
             counters=int(counter_rows.get(p.id, 0)), revenue=_money(revenue),
             agent_user_id=str(p.agent_user_id) if p.agent_user_id else None,
+            contracted=p.id in contracted_ids,
         ))
     return out
+
+
+@router.post(
+    "/map/geocode-missing",
+    dependencies=[Depends(require_module("stats"))],
+)
+async def map_geocode_missing(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("agent_report")),
+):
+    """d650f1d5: minden aktív, koordináta nélküli partner geokódolása a
+    háttérben, sorban (a Nominatim 1 kérés/mp szabálya miatt lassú: ~1,2 s/partner)."""
+    import asyncio
+
+    from app.models import Partner
+    from app.services.wfm.geocode import enabled, geocode_partner_background
+
+    ids = (
+        await db.execute(
+            select(Partner.id).where(Partner.is_active.is_(True), Partner.lat.is_(None))
+        )
+    ).scalars().all()
+
+    async def _run(partner_ids: list) -> None:
+        for pid in partner_ids:
+            await geocode_partner_background(pid)
+            await asyncio.sleep(1.2)
+
+    if ids and enabled():
+        asyncio.get_running_loop().create_task(_run(list(ids)))
+    return {"queued": len(ids) if enabled() else 0, "missing": len(ids)}
 
 
 @router.get("/machine-history", dependencies=[Depends(require_module("stats"))])

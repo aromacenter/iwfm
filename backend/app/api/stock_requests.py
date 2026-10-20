@@ -29,7 +29,9 @@ from app.models import (
     WarehouseTransfer,
 )
 
-router = APIRouter()
+from app.services.wfm.license import require_module
+
+router = APIRouter(dependencies=[Depends(require_module("warehouse"))])
 
 
 class MyStockRow(BaseModel):

@@ -24,6 +24,7 @@ MODULES = (
     "billing", "gls", "labels", "ai", "portal", "support",
     "mpl", "foxpost", "dpd", "bugreport", "cashbook", "szamlazz",
     "cashbox", "stats", "tiered", "stocktake", "saferpay",
+    "warehouse",  # raktár: saját raktár, átadások, raktármozgások (Flotta-kapcsoló)
 )
 
 

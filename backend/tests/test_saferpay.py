@@ -699,3 +699,36 @@ async def test_vending_assets_upload_list_zip(client, admin):
     assert set(names) == {"making/Kawa3_1280x800.jpg", "product_image/ic_Espresso.png"}
     z = await client.get(f"/api/saferpay/machines/{m['id']}/assets.zip?kind=making", headers=adm)
     assert zipfile.ZipFile(io.BytesIO(z.content)).namelist() == ["making/Kawa3_1280x800.jpg"]
+
+
+async def test_vending_promo_video(client, admin):
+    """Videó a képernyővédő slotba (MP4 'ftyp' fejléc), a MakingImage slotba nem;
+    a fájlnév .mp4, a manifest a gépnek ugyanúgy kiadja."""
+    import base64
+
+    _, adm = admin
+    m = (
+        await client.post(
+            "/api/saferpay/machines",
+            json={"machine_code": "174226", "name": "Jetinno JL30"},
+            headers=adm,
+        )
+    ).json()
+    mp4 = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 200
+    b64 = base64.b64encode(mp4).decode()
+    res = await client.post(f"/api/saferpay/machines/{m['id']}/promos", headers=adm,
+                            json={"slot": "making", "title": "reklam.mp4", "data_b64": b64, "content_type": "video/mp4"})
+    assert res.status_code == 422 and res.json()["detail"]["code"] == "vending.video_only_screensaver"
+    res = await client.post(f"/api/saferpay/machines/{m['id']}/promos", headers=adm,
+                            json={"slot": "screensaver", "title": "reklam.mp4", "data_b64": base64.b64encode(b"nem video" * 10).decode(), "content_type": "video/mp4"})
+    assert res.status_code == 422 and res.json()["detail"]["code"] == "vending.bad_video"
+    res = await client.post(f"/api/saferpay/machines/{m['id']}/promos", headers=adm,
+                            json={"slot": "screensaver", "title": "X-Presso reklám.mp4", "data_b64": b64, "content_type": "video/mp4",
+                                  "thumb": "data:image/jpeg;base64,AAAA"})
+    assert res.status_code == 200, res.text
+    p = res.json()
+    assert p["filename"].endswith(".mp4") and p["content_type"] == "video/mp4" and p["size"] == len(mp4)
+    man = (await client.post("/api/pay/promos/manifest", json={"machine_code": "174226", "key": m["api_key"]})).json()
+    assert man["items"][0]["filename"].endswith(".mp4")
+    res = await client.post(f"/api/pay/promos/{p['id']}/file", json={"machine_code": "174226", "key": m["api_key"]})
+    assert res.status_code == 200 and res.content == mp4 and res.headers["content-type"].startswith("video/mp4")

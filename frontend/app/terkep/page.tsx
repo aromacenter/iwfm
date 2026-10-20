@@ -27,6 +27,7 @@ interface MapPartner {
   counters: number;
   revenue: number;
   agent_user_id: string | null;
+  contracted?: boolean;
 }
 // Budai kerületek (I., II., III., XI., XII., XXII.) — az irányítószám 2-3.
 // számjegye a kerület.
@@ -46,6 +47,21 @@ export default function TerkepPage() {
   // Képviselő-szűrő (8f78ba71 reopened) — alapból minden AKTÍV partner látszik
   const [agentFilter, setAgentFilter] = useState("");
   const [agents, setAgents] = useState<{ id: string; display_name: string }[]>([]);
+  // d650f1d5: alapból MINDEN aktív partner látszik (gép nélküliek szürkén); szűrhető a gépesekre
+  const [onlyMachines, setOnlyMachines] = useState(false);
+  const [geoBusy, setGeoBusy] = useState(false);
+
+  async function geocodeMissing() {
+    setGeoBusy(true);
+    try {
+      const r = await api.post<{ queued: number; missing: number }>("/api/stats/map/geocode-missing", {});
+      toast(r.missing === 0 ? t("map.geocodeNone") : t("map.geocodeQueued", { n: r.queued }), r.missing === 0 ? "success" : "info");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setGeoBusy(false);
+    }
+  }
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
   const LRef = useRef<any>(null);
@@ -65,13 +81,15 @@ export default function TerkepPage() {
   const filtered = useMemo(
     () =>
       rows.filter((r) => {
+        if (onlyMachines && r.machines === 0) return false;
         if (bp && budaPest(r.zip) !== bp) return false;
         if (agentFilter === "none" && r.agent_user_id) return false;
         if (agentFilter && agentFilter !== "none" && r.agent_user_id !== agentFilter) return false;
         return true;
       }),
-    [rows, bp, agentFilter],
+    [rows, bp, agentFilter, onlyMachines],
   );
+  const missingGeo = rows.filter((r) => r.lat == null).length;
 
   const cities = useMemo(() => {
     const by: Record<string, { partners: number; machines: number; revenue: number; lat: number; lng: number; n: number }> = {};
@@ -141,13 +159,17 @@ export default function TerkepPage() {
     layerRef.current = layer;
     for (const r of filtered) {
       if (r.lat == null || r.lng == null) continue;
-      const radius = Math.max(6, Math.min(18, 5 + r.machines * 2));
+      const hasMachines = r.machines > 0;
+      const radius = hasMachines ? Math.max(6, Math.min(18, 5 + r.machines * 2)) : 5;
+      const color = hasMachines ? "#E31E24" : "#64748b";
       L.circleMarker([r.lat, r.lng], {
-        radius, color: "#E31E24", weight: 1.5, fillColor: "#E31E24", fillOpacity: 0.55,
+        radius, color, weight: 1.5, fillColor: color, fillOpacity: hasMachines ? 0.55 : 0.4,
       })
         .bindPopup(
           `<b>${r.name}</b><br/>${r.city ?? ""} ${r.zip ?? ""}<br/>` +
-          `☕ ${r.machines} ${t("map.machinesShort")} · 💰 ${ft(r.revenue)}`,
+          (hasMachines
+            ? `☕ ${r.machines} ${t("map.machinesShort")} · 💰 ${ft(r.revenue)}`
+            : `⚪ ${t("map.noMachines")}${r.contracted === false ? "" : ""}`),
         )
         .addTo(layer);
     }
@@ -193,6 +215,21 @@ export default function TerkepPage() {
             <option key={a.id} value={a.id}>💼 {a.display_name}</option>
           ))}
         </select>
+        <button
+          onClick={() => setOnlyMachines((v) => !v)}
+          className={`rounded-full px-3 py-1.5 text-xs font-medium ${onlyMachines ? "bg-indigo-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
+        >
+          ☕ {t("map.onlyMachines")}
+        </button>
+        {missingGeo > 0 && (
+          <button
+            onClick={() => void geocodeMissing()}
+            disabled={geoBusy}
+            className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-200 disabled:opacity-50"
+          >
+            {t("map.geocodeMissing", { n: missingGeo })}
+          </button>
+        )}
         <div className="ml-auto flex flex-wrap gap-2 text-sm">
           <span className="rounded-lg bg-slate-100 px-3 py-1.5">🤝 {totals.partners} {t("map.partners")}</span>
           <span className="rounded-lg bg-slate-100 px-3 py-1.5">

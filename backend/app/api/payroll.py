@@ -84,7 +84,14 @@ async def export_payroll(
     )
 
     rows: list[PayrollRow] = []
+    skipped_no_taj = 0
     for emp in employees:
+        # c6af18d8: a külsős szervizesek és a külsős szervizcégek emberei nem
+        # bérszámfejtettek nálunk — ismertetőjelük, hogy nincs TAJ-számuk rögzítve.
+        taj = decrypt_pii(emp.taj_encrypted)
+        if not (taj or "").strip():
+            skipped_no_taj += 1
+            continue
         emp_shifts = [s for s in shifts if s.employee_id == emp.id]
         scheduled = sum(
             ShiftSpan(
@@ -109,7 +116,7 @@ async def export_payroll(
             PayrollRow(
                 name=f"{emp.last_name} {emp.first_name}",
                 tax_id=decrypt_pii(emp.tax_id_encrypted),
-                taj=decrypt_pii(emp.taj_encrypted),
+                taj=taj,
                 bank_account=decrypt_pii(emp.bank_account_encrypted),
                 feor_code=emp.feor_code,
                 job_title=emp.job_title,
@@ -127,7 +134,8 @@ async def export_payroll(
     await record_audit(
         db, actor=actor, action="payroll.export", entity_type="payroll",
         entity_id=f"{period_start}_{period_end}",
-        detail={"format": format, "employees": len(rows)}, request=request,
+        detail={"format": format, "employees": len(rows), "skipped_no_taj": skipped_no_taj},
+        request=request,
     )
     await db.commit()
 

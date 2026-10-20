@@ -31,7 +31,9 @@ from app.models import (
 )
 from app.services.wfm.automation import fire_event
 
-router = APIRouter()
+from app.services.wfm.license import require_module
+
+router = APIRouter(dependencies=[Depends(require_module("warehouse"))])
 po_router = APIRouter()
 
 WAREHOUSE_KINDS = ("site", "van")

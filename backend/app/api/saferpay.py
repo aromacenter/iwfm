@@ -672,6 +672,7 @@ PROMO_MAX_BYTES = 3 * 1024 * 1024
 
 def _promo_out(p: VendingPromo) -> dict:
     return {
+        "content_type": p.content_type,
         "id": str(p.id), "slot": p.slot, "filename": p.filename, "title": p.title,
         "size": p.size, "width": p.width, "height": p.height, "thumb": p.thumb,
         "sort_order": p.sort_order, "status": p.status, "error": p.error,
@@ -705,13 +706,17 @@ async def list_promos(
     }
 
 
+PROMO_VIDEO_MAX_BYTES = 30 * 1024 * 1024
+
+
 class PromoBody(BaseModel):
     slot: str = Field(min_length=1, max_length=16)
     title: str = Field(min_length=1, max_length=256)
-    data_b64: str = Field(min_length=16, max_length=6_000_000)  # 1280×800 JPEG, max ~3 MB
+    data_b64: str = Field(min_length=16, max_length=42_000_000)  # JPEG max 3 MB, MP4 max 30 MB
     thumb: str | None = Field(default=None, max_length=200_000)  # data-URL bélyegkép
     width: int = 0
     height: int = 0
+    content_type: str = Field(default="image/jpeg", max_length=64)  # image/jpeg | video/mp4
 
 
 def _safe_stem(title: str) -> str:
@@ -746,7 +751,14 @@ async def create_promo(
         raw = base64.b64decode(body.data_b64, validate=True)
     except Exception:
         raise HTTPException(status_code=422, detail={"code": "vending.bad_image"})
-    if len(raw) > PROMO_MAX_BYTES or not raw.startswith(b"\xff\xd8"):
+    is_video = body.content_type == "video/mp4"
+    if is_video:
+        # MP4: az 'ftyp' doboz a 4. bájttól; csak a képernyővédő mappába (a MakingImage képeket vár)
+        if body.slot != "screensaver":
+            raise HTTPException(status_code=422, detail={"code": "vending.video_only_screensaver"})
+        if len(raw) > PROMO_VIDEO_MAX_BYTES or raw[4:8] != b"ftyp":
+            raise HTTPException(status_code=422, detail={"code": "vending.bad_video"})
+    elif len(raw) > PROMO_MAX_BYTES or not raw.startswith(b"\xff\xd8"):
         raise HTTPException(status_code=422, detail={"code": "vending.bad_image"})
     n = int(
         (
@@ -758,10 +770,10 @@ async def create_promo(
         ).scalar_one()
     )
     stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
-    filename = f"xadmin_{body.slot}_{stamp}_{_safe_stem(body.title)}_1280x800.jpg"
+    filename = f"xadmin_{body.slot}_{stamp}_{_safe_stem(body.title)}_1280x800." + ("mp4" if is_video else "jpg")
     p = VendingPromo(
         machine_id=m.id, slot=body.slot, filename=filename[:128], title=body.title.strip()[:256],
-        content_type="image/jpeg", data=raw, sha256=hashlib.sha256(raw).hexdigest(),
+        content_type="video/mp4" if is_video else "image/jpeg", data=raw, sha256=hashlib.sha256(raw).hexdigest(),
         size=len(raw), width=body.width, height=body.height, thumb=body.thumb,
         sort_order=n, status="pending",
     )

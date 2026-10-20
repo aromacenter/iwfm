@@ -1211,7 +1211,15 @@
       "self": "App",
       "manual": "Manual",
       "auto": "Automatic"
-    }
+    },
+    "leaveRecord": "🏖 Record absence",
+    "leaveTitle": "Record absence",
+    "leaveHint": "Day off, sick leave or other absence for a day or a period — in advance or retroactively. Approved immediately, shown in the payroll export.",
+    "leaveType": "Type",
+    "leaveFrom": "From",
+    "leaveTo": "To (same day for a single day)",
+    "leaveReason": "Note",
+    "leaveSaved": "Absence recorded: {name}, {from} – {to}"
   },
   "tasks": {
     "title": "Tasks",
@@ -2817,7 +2825,13 @@
     "city": "City",
     "missingGeo": "{n} partners have no coordinates yet.",
     "loadFailed": "Map failed to load.",
-    "counters": "counters"
+    "counters": "counters",
+    "onlyMachines": "With machines only",
+    "withMachines": "with machines",
+    "noMachines": "no machines",
+    "geocodeMissing": "📍 Geocode missing ({n})",
+    "geocodeQueued": "Geocoding {n} partner(s) in the background (~1.2 s each) — reload in a few minutes.",
+    "geocodeNone": "Every active partner has coordinates."
   },
   "streq": {
     "title": "My warehouse & requests",
@@ -3024,6 +3038,10 @@
     "kind.making": "While brewing (MakingImage)",
     "kind.screensaver": "Screensaver (ScreenProtect)",
     "kind.product_image": "Product icons (ProductImage)",
-    "kind.other": "Other"
+    "kind.other": "Other",
+    "videoHint": "MP4 video can be uploaded for the screensaver (max 30 MB, H.264). The brewing folder accepts images only.",
+    "videoTooBig": "Video too large (max 30 MB): {name}",
+    "videoOnlyScreensaver": "Videos can only go to the Screensaver folder.",
+    "uploadVideo": "🎬 Upload video"
   }
 }

@@ -25,6 +25,7 @@ interface Promo {
   slot: "making" | "screensaver";
   filename: string;
   title: string;
+  content_type?: string;
   size: number;
   width: number;
   height: number;
@@ -130,6 +131,32 @@ export default function VendingPromocioPage() {
     return () => clearInterval(id);
   }, [load]);
 
+  /** MP4: nyers base64 (nincs átméretezés) + bélyegkép az első képkockából. */
+  async function readVideo(f: File): Promise<{ data_b64: string; thumb: string | null; content_type: string }> {
+    const data_b64 = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(f);
+    });
+    let thumb: string | null = null;
+    try {
+      const url = URL.createObjectURL(f);
+      const v = document.createElement("video");
+      v.muted = true;
+      v.src = url;
+      await new Promise<void>((res, rej) => { v.onloadeddata = () => res(); v.onerror = () => rej(new Error("video")); });
+      v.currentTime = Math.min(1, (v.duration || 1) / 2);
+      await new Promise<void>((res) => { v.onseeked = () => res(); });
+      const canvas = document.createElement("canvas");
+      canvas.width = 320; canvas.height = 200;
+      canvas.getContext("2d")?.drawImage(v, 0, 0, 320, 200);
+      thumb = canvas.toDataURL("image/jpeg", 0.7);
+      URL.revokeObjectURL(url);
+    } catch { /* bélyegkép nélkül is mehet */ }
+    return { data_b64, thumb, content_type: "video/mp4" };
+  }
+
   async function upload(m: Machine, slot: (typeof SLOTS)[number], files: FileList | null) {
     if (!files || files.length === 0) return;
     const list = Array.from(files);
@@ -138,8 +165,16 @@ export default function VendingPromocioPage() {
     for (const [i, f] of list.entries()) {
       setProgress({ machine: m.id, n: i + 1, total: list.length });
       try {
-        const img = await fitImage(f);
-        await api.post(`/api/saferpay/machines/${m.id}/promos`, { slot, title: f.name, ...img });
+        const isVideo = f.type === "video/mp4" || f.name.toLowerCase().endsWith(".mp4");
+        if (isVideo) {
+          if (slot !== "screensaver") { toast(t("vpromo.videoOnlyScreensaver"), "error"); continue; }
+          if (f.size > 30 * 1024 * 1024) { toast(t("vpromo.videoTooBig", { name: f.name }), "error"); continue; }
+          const vid = await readVideo(f);
+          await api.post(`/api/saferpay/machines/${m.id}/promos`, { slot, title: f.name, width: 0, height: 0, ...vid });
+        } else {
+          const img = await fitImage(f);
+          await api.post(`/api/saferpay/machines/${m.id}/promos`, { slot, title: f.name, ...img });
+        }
         ok++;
       } catch (err) {
         toast(err instanceof Error && err.message === "canvas" ? t("vpromo.badImage", { name: f.name }) : errorMessage(err), "error");
@@ -254,7 +289,7 @@ export default function VendingPromocioPage() {
                           <input
                             ref={(el) => { fileInputs.current[`${m.id}:${slot}`] = el; }}
                             type="file"
-                            accept="image/*"
+                            accept={slot === "screensaver" ? "image/*,video/mp4" : "image/*"}
                             multiple
                             className="hidden"
                             onChange={(e) => {
@@ -270,7 +305,7 @@ export default function VendingPromocioPage() {
                             {busy && progress ? t("vpromo.uploading", { n: progress.n, total: progress.total }) : t("vpromo.upload")}
                           </button>
                         </div>
-                        <p className="mt-1 text-xs text-slate-400">{t(`vpromo.slotHint.${slot}`)}</p>
+                        <p className="mt-1 text-xs text-slate-400">{t(`vpromo.slotHint.${slot}`)}{slot === "screensaver" && ` ${t("vpromo.videoHint")}`}</p>
                         <label className="mt-2 flex items-start gap-2 text-xs text-slate-600" title={t("vpromo.exclusiveHint")}>
                           <input
                             type="checkbox"
@@ -287,12 +322,17 @@ export default function VendingPromocioPage() {
                           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                             {items.map((p) => (
                               <div key={p.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                {p.thumb ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={p.thumb} alt={p.title} className="aspect-[16/10] w-full object-cover" />
-                                ) : (
-                                  <div className="flex aspect-[16/10] items-center justify-center text-2xl text-slate-300">🖼️</div>
-                                )}
+                                <div className="relative">
+                                  {p.thumb ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={p.thumb} alt={p.title} className="aspect-[16/10] w-full object-cover" />
+                                  ) : (
+                                    <div className="flex aspect-[16/10] items-center justify-center text-2xl text-slate-300">{p.content_type === "video/mp4" ? "🎬" : "🖼️"}</div>
+                                  )}
+                                  {p.content_type === "video/mp4" && (
+                                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">🎬 MP4</span>
+                                  )}
+                                </div>
                                 <div className="p-1.5">
                                   <p className="truncate text-xs font-medium" title={p.filename}>{p.title}</p>
                                   <div className="mt-1 flex items-center gap-1">

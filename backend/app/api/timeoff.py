@@ -30,6 +30,9 @@ class TimeOffCreate(BaseModel):
     start_date: date
     end_date: date
     reason: str | None = Field(default=None, max_length=512)
+    # 2e9c7b96: a vezető közvetlenül rögzít (szabadnap / betegszabadság, előre
+    # vagy utólag) — azonnal jóváhagyott, nem vár döntésre.
+    auto_approve: bool = False
 
 
 class DecideBody(BaseModel):
@@ -164,9 +167,26 @@ async def create_time_off(
     )
     db.add(req)
     await db.flush()
+    if body.auto_approve:
+        # éves szabadságnál a keret itt is érvényes (ugyanaz, mint a döntésnél)
+        if body.type == "annual":
+            year = body.start_date.year
+            used = await _annual_used_working_days(db, emp_id, year, exclude_id=req.id)
+            requested = working_days(body.start_date, body.end_date, year=year)
+            if used + requested > emp.annual_leave_days:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "timeoff.over_balance", "entitlement": emp.annual_leave_days,
+                            "used": used, "requested": requested},
+                )
+        req.status = "approved"
+        req.decided_by = actor.id
+        req.decided_at = datetime.now(UTC)
+        req.decision_note = body.reason or "Vezető rögzítette"
     await record_audit(
-        db, actor=actor, action="timeoff.create", entity_type="timeoff",
-        entity_id=str(req.id), request=request,
+        db, actor=actor, action="timeoff.create_approved" if body.auto_approve else "timeoff.create",
+        entity_type="timeoff", entity_id=str(req.id), request=request,
+        detail={"type": body.type, "start": str(body.start_date), "end": str(body.end_date)},
     )
     await db.commit()
     return to_out(req, f"{emp.last_name} {emp.first_name}")

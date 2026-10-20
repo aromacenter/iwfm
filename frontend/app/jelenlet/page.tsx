@@ -43,6 +43,9 @@ export default function JelenletPage() {
   const [entries, setEntries] = useState<EntryOut[]>([]);
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
   const [showForm, setShowForm] = useState(false);
+  // 2e9c7b96: távollét közvetlen rögzítése (azonnal jóváhagyott)
+  const [leaveForm, setLeaveForm] = useState<{ employee_id: string; type: string; start_date: string; end_date: string; reason: string } | null>(null);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
   const [form, setForm] = useState({ employee_id: "", date: "", in_time: "08:00", out_time: "16:30", break_minutes: 30, note: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -91,6 +94,27 @@ export default function JelenletPage() {
       (sum, e) => sum + (e.worked_minutes ?? 0),
       0
     );
+
+  async function submitLeave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!leaveForm || !leaveForm.employee_id) return;
+    setBusy(true);
+    setLeaveError(null);
+    try {
+      await api.post("/api/time-off", {
+        employee_id: leaveForm.employee_id, type: leaveForm.type,
+        start_date: leaveForm.start_date, end_date: leaveForm.end_date,
+        reason: leaveForm.reason || null, auto_approve: true,
+      });
+      const emp = employees.find((x) => x.id === leaveForm.employee_id);
+      toast(t("att.leaveSaved", { name: emp ? `${emp.last_name} ${emp.first_name}` : "", from: leaveForm.start_date, to: leaveForm.end_date }), "success");
+      setLeaveForm(null);
+    } catch (err) {
+      setLeaveError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -165,6 +189,9 @@ export default function JelenletPage() {
           </div>
         )}
         <div className="ml-auto flex gap-2">
+          <button onClick={() => setLeaveForm({ employee_id: "", type: "sick", start_date: isoDate(new Date()), end_date: isoDate(new Date()), reason: "" })} className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 hover:bg-emerald-100">
+            {t("att.leaveRecord")}
+          </button>
           <button onClick={() => setShowForm(true)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">
             {t("att.manualEntry")}
           </button>
@@ -353,6 +380,54 @@ export default function JelenletPage() {
           </tbody>
         </table>
       </div>
+      )}
+
+      {/* 2e9c7b96: távollét (szabadnap / betegszabadság) közvetlen rögzítése — előre és utólag, napra vagy időszakra */}
+      {leaveForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={submitLeave} className="relative max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setLeaveForm(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">🏖 {t("att.leaveTitle")}</h2>
+            <p className="text-xs text-slate-500">{t("att.leaveHint")}</p>
+            <label className="block text-sm">
+              {t("att.employee")}
+              <select required value={leaveForm.employee_id} onChange={(e) => setLeaveForm({ ...leaveForm, employee_id: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
+                <option value="">{t("leave.choose")}</option>
+                {employees.filter((e) => e.status === "active").map((emp) => (
+                  <option key={emp.id} value={emp.id}>{emp.last_name} {emp.first_name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              {t("att.leaveType")}
+              <select value={leaveForm.type} onChange={(e) => setLeaveForm({ ...leaveForm, type: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
+                {(["sick", "annual", "unpaid", "other"] as const).map((k) => (
+                  <option key={k} value={k}>{t(`leave.types.${k}`)}</option>
+                ))}
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-sm">
+                {t("att.leaveFrom")}
+                <input required type="date" value={leaveForm.start_date} onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value, end_date: leaveForm.end_date < e.target.value ? e.target.value : leaveForm.end_date })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+              <label className="block text-sm">
+                {t("att.leaveTo")}
+                <input required type="date" min={leaveForm.start_date} value={leaveForm.end_date} onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+            </div>
+            <label className="block text-sm">
+              {t("att.leaveReason")}
+              <input value={leaveForm.reason} onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            {leaveError && <p className="text-sm text-red-600">{leaveError}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setLeaveForm(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={busy} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">{t("common.save")}</button>
+            </div>
+          </form>
+        </div>
       )}
 
       {showForm && (

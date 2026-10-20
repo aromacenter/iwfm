@@ -1211,7 +1211,15 @@
       "self": "App",
       "manual": "Kézi",
       "auto": "Automatikus"
-    }
+    },
+    "leaveRecord": "🏖 Távollét rögzítése",
+    "leaveTitle": "Távollét rögzítése",
+    "leaveHint": "Szabadnap, betegszabadság vagy egyéb távollét egy napra vagy időszakra — előre és utólag is. Azonnal jóváhagyott, a bérexportban megjelenik.",
+    "leaveType": "Típus",
+    "leaveFrom": "Kezdete",
+    "leaveTo": "Vége (napra is lehet ugyanaz)",
+    "leaveReason": "Megjegyzés",
+    "leaveSaved": "Távollét rögzítve: {name}, {from} – {to}"
   },
   "tasks": {
     "title": "Feladatok",
@@ -2817,7 +2825,13 @@
     "city": "Település",
     "missingGeo": "{n} partnernek még nincs térkép-koordinátája (geokódolás folyamatban) — ők csak a táblázatban látszanak.",
     "loadFailed": "A térkép betöltése nem sikerült — ellenőrizd az internetkapcsolatot.",
-    "counters": "számláló"
+    "counters": "számláló",
+    "onlyMachines": "Csak gépes",
+    "withMachines": "gépes",
+    "noMachines": "gép nélkül",
+    "geocodeMissing": "📍 Hiányzó koordináták geokódolása ({n})",
+    "geocodeQueued": "{n} partner geokódolása elindult a háttérben (~1,2 mp/partner) — frissítsd az oldalt pár perc múlva.",
+    "geocodeNone": "Minden aktív partnernek van koordinátája."
   },
   "streq": {
     "title": "Saját raktár és igénylés",
@@ -3024,6 +3038,10 @@
     "kind.making": "Készítés közben (MakingImage)",
     "kind.screensaver": "Képernyővédő (ScreenProtect)",
     "kind.product_image": "Termékikonok (ProductImage)",
-    "kind.other": "Egyéb"
+    "kind.other": "Egyéb",
+    "videoHint": "Képernyővédőhöz MP4-videó is feltölthető (max 30 MB, H.264). A készítés közbeni mappa csak képet fogad.",
+    "videoTooBig": "A videó túl nagy (max 30 MB): {name}",
+    "videoOnlyScreensaver": "Videót csak a Képernyővédő mappába lehet feltölteni.",
+    "uploadVideo": "🎬 Videó feltöltése"
   }
 }

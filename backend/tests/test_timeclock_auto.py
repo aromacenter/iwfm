@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from tests.conftest import make_employee_record, make_user
+from tests.conftest import gen_taj
 
 
 async def test_auto_clockin_on_first_login(client):
@@ -100,7 +101,8 @@ async def test_payroll_source_switch(client, admin):
     res = await client.post(
         "/api/employees",
         json={"email": "berforras@example.com", "last_name": "Bér", "first_name": "Forrás",
-              "hire_date": "2026-01-05", "payroll_source": "schedule"},
+              "hire_date": "2026-01-05", "payroll_source": "schedule",
+              "taj": gen_taj(7)},  # c6af18d8: TAJ nélkül nem kerül a bérexportba
         headers=adm,
     )
     assert res.status_code == 201, res.text
