@@ -44,6 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/atadas", key: "nav.handover", perm: "invoicing", icon: "🤝" },
       { href: "/szerelo-atadas", key: "nav.serviceHandover", perm: "tasks", icon: "🔧" },
       { href: "/sajat-raktar", key: "nav.myWarehouse", perm: "always", icon: "🚚", module: "warehouse" },
+      { href: "/sajat-alkatreszek", key: "nav.myParts", perm: "always", icon: "🔩", module: "parts" },
       { href: "/tudasbazis", key: "nav.kb", perm: "knowledge", icon: "📚", module: "support" },
       { href: "/beosztas", key: "nav.schedule", perm: "schedule", icon: "🗓️" },
       { href: "/jelenlet", key: "nav.attendance", perm: "attendance", icon: "⏱️" },

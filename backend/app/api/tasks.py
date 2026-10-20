@@ -41,6 +41,7 @@ from app.models import (
 from app.services.wfm.ai_assign import suggest_assignee
 from app.services.wfm.ai_service import generate_from_image
 from app.services.wfm.email_service import load_smtp_config, send_email
+from app.services.wfm.parts_service import UsedPartOut, used_parts_as_materials, used_parts_for_worksheet
 from app.services.wfm.worksheet_pdf import DEFAULT_CUSTOMER_FOOTER, build_worksheet_pdf
 
 router = APIRouter()
@@ -198,6 +199,9 @@ class WorksheetOut(BaseModel):
     works: list[WorkItem] = []
     repair_options: list[WorkItem] = []
     materials: list[MaterialItem]
+    # Beépített alkatrészek az alkatrész-raktárból (parts modul, B fázis) —
+    # csak olvasható itt; a beépítés a /api/parts/use végponton történik.
+    used_parts: list[UsedPartOut] = []
     hours_spent: float | None
     client_name: str | None
     client_location: str | None
@@ -240,7 +244,8 @@ def _strip_price(rows: list[dict]) -> list[dict]:
 
 
 def _worksheet_out(
-    ws: Worksheet, *, for_worker: bool = False, suggested_email: str | None = None
+    ws: Worksheet, *, for_worker: bool = False, suggested_email: str | None = None,
+    used_parts: list[UsedPartOut] | None = None,
 ) -> WorksheetOut:
     """A munkalap API-képe. ``for_worker=True`` (dolgozói/me-végpontok) esetén
     KSZ-munkalapon az ÜGYFÉLNEK szánt áraink (price_net) és az ügyfél-
@@ -249,10 +254,12 @@ def _worksheet_out(
     works = list(ws.works or [])
     repair_options = list(ws.repair_options or [])
     materials = list(ws.materials or [])
+    used = list(used_parts or [])
     if hide:
         works = _strip_price(works)
         repair_options = _strip_price(repair_options)
         materials = _strip_price(materials)
+        used = [u.model_copy(update={"price_net": None, "cost_net": None}) for u in used]
     return WorksheetOut(
         serial=ws.serial,
         external_service=ws.external_service,
@@ -264,6 +271,7 @@ def _worksheet_out(
         works=[WorkItem(**w) for w in works],
         repair_options=[WorkItem(**w) for w in repair_options],
         materials=[MaterialItem(**m) for m in materials],
+        used_parts=used,
         hours_spent=ws.hours_spent,
         client_name=ws.client_name,
         client_location=ws.client_location,
@@ -385,6 +393,15 @@ async def _get_worksheet(db: AsyncSession, task_id: uuid.UUID) -> Worksheet | No
     return (
         await db.execute(select(Worksheet).where(Worksheet.task_id == task_id))
     ).scalar_one_or_none()
+
+
+async def _used_parts(db: AsyncSession, ws: Worksheet) -> list[UsedPartOut]:
+    """A munkalapra beépített alkatrészek — csak bekapcsolt parts modulnál."""
+    from app.services.wfm.license import module_enabled
+
+    if not await module_enabled(db, "parts"):
+        return []
+    return await used_parts_for_worksheet(db, ws.id)
 
 
 async def _upsert_worksheet(
@@ -1136,7 +1153,7 @@ async def get_task_worksheet(
     ws = await _get_worksheet(db, task.id)
     if ws is None:
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
-    return _worksheet_out(ws, suggested_email=await _suggest_quote_email(db, ws))
+    return _worksheet_out(ws, suggested_email=await _suggest_quote_email(db, ws), used_parts=await _used_parts(db, ws))
 
 
 @router.put("/{task_id}/worksheet", response_model=WorksheetOut)
@@ -1149,7 +1166,8 @@ async def manager_upsert_worksheet(
 ):
     """Vezetői kitöltés/javítás — ugyanaz a folyamat, mint a dolgozói."""
     task = await _get_task_or_404(db, task_id)
-    return _worksheet_out(await _upsert_worksheet(db, task, body, actor, request))
+    ws = await _upsert_worksheet(db, task, body, actor, request)
+    return _worksheet_out(ws, used_parts=await _used_parts(db, ws))
 
 
 async def _build_worksheet_pdf(
@@ -1174,6 +1192,12 @@ async def _build_worksheet_pdf(
     title = "HELYSZÍNI MUNKALAP" if ws.onsite and not ws.external_service else None
     price_column = None
     materials = list(ws.materials or [])
+    # Beépített alkatrészek (alkatrész-raktár): tételként, árral — sima
+    # munkalapon emiatt megjelenik az ár-oszlop (a mi ügyfél-árunk).
+    used_parts = used_parts_as_materials(await _used_parts(db, ws))
+    materials += used_parts
+    if used_parts and not ws.external_service and any(u.get("price_net") is not None for u in used_parts):
+        price_column = {"field": "price_net", "label": "Ár (Ft, nettó)"}
     # Tételes munkadíjak: belső példányon a szerviz költsége (cost_net),
     # ügyfél-példányon KIZÁRÓLAG a mi áraink (price_net) — a cost_net-et
     # lehúzzuk, hogy véletlenül se kerülhessen az ügyfél elé.
@@ -1735,7 +1759,7 @@ async def my_worksheet(
     ws = await _get_worksheet(db, task.id)
     if ws is None:
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
-    return _worksheet_out(ws, for_worker=True)
+    return _worksheet_out(ws, for_worker=True, used_parts=await _used_parts(db, ws))
 
 
 @me_router.put("/{task_id}/worksheet", response_model=WorksheetOut)
@@ -1751,10 +1775,8 @@ async def my_upsert_worksheet(
     KSZ-munkalapon az ügyfél-árakat a képviselő kezeli — a dolgozói mentés
     nem írja felül őket (preserve_prices)."""
     task = await _own_task_or_404(db, emp, task_id)
-    return _worksheet_out(
-        await _upsert_worksheet(db, task, body, user, request, preserve_prices=True),
-        for_worker=True,
-    )
+    ws = await _upsert_worksheet(db, task, body, user, request, preserve_prices=True)
+    return _worksheet_out(ws, for_worker=True, used_parts=await _used_parts(db, ws))
 
 
 class LoanerBody(BaseModel):

@@ -1074,6 +1074,8 @@ class PartsMovement(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     quantity_delta: Mapped[float] = mapped_column(Float, nullable=False)  # + be, − ki
     unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)  # vételezésnél
+    # use-mozgásnál a MI ügyfél-árunk pillanatképe (cikktörzsből, felülírható)
+    price_net: Mapped[float | None] = mapped_column(Float, nullable=True)
     # áthelyezésnél a másik raktár / hely; beépítésnél a munkalap
     ref_warehouse_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     ref_location: Mapped[str | None] = mapped_column(String(16), nullable=True)
@@ -1081,6 +1083,46 @@ class PartsMovement(Base):
     document_no: Mapped[str | None] = mapped_column(String(64), nullable=True)  # szállítólevél
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PartsRequest(Base):
+    """Kiadás-kérés (B fázis): a szerelő a saját autós raktárába kér
+    alkatrészt a központból. pending → issued (a raktáros helykódról kiadja,
+    a készlet azonnal az autóra kerül) → received (a szerelő nyugtázza);
+    vagy declined / cancelled."""
+
+    __tablename__ = "parts_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','issued','received','declined','cancelled')", name="ck_parts_req_status"
+        ),
+        Index("ix_parts_requests_status", "status", "created_at"),
+        Index("ix_parts_requests_requester", "requester_user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts.id", ondelete="CASCADE", name="fk_parts_req_part"), nullable=False
+    )
+    requester_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE", name="fk_parts_req_user"), nullable=False
+    )
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(  # a cél (autós) raktár
+        Uuid, ForeignKey("parts_warehouses.id", ondelete="CASCADE", name="fk_parts_req_wh"), nullable=False
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="pending")
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    issued_from_warehouse_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    issued_from_location: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    issued_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

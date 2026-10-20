@@ -47,6 +47,12 @@ TRIGGERS: dict[str, list[str]] = {
     "stock.low": [
         "partner_nev", "termek_nev", "keszlet_kg", "kuszob_kg",
     ],
+    "parts.low": [
+        "nev", "cikkszam", "keszlet", "egyseg", "minimum",
+    ],
+    "parts.request": [
+        "nev", "cikkszam", "mennyiseg", "egyseg", "kero", "megjegyzes",
+    ],
     "task.assigned": [
         "cim", "dolgozo", "hatarido", "gep_nev", "gep_vonalkod", "ugyfel", "sorszam",
     ],

@@ -398,6 +398,8 @@ export default function FeladatokPage() {
     works: { name: string; cost_net: number | null; price_net: number | null }[];
     repair_options: { name: string; cost_net: number | null; price_net: number | null }[];
     materials: { name: string; qty: string; unit: string; cost_net: number | null; price_net: number | null }[];
+    // alkatrész-raktárból beépített tételek (parts modul) — itt csak olvasható
+    used_parts?: { movement_id: string; sku: string; name: string; unit: string; quantity: number; price_net: number | null; cost_net: number | null; warehouse_name: string }[];
     hours_spent: number | null;
     client_name: string | null;
     client_location: string | null;
@@ -1196,6 +1198,22 @@ export default function FeladatokPage() {
                   ))}
                 </tbody>
               </table>
+            )}
+            {(priceEdit.ws.used_parts ?? []).length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                <div className="mb-1 text-xs font-semibold text-slate-600">{t("tasks.usedParts")}</div>
+                <table className="w-full text-sm">
+                  <tbody>
+                    {(priceEdit.ws.used_parts ?? []).map((u) => (
+                      <tr key={u.movement_id} className="border-t border-slate-100">
+                        <td className="py-1 pr-2"><span className="font-mono text-[11px] text-slate-400">{u.sku}</span> {u.name} <span className="text-[11px] text-slate-400">· {u.warehouse_name}</span></td>
+                        <td className="py-1 pr-2 text-right tabular-nums text-slate-500">{u.quantity} {u.unit}</td>
+                        <td className="py-1 text-right tabular-nums">{u.price_net != null ? `${u.price_net.toLocaleString("hu-HU")} Ft` : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             {/* Karbantartási díj: a gépből előtöltve, átírható; kedvezmény = elengedve */}
             <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3">

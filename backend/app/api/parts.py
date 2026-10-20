@@ -1,13 +1,14 @@
 """Alkatrész-raktár (parts modul, 1d553d2e — A fázis): cikktörzs, helykódos
 raktárak (oszlop × sor), készlet, vételezés / áthelyezés / korrekció,
-mozgásnapló. A termék-raktártól (warehouse.py) teljesen független; a
-Flotta-pulton a `parts` modullal kapcsolható."""
+mozgásnapló. B fázis: szerelői autós raktár, beépítés munkalapra, jóváhagyásos
+kiadás-kérés, min. készlet riasztás. A termék-raktártól (warehouse.py)
+teljesen független; a Flotta-pulton a `parts` modullal kapcsolható."""
 
 from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -15,10 +16,12 @@ from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_perm
+from app.api.deps import get_current_user, get_permission_matrix, record_audit, require_perm
 from app.db import get_db
-from app.models import Part, PartsMovement, PartsStock, PartsWarehouse, User
+from app.models import Employee, Part, PartsMovement, PartsRequest, PartsStock, PartsWarehouse, Task, User, Worksheet
 from app.services.wfm.license import require_module
+from app.services.wfm.parts_service import UsedPartOut, used_parts_for_worksheet
+from app.services.wfm.telegram import notify_event
 
 router = APIRouter(dependencies=[Depends(require_module("parts"))])
 
@@ -342,7 +345,7 @@ async def _move(
     db: AsyncSession, *, part: Part, wh: PartsWarehouse, location: str, kind: str, delta: float,
     actor: User, unit_cost: float | None = None, ref_wh: uuid.UUID | None = None,
     ref_location: str | None = None, worksheet_id: uuid.UUID | None = None,
-    document_no: str | None = None, note: str | None = None,
+    document_no: str | None = None, note: str | None = None, price_net: float | None = None,
 ) -> PartsStock:
     """Egy mozgás: készlet-sor frissítése + append-only napló. Negatívba nem mehet."""
     row = await _stock_row(db, wh.id, part.id, location)
@@ -355,7 +358,7 @@ async def _move(
     db.add(PartsMovement(
         part_id=part.id, warehouse_id=wh.id, location=location, kind=kind, quantity_delta=delta,
         unit_cost=unit_cost, ref_warehouse_id=ref_wh, ref_location=ref_location, worksheet_id=worksheet_id,
-        document_no=document_no, note=note, actor_user_id=actor.id,
+        document_no=document_no, note=note, actor_user_id=actor.id, price_net=price_net,
     ))
     return row
 
@@ -560,3 +563,473 @@ async def list_movements(
         )
         for m, sku, pn, unit, whn in rows
     ]
+
+
+# ─── B fázis: szerelői autós raktár, beépítés, kiadás-kérés ──────────────────
+
+
+async def _has_perm(db: AsyncSession, user: User, feature: str) -> bool:
+    if user.role == "admin":
+        return True
+    return feature in (await get_permission_matrix(db)).get(user.role, [])
+
+
+async def _own_vehicle(db: AsyncSession, user_id: uuid.UUID) -> PartsWarehouse | None:
+    """A bejelentkezett szerelő saját (aktív) autós raktára."""
+    return (
+        await db.execute(
+            select(PartsWarehouse)
+            .where(
+                PartsWarehouse.kind == "vehicle", PartsWarehouse.owner_user_id == user_id,
+                PartsWarehouse.is_active.is_(True),
+            )
+            .order_by(PartsWarehouse.created_at)
+        )
+    ).scalars().first()
+
+
+async def _part_total(db: AsyncSession, part_id: uuid.UUID) -> float:
+    total = (
+        await db.execute(
+            select(sa_func.coalesce(sa_func.sum(PartsStock.quantity), 0.0)).where(PartsStock.part_id == part_id)
+        )
+    ).scalar_one()
+    return float(total or 0.0)
+
+
+async def _low_check(db: AsyncSession, part: Part, before_total: float) -> None:
+    """Min. készlet riasztás (Telegram, `parts.low`) — csak a küszöb ÁTLÉPÉSEKOR,
+    hogy ne spameljen minden beépítésnél. Best-effort."""
+    if part.min_stock <= 0:
+        return
+    after = await _part_total(db, part.id)
+    if after < part.min_stock <= before_total:
+        try:
+            await notify_event(db, "parts.low", {
+                "nev": part.name, "cikkszam": part.sku, "keszlet": f"{after:g}",
+                "egyseg": part.unit, "minimum": f"{part.min_stock:g}",
+            })
+        except Exception:  # pragma: no cover
+            import logging
+
+            logging.getLogger(__name__).warning("parts.low notify failed", exc_info=True)
+
+
+class CatalogItem(BaseModel):
+    id: str
+    sku: str
+    name: str
+    unit: str
+
+
+class MyStockRow(BaseModel):
+    part_id: str
+    sku: str
+    name: str
+    unit: str
+    quantity: float
+    min_stock: float
+    total_qty: float  # céges összes (minden raktár)
+    low: bool
+
+
+class PartsRequestOut(BaseModel):
+    id: str
+    part_id: str
+    sku: str
+    name: str
+    unit: str
+    quantity: float
+    note: str | None
+    status: str
+    requester_user_id: str
+    requester_name: str | None
+    warehouse_id: str
+    warehouse_name: str | None
+    decided_by_name: str | None
+    decided_at: datetime | None
+    decision_note: str | None
+    issued_from_name: str | None
+    issued_from_location: str | None
+    issued_quantity: float | None
+    received_at: datetime | None
+    created_at: datetime
+
+
+class MyPartsWarehouseOut(BaseModel):
+    warehouse_id: str | None
+    warehouse_name: str | None
+    stock: list[MyStockRow] = []
+    requests: list[PartsRequestOut] = []
+    catalog: list[CatalogItem] = []  # kérhető cikkek (ár NÉLKÜL)
+
+
+async def _requests_out(db: AsyncSession, rows: list[PartsRequest]) -> list[PartsRequestOut]:
+    if not rows:
+        return []
+    parts = {
+        p.id: p
+        for p in (await db.execute(select(Part).where(Part.id.in_({r.part_id for r in rows})))).scalars().all()
+    }
+    wh_ids = {r.warehouse_id for r in rows} | {r.issued_from_warehouse_id for r in rows if r.issued_from_warehouse_id}
+    whs = {
+        w.id: w
+        for w in (await db.execute(select(PartsWarehouse).where(PartsWarehouse.id.in_(wh_ids)))).scalars().all()
+    }
+    uids = {r.requester_user_id for r in rows} | {r.decided_by_user_id for r in rows if r.decided_by_user_id}
+    users = {
+        u.id: (u.display_name or u.email or "")
+        for u in (await db.execute(select(User).where(User.id.in_(uids)))).scalars().all()
+    }
+    out = []
+    for r in rows:
+        p = parts.get(r.part_id)
+        out.append(PartsRequestOut(
+            id=str(r.id), part_id=str(r.part_id), sku=p.sku if p else "", name=p.name if p else "",
+            unit=p.unit if p else "db", quantity=r.quantity, note=r.note, status=r.status,
+            requester_user_id=str(r.requester_user_id), requester_name=users.get(r.requester_user_id),
+            warehouse_id=str(r.warehouse_id),
+            warehouse_name=whs[r.warehouse_id].name if r.warehouse_id in whs else None,
+            decided_by_name=users.get(r.decided_by_user_id) if r.decided_by_user_id else None,
+            decided_at=r.decided_at, decision_note=r.decision_note,
+            issued_from_name=whs[r.issued_from_warehouse_id].name if r.issued_from_warehouse_id in whs else None,
+            issued_from_location=r.issued_from_location, issued_quantity=r.issued_quantity,
+            received_at=r.received_at, created_at=r.created_at,
+        ))
+    return out
+
+
+@router.get("/my-warehouse", response_model=MyPartsWarehouseOut)
+async def my_parts_warehouse(
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """A szerelő saját autós alkatrész-raktára: készlet + saját kérések +
+    a kérhető cikkek listája (ár nélkül). Akinek nincs autós raktára, üreset kap."""
+    wh = await _own_vehicle(db, actor.id)
+    if wh is None:
+        return MyPartsWarehouseOut(warehouse_id=None, warehouse_name=None)
+    totals = await _totals(db)
+    rows = (
+        await db.execute(
+            select(PartsStock, Part)
+            .join(Part, Part.id == PartsStock.part_id)
+            .where(PartsStock.warehouse_id == wh.id, PartsStock.quantity > 0)
+            .order_by(Part.name)
+        )
+    ).all()
+    reqs = (
+        await db.execute(
+            select(PartsRequest).where(PartsRequest.requester_user_id == actor.id)
+            .order_by(PartsRequest.created_at.desc()).limit(50)
+        )
+    ).scalars().all()
+    catalog = (await db.execute(select(Part).where(Part.is_active.is_(True)).order_by(Part.name))).scalars().all()
+    return MyPartsWarehouseOut(
+        warehouse_id=str(wh.id), warehouse_name=wh.name,
+        stock=[
+            MyStockRow(
+                part_id=str(p.id), sku=p.sku, name=p.name, unit=p.unit, quantity=s.quantity, min_stock=p.min_stock,
+                total_qty=totals.get(p.id, 0.0), low=p.min_stock > 0 and totals.get(p.id, 0.0) < p.min_stock,
+            )
+            for s, p in rows
+        ],
+        requests=await _requests_out(db, reqs),
+        catalog=[CatalogItem(id=str(p.id), sku=p.sku, name=p.name, unit=p.unit) for p in catalog],
+    )
+
+
+# ── beépítés munkalapra ──
+
+
+class UseBody(BaseModel):
+    task_id: str
+    part_id: str
+    quantity: float = Field(gt=0)
+    price_net: float | None = Field(default=None, ge=0)  # None = a cikktörzs ára
+    # Csak settlements-joggal: tetszőleges raktár + helykód. Szerelőnek mindig
+    # a saját autós raktára (szerveroldalon kikényszerítve).
+    warehouse_id: str | None = None
+    location: str = ""
+    note: str | None = Field(default=None, max_length=512)
+
+
+async def _task_and_worksheet(db: AsyncSession, task_id: str) -> tuple[Task, Worksheet]:
+    task = (await db.execute(select(Task).where(Task.id == _uuid(task_id, "tasks.not_found")))).scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
+    ws = (await db.execute(select(Worksheet).where(Worksheet.task_id == task.id))).scalar_one_or_none()
+    if ws is None:
+        raise HTTPException(status_code=409, detail={"code": "parts.worksheet_missing"})
+    return task, ws
+
+
+async def _assert_own_task(db: AsyncSession, actor: User, task: Task) -> None:
+    emp = (await db.execute(select(Employee).where(Employee.user_id == actor.id))).scalars().first()
+    if emp is None or task.employee_id != emp.id:  # idegen feladat: 404, mint a me-végpontokon
+        raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
+
+
+@router.post("/use", response_model=list[UsedPartOut], status_code=201)
+async def use_part(
+    body: UseBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """Alkatrész beépítése munkalapra: `use` mozgás (−) a szerelő SAJÁT autós
+    raktárából — csak a saját feladatára. Settlements-joggal bármely raktárból,
+    bármely munkalapra. Az ügyfél-ár pillanatképe a mozgásra kerül."""
+    part = await _part_or_404(db, body.part_id)
+    task, ws = await _task_and_worksheet(db, body.task_id)
+    manager = await _has_perm(db, actor, "settlements")
+    if manager and body.warehouse_id:
+        wh = await _wh_or_404(db, body.warehouse_id)
+    else:
+        wh = await _own_vehicle(db, actor.id)
+        if wh is None:
+            raise HTTPException(status_code=422, detail={"code": "parts.no_vehicle"})
+        if not manager:
+            await _assert_own_task(db, actor, task)
+    loc = _validate_location(wh, body.location)
+    before = await _part_total(db, part.id)
+    price = body.price_net if body.price_net is not None else part.price_net
+    await _move(
+        db, part=part, wh=wh, location=loc, kind="use", delta=-body.quantity, actor=actor,
+        unit_cost=part.cost_net, price_net=price, worksheet_id=ws.id, note=body.note,
+    )
+    await record_audit(
+        db, actor=actor, action="parts.use", entity_type="worksheet", entity_id=str(ws.id),
+        detail={"sku": part.sku, "qty": body.quantity, "warehouse": wh.name, "serial": ws.serial}, request=request,
+    )
+    await db.commit()
+    await _low_check(db, part, before)
+    return await used_parts_for_worksheet(db, ws.id)
+
+
+@router.delete("/use/{movement_id}", response_model=list[UsedPartOut])
+async def unuse_part(
+    movement_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """Beépítés visszavonása: storno `use` mozgás (+), az eredeti azonosítójával
+    a document_no-ban — a készlet visszakerül, a napló nem törlődik."""
+    mv = (
+        await db.execute(
+            select(PartsMovement).where(PartsMovement.id == _uuid(movement_id, "parts.movement_not_found"))
+        )
+    ).scalar_one_or_none()
+    if mv is None or mv.kind != "use" or mv.quantity_delta >= 0 or mv.worksheet_id is None:
+        raise HTTPException(status_code=404, detail={"code": "parts.movement_not_found"})
+    if not await _has_perm(db, actor, "settlements"):
+        own = await _own_vehicle(db, actor.id)
+        if own is None or own.id != mv.warehouse_id:
+            raise HTTPException(status_code=404, detail={"code": "parts.movement_not_found"})
+    already = (
+        await db.execute(
+            select(PartsMovement.id).where(PartsMovement.kind == "use", PartsMovement.document_no == str(mv.id))
+        )
+    ).first()
+    if already is not None:
+        raise HTTPException(status_code=409, detail={"code": "parts.already_reversed"})
+    part = (await db.execute(select(Part).where(Part.id == mv.part_id))).scalar_one()
+    wh = (await db.execute(select(PartsWarehouse).where(PartsWarehouse.id == mv.warehouse_id))).scalar_one()
+    await _move(
+        db, part=part, wh=wh, location=mv.location, kind="use", delta=-mv.quantity_delta, actor=actor,
+        worksheet_id=mv.worksheet_id, document_no=str(mv.id), note="storno",
+    )
+    await record_audit(
+        db, actor=actor, action="parts.unuse", entity_type="worksheet", entity_id=str(mv.worksheet_id),
+        detail={"sku": part.sku, "qty": -mv.quantity_delta}, request=request,
+    )
+    await db.commit()
+    return await used_parts_for_worksheet(db, mv.worksheet_id)
+
+
+# ── kiadás-kérések (jóváhagyásos) ──
+
+
+class PartsRequestBody(BaseModel):
+    part_id: str
+    quantity: float = Field(gt=0)
+    note: str | None = Field(default=None, max_length=512)
+
+
+async def _req_or_404(db: AsyncSession, raw: str) -> PartsRequest:
+    r = (
+        await db.execute(select(PartsRequest).where(PartsRequest.id == _uuid(raw, "parts.request_not_found")))
+    ).scalar_one_or_none()
+    if r is None:
+        raise HTTPException(status_code=404, detail={"code": "parts.request_not_found"})
+    return r
+
+
+@router.post("/requests", response_model=PartsRequestOut, status_code=201)
+async def create_parts_request(
+    body: PartsRequestBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """A szerelő alkatrészt kér a központból a SAJÁT autós raktárába —
+    Telegram (`parts.request`) a raktárosnak, jóváhagyás az Alkatrészek oldalon."""
+    wh = await _own_vehicle(db, actor.id)
+    if wh is None:
+        raise HTTPException(status_code=422, detail={"code": "parts.no_vehicle"})
+    part = await _part_or_404(db, body.part_id)
+    if not part.is_active:
+        raise HTTPException(status_code=422, detail={"code": "parts.inactive"})
+    req = PartsRequest(
+        part_id=part.id, requester_user_id=actor.id, warehouse_id=wh.id, quantity=body.quantity,
+        note=(body.note or "").strip() or None, status="pending",
+    )
+    db.add(req)
+    await db.flush()
+    await record_audit(
+        db, actor=actor, action="parts.request_created", entity_type="parts_request", entity_id=str(req.id),
+        detail={"sku": part.sku, "qty": body.quantity}, request=request,
+    )
+    await db.commit()
+    try:
+        await notify_event(db, "parts.request", {
+            "nev": part.name, "cikkszam": part.sku, "mennyiseg": f"{body.quantity:g}", "egyseg": part.unit,
+            "kero": actor.display_name or actor.email, "megjegyzes": f"— {req.note}" if req.note else "",
+        })
+    except Exception:  # pragma: no cover
+        import logging
+
+        logging.getLogger(__name__).warning("parts.request notify failed", exc_info=True)
+    return (await _requests_out(db, [req]))[0]
+
+
+@router.get("/requests", response_model=list[PartsRequestOut])
+async def list_parts_requests(
+    status: str | None = Query(default=None, max_length=12),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """Settlements-joggal az ÖSSZES kérés, egyébként csak a sajátok."""
+    q = select(PartsRequest).order_by(PartsRequest.created_at.desc()).limit(200)
+    if status:
+        q = q.where(PartsRequest.status == status)
+    if not await _has_perm(db, actor, "settlements"):
+        q = q.where(PartsRequest.requester_user_id == actor.id)
+    return await _requests_out(db, (await db.execute(q)).scalars().all())
+
+
+class IssueBody(BaseModel):
+    from_warehouse_id: str
+    from_location: str = ""
+    quantity: float | None = Field(default=None, gt=0)  # None = a kért mennyiség
+    note: str | None = Field(default=None, max_length=512)
+
+
+@router.post("/requests/{request_id}/issue", response_model=PartsRequestOut)
+async def issue_parts_request(
+    request_id: str,
+    body: IssueBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Jóváhagyás + kiadás helykódról: `issue` mozgás (− a forráson, + az
+    autón) — a készlet AZONNAL a szerelő autójára kerül, ő csak nyugtázza."""
+    req = await _req_or_404(db, request_id)
+    if req.status != "pending":
+        raise HTTPException(status_code=422, detail={"code": "parts.request_decided"})
+    part = (await db.execute(select(Part).where(Part.id == req.part_id))).scalar_one()
+    src = await _wh_or_404(db, body.from_warehouse_id)
+    dst = (await db.execute(select(PartsWarehouse).where(PartsWarehouse.id == req.warehouse_id))).scalar_one()
+    if src.id == dst.id:
+        raise HTTPException(status_code=422, detail={"code": "parts.same_location"})
+    from_loc = _validate_location(src, body.from_location)
+    qty = body.quantity if body.quantity is not None else req.quantity
+    doc = f"REQ-{str(req.id)[:8]}"
+    await _move(
+        db, part=part, wh=src, location=from_loc, kind="issue", delta=-qty, actor=actor,
+        ref_wh=dst.id, ref_location="", document_no=doc, note=body.note,
+    )
+    await _move(
+        db, part=part, wh=dst, location="", kind="issue", delta=qty, actor=actor,
+        ref_wh=src.id, ref_location=from_loc, document_no=doc, note=body.note,
+    )
+    req.status = "issued"
+    req.decided_by_user_id, req.decided_at, req.decision_note = actor.id, datetime.now(UTC), body.note
+    req.issued_from_warehouse_id, req.issued_from_location, req.issued_quantity = src.id, from_loc, qty
+    await record_audit(
+        db, actor=actor, action="parts.request_issued", entity_type="parts_request", entity_id=str(req.id),
+        detail={"sku": part.sku, "qty": qty, "from": f"{src.name} {from_loc}".strip(), "to": dst.name},
+        request=request,
+    )
+    await db.commit()
+    return (await _requests_out(db, [req]))[0]
+
+
+class DeclineBody(BaseModel):
+    note: str | None = Field(default=None, max_length=512)
+
+
+@router.post("/requests/{request_id}/decline", response_model=PartsRequestOut)
+async def decline_parts_request(
+    request_id: str,
+    body: DeclineBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    req = await _req_or_404(db, request_id)
+    if req.status != "pending":
+        raise HTTPException(status_code=422, detail={"code": "parts.request_decided"})
+    req.status, req.decided_by_user_id, req.decided_at = "declined", actor.id, datetime.now(UTC)
+    req.decision_note = (body.note or "").strip() or None
+    await record_audit(
+        db, actor=actor, action="parts.request_declined", entity_type="parts_request", entity_id=str(req.id),
+        detail={"note": req.decision_note}, request=request,
+    )
+    await db.commit()
+    return (await _requests_out(db, [req]))[0]
+
+
+@router.post("/requests/{request_id}/receive", response_model=PartsRequestOut)
+async def receive_parts_request(
+    request_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """A szerelő nyugtázza az átvételt (a készlet már a kiadáskor az autón van)."""
+    req = await _req_or_404(db, request_id)
+    if req.requester_user_id != actor.id:
+        raise HTTPException(status_code=404, detail={"code": "parts.request_not_found"})
+    if req.status != "issued":
+        raise HTTPException(status_code=422, detail={"code": "parts.request_not_issued"})
+    req.status, req.received_at = "received", datetime.now(UTC)
+    await record_audit(
+        db, actor=actor, action="parts.request_received", entity_type="parts_request", entity_id=str(req.id),
+        detail={}, request=request,
+    )
+    await db.commit()
+    return (await _requests_out(db, [req]))[0]
+
+
+@router.post("/requests/{request_id}/cancel", response_model=PartsRequestOut)
+async def cancel_parts_request(
+    request_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    req = await _req_or_404(db, request_id)
+    if req.requester_user_id != actor.id:
+        raise HTTPException(status_code=404, detail={"code": "parts.request_not_found"})
+    if req.status != "pending":
+        raise HTTPException(status_code=422, detail={"code": "parts.request_decided"})
+    req.status, req.decided_at = "cancelled", datetime.now(UTC)
+    await record_audit(
+        db, actor=actor, action="parts.request_cancelled", entity_type="parts_request", entity_id=str(req.id),
+        detail={}, request=request,
+    )
+    await db.commit()
+    return (await _requests_out(db, [req]))[0]

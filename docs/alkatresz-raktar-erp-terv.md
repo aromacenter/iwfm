@@ -61,8 +61,13 @@ Külön, de ugyanebben a körben:
 
 ## 5. Ütemezés (javaslat)
 
-1. **Fázis A (1 kör):** cikktörzs + raktárak/helyek + vételezés/áthelyezés + mozgásnapló + modulkapcsoló.
-2. **Fázis B (1 kör):** szerelői raktár + munkalap-felhasználás + jóváhagyásos kiadás + min. készlet.
+1. **Fázis A (1 kör) — KÉSZ (2026-10-20, 5f6b8d0e2a7c):** cikktörzs + raktárak/helyek + vételezés/áthelyezés + mozgásnapló + modulkapcsoló.
+2. **Fázis B (1 kör) — KÉSZ (2026-10-20, 6a7b9c0d1e2f):** szerelői raktár + munkalap-felhasználás + jóváhagyásos kiadás + min. készlet.
+   - `GET /api/parts/my-warehouse` (saját autós raktár készlete, saját kérések, kérhető cikkek ár nélkül); `/sajat-alkatreszek` oldal.
+   - `POST /api/parts/use` (task_id, part_id, quantity, price_net?): szerelőnek KIZÁRÓLAG a saját autós raktárból, saját feladatra (a warehouse_id-t a szerver eldobja); settlements-joggal bármely raktár/helykód. `use` mozgás − mennyiséggel, `price_net` pillanatkép a mozgáson (új oszlop), `unit_cost` = beszerzési ár. `DELETE /api/parts/use/{movement_id}` = storno (+ mozgás, document_no = eredeti id). A munkalap API-n `used_parts` (csak olvasható), a PDF-en anyag-sorként árral (sima ML-en emiatt ár-oszlop); külsős szervizesnek az árak lehúzva.
+   - Kiadás-kérés: `parts_requests` tábla, `POST /api/parts/requests` → pending (Telegram `parts.request`), `…/issue` (settlements; helykódról `issue` mozgás − forrás / + autó, a készlet AZONNAL az autón), `…/decline`, `…/receive` (csak a kérő nyugtáz), `…/cancel` (csak a kérő, pending). Alkatrészek oldalon „Kérések” fül (nyitott darabszám a fülön, kiadás-modal helykód-előtöltéssel).
+   - Min. készlet: `parts.low` Telegram-esemény, csak a küszöb ÁTLÉPÉSEKOR (céges összes < min, előtte ≥ min) — nem spamel.
+   - A Feladataim munkalap-modalban „🔩 Beépített alkatrészek” blokk (SearchSelect az autó készletéből, azonnali könyvelés, 🗑 storno); a Feladatok ár-szerkesztőjében csak olvasható lista.
 3. **Fázis C (1 kör):** munkaidő-timer + szünet + statisztikák.
 4. **Fázis D:** leltár alkatrészekre, export/riportok.
 

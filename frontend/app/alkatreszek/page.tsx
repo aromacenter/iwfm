@@ -27,8 +27,18 @@ interface Movement {
   ref_warehouse_name: string | null; ref_location: string | null; document_no: string | null; note: string | null; actor_name: string | null;
 }
 interface AssignableUser { id: string; display_name: string }
+interface PartsReq {
+  id: string; part_id: string; sku: string; name: string; unit: string; quantity: number; note: string | null;
+  status: "pending" | "issued" | "received" | "declined" | "cancelled"; requester_name: string | null; warehouse_id: string; warehouse_name: string | null;
+  decided_by_name: string | null; decided_at: string | null; decision_note: string | null;
+  issued_from_name: string | null; issued_from_location: string | null; issued_quantity: number | null; received_at: string | null; created_at: string;
+}
+const REQ_CHIP: Record<PartsReq["status"], string> = {
+  pending: "bg-amber-100 text-amber-800", issued: "bg-sky-100 text-sky-800", received: "bg-emerald-100 text-emerald-800",
+  declined: "bg-rose-100 text-rose-800", cancelled: "bg-slate-100 text-slate-500",
+};
 
-type Tab = "stock" | "parts" | "warehouses" | "movements";
+type Tab = "stock" | "parts" | "warehouses" | "movements" | "requests";
 type MoveKind = "receipt" | "transfer" | "adjust";
 
 const emptyPart = { sku: "", name: "", manufacturer_code: "", unit: "db", min_stock: "0", price_net: "", cost_net: "", supplier: "", notes: "", is_active: true };
@@ -47,6 +57,9 @@ export default function AlkatreszekPage() {
   const [stock, setStock] = useState<StockRow[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [users, setUsers] = useState<AssignableUser[]>([]);
+  const [requests, setRequests] = useState<PartsReq[]>([]);
+  const [onlyOpen, setOnlyOpen] = useState(true);
+  const [issue, setIssue] = useState<{ req: PartsReq; from_warehouse_id: string; from_location: string; quantity: string; note: string } | null>(null);
   const [q, setQ] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -62,6 +75,7 @@ export default function AlkatreszekPage() {
     api.get<StockRow[]>("/api/parts/stock").then(setStock).catch(() => {});
     api.get<Movement[]>("/api/parts/movements").then(setMovements).catch(() => {});
     api.get<AssignableUser[]>("/api/warehouses/assignable-users").then(setUsers).catch(() => {});
+    api.get<PartsReq[]>("/api/parts/requests").then(setRequests).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showInactive]);
   useEffect(() => { load(); }, [load]);
@@ -159,6 +173,38 @@ export default function AlkatreszekPage() {
     }
   }
 
+  // ── kiadás-kérések ────────────────────────────────────────────────────────
+  async function submitIssue(e: React.FormEvent) {
+    e.preventDefault();
+    if (!issue || !issue.from_warehouse_id) return;
+    setBusy(true);
+    try {
+      await api.post(`/api/parts/requests/${issue.req.id}/issue`, {
+        from_warehouse_id: issue.from_warehouse_id, from_location: issue.from_location,
+        quantity: num(issue.quantity), note: issue.note || null,
+      });
+      toast(t("parts.req.issuedToast"), "success");
+      setIssue(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function declineReq(r: PartsReq) {
+    if (!(await confirm(t("parts.req.declineConfirm")))) return;
+    try {
+      await api.post(`/api/parts/requests/${r.id}/decline`, {});
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
+  const shownRequests = onlyOpen ? requests.filter((r) => r.status === "pending" || r.status === "issued") : requests;
+
   const whById = (id: string) => warehouses.find((w) => w.id === id);
   const locationHint = (whId: string) => {
     const w = whById(whId);
@@ -185,7 +231,7 @@ export default function AlkatreszekPage() {
         </div>
       </div>
       <div className="mb-4 flex overflow-hidden rounded-lg border border-slate-300 text-sm w-fit">
-        {tabBtn("stock", t("parts.tab.stock"))}{tabBtn("parts", t("parts.tab.parts"))}{tabBtn("warehouses", t("parts.tab.warehouses"))}{tabBtn("movements", t("parts.tab.movements"))}
+        {tabBtn("stock", t("parts.tab.stock"))}{tabBtn("parts", t("parts.tab.parts"))}{tabBtn("warehouses", t("parts.tab.warehouses"))}{tabBtn("movements", t("parts.tab.movements"))}{tabBtn("requests", `${t("parts.tab.requests")}${pendingCount ? ` (${pendingCount})` : ""}`)}
       </div>
 
       {/* ── Készlet ── */}
@@ -307,6 +353,78 @@ export default function AlkatreszekPage() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {/* ── Kérések (szerelői kiadás-kérések) ── */}
+      {tab === "requests" && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs text-slate-500">{t("parts.req.hint")}</p>
+            <label className="ml-auto flex items-center gap-1.5 text-xs text-slate-500"><input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} className="h-3.5 w-3.5" />{t("parts.req.onlyOpen")}</label>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            {shownRequests.length === 0 ? <p className="p-8 text-center text-sm text-slate-400">{t("parts.req.empty")}</p> : (
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2">{t("parts.when")}</th><th className="px-3 py-2">{t("parts.req.requester")}</th><th className="px-3 py-2">{t("parts.part")}</th><th className="px-3 py-2 text-right">{t("parts.quantity")}</th><th className="px-3 py-2">{t("parts.req.target")}</th><th className="px-3 py-2">{t("parts.req.status")}</th><th className="px-3 py-2"></th>
+                </tr></thead>
+                <tbody>
+                  {shownRequests.map((r) => (
+                    <tr key={r.id} className="border-b border-slate-100">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-slate-500">{fmt(r.created_at)}</td>
+                      <td className="px-3 py-2">{r.requester_name ?? "—"}</td>
+                      <td className="px-3 py-2"><span className="font-mono text-xs text-slate-400">{r.sku}</span> {r.name}{r.note && <span className="block text-[11px] text-slate-400">„{r.note}”</span>}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium">{r.quantity} {r.unit}</td>
+                      <td className="px-3 py-2 text-xs">🚚 {r.warehouse_name ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${REQ_CHIP[r.status]}`}>{t(`parts.req.${r.status}`)}</span>
+                        {r.issued_from_name && <span className="block text-[11px] text-slate-400">{t("parts.req.issuedFrom")}: {r.issued_from_name} {r.issued_from_location}{r.decided_by_name ? ` · ${r.decided_by_name}` : ""}</span>}
+                        {r.status === "declined" && r.decision_note && <span className="block text-[11px] text-slate-400">{r.decision_note}</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        {r.status === "pending" && (
+                          <>
+                            <button onClick={() => setIssue({ req: r, from_warehouse_id: warehouses.find((w) => w.kind === "central" && w.is_active)?.id ?? "", from_location: stock.find((s) => s.part_id === r.part_id && whById(s.warehouse_id)?.kind === "central")?.location ?? "", quantity: String(r.quantity), note: "" })} className="mr-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700">{t("parts.req.issue")}</button>
+                            <button onClick={() => void declineReq(r)} className="rounded-lg border border-rose-300 px-2.5 py-1 text-xs text-rose-700 hover:bg-rose-50">{t("parts.req.decline")}</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Kiadás modal (kérésre) ── */}
+      {issue && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={submitIssue} className="relative w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setIssue(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">📤 {t("parts.req.issueTitle")}</h2>
+            <p className="text-sm"><span className="font-mono text-xs text-slate-400">{issue.req.sku}</span> {issue.req.name} · {issue.req.quantity} {issue.req.unit} → 🚚 {issue.req.warehouse_name} ({issue.req.requester_name})</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="text-sm">
+                <p className="mb-1 text-xs text-slate-500">{t("parts.from")} *</p>
+                <SearchSelect items={whItems.filter((w) => w.id !== issue.req.warehouse_id)} value={issue.from_warehouse_id} onChange={(id) => setIssue({ ...issue, from_warehouse_id: id, from_location: "" })} placeholder={t("parts.warehouse")} />
+              </div>
+              <label className="block text-sm">{t("parts.location")}
+                <input value={issue.from_location} disabled={whById(issue.from_warehouse_id)?.kind === "vehicle"} onChange={(e) => setIssue({ ...issue, from_location: e.target.value.toUpperCase() })} placeholder={locationHint(issue.from_warehouse_id)} className={input} />
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-sm">{t("parts.quantity")} *<input required type="number" min={0} step="any" value={issue.quantity} onChange={(e) => setIssue({ ...issue, quantity: e.target.value })} className={input} /></label>
+              <label className="block text-sm">{t("parts.req.decisionNote")}<input value={issue.note} onChange={(e) => setIssue({ ...issue, note: e.target.value })} className={input} /></label>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setIssue(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={busy || !issue.from_warehouse_id} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">{busy ? t("common.saving") : t("parts.req.issue")}</button>
+            </div>
+          </form>
         </div>
       )}
 

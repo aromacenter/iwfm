@@ -59,6 +59,8 @@ EVENT_TEMPLATES: dict[str, str] = {
     "warehouse.movement": "📦 Raktármozgás — {{muvelet}}: {{termek_nev}} {{mennyiseg}} {{egyseg}} · {{raktar}} {{reszlet}} ({{aki}})",
     "warehouse.transfer_pending": "🚚 Átadás jóváhagyásra vár: {{termek_nev}} {{mennyiseg}} {{egyseg}} · {{honnan}} → {{hova}} ({{inditotta}})",
     "warehouse.transfer_accepted": "✅ Átadás átvéve: {{termek_nev}} {{mennyiseg}} {{egyseg}} · {{honnan}} → {{hova}} ({{dontott}})",
+    "parts.low": "⚠️ Alkatrész min. alatt: {{nev}} ({{cikkszam}}) — összesen {{keszlet}} {{egyseg}} (min: {{minimum}} {{egyseg}})",
+    "parts.request": "🔩 Alkatrész-kérés: {{nev}} ({{cikkszam}}) {{mennyiseg}} {{egyseg}} → {{kero}} {{megjegyzes}}",
     "warehouse.transfer_rejected": "🚫 Átadás elutasítva: {{termek_nev}} {{mennyiseg}} {{egyseg}} · {{honnan}} → {{hova}} ({{dontott}}) {{indok}}",
 }
 

@@ -174,7 +174,8 @@
     "expand": "Expand",
     "collapse": "Collapse",
     "vendingPromo": "Promotion",
-    "parts": "Parts"
+    "parts": "Parts",
+    "myParts": "My parts"
   },
   "roles": {
     "admin": "Admin",
@@ -677,7 +678,9 @@
       "warehouse_transfer_accepted": "Warehouse transfer received",
       "warehouse_transfer_rejected": "Warehouse transfer rejected",
       "warehouse_movement": "Warehouse stock movement",
-      "vending_error": "Coffee machine error (vending)"
+      "vending_error": "Coffee machine error (vending)",
+      "parts_low": "Part below min. stock",
+      "parts_request": "Parts request received"
     },
     "ops": {
       "eq": "=",
@@ -1347,7 +1350,8 @@
     "assetAtPartnerHint": "The machine is deployed here",
     "quoteHistoryTitle": "Quote history",
     "quoteHistoryAccepted": "Accepted by {by} — {at}",
-    "quoteHistoryDeclined": "Declined by {by} — {at}"
+    "quoteHistoryDeclined": "Declined by {by} — {at}",
+    "usedParts": "🔩 Installed parts (from parts stock — price per catalogue, listed on the PDF)"
   },
   "myTasks": {
     "title": "My tasks",
@@ -1437,7 +1441,15 @@
     "assignTech": "Technician (within company)",
     "assignTechNone": "— not assigned —",
     "techAssigned": "Assigned to {name}",
-    "techCleared": "Assignment cleared."
+    "techCleared": "Assignment cleared.",
+    "wsParts": "🔩 Installed parts",
+    "wsPartsHint": "Only from your own vehicle stock — installing deducts stock immediately and the item appears on the worksheet with its price.",
+    "wsPartsAdd": "＋ Install",
+    "wsPartsPick": "Part from the vehicle…",
+    "wsPartsEmpty": "No parts installed yet.",
+    "wsPartsNoVehicle": "You have no vehicle parts warehouse — see the My parts page for details.",
+    "wsPartsRemove": "Undo this installation? The stock returns to the vehicle.",
+    "wsPartsOnVehicle": "{qty} {unit} on the vehicle"
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -1912,7 +1924,21 @@
     "employee.bad_username": "Invalid username (3–64: lowercase, digits, . _ -).",
     "stock.contracted_protected": "The contracted coffee cannot be deleted — a deployed machine's settlement depends on it.",
     "offline.no_cache": "No internet, and no saved copy of this data exists on this device yet.",
-    "quote.decided_admin_only": "The decision has been made — only an admin can override it."
+    "quote.decided_admin_only": "The decision has been made — only an admin can override it.",
+    "parts.no_vehicle": "No vehicle parts warehouse is assigned to you.",
+    "parts.insufficient_stock": "Not enough stock at this location.",
+    "parts.worksheet_missing": "This task has no worksheet yet.",
+    "parts.request_decided": "This request has already been decided.",
+    "parts.request_not_issued": "This request has not been issued yet.",
+    "parts.already_reversed": "This installation was already undone.",
+    "parts.inactive": "This part is inactive.",
+    "parts.movement_not_found": "Installation not found.",
+    "parts.request_not_found": "Request not found.",
+    "parts.bad_location": "Invalid bin code (COLUMN-ROW, e.g. B-12).",
+    "parts.same_location": "Source and target are the same.",
+    "parts.sku_taken": "This SKU is already taken.",
+    "parts.location_in_use": "Bin in use — the column/row cannot be removed.",
+    "parts.warehouse_not_empty": "The warehouse is not empty and cannot be deleted."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -3110,6 +3136,48 @@
     "delta": "Change",
     "ref": "Related",
     "saved": "Saved.",
-    "done": "Movement recorded."
+    "done": "Movement recorded.",
+    "tab.requests": "Requests",
+    "req.title": "Issue requests from technicians",
+    "req.empty": "No issue requests.",
+    "req.pending": "awaiting approval",
+    "req.issued": "issued",
+    "req.received": "received",
+    "req.declined": "declined",
+    "req.cancelled": "cancelled",
+    "req.issue": "📤 Issue",
+    "req.decline": "Decline",
+    "req.issueTitle": "Issue for request",
+    "req.requester": "Requested by",
+    "req.target": "Target",
+    "req.issuedFrom": "Issued from",
+    "req.decisionNote": "Note (decision)",
+    "req.onlyOpen": "open only",
+    "req.declineConfirm": "Decline this request?",
+    "req.issuedToast": "Issued — the stock is on the technician's vehicle.",
+    "req.hint": "On issue the stock moves to the technician's vehicle IMMEDIATELY (issue movement); they only confirm receipt.",
+    "req.status": "Status"
+  },
+  "myParts": {
+    "title": "My parts",
+    "subtitle": "Parts on your vehicle can be installed on worksheets. When something runs low, request it from the central warehouse — the storekeeper issues it, you confirm receipt.",
+    "noVehicle": "No vehicle parts warehouse is assigned to you — a manager can create one under Parts → Warehouses.",
+    "stock": "📦 Stock on the vehicle",
+    "emptyStock": "The vehicle is empty.",
+    "request": "request",
+    "newRequest": "+ Issue request",
+    "requests": "🔁 My issue requests",
+    "emptyRequests": "No requests yet.",
+    "steps": "1. you request → 2. the storekeeper issues (from a bin) → 3. you confirm on the vehicle",
+    "received": "✓ Received",
+    "cancel": "Cancel",
+    "part": "Part",
+    "quantity": "Quantity",
+    "note": "Note (why needed)",
+    "sent": "Request sent.",
+    "min.ok": "OK",
+    "min.low": "below min.",
+    "min.out": "out of stock",
+    "companyTotal": "company total"
   }
 }

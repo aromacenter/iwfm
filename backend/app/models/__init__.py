@@ -32,6 +32,7 @@ from app.models.models import (  # noqa: F401
     PartnerContract,
     Part,
     PartsMovement,
+    PartsRequest,
     PartsStock,
     PartsWarehouse,
     PaymentOrder,

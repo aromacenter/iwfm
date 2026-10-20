@@ -174,7 +174,8 @@
     "expand": "Kinyitás",
     "collapse": "Összecsukás",
     "vendingPromo": "Promóció",
-    "parts": "Alkatrészek"
+    "parts": "Alkatrészek",
+    "myParts": "Saját alkatrészeim"
   },
   "roles": {
     "admin": "Admin",
@@ -677,7 +678,9 @@
       "warehouse_transfer_accepted": "Raktár-átadás átvéve",
       "warehouse_transfer_rejected": "Raktár-átadás elutasítva",
       "warehouse_movement": "Raktárkészlet-mozgás",
-      "vending_error": "Kávégép hiba (vending)"
+      "vending_error": "Kávégép hiba (vending)",
+      "parts_low": "Alkatrész min. készlet alatt",
+      "parts_request": "Alkatrész-kérés érkezett"
     },
     "ops": {
       "eq": "=",
@@ -1347,7 +1350,8 @@
     "assetAtPartnerHint": "Itt van kihelyezve a gép",
     "quoteHistoryTitle": "Ajánlat-előzmény",
     "quoteHistoryAccepted": "Elfogadta: {by} — {at}",
-    "quoteHistoryDeclined": "A javítást nem kérte: {by} — {at}"
+    "quoteHistoryDeclined": "A javítást nem kérte: {by} — {at}",
+    "usedParts": "🔩 Beépített alkatrészek (alkatrész-raktárból — az ár a cikktörzs szerint, a PDF-en tételként)"
   },
   "myTasks": {
     "title": "Feladataim",
@@ -1437,7 +1441,15 @@
     "assignTech": "Szerelő (cégen belül)",
     "assignTechNone": "— nincs kiadva —",
     "techAssigned": "Kiadva: {name}",
-    "techCleared": "Kiadás törölve."
+    "techCleared": "Kiadás törölve.",
+    "wsParts": "🔩 Beépített alkatrészek",
+    "wsPartsHint": "Csak a saját autós raktárból — a beépítés azonnal levonja a készletet, és a munkalapra kerül árral.",
+    "wsPartsAdd": "＋ Beépítés",
+    "wsPartsPick": "Alkatrész az autóról…",
+    "wsPartsEmpty": "Még nincs beépített alkatrész.",
+    "wsPartsNoVehicle": "Nincs autós alkatrész-raktárad — a Saját alkatrészeim menüben látod a részleteket.",
+    "wsPartsRemove": "Visszavonod a beépítést? A készlet visszakerül az autóra.",
+    "wsPartsOnVehicle": "{qty} {unit} az autón"
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -1912,7 +1924,21 @@
     "employee.bad_username": "Érvénytelen felhasználónév (3–64: kisbetű, szám, . _ -).",
     "stock.contracted_protected": "A szerződött kávé nem törölhető — kihelyezett gép elszámolása épül rá.",
     "offline.no_cache": "Nincs internet, és ehhez az adathoz még nincs mentett példány ezen az eszközön.",
-    "quote.decided_admin_only": "A döntés már megszületett — felülírni csak admin tudja."
+    "quote.decided_admin_only": "A döntés már megszületett — felülírni csak admin tudja.",
+    "parts.no_vehicle": "Nincs hozzád rendelt autós alkatrész-raktár.",
+    "parts.insufficient_stock": "Nincs elég készlet ezen a helyen.",
+    "parts.worksheet_missing": "Ehhez a feladathoz még nincs munkalap.",
+    "parts.request_decided": "A kérés már el lett bírálva.",
+    "parts.request_not_issued": "A kérés még nincs kiadva.",
+    "parts.already_reversed": "Ez a beépítés már vissza lett vonva.",
+    "parts.inactive": "Ez az alkatrész inaktív.",
+    "parts.movement_not_found": "A beépítés nem található.",
+    "parts.request_not_found": "A kérés nem található.",
+    "parts.bad_location": "Érvénytelen helykód (OSZLOP-SOR, pl. B-12).",
+    "parts.same_location": "A forrás és a cél ugyanaz.",
+    "parts.sku_taken": "Ez a cikkszám már foglalt.",
+    "parts.location_in_use": "Használt helykód — az oszlop/sor nem vehető ki.",
+    "parts.warehouse_not_empty": "A raktár nem üres, nem törölhető."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -3110,6 +3136,48 @@
     "delta": "Változás",
     "ref": "Kapcsolódó",
     "saved": "Mentve.",
-    "done": "Mozgás rögzítve."
+    "done": "Mozgás rögzítve.",
+    "tab.requests": "Kérések",
+    "req.title": "Kiadás-kérések a szerelőktől",
+    "req.empty": "Nincs kiadás-kérés.",
+    "req.pending": "jóváhagyásra vár",
+    "req.issued": "kiadva",
+    "req.received": "átvéve",
+    "req.declined": "elutasítva",
+    "req.cancelled": "visszavonva",
+    "req.issue": "📤 Kiadás",
+    "req.decline": "Elutasítás",
+    "req.issueTitle": "Kiadás a kérésre",
+    "req.requester": "Kérte",
+    "req.target": "Cél",
+    "req.issuedFrom": "Kiadva innen",
+    "req.decisionNote": "Megjegyzés (döntés)",
+    "req.onlyOpen": "csak nyitottak",
+    "req.declineConfirm": "Elutasítod a kérést?",
+    "req.issuedToast": "Kiadva — a készlet a szerelő autóján.",
+    "req.hint": "Kiadáskor a készlet AZONNAL a szerelő autójára kerül (issue mozgás), ő csak nyugtázza az átvételt.",
+    "req.status": "Állapot"
+  },
+  "myParts": {
+    "title": "Saját alkatrészeim",
+    "subtitle": "Ami az autón van, abból lehet beépíteni a munkalapra. Ami fogy, azt kiadás-kéréssel kérheted a központi raktárból — a raktáros kiadja, te nyugtázod.",
+    "noVehicle": "Nincs hozzád rendelt autós alkatrész-raktár — a vezető az Alkatrészek → Raktárak menüben tud létrehozni egyet.",
+    "stock": "📦 Készlet az autón",
+    "emptyStock": "Üres az autó.",
+    "request": "kérés",
+    "newRequest": "+ Kiadás-kérés",
+    "requests": "🔁 Kiadás-kéréseim",
+    "emptyRequests": "Még nem kértél alkatrészt.",
+    "steps": "1. te kérsz → 2. a raktáros kiadja (helykódról) → 3. te nyugtázod az autón",
+    "received": "✓ Átvettem",
+    "cancel": "Visszavonás",
+    "part": "Alkatrész",
+    "quantity": "Mennyiség",
+    "note": "Megjegyzés (miért kell)",
+    "sent": "Kérés elküldve.",
+    "min.ok": "OK",
+    "min.low": "min. alatt",
+    "min.out": "elfogyott",
+    "companyTotal": "céges összes"
   }
 }

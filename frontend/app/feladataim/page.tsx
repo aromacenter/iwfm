@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import SignatureCanvas from "@/components/SignatureCanvas";
+import SearchSelect from "@/components/SearchSelect";
 import SuggestInput from "@/components/SuggestInput";
 import Link from "next/link";
 import { api, ApiError, errorMessage, shareOrDownloadFile } from "@/lib/api";
@@ -68,6 +69,19 @@ interface MaterialRow {
   cost_net?: string;
   price_net?: string;
 }
+
+// Beépített alkatrész (alkatrész-raktár, B fázis) — a /api/parts/use könyveli.
+interface UsedPart {
+  movement_id: string;
+  part_id: string;
+  sku: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  price_net: number | null;
+  warehouse_name: string;
+}
+interface MyPartsStock { part_id: string; sku: string; name: string; unit: string; quantity: number }
 
 interface WorkRow {
   name: string;
@@ -138,6 +152,12 @@ export default function FeladataimPage() {
   const [noEmployee, setNoEmployee] = useState(false);
   const [wsTask, setWsTask] = useState<TaskOut | null>(null);
   const [ws, setWs] = useState<WorksheetForm>(EMPTY_WS);
+  // Beépített alkatrészek: a saját autós raktár készlete + a munkalap sorai.
+  // null = nincs parts modul / nincs autós raktár → a blokk nem jelenik meg.
+  const [myParts, setMyParts] = useState<MyPartsStock[] | null>(null);
+  const [usedParts, setUsedParts] = useState<UsedPart[]>([]);
+  const [partPick, setPartPick] = useState<{ part_id: string; quantity: string }>({ part_id: "", quantity: "1" });
+  const [partsBusy, setPartsBusy] = useState(false);
   const [wsError, setWsError] = useState<string | null>(null);
   const [wsBusy, setWsBusy] = useState(false);
   const [wsPhotoBusy, setWsPhotoBusy] = useState(false);
@@ -172,7 +192,7 @@ export default function FeladataimPage() {
     }
   }
   const { t } = useT();
-  const { toast, prompt } = useUI();
+  const { toast, prompt, confirm } = useUI();
 
   // Offline munkalap-várólista (841171f6): hálózat nélkül mentett munkalapok
   // helyben tárolódnak, és online-ra érve magától beküldődnek.
@@ -319,6 +339,12 @@ export default function FeladataimPage() {
     setWsSaved({ emp: null, client: null });
     setRedoSig({ emp: false, client: false });
     setWsTask(task);
+    setUsedParts([]);
+    setPartPick({ part_id: "", quantity: "1" });
+    // saját autós alkatrész-készlet (parts modul nélkül / autó nélkül: nincs blokk)
+    api.get<{ warehouse_id: string | null; stock: MyPartsStock[] }>("/api/parts/my-warehouse")
+      .then((r) => setMyParts(r.warehouse_id ? r.stock : null))
+      .catch(() => setMyParts(null));
     if (task.worksheet_serial) {
       try {
         const existing = await api.get<{
@@ -341,8 +367,10 @@ export default function FeladataimPage() {
           quote_status: string;
           quote_selected_name: string | null;
           public_note: string | null;
+          used_parts?: UsedPart[];
         }>(`/api/me/tasks/${task.id}/worksheet`);
         setWsQuote({ status: existing.quote_status, selected: existing.quote_selected_name });
+        setUsedParts(existing.used_parts ?? []);
         setWs({
           work_description: existing.work_description,
           technician_name: (existing as { technician_name?: string | null }).technician_name ?? "",
@@ -549,6 +577,39 @@ export default function FeladataimPage() {
       }
     } finally {
       setWsBusy(false);
+    }
+  }
+
+  // ── beépített alkatrészek (saját autós raktárból, azonnali könyvelés) ──
+  async function installPart() {
+    if (!wsTask || !partPick.part_id) return;
+    setPartsBusy(true);
+    try {
+      const rows = await api.post<UsedPart[]>("/api/parts/use", {
+        task_id: wsTask.id, part_id: partPick.part_id, quantity: Number(partPick.quantity.replace(",", ".")) || 0,
+      });
+      setUsedParts(rows);
+      setPartPick({ part_id: "", quantity: "1" });
+      const r = await api.get<{ warehouse_id: string | null; stock: MyPartsStock[] }>("/api/parts/my-warehouse");
+      setMyParts(r.warehouse_id ? r.stock : null);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setPartsBusy(false);
+    }
+  }
+
+  async function uninstallPart(u: UsedPart) {
+    if (!(await confirm(t("myTasks.wsPartsRemove")))) return;
+    setPartsBusy(true);
+    try {
+      setUsedParts(await api.delete<UsedPart[]>(`/api/parts/use/${u.movement_id}`));
+      const r = await api.get<{ warehouse_id: string | null; stock: MyPartsStock[] }>("/api/parts/my-warehouse");
+      setMyParts(r.warehouse_id ? r.stock : null);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setPartsBusy(false);
     }
   }
 
@@ -1140,6 +1201,59 @@ export default function FeladataimPage() {
                   látja és nem állíthatja; a képviselő kezeli az
                   ár-szerkesztőben. */}
             </div>
+
+            {/* 🔩 Beépített alkatrészek — csak saját autós raktárból, azonnali
+                use-mozgás; a munkalap PDF-jén tételként, árral (B fázis) */}
+            {myParts !== null && wsTask?.worksheet_serial && (
+              <div className="rounded-xl border border-indigo-200 bg-slate-50 p-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-sm font-medium text-slate-800">{t("myTasks.wsParts")}</span>
+                  <span className="text-[11px] text-slate-500">{t("myTasks.wsPartsHint")}</span>
+                </div>
+                {usedParts.length === 0 ? (
+                  <p className="mb-2 text-xs text-slate-500">{t("myTasks.wsPartsEmpty")}</p>
+                ) : (
+                  <table className="mb-2 w-full text-sm">
+                    <tbody>
+                      {usedParts.map((u) => (
+                        <tr key={u.movement_id} className="border-b border-slate-200">
+                          <td className="py-1 pr-2"><span className="font-mono text-[11px] text-slate-400">{u.sku}</span> {u.name}</td>
+                          <td className="py-1 pr-2 text-right tabular-nums">{u.quantity} {u.unit}</td>
+                          <td className="py-1 pr-2 text-right tabular-nums text-slate-500">{u.price_net != null ? `${u.price_net.toLocaleString("hu-HU")} Ft` : ""}</td>
+                          <td className="py-1 text-right">
+                            <button type="button" disabled={partsBusy} onClick={() => void uninstallPart(u)} className="px-1 text-slate-400 hover:text-red-600" title={t("myTasks.wsPartsRemove")}>🗑</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                <div className="flex flex-wrap items-end gap-1.5">
+                  <div className="min-w-[12rem] flex-1 text-sm">
+                    <SearchSelect
+                      items={myParts.map((s) => ({ id: s.part_id, label: s.name, badge: s.sku, sublabel: t("myTasks.wsPartsOnVehicle", { qty: s.quantity, unit: s.unit }) }))}
+                      value={partPick.part_id}
+                      onChange={(id) => setPartPick({ ...partPick, part_id: id })}
+                      placeholder={t("myTasks.wsPartsPick")}
+                    />
+                  </div>
+                  <input
+                    type="number" min={0} step="any"
+                    value={partPick.quantity}
+                    onChange={(e) => setPartPick({ ...partPick, quantity: e.target.value })}
+                    className="w-16 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                  <button
+                    type="button"
+                    disabled={partsBusy || !partPick.part_id}
+                    onClick={() => void installPart()}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {t("myTasks.wsPartsAdd")}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="block text-sm">
