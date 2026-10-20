@@ -48,6 +48,7 @@ EVENT_TEMPLATES: dict[str, str] = {
     "order.created": "📦 Új rendelés (QR): {{rendeles_szam}} — {{partner_nev}}: {{tetel_lista}}",
     "partner.created": "🤝 Új partner: {{partner_nev}} ({{varos}})",
     "counter.reported": "🔢 Számláló bejelentve: {{gep_nev}} — {{partner_nev}}: {{szamlalo}}",
+    "vending.error": "🚨 Kávégép hiba: {{gep_nev}} ({{gep_kod}}) — {{hiba}} ({{forras}}, {{darab}}×)",
     "stock.low": "⚠️ Alacsony készlet: {{partner_nev}} — {{termek_nev}}: {{keszlet_kg}} kg (küszöb: {{kuszob_kg}} kg)",
     "task.assigned": "📋 Feladat kiosztva: {{cim}} → {{dolgozo}} (határidő: {{hatarido}})",
     "worksheet.signed": "✍️ Munkalap aláírva: {{sorszam}} — {{cim}} ({{dolgozo}})",

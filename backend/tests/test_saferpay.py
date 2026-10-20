@@ -271,3 +271,216 @@ async def test_order_fail_and_not_configured(client, admin, fake_saferpay):
     assert res.status_code == 200
     st = (await client.get(f"/api/pay/{order['id']}/status")).json()
     assert st["status"] == "failed"
+
+
+async def test_vending_files_and_catalog(client, admin):
+    """A gép fájlt tölt fel (katalógus = italok + adagok, napló-minta) a saját
+    kulcsával; az admin listázza, olvassa, a legutóbbi katalógus JSON-ként jön."""
+    import json
+
+    _, adm = admin
+    m = (
+        await client.post(
+            "/api/saferpay/machines",
+            json={"machine_code": "174226", "name": "Jetinno JL30"},
+            headers=adm,
+        )
+    ).json()
+
+    # rossz kulcs / rossz fajta
+    res = await client.post(
+        "/api/pay/upload",
+        json={"machine_code": "174226", "key": "x" * 32, "kind": "catalog", "name": "c.json", "text": "{}"},
+    )
+    assert res.status_code == 403
+    res = await client.post(
+        "/api/pay/upload",
+        json={"machine_code": "174226", "key": m["api_key"], "kind": "virus", "name": "x", "text": "{}"},
+    )
+    assert res.status_code == 422
+
+    catalog = {
+        "products": [{"id": 29, "name": "Eszpresszó", "price": 450, "recipe": "意式浓缩"}],
+        "recipes": [{"name": "意式浓缩", "steps": [{"canister": 170, "water_ml": 60, "coffee_g": 10}]}],
+    }
+    res = await client.post(
+        "/api/pay/upload",
+        json={"machine_code": "174226", "key": m["api_key"], "kind": "catalog",
+              "name": "Product_2026_01_21_G14.product", "text": json.dumps(catalog, ensure_ascii=False)},
+    )
+    assert res.status_code == 200, res.text
+    res = await client.post(
+        "/api/pay/upload",
+        json={"machine_code": "174226", "key": m["api_key"], "kind": "order_sample",
+              "name": "order_20261010.txt", "text": "2026:10:10 08:01:02.000 [main] X order 订单开始\n"},
+    )
+    assert res.status_code == 200
+
+    files = (await client.get(f"/api/saferpay/machines/{m['id']}/files", headers=adm)).json()
+    assert {f["kind"] for f in files} == {"catalog", "order_sample"}
+    sample = next(f for f in files if f["kind"] == "order_sample")
+    one = (await client.get(f"/api/saferpay/machines/{m['id']}/files/{sample['id']}", headers=adm)).json()
+    assert "订单开始" in one["text"] and one["size"] > 0
+
+    cat = (await client.get(f"/api/saferpay/machines/{m['id']}/catalog", headers=adm)).json()
+    assert cat["updated_at"] is not None
+    assert cat["catalog"]["products"][0]["name"] == "Eszpresszó"
+    assert cat["catalog"]["recipes"][0]["steps"][0]["coffee_g"] == 10
+
+    # retenció: fajtánként legfeljebb 10 marad
+    for i in range(12):
+        await client.post(
+            "/api/pay/upload",
+            json={"machine_code": "174226", "key": m["api_key"], "kind": "order_sample",
+                  "name": f"s{i}.txt", "text": "x"},
+        )
+    files = (await client.get(f"/api/saferpay/machines/{m['id']}/files", headers=adm)).json()
+    assert sum(1 for f in files if f["kind"] == "order_sample") == 10
+
+    # a feltöltés "életjel" is: last_seen beáll
+    rows = (await client.get("/api/saferpay/machines", headers=adm)).json()
+    assert next(r for r in rows if r["machine_code"] == "174226")["last_seen_at"] is not None
+
+
+async def test_vending_promos(client, admin):
+    """Promóció: kép feltöltése géphez → a gép manifestből látja, letölti,
+    visszajelez (delivered); törlés → remove_pending → ügynök törli → sor megy."""
+    import base64
+
+    _, adm = admin
+    m = (
+        await client.post(
+            "/api/saferpay/machines",
+            json={"machine_code": "174226", "name": "Jetinno JL30"},
+            headers=adm,
+        )
+    ).json()
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 100 + b"\xff\xd9"
+    b64 = base64.b64encode(jpeg).decode()
+
+    # rossz slot / nem JPEG
+    res = await client.post(
+        f"/api/saferpay/machines/{m['id']}/promos", headers=adm,
+        json={"slot": "falra", "title": "x.jpg", "data_b64": b64},
+    )
+    assert res.status_code == 422
+    res = await client.post(
+        f"/api/saferpay/machines/{m['id']}/promos", headers=adm,
+        json={"slot": "making", "title": "x.jpg", "data_b64": base64.b64encode(b"nem kep" * 5).decode()},
+    )
+    assert res.status_code == 422
+
+    res = await client.post(
+        f"/api/saferpay/machines/{m['id']}/promos", headers=adm,
+        json={"slot": "making", "title": "Őszi akció.png", "data_b64": b64,
+              "thumb": "data:image/jpeg;base64,AAAA", "width": 1280, "height": 800},
+    )
+    assert res.status_code == 200, res.text
+    promo = res.json()
+    assert promo["filename"].startswith("xadmin_making_") and promo["filename"].endswith("_1280x800.jpg")
+    assert promo["status"] == "pending" and promo["size"] == len(jpeg)
+
+    # a gép: manifest (rossz kulcs 403), fájl letöltés, visszajelzés
+    auth = {"machine_code": "174226", "key": m["api_key"]}
+    res = await client.post("/api/pay/promos/manifest", json={"machine_code": "174226", "key": "x" * 32})
+    assert res.status_code == 403
+    man = (await client.post("/api/pay/promos/manifest", json=auth)).json()
+    assert man["exclusive"] == {"making": False, "screensaver": False}
+    assert len(man["items"]) == 1 and man["items"][0]["action"] == "put"
+    res = await client.post(f"/api/pay/promos/{promo['id']}/file", json=auth)
+    assert res.status_code == 200 and res.content == jpeg
+    assert res.headers["x-sha256"] == man["items"][0]["sha256"]
+
+    res = await client.post("/api/pay/promos/report", json={**auth, "results": [{"id": promo["id"], "ok": True}]})
+    assert res.status_code == 200
+    lst = (await client.get(f"/api/saferpay/machines/{m['id']}/promos", headers=adm)).json()
+    assert lst["items"][0]["status"] == "delivered" and lst["items"][0]["delivered_at"]
+
+    # kizárólagos kapcsoló
+    res = await client.put(
+        f"/api/saferpay/machines/{m['id']}/promo-settings", headers=adm,
+        json={"exclusive_making": True, "exclusive_screensaver": False},
+    )
+    assert res.status_code == 200
+    man = (await client.post("/api/pay/promos/manifest", json=auth)).json()
+    assert man["exclusive"]["making"] is True
+
+    # törlés kézbesített képnél: remove_pending → a gép törli → sor eltűnik
+    res = await client.delete(f"/api/saferpay/machines/{m['id']}/promos/{promo['id']}", headers=adm)
+    assert res.status_code == 200
+    man = (await client.post("/api/pay/promos/manifest", json=auth)).json()
+    assert man["items"][0]["action"] == "delete"
+    await client.post("/api/pay/promos/report", json={**auth, "results": [{"id": promo["id"], "ok": True}]})
+    lst = (await client.get(f"/api/saferpay/machines/{m['id']}/promos", headers=adm)).json()
+    assert lst["items"] == []
+
+    # hibás kézbesítés → failed + hibaüzenet; még nem kézbesített kép törlése azonnali
+    p2 = (
+        await client.post(
+            f"/api/saferpay/machines/{m['id']}/promos", headers=adm,
+            json={"slot": "screensaver", "title": "b.jpg", "data_b64": b64},
+        )
+    ).json()
+    await client.post("/api/pay/promos/report", json={**auth, "results": [{"id": p2["id"], "ok": False, "error": "nincs írási engedély"}]})
+    lst = (await client.get(f"/api/saferpay/machines/{m['id']}/promos", headers=adm)).json()
+    assert lst["items"][0]["status"] == "failed" and "írási" in lst["items"][0]["error"]
+    await client.delete(f"/api/saferpay/machines/{m['id']}/promos/{p2['id']}", headers=adm)
+    lst = (await client.get(f"/api/saferpay/machines/{m['id']}/promos", headers=adm)).json()
+    assert lst["items"] == []
+
+
+async def test_vending_errors(client, admin):
+    """Hibajelentés: a gép összevont hibákat küld → új ujjlenyomat felvétel,
+    ismert → darabszám/utolsó frissül; lezárás; újra előjövő hiba újranyílik;
+    a géplistán a nyitott hibák száma."""
+    _, adm = admin
+    m = (
+        await client.post(
+            "/api/saferpay/machines",
+            json={"machine_code": "174226", "name": "Jetinno JL30"},
+            headers=adm,
+        )
+    ).json()
+    auth = {"machine_code": "174226", "key": m["api_key"]}
+    res = await client.post("/api/pay/errors", json={"machine_code": "174226", "key": "x" * 32, "errors": []})
+    assert res.status_code == 403
+
+    res = await client.post("/api/pay/errors", json={**auth, "errors": [
+        {"source": "exception", "message": "NdkWrapper: 锅炉超时 boiler timeout", "count": 3,
+         "first_seen": "2026:10:20 08:01:02", "last_seen": "2026:10:20 09:15:00"},
+        {"source": "operation", "message": "GeneralDialog: 显示除垢弹框", "count": 1,
+         "first_seen": "2026:10:20 03:01:56", "last_seen": "2026:10:20 03:01:56"},
+    ]})
+    assert res.status_code == 200 and res.json()["new"] == 2
+
+    rows = (await client.get(f"/api/saferpay/machines/{m['id']}/errors", headers=adm)).json()
+    assert len(rows) == 2 and rows[0]["message"].startswith("NdkWrapper") and rows[0]["count"] == 3
+    machines = (await client.get("/api/saferpay/machines", headers=adm)).json()
+    assert next(x for x in machines if x["machine_code"] == "174226")["open_errors"] == 2
+
+    # ugyanaz a hiba újra: nem új, darabszám nő, utolsó időpont frissül
+    res = await client.post("/api/pay/errors", json={**auth, "errors": [
+        {"source": "exception", "message": "NdkWrapper: 锅炉超时 boiler timeout", "count": 5,
+         "first_seen": "2026:10:20 08:01:02", "last_seen": "2026:10:20 11:00:00"},
+    ]})
+    assert res.json()["new"] == 0
+    rows = (await client.get(f"/api/saferpay/machines/{m['id']}/errors", headers=adm)).json()
+    boiler = next(r for r in rows if r["message"].startswith("NdkWrapper"))
+    assert boiler["count"] == 5 and boiler["last_seen"].startswith("2026-10-20T11:00")
+
+    # lezárás → nem nyitott; a listában include_resolved-dal látszik
+    res = await client.post(f"/api/saferpay/machines/{m['id']}/errors/{boiler['id']}/resolve", headers=adm)
+    assert res.status_code == 200 and res.json()["resolved_at"]
+    rows = (await client.get(f"/api/saferpay/machines/{m['id']}/errors", headers=adm)).json()
+    assert len(rows) == 1
+    rows = (await client.get(f"/api/saferpay/machines/{m['id']}/errors?include_resolved=true", headers=adm)).json()
+    assert len(rows) == 2
+
+    # a lezárás után újra előjövő hiba (későbbi last_seen) újranyílik és "új"-nak számít
+    res = await client.post("/api/pay/errors", json={**auth, "errors": [
+        {"source": "exception", "message": "NdkWrapper: 锅炉超时 boiler timeout", "count": 1,
+         "first_seen": "2036:01:01 10:00:00", "last_seen": "2036:01:01 10:00:00"},
+    ]})
+    assert res.json()["new"] == 1
+    rows = (await client.get(f"/api/saferpay/machines/{m['id']}/errors", headers=adm)).json()
+    assert len(rows) == 2

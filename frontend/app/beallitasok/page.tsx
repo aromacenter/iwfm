@@ -2532,7 +2532,7 @@ export default function BeallitasokPage() {
               <div className="mb-1.5 text-xs font-semibold text-sky-800">{t("notif.tgEventsTitle")}</div>
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {["settlement.created", "settlement.signed", "ticket.created", "ticket.done",
-                  "order.created", "partner.created", "counter.reported", "stock.low"].map((ev) => (
+                  "order.created", "partner.created", "counter.reported", "stock.low", "vending.error"].map((ev) => (
                   <label key={ev} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"

@@ -171,7 +171,8 @@
     "saferpay": "QR payments",
     "vendingTelemetry": "Telemetry",
     "expand": "Expand",
-    "collapse": "Collapse"
+    "collapse": "Collapse",
+    "vendingPromo": "Promotion"
   },
   "roles": {
     "admin": "Admin",
@@ -673,7 +674,8 @@
       "warehouse_transfer_pending": "Warehouse transfer awaiting approval",
       "warehouse_transfer_accepted": "Warehouse transfer received",
       "warehouse_transfer_rejected": "Warehouse transfer rejected",
-      "warehouse_movement": "Warehouse stock movement"
+      "warehouse_movement": "Warehouse stock movement",
+      "vending_error": "Coffee machine error (vending)"
     },
     "ops": {
       "eq": "=",
@@ -2935,6 +2937,57 @@
     "apiHint": "Machines report to POST /api/pay/telemetry (machine_code + key + data) — copy the key from here to the machine. A machine seen within 5 minutes counts as online.",
     "generateCode": "Generate a new 11-digit code",
     "pickAsset": "…or pick an existing machine from the Machines module (its barcode becomes the code):",
-    "pickAssetPh": "Search machine (name, barcode)…"
+    "pickAssetPh": "Search machine (name, barcode)…",
+    "catalog": "Drinks & portions",
+    "catalogEmpty": "No catalog yet — the agent uploads the machine's drink and recipe list daily.",
+    "catalogUpdated": "Updated: {at}",
+    "product": "Drink",
+    "price": "Price",
+    "coffeeG": "Coffee (g)",
+    "waterMl": "Water (ml)",
+    "milk": "Milk",
+    "steps": "Recipe steps",
+    "hidden": "hidden",
+    "disabled": "disabled",
+    "files": "Files",
+    "noFiles": "No uploaded files yet.",
+    "kind.catalog": "catalog",
+    "kind.order_sample": "log sample",
+    "kind.file": "file",
+    "canister.170": "coffee beans",
+    "canister.0": "water",
+    "canister.225": "milk",
+    "canister.226": "milk foam",
+    "errors": "Errors",
+    "errorsBadge": "⚠️ {n} error(s)",
+    "noErrors": "No open errors.",
+    "resolve": "Resolve",
+    "resolved": "resolved",
+    "source.exception": "exception log",
+    "source.operation": "operator log",
+    "seen": "{n}× · first: {first} · last: {last}",
+    "showResolved": "include resolved"
+  },
+  "vpromo": {
+    "title": "Vending promotion",
+    "subtitle": "Upload ad images to machines remotely — the agent copies them on its next report (boot / interval) and reports back.",
+    "slot.making": "Images while brewing",
+    "slot.screensaver": "Screensaver",
+    "slotHint.making": "Images rotating while the coffee is made (machine: Jetinno/MakingImage, 1280×800).",
+    "slotHint.screensaver": "Idle-screen images (machine: Jetinno/ScreenProtect, 1280×800). The factory video is left alone unless the exclusive switch is on.",
+    "upload": "+ Upload images",
+    "uploading": "Uploading… {n}/{total}",
+    "uploaded": "{n} image(s) uploaded — the machine picks them up on its next report.",
+    "empty": "No images in this folder yet.",
+    "status.pending": "⏳ waiting for machine",
+    "status.delivered": "✅ on machine",
+    "status.failed": "❌ failed",
+    "status.remove_pending": "🗑 removing from machine…",
+    "deleteConfirm": "Delete {title}? If it is already on the machine, the agent removes it on the next sync.",
+    "exclusive": "Only our images on the machine",
+    "exclusiveHint": "When on, the agent moves the factory images into its own backup folder (restored when switched off).",
+    "deliveryHint": "Images are resized to 1280×800 JPEG on upload. The machine shows new ones at the latest after its nightly restart.",
+    "noMachines": "No machines yet — add the first one on the Telemetry page.",
+    "badImage": "Could not read image: {name}"
   }
 }

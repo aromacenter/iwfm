@@ -171,7 +171,8 @@
     "saferpay": "QR-fizetések",
     "vendingTelemetry": "Telemetria",
     "expand": "Kinyitás",
-    "collapse": "Összecsukás"
+    "collapse": "Összecsukás",
+    "vendingPromo": "Promóció"
   },
   "roles": {
     "admin": "Admin",
@@ -673,7 +674,8 @@
       "warehouse_transfer_pending": "Raktár-átadás jóváhagyásra vár",
       "warehouse_transfer_accepted": "Raktár-átadás átvéve",
       "warehouse_transfer_rejected": "Raktár-átadás elutasítva",
-      "warehouse_movement": "Raktárkészlet-mozgás"
+      "warehouse_movement": "Raktárkészlet-mozgás",
+      "vending_error": "Kávégép hiba (vending)"
     },
     "ops": {
       "eq": "=",
@@ -2935,6 +2937,57 @@
     "apiHint": "A gép a POST /api/pay/telemetry végpontra jelent (machine_code + key + data) — a kulcsot innen másold a gépre. Az 5 percen belül jelentkező gép online.",
     "generateCode": "Új 11 jegyű azonosító generálása",
     "pickAsset": "…vagy válassz meglévő gépet a Gépek modulból (a vonalkódja lesz a kód):",
-    "pickAssetPh": "Gép keresése (név, vonalkód)…"
+    "pickAssetPh": "Gép keresése (név, vonalkód)…",
+    "catalog": "Italok és adagok",
+    "catalogEmpty": "Még nincs katalógus — az ügynök naponta felküldi a gép ital- és receptlistáját.",
+    "catalogUpdated": "Frissítve: {at}",
+    "product": "Ital",
+    "price": "Ár",
+    "coffeeG": "Kávé (g)",
+    "waterMl": "Víz (ml)",
+    "milk": "Tej",
+    "steps": "Recept lépések",
+    "hidden": "rejtett",
+    "disabled": "tiltva",
+    "files": "Fájlok",
+    "noFiles": "Még nincs feltöltött fájl.",
+    "kind.catalog": "katalógus",
+    "kind.order_sample": "napló-minta",
+    "kind.file": "fájl",
+    "canister.170": "kávébab",
+    "canister.0": "víz",
+    "canister.225": "tej",
+    "canister.226": "tejhab",
+    "errors": "Hibák",
+    "errorsBadge": "⚠️ {n} hiba",
+    "noErrors": "Nincs nyitott hiba.",
+    "resolve": "Lezár",
+    "resolved": "lezárva",
+    "source.exception": "kivétel-napló",
+    "source.operation": "kezelői napló",
+    "seen": "{n}× · első: {first} · utolsó: {last}",
+    "showResolved": "lezártak is"
+  },
+  "vpromo": {
+    "title": "Vending promóció",
+    "subtitle": "Reklámképek távoli feltöltése a gépekre — az ügynök a következő jelentéskor (indításkor / időközönként) felmásolja, és visszajelez.",
+    "slot.making": "Készítés közbeni képek",
+    "slot.screensaver": "Képernyővédő",
+    "slotHint.making": "A kávé készítése alatt pörgő képek (gép: Jetinno/MakingImage, 1280×800).",
+    "slotHint.screensaver": "Tétlen állapotban megjelenő képek (gép: Jetinno/ScreenProtect, 1280×800). A gyári videót nem bántjuk, csak ha a kizárólagos kapcsoló be van kapcsolva.",
+    "upload": "+ Képek feltöltése",
+    "uploading": "Feltöltés… {n}/{total}",
+    "uploaded": "{n} kép feltöltve — a gép a következő jelentéskor átveszi.",
+    "empty": "Még nincs kép ebben a mappában.",
+    "status.pending": "⏳ várakozik a gépre",
+    "status.delivered": "✅ a gépen",
+    "status.failed": "❌ hiba",
+    "status.remove_pending": "🗑 törlés a gépről…",
+    "deleteConfirm": "Törlöd a(z) {title} képet? Ha már a gépen van, az ügynök a következő szinkronnál törli onnan.",
+    "exclusive": "Csak a mi képeink legyenek a gépen",
+    "exclusiveHint": "Bekapcsolva az ügynök a gyári képeket a saját mentés-mappájába teszi át (visszaállítható a kapcsoló kikapcsolásával).",
+    "deliveryHint": "A képek 1280×800-ra méreteződnek feltöltéskor (JPEG). A gép legkésőbb a hajnali újraindítás után mutatja az újakat.",
+    "noMachines": "Még nincs felvett gép — a Telemetria oldalon vedd fel az elsőt.",
+    "badImage": "Nem sikerült beolvasni a képet: {name}"
   }
 }

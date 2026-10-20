@@ -22,12 +22,38 @@ interface Machine {
   telemetry: Record<string, unknown> | null;
   paid_today: number;
   revenue_today: number;
+  open_errors: number;
+}
+
+interface MachineError {
+  id: string;
+  source: "exception" | "operation";
+  message: string;
+  count: number;
+  first_seen: string;
+  last_seen: string;
+  resolved_at: string | null;
 }
 
 interface TelemetryRow {
   created_at: string;
   data: Record<string, unknown>;
 }
+
+/** Az ügynök által a gép Product/Recipe fájljaiból összeállított katalógus. */
+interface CatalogStep { canister: number; water_ml: number; coffee_g: number; order?: number }
+interface CatalogRecipe { name: string; key?: string; steps: CatalogStep[] }
+interface CatalogProduct {
+  id: number; product_id?: number; name: string; name_en?: string; price: number; sale_price?: number;
+  recipe: string; cup?: number; enabled?: boolean; visible?: boolean; order?: number;
+}
+interface Catalog {
+  products: CatalogProduct[];
+  recipes: CatalogRecipe[];
+  canisters?: { id: number; name: string }[];
+  files?: Record<string, string>;
+}
+interface MachineFile { id: string; kind: string; name: string; size: number; created_at: string; text?: string }
 
 function onlineState(lastSeen: string | null): "online" | "stale" | "offline" {
   if (!lastSeen) return "offline";
@@ -57,6 +83,9 @@ export default function VendingTelemetriaPage() {
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<{ machine: Machine; rows: TelemetryRow[] } | null>(null);
   const [keyShown, setKeyShown] = useState<string | null>(null); // machine id
+  const [catalog, setCatalog] = useState<{ machine: Machine; updated_at: string | null; catalog: Catalog | null } | null>(null);
+  const [files, setFiles] = useState<{ machine: Machine; rows: MachineFile[]; open: MachineFile | null } | null>(null);
+  const [errors, setErrors] = useState<{ machine: Machine; rows: MachineError[]; withResolved: boolean } | null>(null);
   // Meglévő gépek a Gépek modulból — a 11 jegyű vonalkód betöltéséhez (7dc9d3ce)
   const [assets, setAssets] = useState<{ id: string; name: string; barcode: string }[]>([]);
 
@@ -121,6 +150,76 @@ export default function VendingTelemetriaPage() {
     }
   }
 
+  async function openCatalog(m: Machine) {
+    try {
+      const r = await api.get<{ updated_at: string | null; catalog: Catalog | null }>(`/api/saferpay/machines/${m.id}/catalog`);
+      setCatalog({ machine: m, ...r });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function openErrors(m: Machine, withResolved = false) {
+    try {
+      const rows = await api.get<MachineError[]>(
+        `/api/saferpay/machines/${m.id}/errors${withResolved ? "?include_resolved=true" : ""}`,
+      );
+      setErrors({ machine: m, rows, withResolved });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function resolveError(e: MachineError) {
+    if (!errors) return;
+    try {
+      await api.post(`/api/saferpay/machines/${errors.machine.id}/errors/${e.id}/resolve`, {});
+      await openErrors(errors.machine, errors.withResolved);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function openFiles(m: Machine) {
+    try {
+      const rows = await api.get<MachineFile[]>(`/api/saferpay/machines/${m.id}/files`);
+      setFiles({ machine: m, rows, open: null });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function openFile(f: MachineFile) {
+    if (!files) return;
+    try {
+      const full = await api.get<MachineFile>(`/api/saferpay/machines/${files.machine.id}/files/${f.id}`);
+      setFiles({ ...files, open: full });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  /** Tartály → olvasható név (170 kávébab, 0 víz, 225 tej, 226 tejhab; egyébként a gép neve). */
+  const canisterLabel = (id: number, cat: Catalog) => {
+    const known = t(`vtel.canister.${id}`);
+    if (!known.startsWith("vtel.")) return known;
+    return cat.canisters?.find((c) => c.id === id)?.name ?? `#${id}`;
+  };
+
+  /** Egy ital adagjai a receptjéből: kávé g, víz ml, tej-lépések. */
+  const portions = (p: CatalogProduct, cat: Catalog) => {
+    const r = cat.recipes.find((x) => x.name === p.recipe);
+    if (!r) return { coffee: 0, water: 0, milk: [] as string[], steps: [] as CatalogStep[] };
+    const steps = [...r.steps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    return {
+      coffee: steps.reduce((s, x) => s + (Number(x.coffee_g) || 0), 0),
+      water: steps.reduce((s, x) => s + (Number(x.water_ml) || 0), 0),
+      milk: steps.filter((x) => x.canister === 225 || x.canister === 226).map((x) => `${canisterLabel(x.canister, cat)} ${x.water_ml} ml`),
+      steps,
+    };
+  };
+
   async function copyKey(m: Machine) {
     if (!m.api_key) return;
     try {
@@ -183,6 +282,14 @@ export default function VendingTelemetriaPage() {
                   {" · "}✅ {t("vtel.todayStats", { n: m.paid_today })} · {ft(m.revenue_today)}
                 </p>
                 {m.note && <p className="mt-0.5 text-xs text-slate-400">{m.note}</p>}
+                {m.open_errors > 0 && (
+                  <button
+                    onClick={() => void openErrors(m)}
+                    className="mt-1 rounded-lg bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800 hover:bg-rose-200"
+                  >
+                    {t("vtel.errorsBadge", { n: m.open_errors })}
+                  </button>
+                )}
                 {telemetryChips(m.telemetry)}
                 {keyShown === m.id && m.api_key && (
                   <input
@@ -195,6 +302,15 @@ export default function VendingTelemetriaPage() {
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <button onClick={() => void openHistory(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
                     📜 {t("vtel.history")}
+                  </button>
+                  <button onClick={() => void openCatalog(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
+                    ☕ {t("vtel.catalog")}
+                  </button>
+                  <button onClick={() => void openFiles(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
+                    📄 {t("vtel.files")}
+                  </button>
+                  <button onClick={() => void openErrors(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
+                    ⚠️ {t("vtel.errors")}
                   </button>
                   <button onClick={() => void copyKey(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
                     🔑 {t("vtel.copyKey")}
@@ -278,6 +394,162 @@ export default function VendingTelemetriaPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Italok és adagok modal — a gép Product/Recipe fájljaiból */}
+      {catalog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative max-h-[85vh] w-full max-w-3xl space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setCatalog(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">☕ {catalog.machine.name} — {t("vtel.catalog")}</h2>
+            {!catalog.catalog ? (
+              <p className="py-6 text-center text-sm text-slate-400">{t("vtel.catalogEmpty")}</p>
+            ) : (
+              <>
+                <p className="text-xs text-slate-400">
+                  {catalog.updated_at && t("vtel.catalogUpdated", { at: fmt(catalog.updated_at) })}
+                  {catalog.catalog.files?.product && ` · ${catalog.catalog.files.product}`}
+                  {catalog.catalog.files?.recipe && ` · ${catalog.catalog.files.recipe}`}
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                        <th className="py-1.5 pr-2">{t("vtel.product")}</th>
+                        <th className="py-1.5 pr-2 text-right">{t("vtel.price")}</th>
+                        <th className="py-1.5 pr-2 text-right">{t("vtel.coffeeG")}</th>
+                        <th className="py-1.5 pr-2 text-right">{t("vtel.waterMl")}</th>
+                        <th className="py-1.5 pr-2">{t("vtel.milk")}</th>
+                        <th className="py-1.5">{t("vtel.steps")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...catalog.catalog.products]
+                        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                        .map((p) => {
+                          const cat = catalog.catalog as Catalog;
+                          const q = portions(p, cat);
+                          const muted = p.enabled === false || p.visible === false;
+                          return (
+                            <tr key={p.id} className={`border-b border-slate-100 ${muted ? "text-slate-400" : ""}`}>
+                              <td className="py-1.5 pr-2">
+                                <span className="font-medium">{p.name}</span>
+                                {p.name_en && p.name_en !== p.name && <span className="ml-1 text-xs text-slate-400">({p.name_en})</span>}
+                                {p.visible === false && <span className="ml-1 rounded bg-slate-100 px-1 text-[10px]">{t("vtel.hidden")}</span>}
+                                {p.enabled === false && <span className="ml-1 rounded bg-rose-50 px-1 text-[10px] text-rose-600">{t("vtel.disabled")}</span>}
+                              </td>
+                              <td className="py-1.5 pr-2 text-right tabular-nums">{ft(p.sale_price ?? p.price)}</td>
+                              <td className="py-1.5 pr-2 text-right tabular-nums">{q.coffee || "—"}</td>
+                              <td className="py-1.5 pr-2 text-right tabular-nums">{q.water || "—"}</td>
+                              <td className="py-1.5 pr-2 text-xs">{q.milk.length ? q.milk.join(", ") : "—"}</td>
+                              <td className="py-1.5 text-xs text-slate-500">
+                                {q.steps.map((s, i) => (
+                                  <span key={i} className="mr-1 inline-block rounded bg-slate-100 px-1.5 py-0.5">
+                                    {canisterLabel(s.canister, cat)}{s.coffee_g ? ` ${s.coffee_g} g` : ""}{s.water_ml ? ` ${s.water_ml} ml` : ""}
+                                  </span>
+                                ))}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+            <div className="flex justify-end">
+              <button onClick={() => setCatalog(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+                {t("common.close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hibák modal — a gép által jelentett, összevont hibák; lezárható */}
+      {errors && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative max-h-[85vh] w-full max-w-2xl space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setErrors(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">⚠️ {errors.machine.name} — {t("vtel.errors")}</h2>
+            <label className="flex items-center gap-2 text-xs text-slate-500">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5"
+                checked={errors.withResolved}
+                onChange={(e) => void openErrors(errors.machine, e.target.checked)}
+              />
+              {t("vtel.showResolved")}
+            </label>
+            {errors.rows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-400">{t("vtel.noErrors")}</p>
+            ) : (
+              <div className="space-y-2 text-sm">
+                {errors.rows.map((e) => (
+                  <div key={e.id} className={`rounded-xl border p-2 ${e.resolved_at ? "border-slate-100 opacity-60" : "border-rose-200 bg-rose-50"}`}>
+                    <div className="flex items-start gap-2">
+                      <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-500">{t(`vtel.source.${e.source}`)}</span>
+                      <p className="min-w-0 flex-1 break-words font-mono text-xs">{e.message}</p>
+                      {e.resolved_at ? (
+                        <span className="text-[10px] text-slate-400">{t("vtel.resolved")}</span>
+                      ) : (
+                        <button onClick={() => void resolveError(e)} className="shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-0.5 text-xs hover:bg-slate-100">
+                          ✔ {t("vtel.resolve")}
+                        </button>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {t("vtel.seen", { n: e.count, first: fmt(e.first_seen), last: fmt(e.last_seen) })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button onClick={() => setErrors(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+                {t("common.close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feltöltött fájlok modal (napló-minták, nyers katalógus) */}
+      {files && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative max-h-[85vh] w-full max-w-3xl space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setFiles(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">📄 {files.machine.name} — {t("vtel.files")}</h2>
+            {files.rows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-400">{t("vtel.noFiles")}</p>
+            ) : (
+              <div className="space-y-1 text-sm">
+                {files.rows.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => void openFile(f)}
+                    className={`flex w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-left hover:bg-slate-50 ${files.open?.id === f.id ? "border-indigo-300 bg-indigo-50" : "border-slate-200"}`}
+                  >
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{t(`vtel.kind.${f.kind}`)}</span>
+                    <span className="font-mono text-xs">{f.name}</span>
+                    <span className="ml-auto text-xs text-slate-400">{Math.round(f.size / 1024)} KB · {fmt(f.created_at)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {files.open && (
+              <pre className="max-h-[45vh] overflow-auto rounded-xl bg-slate-900 p-3 text-xs text-slate-100">{files.open.text}</pre>
+            )}
+            <div className="flex justify-end">
+              <button onClick={() => setFiles(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+                {t("common.close")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -906,11 +906,104 @@ class VendingMachine(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     telemetry: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # utolsó pillanatkép
+    # Promóció: ha igaz, a gépen csak a mi képeink maradnak az adott mappában
+    # (a gyári képeket az ügynök a saját mentés-mappájába teszi át).
+    promo_exclusive_making: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    promo_exclusive_screensaver: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(UTC)
+    )
+
+
+class VendingPromo(Base):
+    """Promóciós kép egy géphez: az admin tölti fel (1280×800 JPEG), az ügynök
+    a gép Jetinno/MakingImage (készítés közbeni képek) vagy Jetinno/ScreenProtect
+    (képernyővédő) mappájába teszi, és visszajelez (delivered/failed)."""
+
+    __tablename__ = "vending_promos"
+    __table_args__ = (
+        Index("ix_vending_promos_machine", "machine_id", "slot", "sort_order"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("vending_machines.id", ondelete="CASCADE", name="fk_vpromo_machine"),
+        nullable=False,
+    )
+    slot: Mapped[str] = mapped_column(String(16), nullable=False)  # making | screensaver
+    filename: Mapped[str] = mapped_column(String(128), nullable=False)  # a gépen: xadmin_…jpg
+    title: Mapped[str] = mapped_column(String(256), nullable=False)  # eredeti fájlnév
+    content_type: Mapped[str] = mapped_column(String(64), nullable=False, default="image/jpeg")
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    width: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    height: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    thumb: Mapped[str | None] = mapped_column(Text, nullable=True)  # data-URL bélyegkép
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # pending → delivered | failed; törléskor remove_pending → (ügynök visszajelez) → sor törölve
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class VendingError(Base):
+    """Gép által jelentett hiba (Exception-napló / kezelői napló figyelmeztetés),
+    üzenet szerint összevonva: ujjlenyomat + darabszám + első/utolsó előfordulás.
+    Új ujjlenyomat → Telegram-értesítés (vending.error esemény)."""
+
+    __tablename__ = "vending_errors"
+    __table_args__ = (
+        UniqueConstraint("machine_id", "fingerprint", name="uq_vending_error_fp"),
+        Index("ix_vending_errors_machine", "machine_id", "resolved_at", "last_seen"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("vending_machines.id", ondelete="CASCADE", name="fk_verr_machine"),
+        nullable=False,
+    )
+    source: Mapped[str] = mapped_column(String(16), nullable=False)  # exception | operation
+    message: Mapped[str] = mapped_column(String(512), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class VendingFile(Base):
+    """A gép által feltöltött szöveges fájlok: ital-/recept-katalógus (adagok),
+    rendelés-napló minták — gépenként és fajtánként a legutóbbi néhány marad."""
+
+    __tablename__ = "vending_files"
+    __table_args__ = (
+        Index("ix_vending_files_machine", "machine_id", "kind", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("vending_machines.id", ondelete="CASCADE", name="fk_vfile_machine"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)  # catalog | order_sample | file
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
 

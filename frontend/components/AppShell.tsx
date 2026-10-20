@@ -78,6 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/kave-fizetes", key: "nav.saferpay", perm: "invoicing", icon: "📲", module: "saferpay" },
       { href: "/vending-telemetria", key: "nav.vendingTelemetry", perm: "invoicing", icon: "📡", module: "saferpay" },
+      { href: "/vending-promocio", key: "nav.vendingPromo", perm: "invoicing", icon: "🖼️", module: "saferpay" },
     ],
   },
   {

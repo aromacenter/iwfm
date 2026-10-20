@@ -21,7 +21,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, record_audit, require_perm
 from app.core.config import get_settings
 from app.db import get_db
-from app.models import PaymentOrder, PaymentProduct, User, VendingMachine, VendingTelemetry
+from app.models import (
+    PaymentOrder,
+    PaymentProduct,
+    User,
+    VendingError,
+    VendingFile,
+    VendingMachine,
+    VendingPromo,
+    VendingTelemetry,
+)
 from app.services.wfm import saferpay_service
 from app.services.wfm.license import require_module
 from app.services.wfm.saferpay_service import ORDER_TTL_MINUTES, SaferpayError
@@ -358,13 +367,17 @@ class MachineOut(BaseModel):
     telemetry: dict | None
     paid_today: int = 0
     revenue_today: float = 0.0
+    open_errors: int = 0
 
 
-def _machine_out(m: VendingMachine, paid_today: int = 0, revenue_today: float = 0.0) -> MachineOut:
+def _machine_out(
+    m: VendingMachine, paid_today: int = 0, revenue_today: float = 0.0, open_errors: int = 0
+) -> MachineOut:
     return MachineOut(
         id=str(m.id), machine_code=m.machine_code, name=m.name, note=m.note,
         api_key=m.api_key, is_active=m.is_active, last_seen_at=m.last_seen_at,
         telemetry=m.telemetry, paid_today=paid_today, revenue_today=revenue_today,
+        open_errors=open_errors,
     )
 
 
@@ -416,8 +429,18 @@ async def list_machines(
             )
         ).all()
     }
+    open_errors = {
+        mid: int(n or 0)
+        for mid, n in (
+            await db.execute(
+                select(VendingError.machine_id, sa_func.count())
+                .where(VendingError.resolved_at.is_(None))
+                .group_by(VendingError.machine_id)
+            )
+        ).all()
+    }
     return [
-        _machine_out(m, *(stats.get(m.machine_code, (0, 0.0))))
+        _machine_out(m, *(stats.get(m.machine_code, (0, 0.0))), open_errors.get(m.id, 0))
         for m in rows
     ]
 
@@ -548,6 +571,511 @@ async def machine_telemetry_history(
     return [{"created_at": r.created_at, "data": r.data} for r in rows]
 
 
+FILE_KINDS = ("catalog", "order_sample", "file")
+FILES_KEPT_PER_KIND = 10
+
+
+@router.get(
+    "/machines/{machine_id}/files",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def machine_files(
+    machine_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """A gép által feltöltött fájlok listája (tartalom nélkül)."""
+    m = await _machine_or_404(db, machine_id)
+    rows = (
+        await db.execute(
+            select(VendingFile)
+            .where(VendingFile.machine_id == m.id)
+            .order_by(VendingFile.created_at.desc())
+            .limit(50)
+        )
+    ).scalars().all()
+    return [
+        {"id": str(r.id), "kind": r.kind, "name": r.name, "size": r.size, "created_at": r.created_at}
+        for r in rows
+    ]
+
+
+@router.get(
+    "/machines/{machine_id}/files/{file_id}",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def machine_file(
+    machine_id: str,
+    file_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    try:
+        fid = uuid.UUID(file_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "vending.file_not_found"})
+    r = (
+        await db.execute(
+            select(VendingFile).where(VendingFile.id == fid, VendingFile.machine_id == m.id)
+        )
+    ).scalar_one_or_none()
+    if r is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.file_not_found"})
+    return {
+        "id": str(r.id), "kind": r.kind, "name": r.name, "size": r.size,
+        "created_at": r.created_at, "text": r.text,
+    }
+
+
+@router.get(
+    "/machines/{machine_id}/catalog",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def machine_catalog(
+    machine_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """A legutóbbi ital-/recept-katalógus (adagok) — az ügynök a gép Product/
+    Recipe fájljaiból állítja össze és JSON-ként tölti fel."""
+    import json
+
+    m = await _machine_or_404(db, machine_id)
+    r = (
+        await db.execute(
+            select(VendingFile)
+            .where(VendingFile.machine_id == m.id, VendingFile.kind == "catalog")
+            .order_by(VendingFile.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if r is None:
+        return {"updated_at": None, "catalog": None}
+    try:
+        catalog = json.loads(r.text)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "vending.catalog_invalid"})
+    return {"updated_at": r.created_at, "catalog": catalog}
+
+
+# ─── Vending promóció: reklámképek a gépek MakingImage / ScreenProtect mappájába ─
+
+PROMO_SLOTS = ("making", "screensaver")
+PROMO_MAX_BYTES = 3 * 1024 * 1024
+
+
+def _promo_out(p: VendingPromo) -> dict:
+    return {
+        "id": str(p.id), "slot": p.slot, "filename": p.filename, "title": p.title,
+        "size": p.size, "width": p.width, "height": p.height, "thumb": p.thumb,
+        "sort_order": p.sort_order, "status": p.status, "error": p.error,
+        "created_at": p.created_at, "delivered_at": p.delivered_at,
+    }
+
+
+@router.get(
+    "/machines/{machine_id}/promos",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def list_promos(
+    machine_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    rows = (
+        await db.execute(
+            select(VendingPromo)
+            .where(VendingPromo.machine_id == m.id)
+            .order_by(VendingPromo.slot, VendingPromo.sort_order, VendingPromo.created_at)
+        )
+    ).scalars().all()
+    return {
+        "exclusive": {
+            "making": m.promo_exclusive_making,
+            "screensaver": m.promo_exclusive_screensaver,
+        },
+        "items": [_promo_out(p) for p in rows],
+    }
+
+
+class PromoBody(BaseModel):
+    slot: str = Field(min_length=1, max_length=16)
+    title: str = Field(min_length=1, max_length=256)
+    data_b64: str = Field(min_length=16, max_length=6_000_000)  # 1280×800 JPEG, max ~3 MB
+    thumb: str | None = Field(default=None, max_length=200_000)  # data-URL bélyegkép
+    width: int = 0
+    height: int = 0
+
+
+def _safe_stem(title: str) -> str:
+    import re
+
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", title.rsplit(".", 1)[0]).strip("_")[:40]
+    return stem or "kep"
+
+
+@router.post(
+    "/machines/{machine_id}/promos",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def create_promo(
+    machine_id: str,
+    body: PromoBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_perm("invoicing")),
+):
+    """Kép feltöltése (a böngésző már 1280×800 JPEG-re méretezte). A gépen
+    xadmin_ előtaggal kap nevet, így a gyári képektől megkülönböztethető."""
+    import base64
+    import hashlib
+
+    from sqlalchemy import func as sa_func
+
+    m = await _machine_or_404(db, machine_id)
+    if body.slot not in PROMO_SLOTS:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_slot"})
+    try:
+        raw = base64.b64decode(body.data_b64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_image"})
+    if len(raw) > PROMO_MAX_BYTES or not raw.startswith(b"\xff\xd8"):
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_image"})
+    n = int(
+        (
+            await db.execute(
+                select(sa_func.count()).select_from(VendingPromo).where(
+                    VendingPromo.machine_id == m.id, VendingPromo.slot == body.slot
+                )
+            )
+        ).scalar_one()
+    )
+    stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    filename = f"xadmin_{body.slot}_{stamp}_{_safe_stem(body.title)}_1280x800.jpg"
+    p = VendingPromo(
+        machine_id=m.id, slot=body.slot, filename=filename[:128], title=body.title.strip()[:256],
+        content_type="image/jpeg", data=raw, sha256=hashlib.sha256(raw).hexdigest(),
+        size=len(raw), width=body.width, height=body.height, thumb=body.thumb,
+        sort_order=n, status="pending",
+    )
+    db.add(p)
+    await record_audit(
+        db, actor=user, action="vending.promo_uploaded", entity_type="vending_promo",
+        entity_id=m.machine_code, detail={"slot": body.slot, "title": p.title, "size": p.size},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(p)
+    return _promo_out(p)
+
+
+@router.delete(
+    "/machines/{machine_id}/promos/{promo_id}",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def delete_promo(
+    machine_id: str,
+    promo_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_perm("invoicing")),
+):
+    """Ha a kép még nem jutott el a gépre, azonnal törlődik; ha igen, az ügynök
+    törli a gépről a következő szinkronnál (remove_pending), majd a sor is megy."""
+    m = await _machine_or_404(db, machine_id)
+    try:
+        pid = uuid.UUID(promo_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "vending.promo_not_found"})
+    p = (
+        await db.execute(
+            select(VendingPromo).where(VendingPromo.id == pid, VendingPromo.machine_id == m.id)
+        )
+    ).scalar_one_or_none()
+    if p is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.promo_not_found"})
+    if p.delivered_at is None:
+        await db.delete(p)
+    else:
+        p.status = "remove_pending"
+        p.error = None
+    await record_audit(
+        db, actor=user, action="vending.promo_deleted", entity_type="vending_promo",
+        entity_id=m.machine_code, detail={"slot": p.slot, "title": p.title}, request=request,
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+class PromoSettingsBody(BaseModel):
+    exclusive_making: bool
+    exclusive_screensaver: bool
+
+
+@router.put(
+    "/machines/{machine_id}/promo-settings",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def promo_settings(
+    machine_id: str,
+    body: PromoSettingsBody,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    m.promo_exclusive_making = body.exclusive_making
+    m.promo_exclusive_screensaver = body.exclusive_screensaver
+    await db.commit()
+    return {"ok": True}
+
+
+class MachineAuthBody(BaseModel):
+    machine_code: str = Field(min_length=1, max_length=64)
+    key: str = Field(min_length=8, max_length=64)
+
+
+async def _machine_by_key(db: AsyncSession, body: MachineAuthBody) -> VendingMachine:
+    m = (
+        await db.execute(
+            select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
+        )
+    ).scalar_one_or_none()
+    if m is None or not m.is_active or not m.api_key or m.api_key != body.key:
+        raise HTTPException(status_code=403, detail={"code": "vending.bad_key"})
+    return m
+
+
+@public_router.post("/promos/manifest")
+async def promo_manifest(body: MachineAuthBody, db: AsyncSession = Depends(get_db)):
+    """A GÉP kérdezi le: mit kell a mappáiba tenni / onnan törölni."""
+    m = await _machine_by_key(db, body)
+    rows = (
+        await db.execute(
+            select(VendingPromo)
+            .where(VendingPromo.machine_id == m.id)
+            .order_by(VendingPromo.slot, VendingPromo.sort_order)
+        )
+    ).scalars().all()
+    m.last_seen_at = datetime.now(UTC)
+    await db.commit()
+    return {
+        "exclusive": {
+            "making": m.promo_exclusive_making,
+            "screensaver": m.promo_exclusive_screensaver,
+        },
+        "items": [
+            {
+                "id": str(p.id), "slot": p.slot, "filename": p.filename, "sha256": p.sha256,
+                "size": p.size, "action": "delete" if p.status == "remove_pending" else "put",
+            }
+            for p in rows
+        ],
+    }
+
+
+@public_router.post("/promos/{promo_id}/file")
+async def promo_file(promo_id: str, body: MachineAuthBody, db: AsyncSession = Depends(get_db)):
+    m = await _machine_by_key(db, body)
+    try:
+        pid = uuid.UUID(promo_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "vending.promo_not_found"})
+    p = (
+        await db.execute(
+            select(VendingPromo).where(VendingPromo.id == pid, VendingPromo.machine_id == m.id)
+        )
+    ).scalar_one_or_none()
+    if p is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.promo_not_found"})
+    return Response(
+        content=bytes(p.data), media_type=p.content_type,
+        headers={"X-Sha256": p.sha256, "Content-Disposition": f'inline; filename="{p.filename}"'},
+    )
+
+
+class PromoResult(BaseModel):
+    id: str
+    ok: bool
+    error: str | None = Field(default=None, max_length=512)
+
+
+class PromoReportBody(MachineAuthBody):
+    results: list[PromoResult] = Field(default_factory=list, max_length=200)
+
+
+@public_router.post("/promos/report")
+async def promo_report(body: PromoReportBody, db: AsyncSession = Depends(get_db)):
+    """A GÉP visszajelez: melyik kép került fel (delivered) / bukott (failed) /
+    törlődött (a sor is megy)."""
+    m = await _machine_by_key(db, body)
+    now = datetime.now(UTC)
+    for r in body.results:
+        try:
+            pid = uuid.UUID(r.id)
+        except ValueError:
+            continue
+        p = (
+            await db.execute(
+                select(VendingPromo).where(VendingPromo.id == pid, VendingPromo.machine_id == m.id)
+            )
+        ).scalar_one_or_none()
+        if p is None:
+            continue
+        if p.status == "remove_pending":
+            if r.ok:
+                await db.delete(p)
+            else:
+                p.error = (r.error or "törlés sikertelen")[:512]
+        elif r.ok:
+            p.status, p.error, p.delivered_at = "delivered", None, now
+        else:
+            p.status, p.error = "failed", (r.error or "ismeretlen hiba")[:512]
+    m.last_seen_at = now
+    await db.commit()
+    return {"ok": True}
+
+
+# ─── Vending hibajelentés ────────────────────────────────────────────────────
+
+ERROR_SOURCES = ("exception", "operation")
+
+
+def _error_out(e: VendingError) -> dict:
+    return {
+        "id": str(e.id), "source": e.source, "message": e.message, "count": e.count,
+        "first_seen": e.first_seen, "last_seen": e.last_seen, "resolved_at": e.resolved_at,
+    }
+
+
+class ErrorItem(BaseModel):
+    source: str = Field(default="exception", max_length=16)
+    message: str = Field(min_length=1, max_length=512)
+    count: int = Field(default=1, ge=1, le=1_000_000)
+    first_seen: str | None = Field(default=None, max_length=32)  # "ÉÉÉÉ:HH:NN óó:pp:mm" (gép helyi idő)
+    last_seen: str | None = Field(default=None, max_length=32)
+
+
+class ErrorsBody(MachineAuthBody):
+    errors: list[ErrorItem] = Field(default_factory=list, max_length=200)
+
+
+def _aware(dt: datetime | None) -> datetime | None:
+    """SQLite naiv időbélyeget ad vissza — UTC-ként kezeljük az összehasonlításhoz."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
+
+
+def _parse_machine_ts(s: str | None, fallback: datetime) -> datetime:
+    """A Jetinno-napló időbélyege (2026:10:12 03:02:07) — gép helyi idő, UTC-nek vesszük
+    a nagyságrendhez; ha nem értelmezhető, a beérkezés ideje."""
+    if not s:
+        return fallback
+    try:
+        return datetime.strptime(s.strip()[:19], "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
+    except ValueError:
+        return fallback
+
+
+@public_router.post("/errors")
+async def report_errors(body: ErrorsBody, db: AsyncSession = Depends(get_db)):
+    """A GÉP hibajelentése: üzenet szerint összevont csoportok. Ismert ujjlenyomat →
+    darabszám/utolsó előfordulás frissül (lezárt hiba újranyílik); új → Telegram."""
+    import hashlib
+
+    from app.services.wfm.telegram import notify_event
+
+    m = await _machine_by_key(db, body)
+    now = datetime.now(UTC)
+    existing = {
+        e.fingerprint: e
+        for e in (
+            await db.execute(select(VendingError).where(VendingError.machine_id == m.id))
+        ).scalars().all()
+    }
+    new_rows: list[VendingError] = []
+    for item in body.errors:
+        source = item.source if item.source in ERROR_SOURCES else "exception"
+        message = item.message.strip()[:512]
+        fp = hashlib.sha256(f"{source}|{message}".encode("utf-8")).hexdigest()
+        last = _parse_machine_ts(item.last_seen, now)
+        first = _parse_machine_ts(item.first_seen, last)
+        e = existing.get(fp)
+        if e is None:
+            e = VendingError(
+                machine_id=m.id, source=source, message=message, fingerprint=fp,
+                count=item.count, first_seen=first, last_seen=last,
+            )
+            db.add(e)
+            existing[fp] = e
+            new_rows.append(e)
+        else:
+            if last > _aware(e.last_seen):
+                e.last_seen = last
+            e.count = max(e.count, item.count) if e.resolved_at is None else item.count
+            if e.resolved_at is not None and last > _aware(e.resolved_at):
+                e.resolved_at = None  # újra előjött
+                new_rows.append(e)
+    m.last_seen_at = now
+    await db.commit()
+    for e in new_rows:
+        try:
+            await notify_event(db, "vending.error", {
+                "gep_nev": m.name, "gep_kod": m.machine_code, "hiba": e.message,
+                "forras": e.source, "darab": e.count,
+            })
+        except Exception:  # az értesítés hibája nem buktathatja a jelentést
+            pass
+    return {"ok": True, "new": len(new_rows)}
+
+
+@router.get(
+    "/machines/{machine_id}/errors",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def machine_errors(
+    machine_id: str,
+    include_resolved: bool = False,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    q = select(VendingError).where(VendingError.machine_id == m.id)
+    if not include_resolved:
+        q = q.where(VendingError.resolved_at.is_(None))
+    rows = (await db.execute(q.order_by(VendingError.last_seen.desc()).limit(200))).scalars().all()
+    return [_error_out(e) for e in rows]
+
+
+@router.post(
+    "/machines/{machine_id}/errors/{error_id}/resolve",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def resolve_error(
+    machine_id: str,
+    error_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    try:
+        eid = uuid.UUID(error_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "vending.error_not_found"})
+    e = (
+        await db.execute(
+            select(VendingError).where(VendingError.id == eid, VendingError.machine_id == m.id)
+        )
+    ).scalar_one_or_none()
+    if e is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.error_not_found"})
+    e.resolved_at = datetime.now(UTC)
+    await db.commit()
+    return _error_out(e)
+
+
 class TelemetryBody(BaseModel):
     machine_code: str = Field(min_length=1, max_length=64)
     key: str = Field(min_length=8, max_length=64)
@@ -576,6 +1104,49 @@ async def report_telemetry(body: TelemetryBody, db: AsyncSession = Depends(get_d
         db.add(VendingTelemetry(machine_id=m.id, data=data))
     await db.commit()
     return {"ok": True}
+
+
+class UploadBody(BaseModel):
+    machine_code: str = Field(min_length=1, max_length=64)
+    key: str = Field(min_length=8, max_length=64)
+    kind: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=256)
+    text: str = Field(max_length=400_000)
+
+
+@public_router.post("/upload")
+async def upload_file(body: UploadBody, db: AsyncSession = Depends(get_db)):
+    """A GÉP tölt fel szöveges fájlt (katalógus = italok + adagok, napló-minta)
+    a saját API-kulcsával. Fajtánként a legutóbbi néhány marad meg."""
+    m = (
+        await db.execute(
+            select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
+        )
+    ).scalar_one_or_none()
+    if m is None or not m.is_active or not m.api_key or m.api_key != body.key:
+        raise HTTPException(status_code=403, detail={"code": "vending.bad_key"})
+    if body.kind not in FILE_KINDS:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_kind"})
+    row = VendingFile(
+        machine_id=m.id, kind=body.kind, name=body.name.strip()[:256],
+        text=body.text, size=len(body.text.encode("utf-8")),
+    )
+    db.add(row)
+    m.last_seen_at = datetime.now(UTC)
+    await db.flush()
+    # retenció: fajtánként csak a legutóbbi FILES_KEPT_PER_KIND marad
+    old = (
+        await db.execute(
+            select(VendingFile)
+            .where(VendingFile.machine_id == m.id, VendingFile.kind == body.kind)
+            .order_by(VendingFile.created_at.desc())
+            .offset(FILES_KEPT_PER_KIND)
+        )
+    ).scalars().all()
+    for r in old:
+        await db.delete(r)
+    await db.commit()
+    return {"ok": True, "id": str(row.id)}
 
 
 async def _order_or_404(db: AsyncSession, order_id: str) -> PaymentOrder:
