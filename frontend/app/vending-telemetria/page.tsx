@@ -4,7 +4,7 @@
  * telemetria. A gép a /api/pay/telemetry végpontra jelent a saját
  * API-kulcsával — a kulcsot itt generáljuk és visszük fel a gépre. */
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import SearchSelect from "@/components/SearchSelect";
 import { api, errorMessage } from "@/lib/api";
@@ -103,7 +103,8 @@ export default function VendingTelemetriaPage() {
   const [catalog, setCatalog] = useState<{ machine: Machine; updated_at: string | null; catalog: Catalog | null } | null>(null);
   const [edits, setEdits] = useState<RecipeEditList>({ originals_saved: false, items: [] });
   // szerkesztés alatt álló ital: ár + lépésenkénti adagok (szövegként, hogy a beírás ne ugráljon)
-  const [editing, setEditing] = useState<{ product: CatalogProduct; price: string; steps: { canister: number; water_ml: string; coffee_g: string }[] } | null>(null);
+  // rowKey: a gép termékfájljában az `id` nem mindig egyedi → productId + sorindex
+  const [editing, setEditing] = useState<{ rowKey: string; product: CatalogProduct; price: string; steps: { canister: number; water_ml: string; coffee_g: string }[] } | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const [files, setFiles] = useState<{ machine: Machine; rows: MachineFile[]; open: MachineFile | null } | null>(null);
   const [errors, setErrors] = useState<{ machine: Machine; rows: MachineError[]; withResolved: boolean } | null>(null);
@@ -223,9 +224,10 @@ export default function VendingTelemetriaPage() {
     }
   }
 
-  function startEdit(p: CatalogProduct, cat: Catalog) {
+  function startEdit(p: CatalogProduct, cat: Catalog, rowKey: string) {
     const q = portions(p, cat);
     setEditing({
+      rowKey,
       product: p,
       price: String(p.sale_price ?? p.price ?? 0),
       steps: q.steps.map((s) => ({ canister: s.canister, water_ml: String(s.water_ml), coffee_g: String(s.coffee_g) })),
@@ -645,42 +647,53 @@ export default function VendingTelemetriaPage() {
                     <tbody>
                       {[...catalog.catalog.products]
                         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                        .map((p) => {
+                        .map((p, idx) => {
                           const cat = catalog.catalog as Catalog;
                           const q = portions(p, cat);
                           const muted = p.enabled === false || p.visible === false;
                           const ed = editFor(p);
-                          if (editing && editing.product.id === p.id) {
-                            return (
-                              <tr key={p.id} className="border-b border-indigo-100 bg-indigo-50/50">
-                                <td className="py-1.5 pr-2 font-medium">{p.name}</td>
-                                <td className="py-1.5 pr-2 text-right">
-                                  <input value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} className="w-20 rounded border border-slate-300 px-1.5 py-0.5 text-right" />
-                                </td>
-                                <td colSpan={4} className="py-1.5">
-                                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                                    {editing.steps.map((s, i) => (
-                                      <span key={i} className="flex items-center gap-1 rounded bg-white px-1.5 py-1">
-                                        <b>{canisterLabel(s.canister, cat)}</b>
-                                        {s.canister === 170 && (
-                                          <>
-                                            <input value={s.coffee_g} onChange={(e) => setEditing({ ...editing, steps: editing.steps.map((x, j) => (j === i ? { ...x, coffee_g: e.target.value } : x)) })} className="w-14 rounded border border-slate-300 px-1 py-0.5 text-right" /> g
-                                          </>
-                                        )}
-                                        <input value={s.water_ml} onChange={(e) => setEditing({ ...editing, steps: editing.steps.map((x, j) => (j === i ? { ...x, water_ml: e.target.value } : x)) })} className="w-14 rounded border border-slate-300 px-1 py-0.5 text-right" /> ml
-                                      </span>
-                                    ))}
-                                    <button disabled={editBusy} onClick={() => void saveEdit()} className="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                                      {t("vtel.saveEdit")}
-                                    </button>
-                                    <button onClick={() => setEditing(null)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">{t("common.cancel")}</button>
+                          const rowKey = `${p.product_id ?? p.id}:${idx}`;
+                          const isEditing = editing?.rowKey === rowKey;
+                          const inputCls = "w-20 rounded-lg border border-slate-300 bg-white px-2 py-1 text-right text-sm text-slate-900";
+                          return (
+                            <Fragment key={rowKey}>
+                            {isEditing && editing && (
+                              <tr key={`${rowKey}:edit`} className="bg-indigo-50">
+                                <td colSpan={7} className="p-3">
+                                  <div className="rounded-xl border border-indigo-200 bg-white p-3 text-slate-900">
+                                    <p className="mb-2 text-sm font-semibold">✏️ {p.name} <span className="font-normal text-slate-500">— {t("vtel.editHint")}</span></p>
+                                    <div className="flex flex-wrap items-end gap-3">
+                                      <label className="text-xs text-slate-600">
+                                        {t("vtel.price")} (Ft)
+                                        <input value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} className={`mt-1 block ${inputCls}`} />
+                                      </label>
+                                      {editing.steps.map((s, i) => (
+                                        <div key={i} className="flex items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">
+                                          <span className="pb-1.5 text-xs font-semibold text-slate-700">{i + 1}. {canisterLabel(s.canister, cat)}</span>
+                                          {s.canister === 170 && (
+                                            <label className="text-xs text-slate-600">
+                                              {t("vtel.coffeeG")}
+                                              <input value={s.coffee_g} onChange={(e) => setEditing({ ...editing, steps: editing.steps.map((x, j) => (j === i ? { ...x, coffee_g: e.target.value } : x)) })} className={`mt-1 block ${inputCls}`} />
+                                            </label>
+                                          )}
+                                          <label className="text-xs text-slate-600">
+                                            {t("vtel.waterMl")}
+                                            <input value={s.water_ml} onChange={(e) => setEditing({ ...editing, steps: editing.steps.map((x, j) => (j === i ? { ...x, water_ml: e.target.value } : x)) })} className={`mt-1 block ${inputCls}`} />
+                                          </label>
+                                        </div>
+                                      ))}
+                                      <div className="ml-auto flex gap-2">
+                                        <button onClick={() => setEditing(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs hover:bg-slate-100">{t("common.cancel")}</button>
+                                        <button disabled={editBusy} onClick={() => void saveEdit()} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                                          🚀 {t("vtel.saveEdit")}
+                                        </button>
+                                      </div>
+                                    </div>
                                   </div>
                                 </td>
                               </tr>
-                            );
-                          }
-                          return (
-                            <tr key={p.id} className={`border-b border-slate-100 ${muted ? "text-slate-400" : ""}`}>
+                            )}
+                            <tr key={rowKey} className={`border-b border-slate-100 ${muted ? "text-slate-400" : ""} ${isEditing ? "bg-indigo-50" : ""}`}>
                               <td className="py-1.5 pr-2">
                                 <span className="font-medium">{p.name}</span>
                                 {p.name_en && p.name_en !== p.name && <span className="ml-1 text-xs text-slate-400">({p.name_en})</span>}
@@ -702,13 +715,14 @@ export default function VendingTelemetriaPage() {
                                 {ed && ed.status !== "applied" && (
                                   <span className="mr-1 rounded bg-amber-50 px-1 text-[10px] text-amber-700" title={ed.error ?? undefined}>{t(`vtel.editStatus.${ed.status}`)}</span>
                                 )}
-                                {q.steps.length > 0 && (
-                                  <button onClick={() => startEdit(p, cat)} className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">
+                                {q.steps.length > 0 && !isEditing && (
+                                  <button onClick={() => startEdit(p, cat, rowKey)} className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">
                                     ✏️ {t("vtel.edit")}
                                   </button>
                                 )}
                               </td>
                             </tr>
+                            </Fragment>
                           );
                         })}
                     </tbody>
