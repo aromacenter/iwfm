@@ -538,3 +538,117 @@ async def test_agent_releases(client, admin):
     res = await client.delete(f"/api/saferpay/agent/releases/{rel['id']}", headers=adm)
     assert res.status_code == 200
     assert (await client.post("/api/pay/agent/latest", json=auth)).status_code == 404
+
+
+async def test_vending_recipe_edits_and_restore(client, admin):
+    """Távoli adag/ár módosítás: függő kérés italonként (felülírás), a gép
+    manifestje, visszajelzés applied/failed; eredeti fájl mentése (original kind,
+    nincs retenció); restore törli a függőket és előre sorolódik; gyári promó vissza."""
+    _, adm = admin
+    m = (
+        await client.post(
+            "/api/saferpay/machines",
+            json={"machine_code": "174226", "name": "Jetinno JL30"},
+            headers=adm,
+        )
+    ).json()
+    auth = {"machine_code": "174226", "key": m["api_key"]}
+
+    # üres kérés 422; adag + ár
+    res = await client.put(f"/api/saferpay/machines/{m['id']}/recipes/103", headers=adm,
+                           json={"recipe_name": "意式浓缩"})
+    assert res.status_code == 422
+    res = await client.put(f"/api/saferpay/machines/{m['id']}/recipes/103", headers=adm,
+                           json={"product_name": "Eszpresszó", "recipe_name": "意式浓缩", "price": 450,
+                                 "steps": [{"canister": 170, "water_ml": 40, "coffee_g": 9}]})
+    assert res.status_code == 200, res.text
+    e1 = res.json()
+    assert e1["status"] == "pending" and e1["steps"][0]["coffee_g"] == 9
+    # ugyanarra az italra új kérés → a függő felülíródik, nem duplázódik
+    res = await client.put(f"/api/saferpay/machines/{m['id']}/recipes/103", headers=adm,
+                           json={"product_name": "Eszpresszó", "recipe_name": "意式浓缩",
+                                 "steps": [{"canister": 170, "water_ml": 45, "coffee_g": 10}]})
+    assert res.json()["id"] == e1["id"]
+    lst = (await client.get(f"/api/saferpay/machines/{m['id']}/recipes", headers=adm)).json()
+    assert lst["originals_saved"] is False and len(lst["items"]) == 1
+
+    # a gép: manifest → alkalmaz → eredeti feltöltése (original) → visszajelzés
+    man = (await client.post("/api/pay/recipes/manifest", json=auth)).json()
+    assert len(man["items"]) == 1 and man["items"][0]["steps"][0]["water_ml"] == 45
+    res = await client.post("/api/pay/upload", json={**auth, "kind": "original",
+                            "name": "ORIGINAL_Recipe_2026_01_21_G14.recipe", "text": "[{\"recipeName\":\"意式浓缩\"}]"})
+    assert res.status_code == 200
+    res = await client.post("/api/pay/recipes/report", json={**auth, "results": [{"id": e1["id"], "ok": True}]})
+    assert res.status_code == 200
+    lst = (await client.get(f"/api/saferpay/machines/{m['id']}/recipes", headers=adm)).json()
+    assert lst["originals_saved"] is True and lst["items"][0]["status"] == "applied"
+    assert (await client.post("/api/pay/recipes/manifest", json=auth)).json()["items"] == []
+
+    # hibás alkalmazás → failed + üzenet
+    e2 = (await client.put(f"/api/saferpay/machines/{m['id']}/recipes/104", headers=adm,
+                           json={"product_name": "Cappuccino", "recipe_name": "卡布奇诺", "price": 700})).json()
+    await client.post("/api/pay/recipes/report", json={**auth, "results": [{"id": e2["id"], "ok": False, "error": "nincs ilyen recept"}]})
+    lst = (await client.get(f"/api/saferpay/machines/{m['id']}/recipes", headers=adm)).json()
+    assert next(i for i in lst["items"] if i["id"] == e2["id"])["status"] == "failed"
+
+    # restore: a függők törlődnek, a restore előre kerül a manifestben
+    e3 = (await client.put(f"/api/saferpay/machines/{m['id']}/recipes/105", headers=adm,
+                           json={"product_name": "Forró tej", "recipe_name": "热奶", "price": 300})).json()
+    res = await client.post(f"/api/saferpay/machines/{m['id']}/recipes/restore", headers=adm)
+    assert res.status_code == 200 and res.json()["action"] == "restore"
+    man = (await client.post("/api/pay/recipes/manifest", json=auth)).json()
+    assert [i["action"] for i in man["items"]] == ["restore"]
+    assert all(i["id"] != e3["id"] for i in man["items"])
+
+    # original fájlok: 12 feltöltés után is mind megvan (nincs 10-es retenció)
+    for i in range(12):
+        await client.post("/api/pay/upload", json={**auth, "kind": "original", "name": f"o{i}", "text": "x"})
+    files = (await client.get(f"/api/saferpay/machines/{m['id']}/files", headers=adm)).json()
+    assert sum(1 for f in files if f["kind"] == "original") == 13
+
+    # gyári promó vissza: kizárólagos ki, a mi képeink törlésre jelölve
+    import base64
+    jpeg = base64.b64encode(b"\xff\xd8\xff" + b"\x00" * 50).decode()
+    p = (await client.post(f"/api/saferpay/machines/{m['id']}/promos", headers=adm,
+                           json={"slot": "making", "title": "a.jpg", "data_b64": jpeg})).json()
+    await client.post("/api/pay/promos/report", json={**auth, "results": [{"id": p["id"], "ok": True}]})
+    await client.put(f"/api/saferpay/machines/{m['id']}/promo-settings", headers=adm,
+                     json={"exclusive_making": True, "exclusive_screensaver": True})
+    res = await client.post(f"/api/saferpay/machines/{m['id']}/promos/restore-factory", headers=adm)
+    assert res.status_code == 200
+    lst = (await client.get(f"/api/saferpay/machines/{m['id']}/promos", headers=adm)).json()
+    assert lst["exclusive"] == {"making": False, "screensaver": False}
+    assert lst["items"][0]["status"] == "remove_pending"
+
+
+async def test_agent_publish_with_token(client, admin, monkeypatch):
+    """CI-közzététel: token nélkül/rosszal 403; jó tokennel létrejön, azonos
+    verziókóddal felülír; a gép a legújabbat látja."""
+    import base64
+
+    from app.core import config as cfg_mod
+
+    settings = cfg_mod.get_settings()
+    monkeypatch.setattr(settings, "agent_publish_token", "ci-titok-1234")
+    _, adm = admin
+    apk = b"PK\x03\x04" + b"\x00" * 100
+    body = {"version_code": 11, "version_name": "2.7", "filename": "XadminConfig.apk",
+            "note": "ci", "data_b64": base64.b64encode(apk).decode()}
+    res = await client.post("/api/pay/agent/publish", json=body)
+    assert res.status_code == 403
+    res = await client.post("/api/pay/agent/publish", json=body, headers={"X-Publish-Token": "rossz"})
+    assert res.status_code == 403
+    res = await client.post("/api/pay/agent/publish", json=body, headers={"X-Publish-Token": "ci-titok-1234"})
+    assert res.status_code == 200, res.text
+    assert res.json()["version_code"] == 11
+    # felülírás ugyanazzal a kóddal
+    apk2 = b"PK\x03\x04" + b"\x01" * 100
+    res = await client.post("/api/pay/agent/publish", json={**body, "version_name": "2.7.1", "data_b64": base64.b64encode(apk2).decode()},
+                            headers={"X-Publish-Token": "ci-titok-1234"})
+    assert res.status_code == 200 and res.json()["version_name"] == "2.7.1"
+    rows = (await client.get("/api/saferpay/agent/releases", headers=adm)).json()
+    assert len(rows) == 1 and rows[0]["size"] == len(apk2)
+    # token nincs beállítva → mindig 403
+    monkeypatch.setattr(settings, "agent_publish_token", "")
+    res = await client.post("/api/pay/agent/publish", json=body, headers={"X-Publish-Token": ""})
+    assert res.status_code == 403

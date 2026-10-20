@@ -30,6 +30,7 @@ from app.models import (
     VendingFile,
     VendingMachine,
     VendingPromo,
+    VendingRecipeEdit,
     VendingTelemetry,
 )
 from app.services.wfm import saferpay_service
@@ -572,8 +573,10 @@ async def machine_telemetry_history(
     return [{"created_at": r.created_at, "data": r.data} for r in rows]
 
 
-FILE_KINDS = ("catalog", "order_sample", "file")
+FILE_KINDS = ("catalog", "order_sample", "file", "original")
 FILES_KEPT_PER_KIND = 10
+# az eredeti Product/Recipe fájlokat (original) sosem takarítjuk automatikusan
+FILES_KEPT_OVERRIDE = {"original": 1000}
 
 
 @router.get(
@@ -938,6 +941,244 @@ async def promo_report(body: PromoReportBody, db: AsyncSession = Depends(get_db)
     return {"ok": True}
 
 
+# ─── Vending receptek: távoli adag-/ármódosítás, eredeti visszaállítása ──────
+
+RECIPE_LIMITS = {"coffee_g": (0.0, 30.0), "water_ml": (0.0, 500.0), "price": (0.0, 100_000.0)}
+
+
+def _edit_out(e: VendingRecipeEdit) -> dict:
+    return {
+        "id": str(e.id), "action": e.action, "product_id": e.product_id,
+        "product_name": e.product_name, "recipe_name": e.recipe_name, "price": e.price,
+        "steps": e.steps, "status": e.status, "error": e.error,
+        "created_at": e.created_at, "applied_at": e.applied_at,
+    }
+
+
+class RecipeStep(BaseModel):
+    canister: int
+    water_ml: float = Field(ge=0, le=500)
+    coffee_g: float = Field(ge=0, le=30)
+
+
+class RecipeEditBody(BaseModel):
+    product_name: str = Field(default="", max_length=256)
+    recipe_name: str = Field(min_length=1, max_length=256)
+    price: float | None = Field(default=None, ge=0, le=100_000)
+    steps: list[RecipeStep] | None = Field(default=None, max_length=12)
+
+
+@router.get(
+    "/machines/{machine_id}/recipes",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def list_recipe_edits(
+    machine_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """Módosítás-kérések (függő/alkalmazott/hibás) + van-e lementett eredeti a szerveren."""
+    from sqlalchemy import func as sa_func
+
+    m = await _machine_or_404(db, machine_id)
+    rows = (
+        await db.execute(
+            select(VendingRecipeEdit)
+            .where(VendingRecipeEdit.machine_id == m.id)
+            .order_by(VendingRecipeEdit.created_at.desc())
+            .limit(100)
+        )
+    ).scalars().all()
+    originals = int(
+        (
+            await db.execute(
+                select(sa_func.count()).select_from(VendingFile).where(
+                    VendingFile.machine_id == m.id, VendingFile.kind == "original"
+                )
+            )
+        ).scalar_one()
+    )
+    return {"originals_saved": originals > 0, "items": [_edit_out(e) for e in rows]}
+
+
+@router.put(
+    "/machines/{machine_id}/recipes/{product_id}",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def set_recipe_edit(
+    machine_id: str,
+    product_id: int,
+    body: RecipeEditBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_perm("invoicing")),
+):
+    """Adag/ár módosítás egy italra: egy függő kérés italonként (felülírja a
+    korábbi függőt). Az ügynök az eredeti fájlt menti, majd a következő
+    jelentéskor alkalmazza és visszajelez."""
+    m = await _machine_or_404(db, machine_id)
+    if body.price is None and body.steps is None:
+        raise HTTPException(status_code=422, detail={"code": "vending.recipe_empty"})
+    pending = (
+        await db.execute(
+            select(VendingRecipeEdit).where(
+                VendingRecipeEdit.machine_id == m.id,
+                VendingRecipeEdit.product_id == product_id,
+                VendingRecipeEdit.action == "set",
+                VendingRecipeEdit.status == "pending",
+            )
+        )
+    ).scalar_one_or_none()
+    e = pending or VendingRecipeEdit(machine_id=m.id, action="set", product_id=product_id)
+    e.product_name = body.product_name.strip()[:256]
+    e.recipe_name = body.recipe_name.strip()[:256]
+    e.price = body.price
+    e.steps = [s.model_dump() for s in body.steps] if body.steps is not None else None
+    e.status, e.error = "pending", None
+    db.add(e)
+    await record_audit(
+        db, actor=user, action="vending.recipe_edit", entity_type="vending_recipe",
+        entity_id=m.machine_code,
+        detail={"product": e.product_name, "price": e.price, "steps": e.steps}, request=request,
+    )
+    await db.commit()
+    await db.refresh(e)
+    return _edit_out(e)
+
+
+@router.post(
+    "/machines/{machine_id}/recipes/restore",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def restore_recipes(
+    machine_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_perm("invoicing")),
+):
+    """Az eredeti (első módosítás előtti) Product/Recipe fájlok visszaállítása
+    a gépen — minden függő módosítás-kérés érvényét veszti."""
+    m = await _machine_or_404(db, machine_id)
+    rows = (
+        await db.execute(
+            select(VendingRecipeEdit).where(
+                VendingRecipeEdit.machine_id == m.id, VendingRecipeEdit.status == "pending"
+            )
+        )
+    ).scalars().all()
+    for r in rows:
+        await db.delete(r)
+    e = VendingRecipeEdit(machine_id=m.id, action="restore", product_id=0, product_name="*", recipe_name="*")
+    db.add(e)
+    await record_audit(
+        db, actor=user, action="vending.recipe_restore", entity_type="vending_recipe",
+        entity_id=m.machine_code, detail={}, request=request,
+    )
+    await db.commit()
+    await db.refresh(e)
+    return _edit_out(e)
+
+
+@router.delete(
+    "/machines/{machine_id}/recipes/{edit_id}",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def delete_recipe_edit(
+    machine_id: str,
+    edit_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    m = await _machine_or_404(db, machine_id)
+    try:
+        eid = uuid.UUID(edit_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "vending.edit_not_found"})
+    e = (
+        await db.execute(
+            select(VendingRecipeEdit).where(VendingRecipeEdit.id == eid, VendingRecipeEdit.machine_id == m.id)
+        )
+    ).scalar_one_or_none()
+    if e is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.edit_not_found"})
+    await db.delete(e)
+    await db.commit()
+    return {"ok": True}
+
+
+@public_router.post("/recipes/manifest")
+async def recipes_manifest(body: MachineAuthBody, db: AsyncSession = Depends(get_db)):
+    """A GÉP kérdezi: függő recept-/ármódosítások (restore előre sorolva)."""
+    m = await _machine_by_key(db, body)
+    rows = (
+        await db.execute(
+            select(VendingRecipeEdit)
+            .where(VendingRecipeEdit.machine_id == m.id, VendingRecipeEdit.status == "pending")
+            .order_by(VendingRecipeEdit.created_at)
+        )
+    ).scalars().all()
+    rows.sort(key=lambda r: 0 if r.action == "restore" else 1)
+    return {"items": [_edit_out(e) for e in rows]}
+
+
+@public_router.post("/recipes/report")
+async def recipes_report(body: PromoReportBody, db: AsyncSession = Depends(get_db)):
+    m = await _machine_by_key(db, body)
+    now = datetime.now(UTC)
+    for r in body.results:
+        try:
+            eid = uuid.UUID(r.id)
+        except ValueError:
+            continue
+        e = (
+            await db.execute(
+                select(VendingRecipeEdit).where(
+                    VendingRecipeEdit.id == eid, VendingRecipeEdit.machine_id == m.id
+                )
+            )
+        ).scalar_one_or_none()
+        if e is None:
+            continue
+        if r.ok:
+            e.status, e.error, e.applied_at = "applied", None, now
+        else:
+            e.status, e.error = "failed", (r.error or "ismeretlen hiba")[:512]
+    m.last_seen_at = now
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/machines/{machine_id}/promos/restore-factory",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def restore_factory_promos(
+    machine_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_perm("invoicing")),
+):
+    """Gyári reklámképek vissza: kizárólagos mód ki (az ügynök visszateszi a
+    mentett gyári fájlokat), a mi képeink törlésre jelölve / törölve."""
+    m = await _machine_or_404(db, machine_id)
+    m.promo_exclusive_making = False
+    m.promo_exclusive_screensaver = False
+    rows = (
+        await db.execute(select(VendingPromo).where(VendingPromo.machine_id == m.id))
+    ).scalars().all()
+    for p in rows:
+        if p.delivered_at is None:
+            await db.delete(p)
+        else:
+            p.status, p.error = "remove_pending", None
+    await record_audit(
+        db, actor=user, action="vending.promo_restore_factory", entity_type="vending_promo",
+        entity_id=m.machine_code, detail={"count": len(rows)}, request=request,
+    )
+    await db.commit()
+    return {"ok": True}
+
+
 # ─── Ügynök (X-admin config) APK-kiadások — online frissítés ────────────────
 
 AGENT_APK_MAX = 20 * 1024 * 1024
@@ -1032,6 +1273,49 @@ async def delete_release(
     await db.delete(r)
     await db.commit()
     return {"ok": True}
+
+
+class PublishBody(ReleaseBody):
+    pass
+
+
+@public_router.post("/agent/publish")
+async def publish_release(
+    body: PublishBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """CI (GitHub Actions) teszi közzé az új ügynök-APK-t közzétételi tokennel
+    (X-Publish-Token fejléc = WFM_AGENT_PUBLISH_TOKEN). Azonos verziókód → felülírás."""
+    import base64
+    import hashlib
+    import hmac
+
+    token = get_settings().agent_publish_token
+    given = request.headers.get("x-publish-token", "")
+    if not token or not hmac.compare_digest(given, token):
+        raise HTTPException(status_code=403, detail={"code": "vending.bad_publish_token"})
+    try:
+        raw = base64.b64decode(body.data_b64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_apk"})
+    if len(raw) > AGENT_APK_MAX or not raw.startswith(b"PK"):
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_apk"})
+    r = (
+        await db.execute(select(AgentRelease).where(AgentRelease.version_code == body.version_code))
+    ).scalar_one_or_none()
+    if r is None:
+        r = AgentRelease(version_code=body.version_code)
+        db.add(r)
+    r.version_name = body.version_name.strip()
+    r.filename = body.filename.strip()[:128]
+    r.data = raw
+    r.sha256 = hashlib.sha256(raw).hexdigest()
+    r.size = len(raw)
+    r.note = (body.note or "").strip() or None
+    await db.commit()
+    await db.refresh(r)
+    return _release_out(r)
 
 
 @public_router.post("/agent/latest")
@@ -1261,7 +1545,7 @@ async def upload_file(body: UploadBody, db: AsyncSession = Depends(get_db)):
             select(VendingFile)
             .where(VendingFile.machine_id == m.id, VendingFile.kind == body.kind)
             .order_by(VendingFile.created_at.desc())
-            .offset(FILES_KEPT_PER_KIND)
+            .offset(FILES_KEPT_OVERRIDE.get(body.kind, FILES_KEPT_PER_KIND))
         )
     ).scalars().all()
     for r in old:

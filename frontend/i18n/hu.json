@@ -2977,7 +2977,20 @@
     "agentUploaded": "Kiadás feltöltve: v{v}",
     "agentDeleteConfirm": "Törlöd a(z) v{v} kiadást?",
     "agentLatest": "legújabb",
-    "agentBadApk": "Ez nem APK-fájl."
+    "agentBadApk": "Ez nem APK-fájl.",
+    "edit": "Szerkeszt",
+    "editHint": "Adag és ár módosítása — az ügynök a következő jelentéskor írja a gépre; az eredeti előtte mentésre kerül.",
+    "saveEdit": "Küldés a gépre",
+    "editQueued": "Módosítás elküldve — a gép a következő jelentéskor alkalmazza.",
+    "restoreOriginal": "Eredeti adagok visszaállítása",
+    "restoreConfirm": "Visszaállítod a(z) {name} gépen az első módosítás előtti eredeti recept- és árfájlt? A függő módosítások törlődnek.",
+    "restoreQueued": "Visszaállítás elküldve — a gép a következő jelentéskor végrehajtja.",
+    "originalsSaved": "eredeti lementve",
+    "originalsMissing": "eredeti még nincs lementve (az első módosításkor menti)",
+    "editStatus.pending": "⏳ a gépre vár",
+    "editStatus.applied": "✅ a gépen",
+    "editStatus.failed": "❌ hiba",
+    "pendingEdits": "Függő módosítások"
   },
   "vpromo": {
     "title": "Vending promóció",
@@ -2999,6 +3012,9 @@
     "exclusiveHint": "Bekapcsolva az ügynök a gyári képeket a saját mentés-mappájába teszi át (visszaállítható a kapcsoló kikapcsolásával).",
     "deliveryHint": "A képek 1280×800-ra méreteződnek feltöltéskor (JPEG). A gép legkésőbb a hajnali újraindítás után mutatja az újakat.",
     "noMachines": "Még nincs felvett gép — a Telemetria oldalon vedd fel az elsőt.",
-    "badImage": "Nem sikerült beolvasni a képet: {name}"
+    "badImage": "Nem sikerült beolvasni a képet: {name}",
+    "restoreFactoryPromo": "Gyári képek visszaállítása",
+    "restoreFactoryConfirm": "Visszaállítod a(z) {name} gépen a gyári reklámképeket? A mi képeink lekerülnek a gépről.",
+    "restoreFactoryQueued": "Visszaállítás elküldve — az ügynök a következő szinkronnál visszateszi a gyári képeket."
   }
 }

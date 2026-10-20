@@ -54,6 +54,12 @@ interface Catalog {
   files?: Record<string, string>;
 }
 interface MachineFile { id: string; kind: string; name: string; size: number; created_at: string; text?: string }
+interface RecipeEdit {
+  id: string; action: "set" | "restore"; product_id: number; product_name: string; recipe_name: string;
+  price: number | null; steps: CatalogStep[] | null; status: "pending" | "applied" | "failed"; error: string | null;
+  created_at: string; applied_at: string | null;
+}
+interface RecipeEditList { originals_saved: boolean; items: RecipeEdit[] }
 interface AgentRelease { id: string; version_code: number; version_name: string; filename: string; size: number; note: string | null; created_at: string }
 
 /** Az APK verziókódja/neve a nevéből nem derül ki — a feltöltő adja meg (build.gradle). */
@@ -95,6 +101,10 @@ export default function VendingTelemetriaPage() {
   const [history, setHistory] = useState<{ machine: Machine; rows: TelemetryRow[] } | null>(null);
   const [keyShown, setKeyShown] = useState<string | null>(null); // machine id
   const [catalog, setCatalog] = useState<{ machine: Machine; updated_at: string | null; catalog: Catalog | null } | null>(null);
+  const [edits, setEdits] = useState<RecipeEditList>({ originals_saved: false, items: [] });
+  // szerkesztés alatt álló ital: ár + lépésenkénti adagok (szövegként, hogy a beírás ne ugráljon)
+  const [editing, setEditing] = useState<{ product: CatalogProduct; price: string; steps: { canister: number; water_ml: string; coffee_g: string }[] } | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
   const [files, setFiles] = useState<{ machine: Machine; rows: MachineFile[]; open: MachineFile | null } | null>(null);
   const [errors, setErrors] = useState<{ machine: Machine; rows: MachineError[]; withResolved: boolean } | null>(null);
   const [releases, setReleases] = useState<AgentRelease[]>([]);
@@ -201,12 +211,73 @@ export default function VendingTelemetriaPage() {
 
   async function openCatalog(m: Machine) {
     try {
-      const r = await api.get<{ updated_at: string | null; catalog: Catalog | null }>(`/api/saferpay/machines/${m.id}/catalog`);
+      const [r, e] = await Promise.all([
+        api.get<{ updated_at: string | null; catalog: Catalog | null }>(`/api/saferpay/machines/${m.id}/catalog`),
+        api.get<RecipeEditList>(`/api/saferpay/machines/${m.id}/recipes`),
+      ]);
       setCatalog({ machine: m, ...r });
+      setEdits(e);
+      setEditing(null);
     } catch (err) {
       toast(errorMessage(err), "error");
     }
   }
+
+  function startEdit(p: CatalogProduct, cat: Catalog) {
+    const q = portions(p, cat);
+    setEditing({
+      product: p,
+      price: String(p.sale_price ?? p.price ?? 0),
+      steps: q.steps.map((s) => ({ canister: s.canister, water_ml: String(s.water_ml), coffee_g: String(s.coffee_g) })),
+    });
+  }
+
+  async function saveEdit() {
+    if (!catalog || !editing) return;
+    const num = (s: string) => Number(String(s).replace(",", "."));
+    setEditBusy(true);
+    try {
+      await api.put(`/api/saferpay/machines/${catalog.machine.id}/recipes/${editing.product.product_id ?? editing.product.id}`, {
+        product_name: editing.product.name,
+        recipe_name: editing.product.recipe,
+        price: num(editing.price),
+        steps: editing.steps.map((s) => ({ canister: s.canister, water_ml: num(s.water_ml), coffee_g: num(s.coffee_g) })),
+      });
+      toast(t("vtel.editQueued"), "success");
+      setEditing(null);
+      setEdits(await api.get<RecipeEditList>(`/api/saferpay/machines/${catalog.machine.id}/recipes`));
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function restoreOriginal() {
+    if (!catalog) return;
+    if (!(await confirm(t("vtel.restoreConfirm", { name: catalog.machine.name })))) return;
+    try {
+      await api.post(`/api/saferpay/machines/${catalog.machine.id}/recipes/restore`, {});
+      toast(t("vtel.restoreQueued"), "success");
+      setEdits(await api.get<RecipeEditList>(`/api/saferpay/machines/${catalog.machine.id}/recipes`));
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function deleteEdit(e: RecipeEdit) {
+    if (!catalog) return;
+    try {
+      await api.delete(`/api/saferpay/machines/${catalog.machine.id}/recipes/${e.id}`);
+      setEdits(await api.get<RecipeEditList>(`/api/saferpay/machines/${catalog.machine.id}/recipes`));
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  /** Az adott italra vonatkozó legfrissebb módosítás-kérés (chiphez). */
+  const editFor = (p: CatalogProduct) =>
+    edits.items.find((e) => e.action === "set" && e.product_id === (p.product_id ?? p.id));
 
   async function openErrors(m: Machine, withResolved = false) {
     try {
@@ -525,11 +596,39 @@ export default function VendingTelemetriaPage() {
               <p className="py-6 text-center text-sm text-slate-400">{t("vtel.catalogEmpty")}</p>
             ) : (
               <>
-                <p className="text-xs text-slate-400">
-                  {catalog.updated_at && t("vtel.catalogUpdated", { at: fmt(catalog.updated_at) })}
-                  {catalog.catalog.files?.product && ` · ${catalog.catalog.files.product}`}
-                  {catalog.catalog.files?.recipe && ` · ${catalog.catalog.files.recipe}`}
-                </p>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                  <span>
+                    {catalog.updated_at && t("vtel.catalogUpdated", { at: fmt(catalog.updated_at) })}
+                    {catalog.catalog.files?.product && ` · ${catalog.catalog.files.product}`}
+                    {catalog.catalog.files?.recipe && ` · ${catalog.catalog.files.recipe}`}
+                  </span>
+                  <span className={`rounded px-1.5 py-0.5 ${edits.originals_saved ? "bg-emerald-50 text-emerald-700" : "bg-slate-100"}`}>
+                    {edits.originals_saved ? `🛡 ${t("vtel.originalsSaved")}` : t("vtel.originalsMissing")}
+                  </span>
+                  <button onClick={() => void restoreOriginal()} className="ml-auto rounded-lg border border-amber-300 px-2.5 py-1 text-xs text-amber-700 hover:bg-amber-50">
+                    ↩️ {t("vtel.restoreOriginal")}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400">{t("vtel.editHint")}</p>
+                {edits.items.some((e) => e.status !== "applied") && (
+                  <div className="space-y-1 rounded-xl border border-slate-100 bg-slate-50 p-2 text-xs">
+                    <p className="font-medium text-slate-600">{t("vtel.pendingEdits")}</p>
+                    {edits.items.filter((e) => e.status !== "applied").map((e) => (
+                      <div key={e.id} className="flex flex-wrap items-center gap-2">
+                        <span>{e.action === "restore" ? `↩️ ${t("vtel.restoreOriginal")}` : e.product_name}</span>
+                        {e.action === "set" && e.price !== null && <span className="text-slate-500">{ft(e.price)}</span>}
+                        {e.action === "set" && e.steps && (
+                          <span className="text-slate-500">
+                            {e.steps.map((s, i) => `${canisterLabel(s.canister, catalog.catalog as Catalog)}${s.coffee_g ? ` ${s.coffee_g} g` : ""}${s.water_ml ? ` ${s.water_ml} ml` : ""}`).join(" · ")}
+                          </span>
+                        )}
+                        <span className="rounded bg-white px-1.5 py-0.5" title={e.error ?? undefined}>{t(`vtel.editStatus.${e.status}`)}</span>
+                        {e.error && <span className="text-rose-600">{e.error}</span>}
+                        <button onClick={() => void deleteEdit(e)} className="ml-auto rounded px-1 text-rose-600 hover:bg-rose-50">🗑</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -540,6 +639,7 @@ export default function VendingTelemetriaPage() {
                         <th className="py-1.5 pr-2 text-right">{t("vtel.waterMl")}</th>
                         <th className="py-1.5 pr-2">{t("vtel.milk")}</th>
                         <th className="py-1.5">{t("vtel.steps")}</th>
+                        <th className="py-1.5"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -549,6 +649,36 @@ export default function VendingTelemetriaPage() {
                           const cat = catalog.catalog as Catalog;
                           const q = portions(p, cat);
                           const muted = p.enabled === false || p.visible === false;
+                          const ed = editFor(p);
+                          if (editing && editing.product.id === p.id) {
+                            return (
+                              <tr key={p.id} className="border-b border-indigo-100 bg-indigo-50/50">
+                                <td className="py-1.5 pr-2 font-medium">{p.name}</td>
+                                <td className="py-1.5 pr-2 text-right">
+                                  <input value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} className="w-20 rounded border border-slate-300 px-1.5 py-0.5 text-right" />
+                                </td>
+                                <td colSpan={4} className="py-1.5">
+                                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                                    {editing.steps.map((s, i) => (
+                                      <span key={i} className="flex items-center gap-1 rounded bg-white px-1.5 py-1">
+                                        <b>{canisterLabel(s.canister, cat)}</b>
+                                        {s.canister === 170 && (
+                                          <>
+                                            <input value={s.coffee_g} onChange={(e) => setEditing({ ...editing, steps: editing.steps.map((x, j) => (j === i ? { ...x, coffee_g: e.target.value } : x)) })} className="w-14 rounded border border-slate-300 px-1 py-0.5 text-right" /> g
+                                          </>
+                                        )}
+                                        <input value={s.water_ml} onChange={(e) => setEditing({ ...editing, steps: editing.steps.map((x, j) => (j === i ? { ...x, water_ml: e.target.value } : x)) })} className="w-14 rounded border border-slate-300 px-1 py-0.5 text-right" /> ml
+                                      </span>
+                                    ))}
+                                    <button disabled={editBusy} onClick={() => void saveEdit()} className="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                                      {t("vtel.saveEdit")}
+                                    </button>
+                                    <button onClick={() => setEditing(null)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">{t("common.cancel")}</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          }
                           return (
                             <tr key={p.id} className={`border-b border-slate-100 ${muted ? "text-slate-400" : ""}`}>
                               <td className="py-1.5 pr-2">
@@ -567,6 +697,16 @@ export default function VendingTelemetriaPage() {
                                     {canisterLabel(s.canister, cat)}{s.coffee_g ? ` ${s.coffee_g} g` : ""}{s.water_ml ? ` ${s.water_ml} ml` : ""}
                                   </span>
                                 ))}
+                              </td>
+                              <td className="py-1.5 text-right">
+                                {ed && ed.status !== "applied" && (
+                                  <span className="mr-1 rounded bg-amber-50 px-1 text-[10px] text-amber-700" title={ed.error ?? undefined}>{t(`vtel.editStatus.${ed.status}`)}</span>
+                                )}
+                                {q.steps.length > 0 && (
+                                  <button onClick={() => startEdit(p, cat)} className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">
+                                    ✏️ {t("vtel.edit")}
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );

@@ -142,6 +142,17 @@ export default function VendingPromocioPage() {
     }
   }
 
+  async function restoreFactory(m: Machine) {
+    if (!(await confirm(t("vpromo.restoreFactoryConfirm", { name: m.name })))) return;
+    try {
+      await api.post(`/api/saferpay/machines/${m.id}/promos/restore-factory`, {});
+      toast(t("vpromo.restoreFactoryQueued"), "success");
+      void loadPromos([m]);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function setExclusive(m: Machine, slot: (typeof SLOTS)[number], value: boolean) {
     const cur = promos[m.id]?.exclusive ?? { making: false, screensaver: false };
     const next = { ...cur, [slot]: value };
@@ -179,6 +190,12 @@ export default function VendingPromocioPage() {
                   {m.last_seen_at && (
                     <span className="ml-auto text-xs text-slate-400">{t("vtel.lastSeen", { at: fmt(m.last_seen_at) })}</span>
                   )}
+                  <button
+                    onClick={() => void restoreFactory(m)}
+                    className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs text-amber-700 hover:bg-amber-50"
+                  >
+                    ↩️ {t("vpromo.restoreFactoryPromo")}
+                  </button>
                 </div>
 
                 <div className="mt-3 grid gap-4 md:grid-cols-2">

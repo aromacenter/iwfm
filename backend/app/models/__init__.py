@@ -38,6 +38,7 @@ from app.models.models import (  # noqa: F401
     VendingError,
     VendingFile,
     VendingPromo,
+    VendingRecipeEdit,
     VendingTelemetry,
     PartnerPrice,
     PartnerStock,

@@ -974,6 +974,36 @@ class AgentRelease(Base):
     )
 
 
+class VendingRecipeEdit(Base):
+    """Távoli recept-/ármódosítás egy gép egy italára (vagy „restore” = az
+    eredeti Product/Recipe fájl visszaállítása). Az admin hozza létre, az ügynök
+    a gépen a fájlba írja (előtte az eredetit menti) és visszajelez."""
+
+    __tablename__ = "vending_recipe_edits"
+    __table_args__ = (
+        Index("ix_vending_recipe_edits_machine", "machine_id", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("vending_machines.id", ondelete="CASCADE", name="fk_vredit_machine"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(16), nullable=False, default="set")  # set | restore
+    product_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # Jetinno productId (restore: 0)
+    product_name: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    recipe_name: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    steps: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{canister, water_ml, coffee_g}]
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")  # pending|applied|failed
+    error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class VendingError(Base):
     """Gép által jelentett hiba (Exception-napló / kezelői napló figyelmeztetés),
     üzenet szerint összevonva: ujjlenyomat + darabszám + első/utolsó előfordulás.

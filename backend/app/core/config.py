@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # Üzemeltetői (Flotta-pult) token: a licenc táv-kezeléséhez. Üresen a
     # /api/operator végpontok zárva vannak.
     operator_token: str = ""
+    # GitHub Actions → X-admin: az ügynök-APK automatikus közzététele (WFM_AGENT_PUBLISH_TOKEN)
+    agent_publish_token: str = ""
     # Modul-alapértelmezés, amíg nincs licenc-sorban beállítás: None (nincs
     # env) = minden modul (saját példány); beállítva = vesszős lista, üres
     # string = csak az alap-funkciók (bérelt példány így születik).

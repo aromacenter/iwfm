@@ -2977,7 +2977,20 @@
     "agentUploaded": "Release uploaded: v{v}",
     "agentDeleteConfirm": "Delete release v{v}?",
     "agentLatest": "latest",
-    "agentBadApk": "This is not an APK file."
+    "agentBadApk": "This is not an APK file.",
+    "edit": "Edit",
+    "editHint": "Change portions and price — the agent writes it to the machine on its next report; the original is saved first.",
+    "saveEdit": "Send to machine",
+    "editQueued": "Change queued — the machine applies it on its next report.",
+    "restoreOriginal": "Restore original portions",
+    "restoreConfirm": "Restore the original recipe and price files (before the first change) on {name}? Pending changes are discarded.",
+    "restoreQueued": "Restore queued — the machine applies it on its next report.",
+    "originalsSaved": "original saved",
+    "originalsMissing": "original not saved yet (saved on first change)",
+    "editStatus.pending": "⏳ waiting for machine",
+    "editStatus.applied": "✅ on machine",
+    "editStatus.failed": "❌ failed",
+    "pendingEdits": "Pending changes"
   },
   "vpromo": {
     "title": "Vending promotion",
@@ -2999,6 +3012,9 @@
     "exclusiveHint": "When on, the agent moves the factory images into its own backup folder (restored when switched off).",
     "deliveryHint": "Images are resized to 1280×800 JPEG on upload. The machine shows new ones at the latest after its nightly restart.",
     "noMachines": "No machines yet — add the first one on the Telemetry page.",
-    "badImage": "Could not read image: {name}"
+    "badImage": "Could not read image: {name}",
+    "restoreFactoryPromo": "Restore factory images",
+    "restoreFactoryConfirm": "Restore the factory ad images on {name}? Our images are removed from the machine.",
+    "restoreFactoryQueued": "Restore queued — the agent puts the factory images back on its next sync."
   }
 }
