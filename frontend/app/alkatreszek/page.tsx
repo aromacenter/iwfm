@@ -45,8 +45,6 @@ const REQ_CHIP: Record<PartsReq["status"], string> = {
   declined: "bg-rose-100 text-rose-800", cancelled: "bg-slate-100 text-slate-500",
 };
 
-interface SheetRow { part_id: string; sku: string; name: string; unit: string; location: string; expected: number }
-
 type Tab = "stock" | "parts" | "warehouses" | "movements" | "requests" | "stocktake";
 type MoveKind = "receipt" | "transfer" | "adjust";
 
@@ -110,7 +108,7 @@ export default function AlkatreszekPage() {
   }, [parts, q]);
 
   const partItems = useMemo(() => parts.filter((p) => p.is_active).map((p) => ({ id: p.id, label: p.name, badge: p.sku, sublabel: `${p.total_qty} ${p.unit}`, keywords: p.manufacturer_code })), [parts]);
-  const whItems = useMemo(() => warehouses.filter((w) => w.is_active).map((w) => ({ id: w.id, label: w.name, badge: w.kind === "vehicle" ? "🚚" : "🏬" })), [warehouses]);
+  const whItems = useMemo(() => warehouses.filter((w) => w.is_active).map((w) => ({ id: w.id, label: w.name, badge: w.kind === "vehicle" ? "🚚" : w.kind === "quarantine" ? "🚧" : "🏬" })), [warehouses]);
 
   // ── cikktörzs ─────────────────────────────────────────────────────────────
   async function savePart(e: React.FormEvent) {
@@ -235,7 +233,7 @@ export default function AlkatreszekPage() {
     const target = scanFor;
     setScanFor(null);
     try {
-      const r = await api.get<{ kind: string; part_id: string | null; sku: string | null; name: string | null; warehouse_id: string | null; location: string | null }>(`/api/parts/scan?code=${encodeURIComponent(code)}`);
+      const r = await api.get<{ kind: string; part_id: string | null; sku: string | null; name: string | null; warehouse_id: string | null; warehouse_name: string | null; location: string | null }>(`/api/parts/scan?code=${encodeURIComponent(code)}`);
       if (target === "move" && move) {
         if (r.kind === "part" && r.part_id) setMove({ ...move, part_id: r.part_id });
         else if (r.kind === "location" && r.warehouse_id) setMove({ ...move, warehouse_id: r.warehouse_id, location: r.location ?? "" });
@@ -244,7 +242,7 @@ export default function AlkatreszekPage() {
         el?.scrollIntoView({ block: "center" });
         (el?.querySelector("input") as HTMLInputElement | null)?.focus();
       }
-      toast(t("parts.scanned", { what: r.kind === "part" ? `${r.sku} ${r.name}` : `${r.warehouse_id ? "" : ""}${r.location}` }), "success");
+      toast(t("parts.scanned", { what: r.kind === "part" ? `${r.sku} ${r.name}` : `${r.warehouse_name ?? ""} ${r.location ?? ""}`.trim() }), "success");
     } catch (err) {
       toast(errorMessage(err), "error");
     }

@@ -87,6 +87,10 @@ async def get_permission_matrix(db: AsyncSession) -> dict[str, list[str]]:
             for extra in ("intake", "knowledge"):
                 if extra not in out[role]:
                     out[role].append(extra)
+        # Az alkatrész-raktár (parts) jog az elszámolás-jogból örökölt — a
+        # mentett (régebbi) mátrixokon se vesszen el a raktáros hozzáférés.
+        if "settlements" in out[role] and "parts" not in out[role]:
+            out[role].append("parts")
     return out
 
 

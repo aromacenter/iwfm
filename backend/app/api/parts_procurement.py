@@ -570,10 +570,12 @@ async def create_return(body: ReturnBody, request: Request, db: AsyncSession = D
                     quantity=body.quantity, serial_no=body.serial_no, reason=body.reason, status="open", created_by=actor.id)
     db.add(r)
     await db.flush()
+    before = await _part_total(db, part.id)
     await _move(db, part=part, wh=wh, location=loc, kind="return", delta=-body.quantity, actor=actor,
                 document_no=f"RET-{str(r.id)[:8]}", note=body.reason, serial_no=body.serial_no, unit_cost=part.avg_cost)
     await record_audit(db, actor=actor, action="parts.return_created", entity_type="parts_return", entity_id=str(r.id), detail={"sku": part.sku, "qty": body.quantity}, request=request)
     await db.commit()
+    await _low_check(db, part, before)
     return await _return_out(db, r)
 
 

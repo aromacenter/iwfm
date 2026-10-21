@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, record_audit, require_perm
 from app.api.parts import (
-    _can_manage, _has_perm, _move, _own_vehicle, _part_or_404, _stock_row, _totals, _uuid, _validate_location,
-    _wh_or_404,
+    _can_manage, _has_perm, _low_check, _move, _own_vehicle, _part_or_404, _part_total, _stock_row, _totals, _uuid,
+    _validate_location, _wh_or_404,
 )
 from app.db import get_db
 from app.models import (
@@ -489,6 +489,7 @@ async def approve_stocktake(stocktake_id: str, body: ApproveBody, request: Reque
     reasons = {(r.part_id, (r.location or "").strip().upper()): r.reason for r in body.reasons}
     rows = [dict(r) for r in (st.rows or [])]
     adjusted = 0
+    lowered: list[tuple[Part, float]] = []
     note = f"leltár: {st.name}" + (f" — {body.note.strip()}" if body.note and body.note.strip() else "")
     for r in rows:
         cnt = r.get("counted")
@@ -502,11 +503,15 @@ async def approve_stocktake(stocktake_id: str, body: ApproveBody, request: Reque
             continue
         reason = reasons.get((r["part_id"], loc), r.get("reason") or "count_error")
         r["reason"] = reason
+        if delta < 0:
+            lowered.append((part, await _part_total(db, part.id)))
         await _move(db, part=part, wh=wh, location=loc, kind="adjust", delta=delta, actor=actor, note=note, reason=reason)
         adjusted += 1
     st.rows, st.status, st.approved_by, st.approved_at = rows, "approved", actor.id, datetime.now(UTC)
     await record_audit(db, actor=actor, action="parts.stocktake_approved", entity_type="parts_stocktake", entity_id=str(st.id), detail={"name": st.name, "adjusted": adjusted}, request=request)
     await db.commit()
+    for part, before in lowered:
+        await _low_check(db, part, before)
     return await _st_out(db, st)
 
 

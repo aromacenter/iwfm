@@ -645,7 +645,7 @@ export default function FeladataimPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast, t]);
   useEffect(() => {
-    flushPartsQueue();
+    void Promise.resolve().then(() => flushPartsQueue());
     const onOnline = () => flushPartsQueue();
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);

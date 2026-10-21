@@ -131,11 +131,16 @@ export default function GepekPage() {
   const [historyFor, setHistoryFor] = useState<Asset | null>(null);
   // Beépített alkatrészek (parts modul) — modul nélkül / jog nélkül üres marad
   interface InstalledPart { movement_id: string; created_at: string; sku: string; name: string; quantity: number; unit: string; serial_no: string | null; warranty_until: string | null; warranty_active: boolean; worksheet_serial: string | null; actor_name: string | null }
-  const [installedParts, setInstalledParts] = useState<InstalledPart[] | null>(null);
+  const [installed, setInstalled] = useState<{ asset_id: string; rows: InstalledPart[] } | null>(null);
   useEffect(() => {
-    if (!historyFor) { setInstalledParts(null); return; }
-    api.get<InstalledPart[]>(`/api/parts/asset/${historyFor.id}/history`).then(setInstalledParts).catch(() => setInstalledParts(null));
+    if (!historyFor) return;
+    let active = true;
+    api.get<InstalledPart[]>(`/api/parts/asset/${historyFor.id}/history`)
+      .then((rows) => { if (active) setInstalled({ asset_id: historyFor.id, rows }); })
+      .catch(() => { /* parts modul nélkül nincs blokk */ });
+    return () => { active = false; };
   }, [historyFor]);
+  const installedParts = historyFor && installed?.asset_id === historyFor.id ? installed.rows : null;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);

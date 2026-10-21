@@ -558,6 +558,7 @@ async def adjust(
     _can_manage(actor, wh)
     loc = _validate_location(wh, body.location)
     row = await _stock_row(db, wh.id, part.id, loc)
+    before = await _part_total(db, part.id)
     delta = round(body.quantity - row.quantity, 4)
     if abs(delta) > 1e-9:
         row = await _move(db, part=part, wh=wh, location=loc, kind="adjust", delta=delta, actor=actor, note=body.note, reason=body.reason)
@@ -566,6 +567,8 @@ async def adjust(
         detail={"warehouse": wh.name, "location": loc, "delta": delta}, request=request,
     )
     await db.commit()
+    if delta < 0:
+        await _low_check(db, part, before)
     return StockOut(
         warehouse_id=str(wh.id), warehouse_name=wh.name, part_id=str(part.id), sku=part.sku, name=part.name,
         unit=part.unit, location=loc, quantity=row.quantity,
@@ -1173,6 +1176,7 @@ async def _apply_counts(
     """Minden számolt sor: ha eltér a nyilvántartástól → `adjust` mozgás a
     különbséggel (append-only). Nem számolt sor érintetlen marad."""
     diffs: list[StocktakeDiff] = []
+    lowered: list[tuple[Part, float]] = []
     for c in counts:
         part = await _part_or_404(db, c.part_id)
         loc = _validate_location(wh, c.location)
@@ -1181,12 +1185,17 @@ async def _apply_counts(
         if abs(delta) < 1e-9:
             continue
         expected = row.quantity
+        if delta < 0:
+            lowered.append((part, await _part_total(db, part.id)))
         await _move(db, part=part, wh=wh, location=loc, kind="adjust", delta=delta, actor=actor, note=note, reason=c.reason or "count_error")
         diffs.append(StocktakeDiff(
             part_id=str(part.id), sku=part.sku, name=part.name, location=loc,
             expected=expected, counted=c.quantity, delta=delta,
         ))
-    return StocktakeOut(adjusted=len(diffs), diffs=diffs)
+    out = StocktakeOut(adjusted=len(diffs), diffs=diffs)
+    for part, before in lowered:
+        await _low_check(db, part, before)
+    return out
 
 
 @router.get("/stocktake/sheet", response_model=list[SheetRow])
@@ -1305,10 +1314,11 @@ async def export_csv(
             [[m.created_at.strftime("%Y-%m-%d %H:%M"), m.kind, p.sku, p.name, whn, m.location,
               float(m.quantity_delta), p.unit, m.unit_cost, m.price_net,
               wh_names.get(m.ref_warehouse_id, "") if m.ref_warehouse_id else "", m.ref_location,
-              m.document_no, m.note, actors.get(m.actor_user_id, "")] for m, p, whn in rows],
+              m.document_no, m.note, actors.get(m.actor_user_id, ""), m.serial_no,
+              m.warranty_until.isoformat() if m.warranty_until else "", m.reason] for m, p, whn in rows],
             ["Mikor", "Mozgás", "Cikkszám", "Megnevezés", "Raktár", "Helykód", "Változás", "Egység",
              "Egységár (beszerzés)", "Eladási ár", "Kapcsolódó raktár", "Kapcsolódó helykód", "Bizonylat",
-             "Megjegyzés", "Ki"],
+             "Megjegyzés", "Ki", "Sorozatszám", "Garancia vége", "Okkód"],
         )
         name = "alkatresz_mozgasok"
     else:

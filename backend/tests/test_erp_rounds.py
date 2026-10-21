@@ -239,3 +239,49 @@ async def test_round3_stocktake_abc_reports_rights(client, admin):
     res = await client.post(f"/api/worktime/apply-measured/{t2['id']}/run", headers=adm)
     assert res.status_code == 200 and res.json()["hours_spent"] == 0.5  # 1800 s → 0,5 óra (negyedórára kerekítve)
     assert (await client.get(f"/api/tasks/{t2['id']}/worksheet", headers=adm)).json()["hours_spent"] == 0.5
+
+
+async def test_polish_permission_inheritance_and_alerts(client, admin, monkeypatch):
+    """Mentett (régi) jogosultság-mátrix parts nélkül → az elszámolás-jog
+    örökíti a raktáros jogot; visszáru és negatív korrekció min. alatt →
+    Telegram parts.low (csak a küszöb átlépésekor)."""
+    _, adm = admin
+    mgr_user, mgr_h = await make_user(email="regimatrix@example.com", role="manager")
+    res = await client.put("/api/settings/permissions", json={"matrix": {"manager": ["dashboard", "settlements"]}}, headers=adm)
+    assert res.status_code == 200, res.text
+    assert (await client.get("/api/parts/suppliers", headers=mgr_h)).status_code == 200
+    res = await client.put("/api/settings/permissions", json={"matrix": {"manager": ["dashboard"]}}, headers=adm)
+    assert res.status_code == 200
+    assert (await client.get("/api/parts/suppliers", headers=mgr_h)).status_code == 403
+
+    user, emp_h, emp = await _emp("alert@example.com")
+    central, van, part = await _setup(client, adm, user)  # összes 5, min 2
+    res = await client.put(
+        "/api/settings/notifications",
+        json={"daily_enabled": False, "send_hour": 6, "weekly_backup": False, "auto_receipt": False, "wa_enabled": False,
+              "tg_enabled": True, "tg_token": "123:abc", "tg_chat_ids": "-100555", "tg_events": ["parts.low"]},
+        headers=adm,
+    )
+    assert res.status_code == 200, res.text
+    sent: list[str] = []
+
+    async def fake_send(config, chat_id, text):
+        sent.append(text)
+        return True
+
+    import app.services.wfm.telegram as tg_mod
+
+    monkeypatch.setattr(tg_mod, "send_telegram", fake_send)
+    # korrekció 4 → 2 az autón: összes 3, még min (2) fölött → nincs riasztás
+    res = await client.post("/api/parts/adjust", json={"part_id": part["id"], "warehouse_id": van["id"], "quantity": 2, "reason": "damage"}, headers=adm)
+    assert res.status_code == 200 and sent == []
+    # visszáru 2 db az autóról: összes 1 < 2 → EGY riasztás
+    res = await client.post("/api/parts/returns", json={"part_id": part["id"], "warehouse_id": van["id"], "quantity": 2, "reason": "hibás"}, headers=adm)
+    assert res.status_code == 201, res.text
+    assert len(sent) == 1 and "min. alatt" in sent[0]
+    # további csökkenés már a küszöb alatt: nincs második
+    res = await client.post("/api/parts/adjust", json={"part_id": part["id"], "warehouse_id": central["id"], "location": "A-1", "quantity": 0, "reason": "theft"}, headers=adm)
+    assert res.status_code == 200 and len(sent) == 1
+    # export: sorozatszám / okkód oszlop
+    body = (await client.get("/api/parts/export.csv?what=movements", headers=adm)).content.decode("utf-8")
+    assert "Okkód" in body and ";theft" in body

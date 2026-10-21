@@ -46,6 +46,7 @@ export default function MunkaidoPage() {
   const [employee, setEmployee] = useState("");
   const [employees, setEmployees] = useState<EmployeeStat[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [now, setNow] = useState(0);  // a betöltés pillanata (a futó timer idővonalához)
   const [busy, setBusy] = useState(false);
   const [corrections, setCorrections] = useState<Correction[]>([]);
   const loadCorrections = useCallback(() => { api.get<Correction[]>("/api/worktime/corrections/list?status=pending").then(setCorrections).catch(() => setCorrections([])); }, []);
@@ -72,7 +73,7 @@ export default function MunkaidoPage() {
     setBusy(true);
     const q = `from=${from}&to=${to}${employee ? `&employee_id=${employee}` : ""}`;
     api.get<Stats>(`/api/worktime/stats/summary?${q}`)
-      .then((s) => { setStats(s); if (!employee) setEmployees(s.by_employee); })
+      .then((s) => { setStats(s); setNow(Date.now()); if (!employee) setEmployees(s.by_employee); })
       .catch((e) => toast(errorMessage(e), "error"))
       .finally(() => setBusy(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,7 +87,7 @@ export default function MunkaidoPage() {
   const timeline = (r: Row) => {
     if (!r.started_at || r.segments.length === 0) return null;
     const t0 = new Date(r.started_at).getTime();
-    const t1 = r.ended_at ? new Date(r.ended_at).getTime() : Date.now();
+    const t1 = r.ended_at ? new Date(r.ended_at).getTime() : now;
     const total = Math.max(1, t1 - t0);
     return (
       <div className="flex h-5 w-44 overflow-hidden rounded-md bg-slate-200" title={`${tm(r.started_at)} → ${tm(r.ended_at)}`}>
