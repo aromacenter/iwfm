@@ -1497,10 +1497,44 @@ ERROR_SOURCES = ("exception", "operation")
 
 
 def _error_out(e: VendingError) -> dict:
+    from app.services.wfm.vending_errors_kb import diagnose, strip_cjk
+
     return {
         "id": str(e.id), "source": e.source, "message": e.message, "count": e.count,
         "first_seen": e.first_seen, "last_seen": e.last_seen, "resolved_at": e.resolved_at,
+        # magyar diagnózis a tudástárból + a nyers sor kínai karakterek nélkül
+        "diagnosis": diagnose(e.source, e.message), "technical": strip_cjk(e.message),
     }
+
+
+@router.post(
+    "/machines/{machine_id}/errors/{error_id}/explain",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def explain_error(
+    machine_id: str,
+    error_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """AI-magyarázat egy naplósorra (ismeretlen mintákhoz) — ai_not_configured, ha nincs AI-kulcs."""
+    from app.services.wfm.vending_errors_kb import ai_explain
+
+    m = await _machine_or_404(db, machine_id)
+    try:
+        eid = uuid.UUID(error_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "vending.error_not_found"})
+    e = (await db.execute(select(VendingError).where(VendingError.id == eid, VendingError.machine_id == m.id))).scalar_one_or_none()
+    if e is None:
+        raise HTTPException(status_code=404, detail={"code": "vending.error_not_found"})
+    try:
+        text = await ai_explain(db, e.source, e.message, e.count)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "ai.not_configured"})
+    except Exception as exc:  # a szolgáltató hibája
+        raise HTTPException(status_code=502, detail={"code": "ai.failed", "message": str(exc)[:200]})
+    return {"explanation": text}
 
 
 class ErrorItem(BaseModel):

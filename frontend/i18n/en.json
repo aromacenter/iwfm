@@ -1992,7 +1992,10 @@
     "parts.labels_empty": "Nothing to print.",
     "worktime.correction_pending": "You already have a pending correction.",
     "worktime.no_timer": "No measured time for this worksheet.",
-    "worktime.not_found": "Correction not found."
+    "worktime.not_found": "Correction not found.",
+    "ai.not_configured": "No AI provider configured (Settings → AI).",
+    "ai.failed": "The AI provider returned an error.",
+    "vending.error_not_found": "Error not found."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -3126,7 +3129,14 @@
     "k.errors_today": "Errors today",
     "k.sales_today": "Sales today",
     "k.portions_today": "Portions today",
-    "k.heartbeat": "Heartbeat"
+    "k.heartbeat": "Heartbeat",
+    "sev.info": "log",
+    "sev.warn": "warning",
+    "sev.critical": "machine out of service",
+    "solution": "Solution",
+    "aiExplanation": "AI explanation",
+    "explainBtn": "🤖 Ask for explanation",
+    "technical": "technical detail"
   },
   "vpromo": {
     "title": "Vending promotion",

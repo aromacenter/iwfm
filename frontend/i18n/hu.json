@@ -1992,7 +1992,10 @@
     "parts.labels_empty": "Nincs mit nyomtatni.",
     "worktime.correction_pending": "Már van elbírálásra váró korrekciód.",
     "worktime.no_timer": "Ehhez a munkalaphoz nincs mért idő.",
-    "worktime.not_found": "A korrekció nem található."
+    "worktime.not_found": "A korrekció nem található.",
+    "ai.not_configured": "Nincs beállított AI-szolgáltató (Beállítások → AI).",
+    "ai.failed": "Az AI-szolgáltató hibát adott.",
+    "vending.error_not_found": "A hiba nem található."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -3126,7 +3129,14 @@
     "k.errors_today": "Hiba ma",
     "k.sales_today": "Bevétel ma",
     "k.portions_today": "Adag ma",
-    "k.heartbeat": "Heartbeat"
+    "k.heartbeat": "Heartbeat",
+    "sev.info": "napló",
+    "sev.warn": "figyelmeztetés",
+    "sev.critical": "a gép nem szolgál ki",
+    "solution": "Megoldás",
+    "aiExplanation": "AI-magyarázat",
+    "explainBtn": "🤖 Magyarázat kérése",
+    "technical": "technikai részlet"
   },
   "vpromo": {
     "title": "Vending promóció",
