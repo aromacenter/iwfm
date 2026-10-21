@@ -3088,7 +3088,8 @@
     "editStatus.pending": "⏳ waiting for machine",
     "editStatus.applied": "✅ on machine",
     "editStatus.failed": "❌ failed",
-    "pendingEdits": "Pending changes"
+    "pendingEdits": "Pending changes",
+    "dupButtons": "{n} button positions"
   },
   "vpromo": {
     "title": "Vending promotion",

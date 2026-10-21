@@ -3088,7 +3088,8 @@
     "editStatus.pending": "⏳ a gépre vár",
     "editStatus.applied": "✅ a gépen",
     "editStatus.failed": "❌ hiba",
-    "pendingEdits": "Függő módosítások"
+    "pendingEdits": "Függő módosítások",
+    "dupButtons": "{n} gomb-pozíció"
   },
   "vpromo": {
     "title": "Vending promóció",

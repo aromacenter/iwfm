@@ -645,9 +645,21 @@ export default function VendingTelemetriaPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {[...catalog.catalog.products]
-                        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                        .map((p, idx) => {
+                      {/* A gép termékfájljában ugyanaz az ital több gomb-pozíción is szerepelhet
+                          (azonos id + név + recept): egyszer mutatjuk, a pozíciók számával. */}
+                      {(() => {
+                        const sorted = [...catalog.catalog.products].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                        const seen = new Map<string, number[]>();
+                        const uniq: typeof sorted = [];
+                        for (const p of sorted) {
+                          const k = `${p.product_id ?? p.id}|${p.name}|${p.recipe ?? ""}|${p.price ?? ""}`;
+                          const hit = seen.get(k);
+                          if (hit) { hit.push(p.order ?? 0); continue; }
+                          seen.set(k, [p.order ?? 0]);
+                          uniq.push(p);
+                        }
+                        return uniq.map((p, idx) => {
+                          const positions = seen.get(`${p.product_id ?? p.id}|${p.name}|${p.recipe ?? ""}|${p.price ?? ""}`) ?? [];
                           const cat = catalog.catalog as Catalog;
                           const q = portions(p, cat);
                           const muted = p.enabled === false || p.visible === false;
@@ -699,6 +711,7 @@ export default function VendingTelemetriaPage() {
                                 {p.name_en && p.name_en !== p.name && <span className="ml-1 text-xs text-slate-400">({p.name_en})</span>}
                                 {p.visible === false && <span className="ml-1 rounded bg-slate-100 px-1 text-[10px]">{t("vtel.hidden")}</span>}
                                 {p.enabled === false && <span className="ml-1 rounded bg-rose-50 px-1 text-[10px] text-rose-600">{t("vtel.disabled")}</span>}
+                                {positions.length > 1 && <span className="ml-1 rounded bg-slate-100 px-1 text-[10px] text-slate-500" title={positions.join(", ")}>{t("vtel.dupButtons", { n: positions.length })}</span>}
                               </td>
                               <td className="py-1.5 pr-2 text-right tabular-nums">{ft(p.sale_price ?? p.price)}</td>
                               <td className="py-1.5 pr-2 text-right tabular-nums">{q.coffee || "—"}</td>
@@ -724,7 +737,7 @@ export default function VendingTelemetriaPage() {
                             </tr>
                             </Fragment>
                           );
-                        })}
+                        }); })()}
                     </tbody>
                   </table>
                 </div>
