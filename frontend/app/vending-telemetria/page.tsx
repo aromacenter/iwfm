@@ -6,6 +6,7 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import TelemetryHistory from "@/components/TelemetryHistory";
 import SearchSelect from "@/components/SearchSelect";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -840,28 +841,11 @@ export default function VendingTelemetriaPage() {
       {/* Telemetria-előzmények modal */}
       {history && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="relative max-h-[80vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative max-h-[88vh] w-full max-w-5xl space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
             <button type="button" onClick={() => setHistory(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">📜 {history.machine.name} — {t("vtel.history")}</h2>
-            {history.rows.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-400">{t("vtel.noHistory")}</p>
-            ) : (
-              <div className="space-y-2 text-sm">
-                {history.rows.map((r, i) => (
-                  <div key={i} className="rounded-xl border border-slate-100 p-2">
-                    <p className="text-xs text-slate-400">{fmt(r.created_at)}</p>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      {Object.entries(r.data).map(([k, v]) => (
-                        <span key={k} className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
-                          {k}: <b>{v === null || v === undefined ? "—" : String(v)}</b>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <TelemetryHistory rows={history.rows} />
             <div className="flex justify-end">
               <button onClick={() => setHistory(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
                 {t("common.close")}

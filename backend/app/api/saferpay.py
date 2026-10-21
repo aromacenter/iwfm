@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -559,16 +559,18 @@ async def delete_machine(
 )
 async def machine_telemetry_history(
     machine_id: str,
+    limit: int = Query(default=200, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("invoicing")),
 ):
+    """A gép jelentései (legfrissebb elöl) — a rendezett előzmény-nézethez."""
     m = await _machine_or_404(db, machine_id)
     rows = (
         await db.execute(
             select(VendingTelemetry)
             .where(VendingTelemetry.machine_id == m.id)
             .order_by(VendingTelemetry.created_at.desc())
-            .limit(50)
+            .limit(limit)
         )
     ).scalars().all()
     return [{"created_at": r.created_at, "data": r.data} for r in rows]
