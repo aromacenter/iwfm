@@ -86,3 +86,17 @@ Külön, de ugyanebben a körben:
 - A timer a dolgozóknak legyen látható (óra fut), vagy csak diszkrét jelzés? (A jegy „sunyi” módot kér —
   javaslat: a szerelő lássa, hogy fut, de a számokat csak a vezető.)
 - A külső szervizcégek szerelőinek is legyen autós raktára (ők saját alkatrészt hoznak)?
+
+## 7. Hiányelemzés más ERP-khez képest (2026-10-21)
+
+Viszonyítás: Odoo Inventory, Dynamics 365 Business Central, SAP Business One; a timerhez Odoo Field Service, Dynamics Field Service, ServiceTitan.
+
+**Készlet / raktár:** vonalkód-QR a helykódokra és cikkekre (szkennelés vételezésnél, áthelyezésnél, leltárnál — CameraScanner + qr_label.py újrahasznosítható); polcszint (3. dimenzió), zónák, betárolási szabály, kapacitás; sarzs / sorozatszám / lejárat + garancia példányonként; foglalás és szedőlista; úton lévő (in transit) készlet kiadás és átvétel között; raktáronkénti (autónkénti) min/max és feltöltési javaslat; karantén-hely, visszáru beszállítónak, garanciaigény; kit (szerviz-szett) és helyettesítő cikk; gép-kompatibilitási mátrix.
+
+**Beszerzés / költség:** beszállítói törzs (ma szöveg) árlistával és szállítási idővel; beszerzési rendelés + vételezés rendelésre, hátralék; újrarendelési javaslat; FIFO / mozgó átlagár és készletérték-riport (ma csak utolsó beszerzési ár); csomagolási egységek átváltása.
+
+**Leltár / riport / folyamat:** vak leltár, ABC ciklikus számolás, eltérés-jóváhagyás küszöb felett; korrekciós okkódok; riportok (fogyás gépenként / szerelőnként / cikkenként, forgás, halott készlet, öregedés, alkatrész-költség munkalaponként és ügyfelenként); gép-szintű beépítési történet felület (adat megvan: munkalap → gép → use-mozgás); raktáronkénti jogosultság, raktáros szerep; offline beépítés; könyvelési szinkron (Billingó tételek, készletérték).
+
+**Timer vs. field-service:** időtípusok (utazás / várakozás / munka), GPS-alapú automatikus indítás; számlázható idő és bér-modul kapcsolat; utólagos korrekció és vezetői jóváhagyás.
+
+**Javasolt sorrend (kávégép-szervizre méretezve):** 1) gép-szintű beépítési történet + sorozatszám + garancia; 2) vonalkód helykódra és cikkre; 3) autónkénti min/max + feltöltőlista; 4) beszállítói törzs + egyszerű rendelés + újrarendelési javaslat; 5) mozgó átlagár + készletérték-riport; 6) vak leltár okkódokkal; 7) offline beépítés a munkalap-várólista mintájára.
