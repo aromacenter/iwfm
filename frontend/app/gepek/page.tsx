@@ -129,6 +129,13 @@ export default function GepekPage() {
   const EMPTY_DEPLOY = { partner_id: "", note: "", site_zip: "", site_city: "", site_street: "", site_number: "" };
   const [deploy, setDeploy] = useState({ ...EMPTY_DEPLOY });
   const [historyFor, setHistoryFor] = useState<Asset | null>(null);
+  // Beépített alkatrészek (parts modul) — modul nélkül / jog nélkül üres marad
+  interface InstalledPart { movement_id: string; created_at: string; sku: string; name: string; quantity: number; unit: string; serial_no: string | null; warranty_until: string | null; warranty_active: boolean; worksheet_serial: string | null; actor_name: string | null }
+  const [installedParts, setInstalledParts] = useState<InstalledPart[] | null>(null);
+  useEffect(() => {
+    if (!historyFor) { setInstalledParts(null); return; }
+    api.get<InstalledPart[]>(`/api/parts/asset/${historyFor.id}/history`).then(setInstalledParts).catch(() => setInstalledParts(null));
+  }, [historyFor]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
@@ -1121,6 +1128,26 @@ export default function GepekPage() {
                   </li>
                 ))}
               </ul>
+            )}
+            {installedParts !== null && (
+              <div className="border-t border-slate-200 pt-3">
+                <p className="mb-1 text-sm font-semibold">{t("inv.partsHistory")} ({installedParts.length})</p>
+                {installedParts.length === 0 ? <p className="text-xs text-slate-400">{t("inv.partsHistoryEmpty")}</p> : (
+                  <ul className="space-y-1 text-sm">
+                    {installedParts.map((p) => (
+                      <li key={p.movement_id} className="flex items-start justify-between gap-2 border-b border-slate-100 pb-1">
+                        <div>
+                          <span className="font-mono text-xs text-slate-400">{p.sku}</span> {p.name} · {p.quantity} {p.unit}
+                          {p.serial_no && <span className="ml-1 text-xs text-slate-500">· gy.sz. {p.serial_no}</span>}
+                          {p.warranty_until && <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${p.warranty_active ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>{t("parts.warranty")} {p.warranty_until}</span>}
+                          <div className="text-xs text-slate-400">{p.worksheet_serial ?? ""}{p.actor_name && ` · 👤 ${p.actor_name}`}</div>
+                        </div>
+                        <span className="whitespace-nowrap text-xs text-slate-400">{fmt(p.created_at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
             {/* Fotók a gépről */}
             <div className="border-t border-slate-200 pt-3">

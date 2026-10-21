@@ -274,6 +274,10 @@ def create_app() -> FastAPI:
     app.include_router(stocktakes_api.router, prefix="/api/stocktakes", tags=["stocktakes"])
     from app.api import parts as parts_api
     app.include_router(parts_api.router, prefix="/api/parts", tags=["parts"])
+    from app.api import parts_ext as parts_ext_api
+    from app.api import parts_procurement as parts_proc_api
+    app.include_router(parts_ext_api.router, prefix="/api/parts", tags=["parts"])
+    app.include_router(parts_proc_api.router, prefix="/api/parts", tags=["parts"])
     from app.api import worktime as worktime_api
     app.include_router(worktime_api.router, prefix="/api/worktime", tags=["worktime"])
     from app.api import stock_requests as stock_requests_api

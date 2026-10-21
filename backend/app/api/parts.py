@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
@@ -25,7 +25,8 @@ from app.services.wfm.telegram import notify_event
 
 router = APIRouter(dependencies=[Depends(require_module("parts"))])
 
-MOVEMENT_KINDS = ("receipt", "issue", "use", "transfer", "adjust")
+MOVEMENT_KINDS = ("receipt", "issue", "use", "transfer", "adjust", "return", "scrap")
+ADJUST_REASONS = ("count_error", "damage", "theft", "expired", "other")
 _COL_RE = re.compile(r"^[A-Z0-9]{1,4}$")
 
 
@@ -41,8 +42,9 @@ def _uuid(raw: str, code: str) -> uuid.UUID:
 
 class WarehouseBody(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    kind: str = Field(default="central", pattern="^(central|vehicle)$")
+    kind: str = Field(default="central", pattern="^(central|vehicle|quarantine)$")
     owner_user_id: str | None = None
+    managers: list[str] = Field(default_factory=list, max_length=50)  # raktáronkénti jog (üres = mindenki parts-joggal)
     columns: list[str] = Field(default_factory=lambda: ["A", "B", "C"], max_length=60)
     rows: int = Field(default=10, ge=1, le=999)
     notes: str | None = Field(default=None, max_length=2000)
@@ -58,6 +60,7 @@ class WarehouseOut(BaseModel):
     rows: int
     notes: str | None
     is_active: bool
+    managers: list[str] = []
     part_count: int = 0
     total_qty: float = 0.0
 
@@ -73,6 +76,14 @@ def _normalize_columns(cols: list[str]) -> list[str]:
         if c not in out:
             out.append(c)
     return out
+
+
+def _can_manage(actor: User, wh: PartsWarehouse) -> None:
+    """Raktáronkénti jog: ha a raktárnak van kezelő-listája, csak ők (és az
+    admin) mozgathatnak benne — 403 parts.warehouse_forbidden."""
+    if actor.role == "admin" or not wh.managers or str(actor.id) in [str(m) for m in wh.managers]:
+        return
+    raise HTTPException(status_code=403, detail={"code": "parts.warehouse_forbidden"})
 
 
 async def _wh_or_404(db: AsyncSession, raw: str) -> PartsWarehouse:
@@ -95,6 +106,7 @@ async def _wh_out(db: AsyncSession, wh: PartsWarehouse) -> WarehouseOut:
         id=str(wh.id), name=wh.name, kind=wh.kind,
         owner_user_id=str(wh.owner_user_id) if wh.owner_user_id else None,
         columns=list(wh.columns or []), rows=wh.rows, notes=wh.notes, is_active=wh.is_active,
+        managers=[str(m) for m in (wh.managers or [])],
         part_count=int(cnt or 0), total_qty=float(total or 0.0),
     )
 
@@ -102,7 +114,7 @@ async def _wh_out(db: AsyncSession, wh: PartsWarehouse) -> WarehouseOut:
 @router.get("/warehouses", response_model=list[WarehouseOut])
 async def list_warehouses(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    _: User = Depends(require_perm("parts")),
 ):
     rows = (await db.execute(select(PartsWarehouse).order_by(PartsWarehouse.kind, PartsWarehouse.name))).scalars().all()
     return [await _wh_out(db, w) for w in rows]
@@ -113,12 +125,13 @@ async def create_warehouse(
     body: WarehouseBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
     wh = PartsWarehouse(
         name=body.name.strip(), kind=body.kind,
         owner_user_id=uuid.UUID(body.owner_user_id) if body.owner_user_id else None,
         columns=_normalize_columns(body.columns), rows=body.rows, notes=body.notes, is_active=body.is_active,
+        managers=[str(uuid.UUID(m)) for m in body.managers],
     )
     db.add(wh)
     await db.flush()
@@ -136,7 +149,7 @@ async def update_warehouse(
     body: WarehouseBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
     """Oszlop/sor csak bővíthető úgy, hogy használt helykód ne vesszen el."""
     wh = await _wh_or_404(db, warehouse_id)
@@ -153,6 +166,7 @@ async def update_warehouse(
     wh.name, wh.kind, wh.columns, wh.rows = body.name.strip(), body.kind, cols, body.rows
     wh.owner_user_id = uuid.UUID(body.owner_user_id) if body.owner_user_id else None
     wh.notes, wh.is_active = body.notes, body.is_active
+    wh.managers = [str(uuid.UUID(m)) for m in body.managers]
     await record_audit(
         db, actor=actor, action="parts.warehouse_updated", entity_type="parts_warehouse",
         entity_id=str(wh.id), detail={"name": wh.name, "columns": cols, "rows": wh.rows}, request=request,
@@ -192,6 +206,13 @@ class PartBody(BaseModel):
     supplier: str | None = Field(default=None, max_length=256)
     notes: str | None = Field(default=None, max_length=2000)
     is_active: bool = True
+    warranty_months: int | None = Field(default=None, ge=0, le=120)
+    supplier_id: str | None = None
+    reorder_qty: float | None = Field(default=None, ge=0)
+    pack_unit: str | None = Field(default=None, max_length=16)
+    pack_qty: float | None = Field(default=None, gt=0)
+    compatible_models: list[str] = Field(default_factory=list, max_length=50)
+    substitutes: list[str] = Field(default_factory=list, max_length=20)  # part id-k
 
 
 class PartOut(BaseModel):
@@ -208,6 +229,15 @@ class PartOut(BaseModel):
     is_active: bool
     total_qty: float = 0.0
     low: bool = False
+    warranty_months: int | None = None
+    supplier_id: str | None = None
+    reorder_qty: float | None = None
+    avg_cost: float | None = None
+    pack_unit: str | None = None
+    pack_qty: float | None = None
+    compatible_models: list[str] = []
+    substitutes: list[str] = []
+    abc_class: str | None = None
 
 
 def _part_out(p: Part, total: float = 0.0) -> PartOut:
@@ -215,6 +245,10 @@ def _part_out(p: Part, total: float = 0.0) -> PartOut:
         id=str(p.id), sku=p.sku, name=p.name, manufacturer_code=p.manufacturer_code, unit=p.unit,
         min_stock=p.min_stock, price_net=p.price_net, cost_net=p.cost_net, supplier=p.supplier,
         notes=p.notes, is_active=p.is_active, total_qty=total, low=p.min_stock > 0 and total < p.min_stock,
+        warranty_months=p.warranty_months, supplier_id=str(p.supplier_id) if p.supplier_id else None,
+        reorder_qty=p.reorder_qty, avg_cost=p.avg_cost, pack_unit=p.pack_unit, pack_qty=p.pack_qty,
+        compatible_models=list(p.compatible_models or []), substitutes=[str(x) for x in (p.substitutes or [])],
+        abc_class=p.abc_class,
     )
 
 
@@ -237,7 +271,7 @@ async def list_parts(
     q: str | None = Query(default=None, max_length=128),
     include_inactive: bool = False,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    _: User = Depends(require_perm("parts")),
 ):
     query = select(Part).order_by(Part.name)
     if not include_inactive:
@@ -254,7 +288,7 @@ async def create_part(
     body: PartBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
     sku = body.sku.strip().upper()
     dup = (await db.execute(select(Part).where(Part.sku == sku))).scalar_one_or_none()
@@ -264,6 +298,10 @@ async def create_part(
         sku=sku, name=body.name.strip(), manufacturer_code=body.manufacturer_code, unit=body.unit.strip() or "db",
         min_stock=body.min_stock, price_net=body.price_net, cost_net=body.cost_net, supplier=body.supplier,
         notes=body.notes, is_active=body.is_active,
+        warranty_months=body.warranty_months, supplier_id=uuid.UUID(body.supplier_id) if body.supplier_id else None,
+        reorder_qty=body.reorder_qty, pack_unit=(body.pack_unit or None), pack_qty=body.pack_qty,
+        compatible_models=[m.strip() for m in body.compatible_models if m.strip()],
+        substitutes=[str(uuid.UUID(x)) for x in body.substitutes],
     )
     db.add(p)
     await db.flush()
@@ -281,7 +319,7 @@ async def update_part(
     body: PartBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
     p = await _part_or_404(db, part_id)
     sku = body.sku.strip().upper()
@@ -292,6 +330,11 @@ async def update_part(
     p.sku, p.name, p.manufacturer_code, p.unit = sku, body.name.strip(), body.manufacturer_code, body.unit.strip() or "db"
     p.min_stock, p.price_net, p.cost_net, p.supplier = body.min_stock, body.price_net, body.cost_net, body.supplier
     p.notes, p.is_active = body.notes, body.is_active
+    p.warranty_months, p.reorder_qty = body.warranty_months, body.reorder_qty
+    p.supplier_id = uuid.UUID(body.supplier_id) if body.supplier_id else None
+    p.pack_unit, p.pack_qty = (body.pack_unit or None), body.pack_qty
+    p.compatible_models = [m.strip() for m in body.compatible_models if m.strip()]
+    p.substitutes = [str(uuid.UUID(x)) for x in body.substitutes if x != str(p.id)]
     await record_audit(
         db, actor=actor, action="parts.updated", entity_type="part", entity_id=str(p.id),
         detail={"sku": p.sku, "name": p.name}, request=request,
@@ -318,7 +361,7 @@ def _validate_location(wh: PartsWarehouse, location: str) -> str:
     """Helykód: "OSZLOP-SOR" (pl. B-12) a raktár oszlopai/sorai közül; autós
     raktárnál üres."""
     loc = (location or "").strip().upper()
-    if wh.kind == "vehicle" or not loc:
+    if wh.kind == "vehicle" or not loc or not (wh.columns or []):
         return ""
     col, sep, row = loc.partition("-")
     if not sep or col not in (wh.columns or []) or not row.isdigit() or not (1 <= int(row) <= wh.rows):
@@ -346,6 +389,8 @@ async def _move(
     actor: User, unit_cost: float | None = None, ref_wh: uuid.UUID | None = None,
     ref_location: str | None = None, worksheet_id: uuid.UUID | None = None,
     document_no: str | None = None, note: str | None = None, price_net: float | None = None,
+    serial_no: str | None = None, warranty_until: date | None = None, asset_id: uuid.UUID | None = None,
+    reason: str | None = None,
 ) -> PartsStock:
     """Egy mozgás: készlet-sor frissítése + append-only napló. Negatívba nem mehet."""
     row = await _stock_row(db, wh.id, part.id, location)
@@ -359,6 +404,7 @@ async def _move(
         part_id=part.id, warehouse_id=wh.id, location=location, kind=kind, quantity_delta=delta,
         unit_cost=unit_cost, ref_warehouse_id=ref_wh, ref_location=ref_location, worksheet_id=worksheet_id,
         document_no=document_no, note=note, actor_user_id=actor.id, price_net=price_net,
+        serial_no=(serial_no or None), warranty_until=warranty_until, asset_id=asset_id, reason=reason,
     ))
     return row
 
@@ -368,7 +414,7 @@ async def list_stock(
     warehouse_id: str | None = None,
     part_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    _: User = Depends(require_perm("parts")),
 ):
     query = (
         select(PartsStock, PartsWarehouse.name, Part.sku, Part.name, Part.unit)
@@ -398,6 +444,7 @@ class ReceiptBody(BaseModel):
     unit_cost: float | None = Field(default=None, ge=0)
     document_no: str | None = Field(default=None, max_length=64)
     note: str | None = Field(default=None, max_length=512)
+    in_packs: bool = False  # a quantity csomagban értendő (part.pack_qty-vel szorozva)
 
 
 @router.post("/receipt", response_model=StockOut, status_code=201)
@@ -405,27 +452,43 @@ async def receipt(
     body: ReceiptBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
-    """Vételezés szállítótól egy raktár egy helykódjára."""
+    """Vételezés szállítótól egy raktár egy helykódjára. Mozgó átlagár:
+    avg = (régi_össz × régi_avg + új × egységár) / (régi_össz + új)."""
     part = await _part_or_404(db, body.part_id)
     wh = await _wh_or_404(db, body.warehouse_id)
+    _can_manage(actor, wh)
     loc = _validate_location(wh, body.location)
+    qty = body.quantity * (part.pack_qty if body.in_packs and part.pack_qty else 1.0)
+    unit_cost = body.unit_cost / (part.pack_qty if body.in_packs and part.pack_qty and body.unit_cost is not None else 1.0) if body.unit_cost is not None else None
+    before = await _part_total(db, part.id)
     row = await _move(
-        db, part=part, wh=wh, location=loc, kind="receipt", delta=body.quantity, actor=actor,
-        unit_cost=body.unit_cost, document_no=body.document_no, note=body.note,
+        db, part=part, wh=wh, location=loc, kind="receipt", delta=qty, actor=actor,
+        unit_cost=unit_cost, document_no=body.document_no, note=body.note,
     )
-    if body.unit_cost is not None:
-        part.cost_net = body.unit_cost  # utolsó beszerzési ár
+    if unit_cost is not None:
+        _update_avg_cost(part, before, qty, unit_cost)  # ELŐBB az átlag (a régi cost_net a prior)
+        part.cost_net = unit_cost  # utolsó beszerzési ár
     await record_audit(
         db, actor=actor, action="parts.receipt", entity_type="part", entity_id=str(part.id),
-        detail={"warehouse": wh.name, "location": loc, "qty": body.quantity}, request=request,
+        detail={"warehouse": wh.name, "location": loc, "qty": qty}, request=request,
     )
     await db.commit()
     return StockOut(
         warehouse_id=str(wh.id), warehouse_name=wh.name, part_id=str(part.id), sku=part.sku, name=part.name,
         unit=part.unit, location=loc, quantity=row.quantity,
     )
+
+
+def _update_avg_cost(part: Part, before_total: float, qty: float, unit_cost: float) -> None:
+    """Mozgó átlagár frissítése vételezéskor."""
+    base = max(0.0, before_total)
+    prior = part.avg_cost if part.avg_cost is not None else part.cost_net  # első átlag: az addigi beszerzési ár
+    if base <= 0 or prior is None:
+        part.avg_cost = round(unit_cost, 2)
+    else:
+        part.avg_cost = round((base * prior + qty * unit_cost) / (base + qty), 2)
 
 
 class TransferBody(BaseModel):
@@ -443,13 +506,14 @@ async def transfer(
     body: TransferBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
     """Áthelyezés raktárak / helykódok között (pl. központi → szerelő autója).
     Két mozgás-sor: transfer − a forráson, transfer + a célon."""
     part = await _part_or_404(db, body.part_id)
     src = await _wh_or_404(db, body.from_warehouse_id)
     dst = await _wh_or_404(db, body.to_warehouse_id)
+    _can_manage(actor, src)
     from_loc = _validate_location(src, body.from_location)
     to_loc = _validate_location(dst, body.to_location)
     if src.id == dst.id and from_loc == to_loc:
@@ -477,6 +541,7 @@ class AdjustBody(BaseModel):
     location: str = ""
     quantity: float = Field(ge=0)  # a tényleges (számolt) mennyiség
     note: str | None = Field(default=None, max_length=512)
+    reason: str | None = Field(default=None, pattern="^(count_error|damage|theft|expired|other)$")
 
 
 @router.post("/adjust", response_model=StockOut)
@@ -484,17 +549,18 @@ async def adjust(
     body: AdjustBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
     """Leltári korrekció: a megadott tényleges mennyiségre állít (a különbség
     kerül a naplóba)."""
     part = await _part_or_404(db, body.part_id)
     wh = await _wh_or_404(db, body.warehouse_id)
+    _can_manage(actor, wh)
     loc = _validate_location(wh, body.location)
     row = await _stock_row(db, wh.id, part.id, loc)
     delta = round(body.quantity - row.quantity, 4)
     if abs(delta) > 1e-9:
-        row = await _move(db, part=part, wh=wh, location=loc, kind="adjust", delta=delta, actor=actor, note=body.note)
+        row = await _move(db, part=part, wh=wh, location=loc, kind="adjust", delta=delta, actor=actor, note=body.note, reason=body.reason)
     await record_audit(
         db, actor=actor, action="parts.adjust", entity_type="part", entity_id=str(part.id),
         detail={"warehouse": wh.name, "location": loc, "delta": delta}, request=request,
@@ -524,6 +590,9 @@ class MovementOut(BaseModel):
     document_no: str | None
     note: str | None
     actor_name: str | None
+    serial_no: str | None = None
+    warranty_until: date | None = None
+    reason: str | None = None
 
 
 @router.get("/movements", response_model=list[MovementOut])
@@ -532,7 +601,7 @@ async def list_movements(
     part_id: str | None = None,
     limit: int = Query(default=200, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    _: User = Depends(require_perm("parts")),
 ):
     query = (
         select(PartsMovement, Part.sku, Part.name, Part.unit, PartsWarehouse.name)
@@ -560,6 +629,7 @@ async def list_movements(
             ref_warehouse_name=wh_names.get(m.ref_warehouse_id) if m.ref_warehouse_id else None,
             ref_location=m.ref_location, document_no=m.document_no, note=m.note,
             actor_name=actors.get(m.actor_user_id) if m.actor_user_id else None,
+            serial_no=m.serial_no, warranty_until=m.warranty_until, reason=m.reason,
         )
         for m, sku, pn, unit, whn in rows
     ]
@@ -752,6 +822,8 @@ class UseBody(BaseModel):
     warehouse_id: str | None = None
     location: str = ""
     note: str | None = Field(default=None, max_length=512)
+    serial_no: str | None = Field(default=None, max_length=64)
+    warranty_until: date | None = None  # None = part.warranty_months a mai naptól
 
 
 async def _task_and_worksheet(db: AsyncSession, task_id: str) -> tuple[Task, Worksheet]:
@@ -782,7 +854,7 @@ async def use_part(
     bármely munkalapra. Az ügyfél-ár pillanatképe a mozgásra kerül."""
     part = await _part_or_404(db, body.part_id)
     task, ws = await _task_and_worksheet(db, body.task_id)
-    manager = await _has_perm(db, actor, "settlements")
+    manager = await _has_perm(db, actor, "parts")
     if manager and body.warehouse_id:
         wh = await _wh_or_404(db, body.warehouse_id)
     else:
@@ -794,9 +866,13 @@ async def use_part(
     loc = _validate_location(wh, body.location)
     before = await _part_total(db, part.id)
     price = body.price_net if body.price_net is not None else part.price_net
+    warranty = body.warranty_until
+    if warranty is None and part.warranty_months:
+        warranty = date.today() + timedelta(days=int(part.warranty_months * 30.44))
     await _move(
         db, part=part, wh=wh, location=loc, kind="use", delta=-body.quantity, actor=actor,
-        unit_cost=part.cost_net, price_net=price, worksheet_id=ws.id, note=body.note,
+        unit_cost=part.avg_cost if part.avg_cost is not None else part.cost_net, price_net=price,
+        worksheet_id=ws.id, note=body.note, serial_no=body.serial_no, warranty_until=warranty, asset_id=ws.asset_id,
     )
     await record_audit(
         db, actor=actor, action="parts.use", entity_type="worksheet", entity_id=str(ws.id),
@@ -823,7 +899,7 @@ async def unuse_part(
     ).scalar_one_or_none()
     if mv is None or mv.kind != "use" or mv.quantity_delta >= 0 or mv.worksheet_id is None:
         raise HTTPException(status_code=404, detail={"code": "parts.movement_not_found"})
-    if not await _has_perm(db, actor, "settlements"):
+    if not await _has_perm(db, actor, "parts"):
         own = await _own_vehicle(db, actor.id)
         if own is None or own.id != mv.warehouse_id:
             raise HTTPException(status_code=404, detail={"code": "parts.movement_not_found"})
@@ -838,7 +914,7 @@ async def unuse_part(
     wh = (await db.execute(select(PartsWarehouse).where(PartsWarehouse.id == mv.warehouse_id))).scalar_one()
     await _move(
         db, part=part, wh=wh, location=mv.location, kind="use", delta=-mv.quantity_delta, actor=actor,
-        worksheet_id=mv.worksheet_id, document_no=str(mv.id), note="storno",
+        worksheet_id=mv.worksheet_id, document_no=str(mv.id), note="storno", asset_id=mv.asset_id,
     )
     await record_audit(
         db, actor=actor, action="parts.unuse", entity_type="worksheet", entity_id=str(mv.worksheet_id),
@@ -914,7 +990,7 @@ async def list_parts_requests(
     q = select(PartsRequest).order_by(PartsRequest.created_at.desc()).limit(200)
     if status:
         q = q.where(PartsRequest.status == status)
-    if not await _has_perm(db, actor, "settlements"):
+    if not await _has_perm(db, actor, "parts"):
         q = q.where(PartsRequest.requester_user_id == actor.id)
     return await _requests_out(db, (await db.execute(q)).scalars().all())
 
@@ -932,7 +1008,7 @@ async def issue_parts_request(
     body: IssueBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
     """Jóváhagyás + kiadás helykódról: `issue` mozgás (− a forráson, + az
     autón) — a készlet AZONNAL a szerelő autójára kerül, ő csak nyugtázza."""
@@ -941,6 +1017,7 @@ async def issue_parts_request(
         raise HTTPException(status_code=422, detail={"code": "parts.request_decided"})
     part = (await db.execute(select(Part).where(Part.id == req.part_id))).scalar_one()
     src = await _wh_or_404(db, body.from_warehouse_id)
+    _can_manage(actor, src)
     dst = (await db.execute(select(PartsWarehouse).where(PartsWarehouse.id == req.warehouse_id))).scalar_one()
     if src.id == dst.id:
         raise HTTPException(status_code=422, detail={"code": "parts.same_location"})
@@ -977,7 +1054,7 @@ async def decline_parts_request(
     body: DeclineBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
     req = await _req_or_404(db, request_id)
     if req.status != "pending":
@@ -1051,6 +1128,7 @@ class CountRow(BaseModel):
     part_id: str
     location: str = ""
     quantity: float = Field(ge=0)
+    reason: str | None = Field(default=None, pattern="^(count_error|damage|theft|expired|other)$")
 
 
 class StocktakeBody(BaseModel):
@@ -1103,7 +1181,7 @@ async def _apply_counts(
         if abs(delta) < 1e-9:
             continue
         expected = row.quantity
-        await _move(db, part=part, wh=wh, location=loc, kind="adjust", delta=delta, actor=actor, note=note)
+        await _move(db, part=part, wh=wh, location=loc, kind="adjust", delta=delta, actor=actor, note=note, reason=c.reason or "count_error")
         diffs.append(StocktakeDiff(
             part_id=str(part.id), sku=part.sku, name=part.name, location=loc,
             expected=expected, counted=c.quantity, delta=delta,
@@ -1115,7 +1193,7 @@ async def _apply_counts(
 async def stocktake_sheet(
     warehouse_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    _: User = Depends(require_perm("parts")),
 ):
     """Leltárív: a raktár nyilvántartott sorai helykódonként (ezt számolják)."""
     return await _sheet_rows(db, await _wh_or_404(db, warehouse_id))
@@ -1126,10 +1204,11 @@ async def stocktake(
     body: StocktakeBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("parts")),
 ):
     """Leltár könyvelése egy raktárra: a számolt mennyiségek → korrekciók."""
     wh = await _wh_or_404(db, body.warehouse_id)
+    _can_manage(actor, wh)
     note = f"leltár: {body.note.strip()}" if body.note and body.note.strip() else "leltár"
     out = await _apply_counts(db, wh, body.counts, actor, note)
     await record_audit(
@@ -1180,13 +1259,22 @@ def _csv(rows: list[list], header: list[str]) -> Response:
 
 @router.get("/export.csv")
 async def export_csv(
-    what: str = Query(default="stock", pattern="^(stock|movements|parts)$"),
+    what: str = Query(default="stock", pattern="^(stock|movements|parts|valuation)$"),
     warehouse_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    _: User = Depends(require_perm("parts")),
 ):
     """CSV export: készlet helykódonként | mozgásnapló | cikktörzs."""
-    if what == "parts":
+    if what == "valuation":
+        totals = await _totals(db)
+        parts = (await db.execute(select(Part).where(Part.is_active.is_(True)).order_by(Part.sku))).scalars().all()
+        resp = _csv(
+            [[p.sku, p.name, float(totals.get(p.id, 0.0)), p.unit, p.avg_cost if p.avg_cost is not None else p.cost_net,
+              round(float(totals.get(p.id, 0.0)) * float(p.avg_cost if p.avg_cost is not None else (p.cost_net or 0.0)), 2)] for p in parts],
+            ["Cikkszám", "Megnevezés", "Készlet", "Egység", "Átlagár (nettó)", "Készletérték (nettó)"],
+        )
+        name = "alkatresz_keszletertek"
+    elif what == "parts":
         totals = await _totals(db)
         parts = (await db.execute(select(Part).order_by(Part.sku))).scalars().all()
         resp = _csv(

@@ -50,7 +50,7 @@ async def test_worktime_timer_and_stats(client, admin):
     res = await client.post(f"/api/worktime/{task['id']}/start", headers=emp_h)
     assert res.status_code == 200, res.text
     st = res.json()
-    assert st["state"] == "running" and st["started_at"] and set(st) == {"state", "started_at", "pause_count"}
+    assert st["state"] == "running" and st["started_at"] and set(st) == {"state", "started_at", "pause_count", "mode", "correction_status"}
     assert (await client.post(f"/api/worktime/{task['id']}/start", headers=emp_h)).json()["state"] == "running"
     assert (await client.post(f"/api/worktime/{task['id']}/pause", headers=emp_h)).json()["state"] == "paused"
     assert (await client.post(f"/api/worktime/{task['id']}/resume", headers=emp_h)).json()["pause_count"] == 1

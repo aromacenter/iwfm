@@ -21,6 +21,7 @@ interface Req {
   issued_from_name: string | null; issued_from_location: string | null; issued_quantity: number | null;
   received_at: string | null; created_at: string;
 }
+interface Replenish { part_id: string; sku: string; name: string; unit: string; min_qty: number; max_qty: number; quantity: number; suggested: number }
 interface MyWarehouse { warehouse_id: string | null; warehouse_name: string | null; stock: StockRow[]; requests: Req[]; catalog: CatalogItem[] }
 
 const REQ_CHIP: Record<Req["status"], string> = {
@@ -40,9 +41,11 @@ export default function SajatAlkatreszekPage() {
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<{ part_id: string; quantity: string; note: string } | null>(null);
   const [count, setCount] = useState<Record<string, string> | null>(null);
+  const [replenish, setReplenish] = useState<Replenish[]>([]);
 
   const load = useCallback(() => {
     api.get<MyWarehouse>("/api/parts/my-warehouse").then(setWh).catch((e) => toast(errorMessage(e), "error"));
+    api.get<Replenish[]>("/api/parts/my-replenish").then(setReplenish).catch(() => setReplenish([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -60,6 +63,20 @@ export default function SajatAlkatreszekPage() {
       await api.post("/api/parts/requests", { part_id: form.part_id, quantity: Number(form.quantity.replace(",", ".")) || 0, note: form.note || null });
       toast(t("myParts.sent"), "success");
       setForm(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function requestAll() {
+    if (replenish.length === 0) return;
+    setBusy(true);
+    try {
+      const r = await api.post<{ created: number }>("/api/parts/requests/bulk", { items: replenish.map((x) => ({ part_id: x.part_id, quantity: x.suggested })) });
+      toast(t("myParts.requested", { n: r.created }), "success");
       load();
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -142,6 +159,23 @@ export default function SajatAlkatreszekPage() {
                     </tr>
                   ))}
                 </tbody>
+              </table>
+            )}
+          </section>
+
+          {/* ── Feltöltőlista (autónkénti min/max) ── */}
+          <section className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-sm lg:col-span-2">
+            <div className="mb-1 flex items-center gap-3">
+              <h2 className="font-semibold">{t("myParts.replenish")}</h2>
+              <span className="text-[11px] text-slate-500">{t("myParts.replenishHint")}</span>
+              {replenish.length > 0 && <button disabled={busy} onClick={() => void requestAll()} className="ml-auto rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{t("myParts.requestAll")} ({replenish.length})</button>}
+            </div>
+            {replenish.length === 0 ? <p className="py-3 text-center text-sm text-slate-400">{t("myParts.replenishEmpty")}</p> : (
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="px-2 py-1.5">{t("parts.sku")}</th><th className="px-2 py-1.5">{t("parts.name")}</th><th className="px-2 py-1.5 text-right">{t("parts.quantity")}</th><th className="px-2 py-1.5 text-right">{t("parts.levelMin")} / {t("parts.levelMax")}</th><th className="px-2 py-1.5 text-right">{t("myParts.suggested")}</th></tr></thead>
+                <tbody>{replenish.map((r) => (
+                  <tr key={r.part_id} className="border-b border-slate-100"><td className="px-2 py-1.5 font-mono text-xs text-slate-500">{r.sku}</td><td className="px-2 py-1.5">{r.name}</td><td className="px-2 py-1.5 text-right tabular-nums text-rose-700">{r.quantity} {r.unit}</td><td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{r.min_qty} / {r.max_qty}</td><td className="px-2 py-1.5 text-right tabular-nums font-semibold">{r.suggested} {r.unit}</td></tr>
+                ))}</tbody>
               </table>
             )}
           </section>

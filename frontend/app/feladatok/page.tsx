@@ -406,7 +406,7 @@ export default function FeladatokPage() {
     maintenance_fee: number | null;
     fee_discount: boolean;
     invoiced: boolean;
-    timer?: { state: string; first_started_at: string | null; last_ended_at: string | null; active_seconds: number; pause_seconds: number; pause_count: number } | null;
+    timer?: { state: string; first_started_at: string | null; last_ended_at: string | null; active_seconds: number; pause_seconds: number; pause_count: number; travel_seconds?: number; wait_seconds?: number } | null;
     customer_note: string | null;
     quote_status: "none" | "sent" | "accepted" | "declined";
     quote_email: string | null;
@@ -1087,6 +1087,11 @@ export default function FeladatokPage() {
                   {tmr.pause_count > 0 && <> · {tmr.pause_count}× {t("tasks.timerPauses")} ({dur(tmr.pause_seconds)})</>}
                   {written != null && <> · {t("tasks.timerWritten")}: {written} ó</>}
                   {ratio != null && <> · {t("tasks.timerRatio")}: <b className={ratio < 70 ? "text-rose-300" : ratio < 85 ? "text-amber-300" : "text-emerald-300"}>{ratio} %</b></>}
+                  {(tmr.travel_seconds ?? 0) > 0 && <> · {t("tasks.timerTravel")} {dur(tmr.travel_seconds ?? 0)}</>}
+                  {(tmr.wait_seconds ?? 0) > 0 && <> · {t("tasks.timerWait")} {dur(tmr.wait_seconds ?? 0)}</>}
+                  {tmr.state === "stopped" && !priceEdit.ws.invoiced && (
+                    <button type="button" onClick={async () => { try { const r = await api.post<{ hours_spent: number }>(`/api/worktime/apply-measured/${priceEdit.task.id}/run`, {}); toast(t("tasks.applyMeasuredDone", { h: r.hours_spent }), "success"); setPriceEdit({ ...priceEdit, ws: { ...priceEdit.ws, hours_spent: r.hours_spent } }); } catch (err) { toast(errorMessage(err), "error"); } }} className="ml-2 rounded-lg bg-white/10 px-2 py-0.5 text-[11px] font-medium hover:bg-white/20">{t("tasks.applyMeasured")}</button>
+                  )}
                 </p>
               );
             })()}

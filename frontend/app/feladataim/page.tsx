@@ -80,10 +80,13 @@ interface UsedPart {
   quantity: number;
   price_net: number | null;
   warehouse_name: string;
+  serial_no?: string | null;
 }
 interface MyPartsStock { part_id: string; sku: string; name: string; unit: string; quantity: number }
 // Munkaidő-mérés (worktime modul): a dolgozó csak az állapotot látja, számokat nem.
-interface TimerState { state: "running" | "paused" | "stopped" | "none"; started_at: string | null; pause_count: number }
+interface TimerState { state: "running" | "paused" | "stopped" | "none"; started_at: string | null; pause_count: number; mode?: "work" | "travel" | "wait"; correction_status?: string }
+interface Kit { id: string; sku: string; name: string; items: { sku: string; name: string; quantity: number; unit: string }[] }
+interface PartsQueueItem { task_id: string; part_id: string; sku: string; quantity: number; serial_no: string | null; queued_at: string }
 
 interface WorkRow {
   name: string;
@@ -158,7 +161,10 @@ export default function FeladataimPage() {
   // null = nincs parts modul / nincs autós raktár → a blokk nem jelenik meg.
   const [myParts, setMyParts] = useState<MyPartsStock[] | null>(null);
   const [usedParts, setUsedParts] = useState<UsedPart[]>([]);
-  const [partPick, setPartPick] = useState<{ part_id: string; quantity: string }>({ part_id: "", quantity: "1" });
+  const [partPick, setPartPick] = useState<{ part_id: string; quantity: string; serial_no: string }>({ part_id: "", quantity: "1", serial_no: "" });
+  const [kits, setKits] = useState<Kit[]>([]);
+  const [kitPick, setKitPick] = useState("");
+  const [pendingParts, setPendingParts] = useState(0);
   const [partsBusy, setPartsBusy] = useState(false);
   const [timer, setTimer] = useState<TimerState | null>(null);
   const [wsError, setWsError] = useState<string | null>(null);
@@ -343,7 +349,8 @@ export default function FeladataimPage() {
     setRedoSig({ emp: false, client: false });
     setWsTask(task);
     setUsedParts([]);
-    setPartPick({ part_id: "", quantity: "1" });
+    setPartPick({ part_id: "", quantity: "1", serial_no: "" });
+    api.get<Kit[]>("/api/parts/kits").then(setKits).catch(() => setKits([]));
     // Munkaidő-mérés: a megnyitás indítja (idempotens); modul nélkül 403 → nincs sáv
     setTimer(null);
     api.post<TimerState>(`/api/worktime/${task.id}/start`, {}).then(setTimer).catch(() => setTimer(null));
@@ -605,21 +612,106 @@ export default function FeladataimPage() {
   }
 
   // ── beépített alkatrészek (saját autós raktárból, azonnali könyvelés) ──
+  // Offline beépítés-várólista: hálózat nélkül a beépítés helyben sorban áll,
+  // online-ra érve beküldődik (a szerver-oldali szabályok ugyanúgy élnek).
+  const PARTS_QUEUE_KEY = "iwfm-parts-queue";
+  function readPartsQueue(): PartsQueueItem[] {
+    try { return JSON.parse(localStorage.getItem(PARTS_QUEUE_KEY) ?? "[]") as PartsQueueItem[]; } catch { return []; }
+  }
+  function writePartsQueue(q: PartsQueueItem[]) {
+    try { localStorage.setItem(PARTS_QUEUE_KEY, JSON.stringify(q)); } catch { /* tárhely-hiba */ }
+  }
+  const flushPartsQueue = useCallback(async () => {
+    let q = readPartsQueue();
+    setPendingParts(q.length);
+    if (q.length === 0) return;
+    let sent = 0;
+    while (q.length > 0) {
+      const item = q[0];
+      try {
+        await api.post("/api/parts/use", { task_id: item.task_id, part_id: item.part_id, quantity: item.quantity, serial_no: item.serial_no });
+        sent += 1; q = q.slice(1); writePartsQueue(q);
+      } catch (err) {
+        if (err instanceof ApiError) {
+          toast(t("myTasks.wsPartsDropped", { sku: item.sku, reason: errorMessage(err) }), "error");
+          q = q.slice(1); writePartsQueue(q);
+        } else {
+          break;
+        }
+      }
+    }
+    setPendingParts(q.length);
+    if (sent > 0) toast(t("myTasks.wsPartsFlushed", { count: sent }), "success");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast, t]);
+  useEffect(() => {
+    flushPartsQueue();
+    const onOnline = () => flushPartsQueue();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [flushPartsQueue]);
+
   async function installPart() {
     if (!wsTask || !partPick.part_id) return;
     setPartsBusy(true);
+    const body = { task_id: wsTask.id, part_id: partPick.part_id, quantity: Number(partPick.quantity.replace(",", ".")) || 0, serial_no: partPick.serial_no.trim() || null };
     try {
-      const rows = await api.post<UsedPart[]>("/api/parts/use", {
-        task_id: wsTask.id, part_id: partPick.part_id, quantity: Number(partPick.quantity.replace(",", ".")) || 0,
-      });
+      const rows = await api.post<UsedPart[]>("/api/parts/use", body);
       setUsedParts(rows);
-      setPartPick({ part_id: "", quantity: "1" });
+      setPartPick({ part_id: "", quantity: "1", serial_no: "" });
+      const r = await api.get<{ warehouse_id: string | null; stock: MyPartsStock[] }>("/api/parts/my-warehouse");
+      setMyParts(r.warehouse_id ? r.stock : null);
+    } catch (err) {
+      if (!(err instanceof ApiError)) {
+        const sku = myParts?.find((s) => s.part_id === body.part_id)?.sku ?? "?";
+        const q = readPartsQueue();
+        q.push({ ...body, sku, queued_at: new Date().toISOString() });
+        writePartsQueue(q);
+        setPendingParts(q.length);
+        setPartPick({ part_id: "", quantity: "1", serial_no: "" });
+        toast(t("myTasks.wsPartsQueued"), "info");
+      } else {
+        toast(errorMessage(err), "error");
+      }
+    } finally {
+      setPartsBusy(false);
+    }
+  }
+
+  async function installKit() {
+    if (!wsTask || !kitPick) return;
+    setPartsBusy(true);
+    try {
+      setUsedParts(await api.post<UsedPart[]>("/api/parts/use-kit", { task_id: wsTask.id, kit_id: kitPick }));
+      setKitPick("");
       const r = await api.get<{ warehouse_id: string | null; stock: MyPartsStock[] }>("/api/parts/my-warehouse");
       setMyParts(r.warehouse_id ? r.stock : null);
     } catch (err) {
       toast(errorMessage(err), "error");
     } finally {
       setPartsBusy(false);
+    }
+  }
+
+  async function setTimerMode(mode: "work" | "travel" | "wait") {
+    if (!wsTask || !timer) return;
+    try { setTimer(await api.post<TimerState>(`/api/worktime/${wsTask.id}/mode:${mode}`, {})); }
+    catch (err) { toast(errorMessage(err), "error"); }
+  }
+
+  async function requestCorrection() {
+    if (!wsTask) return;
+    const raw = await prompt(t("myTasks.timerCorrectionPrompt"));
+    if (!raw) return;
+    const [minsRaw, ...rest] = raw.split(";");
+    const mins = Number(String(minsRaw).replace(",", "."));
+    const note = rest.join(";").trim();
+    if (!Number.isFinite(mins) || mins === 0 || note.length < 3) { toast(t("myTasks.timerCorrectionPrompt"), "error"); return; }
+    try {
+      setTimer(await api.post<TimerState>(`/api/worktime/correction/${wsTask.id}/request`, { seconds: Math.round(mins * 60), note }));
+      toast(t("myTasks.timerCorrectionSent"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -965,9 +1057,19 @@ export default function FeladataimPage() {
                 <span className="font-medium">{timer.state === "paused" ? t("myTasks.timerPaused") : t("myTasks.timerRunning")}</span>
                 <span className="text-slate-400">· {t("myTasks.timerHint")}</span>
                 {timer.state !== "stopped" && (
-                  <button type="button" onClick={() => void toggleTimer()} className="ml-auto rounded-lg bg-white/10 px-2.5 py-1 font-medium hover:bg-white/20">
-                    {timer.state === "paused" ? t("myTasks.timerResume") : t("myTasks.timerPause")}
-                  </button>
+                  <span className="ml-auto flex flex-wrap items-center gap-1">
+                    {(["travel", "work", "wait"] as const).map((m) => (
+                      <button key={m} type="button" onClick={() => void setTimerMode(m)} className={`rounded-lg px-2 py-1 ${(timer.mode ?? "work") === m ? "bg-indigo-500 text-white" : "bg-white/10 hover:bg-white/20"}`}>{t(`myTasks.mode.${m}`)}</button>
+                    ))}
+                    <button type="button" onClick={() => void toggleTimer()} className="rounded-lg bg-white/10 px-2.5 py-1 font-medium hover:bg-white/20">
+                      {timer.state === "paused" ? t("myTasks.timerResume") : t("myTasks.timerPause")}
+                    </button>
+                  </span>
+                )}
+                {timer.state === "stopped" && (
+                  timer.correction_status === "pending"
+                    ? <span className="ml-auto text-amber-300">{t("myTasks.timerCorrectionPending")}</span>
+                    : <button type="button" onClick={() => void requestCorrection()} className="ml-auto rounded-lg bg-white/10 px-2.5 py-1 font-medium hover:bg-white/20">{t("myTasks.timerCorrection")}</button>
                 )}
               </div>
             )}
@@ -1253,7 +1355,7 @@ export default function FeladataimPage() {
                     <tbody>
                       {usedParts.map((u) => (
                         <tr key={u.movement_id} className="border-b border-slate-200">
-                          <td className="py-1 pr-2"><span className="font-mono text-[11px] text-slate-400">{u.sku}</span> {u.name}</td>
+                          <td className="py-1 pr-2"><span className="font-mono text-[11px] text-slate-400">{u.sku}</span> {u.name}{u.serial_no && <span className="ml-1 text-[11px] text-slate-400">· {u.serial_no}</span>}</td>
                           <td className="py-1 pr-2 text-right tabular-nums">{u.quantity} {u.unit}</td>
                           <td className="py-1 pr-2 text-right tabular-nums text-slate-500">{u.price_net != null ? `${u.price_net.toLocaleString("hu-HU")} Ft` : ""}</td>
                           <td className="py-1 text-right">
@@ -1279,6 +1381,12 @@ export default function FeladataimPage() {
                     onChange={(e) => setPartPick({ ...partPick, quantity: e.target.value })}
                     className="w-16 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                   />
+                  <input
+                    value={partPick.serial_no}
+                    onChange={(e) => setPartPick({ ...partPick, serial_no: e.target.value })}
+                    placeholder={t("myTasks.wsPartsSerial")}
+                    className="w-32 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
                   <button
                     type="button"
                     disabled={partsBusy || !partPick.part_id}
@@ -1288,6 +1396,16 @@ export default function FeladataimPage() {
                     {t("myTasks.wsPartsAdd")}
                   </button>
                 </div>
+                {kits.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <select value={kitPick} onChange={(e) => setKitPick(e.target.value)} className="min-w-[12rem] flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
+                      <option value="">{t("myTasks.wsKit")}</option>
+                      {kits.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.items.map((i) => `${i.sku}×${i.quantity}`).join(", ")})</option>)}
+                    </select>
+                    <button type="button" disabled={partsBusy || !kitPick} onClick={() => void installKit()} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">{t("myTasks.wsKitAdd")}</button>
+                  </div>
+                )}
+                {pendingParts > 0 && <p className="mt-1 text-[11px] text-amber-700">📴 {t("myTasks.wsPartsPending", { count: pendingParts })}</p>}
               </div>
             )}
 

@@ -11,8 +11,9 @@ import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
 
-interface Segment { kind: "work" | "pause"; start: string; end: string | null }
-interface EmployeeStat { employee_id: string | null; name: string; worksheets: number; written_hours: number; active_seconds: number; pause_seconds: number; ratio: number | null }
+interface Segment { kind: "work" | "travel" | "wait" | "pause"; start: string; end: string | null }
+interface EmployeeStat { employee_id: string | null; name: string; worksheets: number; written_hours: number; active_seconds: number; pause_seconds: number; ratio: number | null; work_seconds: number; travel_seconds: number; wait_seconds: number; correction_seconds: number }
+interface Correction { timer_id: string; task_id: string; serial: string; title: string; name: string; seconds: number; note: string | null; status: string; requested_at: string | null; active_seconds: number; written_hours: number | null }
 interface Row {
   worksheet_id: string; task_id: string; serial: string; title: string; employee_id: string | null; name: string; state: string;
   started_at: string | null; ended_at: string | null; written_hours: number | null; active_seconds: number; pause_seconds: number; pause_count: number; segments: Segment[];
@@ -46,6 +47,13 @@ export default function MunkaidoPage() {
   const [employees, setEmployees] = useState<EmployeeStat[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [busy, setBusy] = useState(false);
+  const [corrections, setCorrections] = useState<Correction[]>([]);
+  const loadCorrections = useCallback(() => { api.get<Correction[]>("/api/worktime/corrections/list?status=pending").then(setCorrections).catch(() => setCorrections([])); }, []);
+  useEffect(() => { loadCorrections(); }, [loadCorrections]);
+  async function decide(c: Correction, d: "approve" | "reject") {
+    try { await api.post(`/api/worktime/corrections/${c.timer_id}/${d}`, {}); toast(t("worktime.corrDecided"), "success"); loadCorrections(); load(); }
+    catch (e) { toast(errorMessage(e), "error"); }
+  }
 
   const dur = (sec: number) => {
     const h = Math.floor(sec / 3600); const m = Math.round((sec % 3600) / 60);
@@ -85,7 +93,7 @@ export default function MunkaidoPage() {
         {r.segments.map((s, i) => {
           const a = new Date(s.start).getTime(); const b = s.end ? new Date(s.end).getTime() : t1;
           const w = Math.max(1, ((b - a) / total) * 100);
-          return <div key={i} style={{ width: `${w}%` }} className={s.kind === "pause" ? "bg-amber-400" : "bg-indigo-600"} />;
+          return <div key={i} style={{ width: `${w}%` }} className={s.kind === "pause" ? "bg-amber-400" : s.kind === "travel" ? "bg-sky-400" : s.kind === "wait" ? "bg-slate-400" : "bg-indigo-600"} />;
         })}
       </div>
     );
@@ -118,7 +126,24 @@ export default function MunkaidoPage() {
           {employees.filter((e) => e.employee_id).map((e) => <option key={e.employee_id!} value={e.employee_id!}>{e.name}</option>)}
         </select>
         {busy && <span className="text-xs text-slate-400">…</span>}
+        <a href={`/api/worktime/stats/payroll.csv?from=${from}&to=${to}`} className="ml-auto rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-100">{t("worktime.payrollCsv")}</a>
       </div>
+
+      {corrections.length > 0 && (
+        <section className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <h2 className="mb-2 font-semibold text-amber-900">{t("worktime.corrections")} ({corrections.length})</h2>
+          <div className="space-y-2">
+            {corrections.map((c) => (
+              <div key={c.timer_id} className="flex flex-wrap items-center gap-3 rounded-xl bg-white px-3 py-2 text-sm">
+                <span className="font-mono text-xs">{c.serial}</span><span className="font-medium">{c.name}</span><span className="text-slate-500">{c.title}</span>
+                <span className={`font-semibold tabular-nums ${c.seconds >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{c.seconds >= 0 ? "+" : ""}{Math.round(c.seconds / 60)} p</span>
+                <span className="text-xs text-slate-500">„{c.note}” · {t("worktime.col.active")}: {dur(c.active_seconds)}{c.written_hours != null && ` · ${t("worktime.col.written")}: ${hrs(c.written_hours)}`}</span>
+                <span className="ml-auto flex gap-1.5"><button onClick={() => void decide(c, "approve")} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700">{t("worktime.approve")}</button><button onClick={() => void decide(c, "reject")} className="rounded-lg border border-rose-300 px-2.5 py-1 text-xs text-rose-700 hover:bg-rose-50">{t("worktime.reject")}</button></span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {stats && (
         <>
@@ -137,7 +162,7 @@ export default function MunkaidoPage() {
               {stats.by_employee.length === 0 ? <p className="py-6 text-center text-sm text-slate-400">{t("worktime.empty")}</p> : (
                 <table className="w-full text-sm">
                   <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-2 py-1.5">{t("worktime.col.employee")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.worksheets")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.written")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.active")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.ratio")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.pause")}</th>
+                    <th className="px-2 py-1.5">{t("worktime.col.employee")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.worksheets")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.written")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.active")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.travel")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.ratio")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.pause")}</th>
                   </tr></thead>
                   <tbody>
                     {stats.by_employee.map((e) => (
@@ -145,7 +170,8 @@ export default function MunkaidoPage() {
                         <td className="px-2 py-1.5 font-medium">{e.name}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{e.worksheets}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{hrs(e.written_hours)}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{dur(e.active_seconds)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{dur(e.active_seconds)}{e.correction_seconds !== 0 && <span className="ml-1 text-[10px] text-slate-400">({t("worktime.corrected")} {e.correction_seconds >= 0 ? "+" : ""}{Math.round(e.correction_seconds / 60)} p)</span>}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{dur(e.travel_seconds)}{e.wait_seconds > 0 && <span className="block text-[10px]">⏳ {dur(e.wait_seconds)}</span>}</td>
                         <td className="px-2 py-1.5 text-right"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${pill(e.ratio)}`}>{pct(e.ratio)}</span></td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{dur(e.pause_seconds)}</td>
                       </tr>
@@ -180,6 +206,8 @@ export default function MunkaidoPage() {
               <p className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
                 <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-white">{t("worktime.legend.work")}</span>
                 <span className="rounded-full bg-amber-400 px-2 py-0.5 text-black">{t("worktime.legend.pause")}</span>
+                <span className="rounded-full bg-sky-400 px-2 py-0.5 text-black">{t("worktime.legend.travel")}</span>
+                <span className="rounded-full bg-slate-400 px-2 py-0.5 text-white">{t("worktime.legend.wait")}</span>
               </p>
             </section>
           </div>

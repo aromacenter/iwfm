@@ -8,7 +8,7 @@ mezőben az eredeti mozgás azonosítójával (append-only napló, nincs törlé
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -28,6 +28,8 @@ class UsedPartOut(BaseModel):
     cost_net: float | None  # beszerzési ár (belső)
     warehouse_name: str
     created_at: datetime
+    serial_no: str | None = None
+    warranty_until: date | None = None
 
 
 async def used_parts_for_worksheet(db: AsyncSession, worksheet_id: uuid.UUID) -> list[UsedPartOut]:
@@ -45,7 +47,7 @@ async def used_parts_for_worksheet(db: AsyncSession, worksheet_id: uuid.UUID) ->
         UsedPartOut(
             movement_id=str(m.id), part_id=str(p.id), sku=p.sku, name=p.name, unit=p.unit,
             quantity=round(-m.quantity_delta, 4), price_net=m.price_net, cost_net=m.unit_cost,
-            warehouse_name=whn, created_at=m.created_at,
+            warehouse_name=whn, created_at=m.created_at, serial_no=m.serial_no, warranty_until=m.warranty_until,
         )
         for m, p, whn in rows
         if m.quantity_delta < 0 and str(m.id) not in reversed_ids
@@ -56,7 +58,9 @@ def used_parts_as_materials(items: list[UsedPartOut]) -> list[dict]:
     """A beépített alkatrészek anyag-sorként (munkalap PDF / ajánlat)."""
     return [
         {
-            "name": f"{u.name} ({u.sku})", "qty": f"{u.quantity:g}", "unit": u.unit,
+            "name": f"{u.name} ({u.sku})" + (f" · gy.sz. {u.serial_no}" if u.serial_no else "")
+                    + (f" · garancia {u.warranty_until:%Y.%m.%d}-ig" if u.warranty_until else ""),
+            "qty": f"{u.quantity:g}", "unit": u.unit,
             "price_net": u.price_net, "cost_net": u.cost_net,
         }
         for u in items

@@ -48,13 +48,14 @@ FEATURES = (
     "my_schedule",    # saját beosztás (önkiszolgáló)
     "my_tasks",       # saját feladatok/munkalap (önkiszolgáló)
     "delete",         # törlés funkciók (alapból csak admin)
+    "parts",          # alkatrész-raktár kezelése (raktáros) — a parts modulhoz
 )
 
 DEFAULT_MATRIX: dict[str, list[str]] = {
     "manager": [
         "dashboard", "tasks", "schedule", "attendance", "timeoff", "employees",
         "partners", "machines", "products", "settlements", "invoicing",
-        "agent_report", "service", "import_export", "payroll",
+        "agent_report", "service", "import_export", "payroll", "parts",
     ],
     "uzletkoto": [
         "dashboard", "partners", "machines", "products", "settlements",

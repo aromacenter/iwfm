@@ -983,7 +983,7 @@ class PartsWarehouse(Base):
 
     __tablename__ = "parts_warehouses"
     __table_args__ = (
-        CheckConstraint("kind IN ('central','vehicle')", name="ck_parts_wh_kind"),
+        CheckConstraint("kind IN ('central','vehicle','quarantine')", name="ck_parts_wh_kind"),
         Index("ix_parts_warehouses_name", "name"),
     )
 
@@ -997,6 +997,8 @@ class PartsWarehouse(Base):
     rows: Mapped[int] = mapped_column(Integer, nullable=False, default=10)  # 1..rows (bővíthető)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Raktáronkénti jog: ha nem üres, csak ezek a user-ek (és az admin) mozgathatnak itt
+    managers: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -1022,6 +1024,18 @@ class Part(Base):
     supplier: Mapped[str | None] = mapped_column(String(256), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # ERP-körök: garancia (hónap), preferált beszállító, újrarendelési célszint,
+    # mozgó átlagár, csomagolási egység (1 pack_unit = pack_qty unit),
+    # kompatibilis géptípusok, helyettesítő cikkek (id-k), ABC-osztály.
+    warranty_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    reorder_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pack_unit: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    pack_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    compatible_models: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    substitutes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    abc_class: Mapped[str | None] = mapped_column(String(1), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -1058,7 +1072,8 @@ class PartsMovement(Base):
 
     __tablename__ = "parts_movements"
     __table_args__ = (
-        CheckConstraint("kind IN ('receipt','issue','use','transfer','adjust')", name="ck_parts_mv_kind"),
+        CheckConstraint("kind IN ('receipt','issue','use','transfer','adjust','return','scrap')", name="ck_parts_mv_kind"),
+        Index("ix_parts_movements_asset", "asset_id"),
         Index("ix_parts_movements_wh", "warehouse_id", "created_at"),
         Index("ix_parts_movements_part", "part_id", "created_at"),
     )
@@ -1083,6 +1098,12 @@ class PartsMovement(Base):
     document_no: Mapped[str | None] = mapped_column(String(64), nullable=True)  # szállítólevél
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    # beépítésnél: példány sorozatszáma, garancia vége, a gép (a munkalapból)
+    serial_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    warranty_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    # korrekció okkódja: count_error | damage | theft | expired | other
+    reason: Mapped[str | None] = mapped_column(String(24), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -1151,12 +1172,205 @@ class WorksheetTimer(Base):
     pause_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     first_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Utólagos korrekció (szerelő kéri, vezető hagyja jóvá): ± másodperc
+    correction_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    correction_note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    correction_status: Mapped[str] = mapped_column(String(12), nullable=False, default="none")
+    correction_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    correction_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class PartsVehicleLevel(Base):
+    """Autónkénti min/max szint egy cikkre — a feltöltőlista alapja."""
+
+    __tablename__ = "parts_vehicle_levels"
+    __table_args__ = (UniqueConstraint("warehouse_id", "part_id", name="uq_pvl_wh_part"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts_warehouses.id", ondelete="CASCADE", name="fk_pvl_wh"), nullable=False
+    )
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts.id", ondelete="CASCADE", name="fk_pvl_part"), nullable=False
+    )
+    min_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    max_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+
+class PartsSupplier(Base):
+    """Beszállítói törzs."""
+
+    __tablename__ = "parts_suppliers"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    contact: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    lead_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PartsSupplierPrice(Base):
+    """Beszállítói árlista: cikk × beszállító → nettó ár, beszállítói cikkszám, MOQ."""
+
+    __tablename__ = "parts_supplier_prices"
+    __table_args__ = (UniqueConstraint("supplier_id", "part_id", name="uq_psp_supplier_part"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    supplier_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts_suppliers.id", ondelete="CASCADE", name="fk_psp_supplier"), nullable=False
+    )
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts.id", ondelete="CASCADE", name="fk_psp_part"), nullable=False
+    )
+    price_net: Mapped[float] = mapped_column(Float, nullable=False)
+    supplier_sku: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    moq: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    lead_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PartsPurchaseOrder(Base):
+    """Beszerzési rendelés: draft → ordered → partial → received | cancelled."""
+
+    __tablename__ = "parts_purchase_orders"
+    __table_args__ = (
+        UniqueConstraint("number", name="uq_ppo_number"),
+        CheckConstraint("status IN ('draft','ordered','partial','received','cancelled')", name="ck_ppo_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    number: Mapped[str] = mapped_column(String(20), nullable=False)  # PO-2026-0001
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("parts_suppliers.id", ondelete="SET NULL", name="fk_ppo_supplier"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="draft")
+    expected_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PartsPurchaseItem(Base):
+    __tablename__ = "parts_purchase_items"
+    __table_args__ = (Index("ix_ppi_po", "po_id"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    po_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts_purchase_orders.id", ondelete="CASCADE", name="fk_ppi_po"), nullable=False
+    )
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts.id", ondelete="CASCADE", name="fk_ppi_part"), nullable=False
+    )
+    qty_ordered: Mapped[float] = mapped_column(Float, nullable=False)
+    qty_received: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class PartsReturn(Base):
+    """Visszáru / garanciaigény a beszállító felé: open → sent → credited |
+    replaced | rejected | scrapped. Létrehozáskor a tétel `return` mozgással
+    kikerül a készletből."""
+
+    __tablename__ = "parts_returns"
+    __table_args__ = (
+        CheckConstraint("status IN ('open','sent','credited','replaced','rejected','scrapped')", name="ck_pret_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts.id", ondelete="CASCADE", name="fk_pret_part"), nullable=False
+    )
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("parts_suppliers.id", ondelete="SET NULL", name="fk_pret_supplier"), nullable=True
+    )
+    warehouse_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("parts_warehouses.id", ondelete="SET NULL", name="fk_pret_wh"), nullable=True
+    )
+    location: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    serial_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="open")
+    outcome_note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PartsKit(Base):
+    """Szerviz-szett: több cikk egy tételként (pl. éves karbantartó készlet)."""
+
+    __tablename__ = "parts_kits"
+    __table_args__ = (UniqueConstraint("sku", name="uq_parts_kits_sku"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    sku: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class PartsKitItem(Base):
+    __tablename__ = "parts_kit_items"
+    __table_args__ = (UniqueConstraint("kit_id", "part_id", name="uq_pki_kit_part"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    kit_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts_kits.id", ondelete="CASCADE", name="fk_pki_kit"), nullable=False
+    )
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts.id", ondelete="CASCADE", name="fk_pki_part"), nullable=False
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+
+
+class PartsStocktake(Base):
+    """Leltár-munkamenet: vak számolás (a számoló nem látja a nyilvántartást),
+    hatókör (all | A | B | C ABC-osztály), beküldés → jóváhagyás okkódokkal.
+    rows: [{part_id, location, sku, name, unit, expected, counted|None, reason|None}]."""
+
+    __tablename__ = "parts_stocktakes"
+    __table_args__ = (
+        CheckConstraint("status IN ('open','submitted','approved','cancelled')", name="ck_pst_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("parts_warehouses.id", ondelete="CASCADE", name="fk_pst_wh"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    blind: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False, default="all")
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="open")
+    threshold_pct: Mapped[float] = mapped_column(Float, nullable=False, default=10.0)
+    rows: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class VendingAsset(Base):
