@@ -251,7 +251,8 @@ async def create_handover_invoice(
     *,
     serial: str,
     items: list[dict],
-    payment_method: str,  # "cash" | "card"
+    payment_method: str,  # "cash" | "card" | "transfer"
+    due_days: int | None = None,
     vat_percent: int = 27,
 ) -> tuple[str, str]:
     """Szerviz-átadás számlázása a helyszínen (azonnali teljesítés/fizetés)."""
@@ -262,7 +263,7 @@ async def create_handover_invoice(
     today = date.today()
     xml = _invoice_xml(
         agent_key, prefix, test_mode=test_mode,
-        payment_method=payment_method, due=today,
+        payment_method=payment_method, due=today + timedelta(days=due_days or 0),
         vevo=_vevo_xml(partner),
         tetelek=[
             _tetel_xml(f"{it['name']} ({serial})", 1, "db", it["amount_net"], vat_percent)

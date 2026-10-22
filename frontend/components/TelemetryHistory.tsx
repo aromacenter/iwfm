@@ -15,9 +15,10 @@ export interface TelemetryRow {
 
 const SYSTEM_KEYS = ["agent", "android", "jetinno_app", "uptime_min", "ram_free_mb", "ram_total_mb", "disk_free_mb", "reported_at"];
 const NET_KEYS = ["net", "net_kbps", "ip", "ssid", "net_log_at"];
-const TRAFFIC_KEYS = ["orders_today", "order_log_at", "errors_today", "sales_today", "portions_today"];
+const TRAFFIC_KEYS = ["orders_today", "drinks_ok_today", "counter_total", "counter_days", "order_log_at", "errors_today", "sales_today", "portions_today"];
+const LIST_KEYS = ["products_today", "pay_today"];
 const HB_KEYS = ["heartbeat"];
-const KNOWN = new Set([...SYSTEM_KEYS, ...NET_KEYS, ...TRAFFIC_KEYS, ...HB_KEYS]);
+const KNOWN = new Set([...SYSTEM_KEYS, ...NET_KEYS, ...TRAFFIC_KEYS, ...HB_KEYS, ...LIST_KEYS]);
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
@@ -124,7 +125,19 @@ export default function TelemetryHistory({ rows }: { rows: TelemetryRow[] }) {
           {card(t("vtel.k.disk_free_mb"), gb(num(L.disk_free_mb)), undefined, (num(L.disk_free_mb) ?? 99999) < 500 ? "text-rose-700" : "")}
           {card(t("vtel.k.orders_today"), str(L.orders_today), L.order_log_at ? `${t("vtel.k.order_log_at")}: ${str(L.order_log_at)}` : undefined)}
           {card(t("vtel.k.errors_today"), str(L.errors_today), undefined, (num(L.errors_today) ?? 0) > 0 ? "text-rose-700" : "text-emerald-700")}
+          {L.counter_total !== undefined && card(t("vtel.counter"), (num(L.counter_total) ?? 0).toLocaleString(loc), L.counter_days !== undefined ? t("vtel.counterDays", { n: str(L.counter_days) }) : undefined)}
+          {L.drinks_ok_today !== undefined && card(t("vtel.k.drinks_ok_today"), str(L.drinks_ok_today), typeof L.pay_today === "object" && L.pay_today ? Object.entries(L.pay_today as Record<string, number>).map(([k, v]) => `${k}: ${v}`).join(" · ") : undefined)}
         </div>
+        {Array.isArray(L.products_today) && (L.products_today as { id: number; key: string; count: number }[]).length > 0 && (
+          <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-slate-500">{t("vtel.hist.productsToday")}</div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {(L.products_today as { id: number; key: string; count: number }[]).map((p) => (
+                <span key={p.id} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs">{(p.key || String(p.id)).replace(/_/g, " ")} <b>×{p.count}</b></span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Trendek ── */}

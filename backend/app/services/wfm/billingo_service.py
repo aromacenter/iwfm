@@ -431,8 +431,9 @@ async def create_handover_invoice(
     *,
     serial: str,
     items: list[dict],
-    payment_method: str,  # "cash" | "bankcard"
+    payment_method: str,  # "cash" | "card" | "transfer"
     vat_percent: int = 27,
+    due_days: int | None = None,  # átutalásnál a fizetési határidő (nap)
 ) -> tuple[str, str]:
     """Szerviz-átadás számlázása a helyszínen: azonnali teljesítés/fizetés,
     készpénz vagy bankkártya. ``items``: [{name, amount_net}].
@@ -451,8 +452,8 @@ async def create_handover_invoice(
         "block_id": block_id,
         "type": doc_type,
         "fulfillment_date": today.isoformat(),
-        "due_date": today.isoformat(),
-        "payment_method": "bankcard" if payment_method == "card" else "cash",
+        "due_date": (today + timedelta(days=due_days or 0)).isoformat(),
+        "payment_method": {"card": "bankcard", "transfer": "wire_transfer"}.get(payment_method, "cash"),
         "language": "hu",
         "currency": "HUF",
         "electronic": False,

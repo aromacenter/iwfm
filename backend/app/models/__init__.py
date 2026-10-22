@@ -51,6 +51,8 @@ from app.models.models import (  # noqa: F401
     VendingMachine,
     AgentRelease,
     VendingAsset,
+    VendingSalesDay,
+    VendingSalesProduct,
     VendingError,
     VendingFile,
     VendingPromo,

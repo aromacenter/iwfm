@@ -521,7 +521,11 @@
     "lateFeeBanner": "Debt overdue by 30+ days — a 10% late fee is applied to every line (T&C).",
     "lateFeeDetail": "Overdue: settlement {date}, due {due}, remaining {amount}.",
     "lateFeeWaive": "Waive the late fee for THIS settlement",
-    "lateFeeWaiveHint": "Waiving is logged and managers are notified."
+    "lateFeeWaiveHint": "Waiving is logged and managers are notified.",
+    "invoiceEmails": "Invoice recipient",
+    "invoiceEmailsPh": "e.g. accounting@partner.com, boss@partner.com",
+    "invoiceEmailsHint": "The invoice goes to these addresses (comma-separated). Empty = partner's e-mail.",
+    "replenishGls": "Replenish as a GLS parcel (opens the Parcels page)"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1995,7 +1999,10 @@
     "worktime.not_found": "Correction not found.",
     "ai.not_configured": "No AI provider configured (Settings → AI).",
     "ai.failed": "The AI provider returned an error.",
-    "vending.error_not_found": "Error not found."
+    "vending.error_not_found": "Error not found.",
+    "vending.bad_command": "Unknown command.",
+    "tasks.reschedule_note_required": "Changing the due date requires a reason.",
+    "settlement.bad_invoice_email": "Invalid invoice e-mail address."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2237,7 +2244,8 @@
     "swapNewCountersHint": "The next settlement counts consumption from these.",
     "swapPricesTitle": "Per-counter prices (suggested from the replaced machine)",
     "partsHistory": "🔩 Installed parts",
-    "partsHistoryEmpty": "No parts installed in this machine yet."
+    "partsHistoryEmpty": "No parts installed in this machine yet.",
+    "newLabelConfirm": "New machine saved ({barcode}). Queue the barcode label on the Godex printer?"
   },
   "wh": {
     "title": "Warehouse",
@@ -2573,7 +2581,20 @@
     "more": "+{n} more…",
     "taskCount": "{n} task(s)",
     "tlGap": "no tasks from {from} ({n} days)",
-    "tlEmpty": "No scheduled tasks in the next 4 weeks."
+    "tlEmpty": "No scheduled tasks in the next 4 weeks.",
+    "search": "Search the calendar…",
+    "searchHits": "{n} matches",
+    "edit": "Edit",
+    "editTitle": "Schedule task",
+    "dueDate": "Due date",
+    "rescheduleNote": "Reason for rescheduling",
+    "rescheduleNotePh": "e.g. customer asked, Tuesday suits them",
+    "rescheduleNoteRequired": "Changing the due date requires a reason (min. 3 characters).",
+    "visitWindow": "Visit window (when to go)",
+    "visitWindowPh": "e.g. 8–10 am, mornings only",
+    "partnerWindow": "Window saved on the partner: {w}",
+    "saveWindowPartner": "Save the window on the partner too (shown on future tasks)",
+    "saved": "Task saved."
   },
   "worksheet": {
     "empty": "Provide a description or at least one work item.",
@@ -2641,7 +2662,9 @@
     "officePrintQueued": "Receipt queued — printing on the office printer.",
     "loaner": "Loaner machine (optional)",
     "loanerPh": "barcode or scan QR",
-    "loanerHint": "Added to the worksheet automatically when the task is created."
+    "loanerHint": "Added to the worksheet automatically when the task is created.",
+    "ownMachineHint": "Own tangible machine — no customer, contact details are optional.",
+    "worksheetAuto": "Worksheet created automatically: {title}"
   },
   "handover": {
     "title": "Handover",
@@ -2661,7 +2684,10 @@
     "submitDiscount": "Handover with discount",
     "submitHint": "After handover the machine is marked handed over, the worksheet closes and the task completes.",
     "doneInvoiced": "{serial} handed over — Billingo invoice created, worksheet closed.",
-    "doneDiscount": "{serial} handed over with discount — worksheet closed."
+    "doneDiscount": "{serial} handed over with discount — worksheet closed.",
+    "transfer": "Bank transfer",
+    "dueDays": "Payment due",
+    "dueDaysUnit": "days (default 8)"
   },
   "gls": {
     "title": "GLS shipping",
@@ -2870,7 +2896,10 @@
     "costHint": "Bought with their own money — added to the amount due.",
     "costSaved": "Cost recorded on the technician's balance.",
     "worksheetLinkHint": "Task details — what happened, what's next.",
-    "technicianHint": "The technician within the company"
+    "technicianHint": "The technician within the company",
+    "payCash": "Cash",
+    "payTransfer": "Transfer",
+    "payTransferHint": "With a transfer the payout is booked on the technician's ledger, no cash leaves the register — the technician invoices it."
   },
   "stk": {
     "title": "Stocktake",
@@ -3136,7 +3165,47 @@
     "solution": "Solution",
     "aiExplanation": "AI explanation",
     "explainBtn": "🤖 Ask for explanation",
-    "technical": "technical detail"
+    "technical": "technical detail",
+    "sales": "Sales",
+    "salesTitle": "{name} — Sales (per drink)",
+    "salesEmpty": "No daily sales yet: agent 3.5+ sends it from the order log (daily + at boot).",
+    "counter": "Counter",
+    "counterDays": "{n} days of logs",
+    "drinksToday": "{n} drinks today",
+    "salesDays": "Days",
+    "salesProducts": "Drinks",
+    "salesTotal": "Total",
+    "salesOrders": "Orders",
+    "salesOk": "Drinks made",
+    "salesPay": "Payment",
+    "salesCsv": "⬇ CSV",
+    "salesRange": "Range",
+    "d7": "7 days",
+    "d30": "30 days",
+    "d90": "90 days",
+    "hist.productsToday": "Today's drinks",
+    "k.drinks_ok_today": "Drinks made today",
+    "k.counter_total": "Counter (all drinks made)",
+    "k.counter_days": "Log days",
+    "k.pay_today": "Payment today",
+    "k.products_today": "Drinks today",
+    "online": "online",
+    "offline": "offline",
+    "pingNow": "📡 Now",
+    "pingNowHint": "Full report + errors + promo + recipes + images at the next ping (≤ 5 min)",
+    "queued": "Pending: {list}",
+    "queuedToast": "Command sent — the machine runs it at its next heartbeat (≤ 5 min).",
+    "geoIp": "by IP",
+    "geoAgent": "device location",
+    "map": "map",
+    "noLocation": "no location yet (agent 3.5+ sends it; IP estimate when the machine reports from a public address)",
+    "cmd.report": "report",
+    "cmd.errors": "errors",
+    "cmd.promos": "promo",
+    "cmd.recipes": "recipes",
+    "cmd.catalog": "catalog",
+    "cmd.assets": "images",
+    "cmd.update": "update"
   },
   "vpromo": {
     "title": "Vending promotion",

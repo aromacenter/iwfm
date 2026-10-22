@@ -548,6 +548,10 @@ async def cash_overview(
         (await db.execute(select(User.id).where(User.is_active.is_(True)))).scalars().all()
     )
     all_ids = set(rev_rows) | exp_users | active_users
+    # Képviselő (és minden nem admin/manager): CSAK a saját kasszája (e16fec86)
+    if actor.role not in ("admin", "manager"):
+        all_ids = {actor.id}
+        user_id = None
     if user_id:
         try:
             all_ids = {uuid.UUID(user_id)}
@@ -829,18 +833,20 @@ async def business_drill(
 )
 async def central_recipients(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    actor: User = Depends(get_current_user),
 ):
-    """A "Pénz leadása" címzettjei: admin és manager felhasználók — az
-    adminnál landolt pénz leadottnak számít (b5a36526)."""
+    """A "Pénz átadása" címzettjei: admin, manager ÉS képviselő (üzletkötő)
+    felhasználók — a saját magunkat kivéve (2817884b: képviselő képviselőnek is
+    adhat át); az adminnál landolt pénz leadottnak számít (b5a36526)."""
     rows = (
         await db.execute(
-            select(User).where(User.role.in_(("admin", "manager")), User.is_active.is_(True))
+            select(User).where(User.role.in_(("admin", "manager", "uzletkoto")), User.is_active.is_(True), User.id != actor.id)
         )
     ).scalars().all()
+    order = {"admin": 0, "manager": 1, "uzletkoto": 2}
     return [
         {"user_id": str(u.id), "name": u.display_name, "role": u.role}
-        for u in sorted(rows, key=lambda x: (x.role != "admin", x.display_name))
+        for u in sorted(rows, key=lambda x: (order.get(x.role, 9), x.display_name or ""))
     ]
 
 

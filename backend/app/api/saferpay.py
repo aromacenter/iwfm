@@ -9,8 +9,9 @@ a Saferpay felé pollozni tilos), és fizetve-állapotnál kiadja az italt.
 
 from __future__ import annotations
 
+import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
@@ -36,6 +37,7 @@ from app.models import (
 )
 from app.services.wfm import saferpay_service
 from app.services.wfm.license import require_module
+from app.models import VendingSalesDay, VendingSalesProduct
 from app.services.wfm.saferpay_service import ORDER_TTL_MINUTES, SaferpayError
 
 router = APIRouter()        # /api/saferpay — belépéshez kötött
@@ -371,6 +373,13 @@ class MachineOut(BaseModel):
     paid_today: int = 0
     revenue_today: float = 0.0
     open_errors: int = 0
+    drinks_today: int | None = None  # sikeres italok ma (a gép naplójából)
+    counter_total: int | None = None  # halmozott számláló (minden napló)
+    online: bool = False  # az utolsó életjel 15 percen belül
+    pending_commands: list[str] = []
+    ip: str | None = None
+    geo: dict | None = None  # IP-alapú becslés
+    location: dict | None = None  # az ügynök helymeghatározása (lat, lon, src, acc_m)
 
 
 def _machine_out(
@@ -381,7 +390,89 @@ def _machine_out(
         api_key=m.api_key, is_active=m.is_active, last_seen_at=m.last_seen_at,
         telemetry=m.telemetry, paid_today=paid_today, revenue_today=revenue_today,
         open_errors=open_errors,
+        drinks_today=_int_or_none((m.telemetry or {}).get("drinks_ok_today")),
+        counter_total=_int_or_none((m.telemetry or {}).get("counter_total")),
+        online=bool(m.last_seen_at and (datetime.now(UTC) - _aware(m.last_seen_at)).total_seconds() < ONLINE_WINDOW_S),
+        pending_commands=list(m.pending_commands or []), ip=m.ip, geo=m.geo,
+        location=_location_of(m.telemetry or {}),
     )
+
+
+ONLINE_WINDOW_S = 15 * 60
+AGENT_COMMANDS = ("report", "errors", "promos", "recipes", "catalog", "assets", "update")
+
+
+def _location_of(t: dict) -> dict | None:
+    lat, lon = t.get("lat"), t.get("lon")
+    if lat is None or lon is None:
+        return None
+    try:
+        return {"lat": float(lat), "lon": float(lon), "src": t.get("loc_src"), "acc_m": _int_or_none(t.get("loc_acc_m"))}
+    except (TypeError, ValueError):
+        return None
+
+
+def _client_ip(request: Request) -> str | None:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()[:64]
+    return request.client.host[:64] if request.client else None
+
+
+def _is_private_ip(ip: str) -> bool:
+    import ipaddress
+
+    try:
+        return ipaddress.ip_address(ip).is_private or ipaddress.ip_address(ip).is_loopback
+    except ValueError:
+        return True
+
+
+async def _geo_lookup(ip: str) -> dict | None:
+    """IP → város/ország/koordináta (ip-api.com, best-effort, 5 s). Env GEOIP_URL
+    formátum: '...{ip}...'; üres sztring = kikapcsolva."""
+    import os
+
+    import httpx
+
+    url_tpl = os.environ.get("GEOIP_URL", "http://ip-api.com/json/{ip}?fields=status,country,countryCode,city,regionName,lat,lon,isp")
+    if not url_tpl:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(url_tpl.format(ip=ip))
+            j = r.json()
+        if j.get("status") not in (None, "success"):
+            return None
+        return {"ip": ip, "city": j.get("city"), "region": j.get("regionName"), "country": j.get("countryCode") or j.get("country"),
+                "lat": j.get("lat"), "lon": j.get("lon"), "isp": j.get("isp"), "at": datetime.now(UTC).isoformat()}
+    except Exception:  # pragma: no cover
+        return None
+
+
+async def _note_ip(m: VendingMachine, request: Request) -> None:
+    """A gép publikus IP-je + IP-alapú hely, csak ha az IP változott."""
+    ip = _client_ip(request)
+    if not ip or _is_private_ip(ip):
+        return
+    if m.ip != ip or not m.geo or m.geo.get("ip") != ip:
+        m.ip = ip
+        geo = await _geo_lookup(ip)
+        if geo:
+            m.geo = geo
+
+
+def _take_commands(m: VendingMachine) -> list[str]:
+    cmds = [c for c in (m.pending_commands or []) if c in AGENT_COMMANDS]
+    m.pending_commands = []
+    return cmds
+
+
+def _int_or_none(v) -> int | None:
+    try:
+        return int(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 async def _machine_or_404(db: AsyncSession, machine_id: str) -> VendingMachine:
@@ -664,6 +755,132 @@ async def machine_catalog(
     except ValueError:
         raise HTTPException(status_code=422, detail={"code": "vending.catalog_invalid"})
     return {"updated_at": r.created_at, "catalog": catalog}
+
+
+async def _product_names(db: AsyncSession, m: VendingMachine) -> dict[int, str]:
+    """Ital id → név a legutóbbi katalógusból (ha nincs, a nameKey marad)."""
+    r = (
+        await db.execute(
+            select(VendingFile).where(VendingFile.machine_id == m.id, VendingFile.kind == "catalog")
+            .order_by(VendingFile.created_at.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    out: dict[int, str] = {}
+    if r is None:
+        return out
+    try:
+        for p in (json.loads(r.text).get("products") or []):
+            pid = _int_or_none(p.get("product_id") if p.get("product_id") is not None else p.get("id"))
+            if pid is not None and p.get("name") and pid not in out:
+                out[pid] = str(p["name"])
+            pid2 = _int_or_none(p.get("id"))
+            if pid2 is not None and p.get("name") and pid2 not in out:
+                out[pid2] = str(p["name"])
+    except ValueError:
+        pass
+    return out
+
+
+def _pretty_key(key: str) -> str:
+    return (key or "").replace("_", " ").strip().capitalize() or "?"
+
+
+class CommandsBody(BaseModel):
+    commands: list[str] = Field(min_length=1, max_length=10)
+
+
+@router.post(
+    "/machines/{machine_id}/commands",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def queue_commands(
+    machine_id: str,
+    body: CommandsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    """Parancs(ok) az ügynöknek — a következő pingnél (≤ 5 perc) hajtja végre:
+    report | errors | promos | recipes | catalog | assets | update."""
+    m = await _machine_or_404(db, machine_id)
+    bad = [c for c in body.commands if c not in AGENT_COMMANDS]
+    if bad:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_command", "commands": bad})
+    pending = list(m.pending_commands or [])
+    for c in body.commands:
+        if c not in pending:
+            pending.append(c)
+    m.pending_commands = pending
+    await record_audit(db, actor=actor, action="vending.commands", entity_type="vending_machine", entity_id=str(m.id), detail={"commands": pending}, request=request)
+    await db.commit()
+    return {"pending_commands": pending}
+
+
+@router.get(
+    "/machines/{machine_id}/sales",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def machine_sales(
+    machine_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """Napi fogyás-mátrix: napok × italok (darab), nap-összesítők, fizetési
+    módok, halmozott számláló — a gép rendelésnaplójából (ügynök 3.5+)."""
+    m = await _machine_or_404(db, machine_id)
+    since = date.today() - timedelta(days=days - 1)
+    day_rows = (await db.execute(select(VendingSalesDay).where(VendingSalesDay.machine_id == m.id, VendingSalesDay.day >= since).order_by(VendingSalesDay.day))).scalars().all()
+    prod_rows = (await db.execute(select(VendingSalesProduct).where(VendingSalesProduct.machine_id == m.id, VendingSalesProduct.day >= since))).scalars().all()
+    names = await _product_names(db, m)
+    products: dict[int, dict] = {}
+    matrix: dict[str, dict[str, int]] = {}
+    for p in prod_rows:
+        info = products.setdefault(p.product_id, {"product_id": p.product_id, "name_key": p.name_key, "name": names.get(p.product_id) or _pretty_key(p.name_key), "total": 0})
+        info["total"] += p.count
+        matrix.setdefault(p.day.isoformat(), {})[str(p.product_id)] = p.count
+    pay_totals: dict[str, int] = {}
+    for d in day_rows:
+        for k, v in (d.pay or {}).items():
+            pay_totals[k] = pay_totals.get(k, 0) + (_int_or_none(v) or 0)
+    latest_counter = next((d.counter_total for d in reversed(day_rows) if d.counter_total is not None), _int_or_none((m.telemetry or {}).get("counter_total")))
+    return {
+        "days": [{"day": d.day.isoformat(), "orders": d.orders, "drinks_ok": d.drinks_ok, "pay": d.pay or {}, "counter_total": d.counter_total} for d in day_rows],
+        "products": sorted(products.values(), key=lambda x: -x["total"]),
+        "matrix": matrix,
+        "pay_totals": pay_totals,
+        "total_drinks": sum(d.drinks_ok for d in day_rows),
+        "counter_total": latest_counter,
+        "counter_days": _int_or_none((m.telemetry or {}).get("counter_days")),
+    }
+
+
+@router.get(
+    "/machines/{machine_id}/sales.csv",
+    dependencies=[Depends(require_module("saferpay"))],
+)
+async def machine_sales_csv(
+    machine_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    import csv
+    import io as _io
+
+    from fastapi import Response
+
+    data = await machine_sales(machine_id, days, db, actor)
+    buf = _io.StringIO()
+    w = csv.writer(buf, delimiter=";", lineterminator="\r\n")
+    prods = data["products"]
+    w.writerow(["Nap", "Rendelés", "Sikeres ital", "Számláló"] + [p["name"] for p in prods])
+    for d in data["days"]:
+        row = data["matrix"].get(d["day"], {})
+        w.writerow([d["day"], d["orders"], d["drinks_ok"], d["counter_total"] if d["counter_total"] is not None else ""] + [row.get(str(p["product_id"]), 0) for p in prods])
+    w.writerow(["Összesen", sum(d["orders"] for d in data["days"]), data["total_drinks"], ""] + [p["total"] for p in prods])
+    return Response(content="\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="fogyas_{machine_id[:8]}.csv"'})
 
 
 # ─── Vending promóció: reklámképek a gépek MakingImage / ScreenProtect mappájába ─
@@ -1671,7 +1888,7 @@ class TelemetryBody(BaseModel):
 
 
 @public_router.post("/telemetry")
-async def report_telemetry(body: TelemetryBody, db: AsyncSession = Depends(get_db)):
+async def report_telemetry(body: TelemetryBody, request: Request, db: AsyncSession = Depends(get_db)):
     """A GÉP jelent ide (heartbeat + mérések) a saját API-kulcsával. A friss
     pillanatkép a gép-sorra kerül, a napló trendhez/hibakereséshez marad."""
     m = (
@@ -1684,14 +1901,81 @@ async def report_telemetry(body: TelemetryBody, db: AsyncSession = Depends(get_d
         raise HTTPException(status_code=403, detail={"code": "vending.bad_key"})
     # a payload szigorúan ADAT — méret-korlát a napló-hízás ellen
     data = body.data if isinstance(body.data, dict) else {}
-    if len(str(data)) > 8000:
+    if len(str(data)) > 32000:
         raise HTTPException(status_code=422, detail={"code": "vending.payload_too_big"})
     m.last_seen_at = datetime.now(UTC)
+    # a napi fogyás-lista külön táblába megy, a pillanatképbe nem (ne hízzon)
+    sales_days = data.pop("sales_days", None)
     m.telemetry = data
     if data:  # üres heartbeat nem kerül a naplóba
         db.add(VendingTelemetry(machine_id=m.id, data=data))
+    if isinstance(sales_days, list):
+        await _upsert_sales(db, m, sales_days, _int_or_none(data.get("counter_total")))
+    await _note_ip(m, request)
+    commands = _take_commands(m)
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "commands": commands}
+
+
+@public_router.post("/ping")
+async def agent_ping(body: TelemetryBody, request: Request, db: AsyncSession = Depends(get_db)):
+    """Kis életjel 5 percenként (ügynök 3.5+ AgentService): online-státusz,
+    hálózat, hely a pillanatképbe (napló-sor NÉLKÜL), + az adminból sorba
+    tett parancsok visszaadása és törlése."""
+    m = (
+        await db.execute(
+            select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
+        )
+    ).scalar_one_or_none()
+    if m is None or not m.is_active or not m.api_key or m.api_key != body.key:
+        raise HTTPException(status_code=403, detail={"code": "vending.bad_key"})
+    data = body.data if isinstance(body.data, dict) else {}
+    if len(str(data)) > 4000:
+        raise HTTPException(status_code=422, detail={"code": "vending.payload_too_big"})
+    m.last_seen_at = datetime.now(UTC)
+    merged = dict(m.telemetry or {})
+    for k in ("agent", "uptime_min", "net", "net_kbps", "ip_local", "ssid", "lat", "lon", "loc_src", "loc_acc_m", "loc_at"):
+        if k in data:
+            merged[k] = data[k]
+    merged["ping_at"] = m.last_seen_at.isoformat()
+    m.telemetry = merged
+    await _note_ip(m, request)
+    commands = _take_commands(m)
+    await db.commit()
+    return {"ok": True, "commands": commands, "interval_s": 300}
+
+
+async def _upsert_sales(db: AsyncSession, m: VendingMachine, days: list, counter_total: int | None) -> None:
+    """Az ügynök utolsó 7 napja: nap-összesítő + italonkénti darabszám (felülírás)."""
+    for d in days[:31]:
+        if not isinstance(d, dict):
+            continue
+        try:
+            day = date.fromisoformat(str(d.get("day"))[:10])
+        except ValueError:
+            continue
+        row = (await db.execute(select(VendingSalesDay).where(VendingSalesDay.machine_id == m.id, VendingSalesDay.day == day))).scalar_one_or_none()
+        if row is None:
+            row = VendingSalesDay(machine_id=m.id, day=day)
+            db.add(row)
+        row.orders = _int_or_none(d.get("orders")) or 0
+        row.drinks_ok = _int_or_none(d.get("ok")) or 0
+        row.pay = d.get("pay") if isinstance(d.get("pay"), dict) else None
+        row.counter_total = counter_total
+        row.updated_at = datetime.now(UTC)
+        for p in (d.get("products") or [])[:200]:
+            if not isinstance(p, dict):
+                continue
+            pid = _int_or_none(p.get("id"))
+            if pid is None:
+                continue
+            pr = (await db.execute(select(VendingSalesProduct).where(VendingSalesProduct.machine_id == m.id, VendingSalesProduct.day == day, VendingSalesProduct.product_id == pid))).scalar_one_or_none()
+            if pr is None:
+                pr = VendingSalesProduct(machine_id=m.id, day=day, product_id=pid)
+                db.add(pr)
+            pr.name_key = str(p.get("key") or "")[:64]
+            pr.count = _int_or_none(p.get("count")) or 0
+            pr.updated_at = datetime.now(UTC)
 
 
 class UploadBody(BaseModel):

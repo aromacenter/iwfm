@@ -24,6 +24,22 @@ interface Machine {
   paid_today: number;
   revenue_today: number;
   open_errors: number;
+  drinks_today: number | null;
+  counter_total: number | null;
+  online: boolean;
+  pending_commands: string[];
+  ip: string | null;
+  geo: { city?: string; region?: string; country?: string; lat?: number; lon?: number; isp?: string } | null;
+  location: { lat: number; lon: number; src: string | null; acc_m: number | null } | null;
+}
+interface SalesData {
+  days: { day: string; orders: number; drinks_ok: number; pay: Record<string, number>; counter_total: number | null }[];
+  products: { product_id: number; name_key: string; name: string; total: number }[];
+  matrix: Record<string, Record<string, number>>;
+  pay_totals: Record<string, number>;
+  total_drinks: number;
+  counter_total: number | null;
+  counter_days: number | null;
 }
 
 interface MachineError {
@@ -102,6 +118,29 @@ export default function VendingTelemetriaPage() {
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<{ machine: Machine; rows: TelemetryRow[] } | null>(null);
+  const [sales, setSales] = useState<{ machine: Machine; days: number; data: SalesData } | null>(null);
+  async function pingNow(m: Machine) {
+    try {
+      await api.post(`/api/saferpay/machines/${m.id}/commands`, { commands: ["report", "errors", "promos", "recipes", "assets"] });
+      toast(t("vtel.queuedToast"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+  const geoText = (m: Machine) => {
+    if (m.location) return { text: `${m.location.lat.toFixed(4)}, ${m.location.lon.toFixed(4)}${m.location.acc_m ? ` ±${m.location.acc_m} m` : ""} (${t("vtel.geoAgent")})`, lat: m.location.lat, lon: m.location.lon };
+    if (m.geo && m.geo.lat != null && m.geo.lon != null) return { text: `${[m.geo.city, m.geo.region, m.geo.country].filter(Boolean).join(", ")} (${t("vtel.geoIp")}${m.geo.isp ? ` · ${m.geo.isp}` : ""})`, lat: m.geo.lat, lon: m.geo.lon };
+    return null;
+  };
+  async function openSales(m: Machine, days = 30) {
+    try {
+      const data = await api.get<SalesData>(`/api/saferpay/machines/${m.id}/sales?days=${days}`);
+      setSales({ machine: m, days, data });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
   const [keyShown, setKeyShown] = useState<string | null>(null); // machine id
   const [catalog, setCatalog] = useState<{ machine: Machine; updated_at: string | null; catalog: Catalog | null } | null>(null);
   const [edits, setEdits] = useState<RecipeEditList>({ originals_saved: false, items: [] });
@@ -420,8 +459,15 @@ export default function VendingTelemetriaPage() {
                     ? t("vtel.lastSeen", { at: fmt(m.last_seen_at) })
                     : t("vtel.neverSeen")}
                   {" · "}✅ {t("vtel.todayStats", { n: m.paid_today })} · {ft(m.revenue_today)}
+                  {" · "}<span className={`inline-block h-2 w-2 rounded-full align-middle ${m.online ? "bg-emerald-500" : "bg-rose-500"}`} /> {m.online ? t("vtel.online") : t("vtel.offline")}
+                  {m.counter_total != null && <> · 🧮 {t("vtel.counter")}: <b>{m.counter_total.toLocaleString("hu-HU")}</b></>}
+                  {m.drinks_today != null && <> · ☕ {t("vtel.drinksToday", { n: m.drinks_today })}</>}
                 </p>
                 {m.note && <p className="mt-0.5 text-xs text-slate-400">{m.note}</p>}
+                {(() => { const g = geoText(m); return (
+                  <p className="mt-0.5 text-xs text-slate-500">📍 {g ? <>{g.text} · <a href={`https://www.google.com/maps?q=${g.lat},${g.lon}`} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{t("vtel.map")}</a></> : t("vtel.noLocation")}{m.ip && <span className="ml-1 font-mono text-[10px] text-slate-400">· {m.ip}</span>}</p>
+                ); })()}
+                {m.pending_commands.length > 0 && <p className="mt-0.5 text-xs text-amber-700">⏳ {t("vtel.queued", { list: m.pending_commands.map((c) => t(`vtel.cmd.${c}`)).join(", ") })}</p>}
                 {m.open_errors > 0 && (
                   <button
                     onClick={() => void openErrors(m)}
@@ -442,6 +488,12 @@ export default function VendingTelemetriaPage() {
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <button onClick={() => void openHistory(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
                     📜 {t("vtel.history")}
+                  </button>
+                  <button onClick={() => void openSales(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
+                    📊 {t("vtel.sales")}
+                  </button>
+                  <button onClick={() => void pingNow(m)} title={t("vtel.pingNowHint")} className="rounded-lg border border-indigo-300 px-2.5 py-1 text-xs text-indigo-700 hover:bg-indigo-50">
+                    {t("vtel.pingNow")}
                   </button>
                   <button onClick={() => void openCatalog(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
                     ☕ {t("vtel.catalog")}
@@ -889,6 +941,59 @@ export default function VendingTelemetriaPage() {
                 {t("common.close")}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fogyás modal: napok × italok */}
+      {sales && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative max-h-[88vh] w-full max-w-5xl space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
+            <button type="button" onClick={() => setSales(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">📊 {t("vtel.salesTitle", { name: sales.machine.name })}</h2>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <div className="inline-flex rounded-xl bg-indigo-50 p-1">{([7, 30, 90] as const).map((d) => <button key={d} onClick={() => void openSales(sales.machine, d)} className={`rounded-lg px-3 py-1 text-sm ${sales.days === d ? "bg-indigo-600 text-white" : "text-indigo-800 hover:bg-indigo-100"}`}>{t(`vtel.d${d}`)}</button>)}</div>
+              {sales.data.counter_total != null && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs">🧮 {t("vtel.counter")}: <b>{sales.data.counter_total.toLocaleString("hu-HU")}</b>{sales.data.counter_days != null && ` · ${t("vtel.counterDays", { n: sales.data.counter_days })}`}</span>}
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs">☕ {t("vtel.salesTotal")}: <b>{sales.data.total_drinks}</b></span>
+              {Object.keys(sales.data.pay_totals).length > 0 && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs">💳 {t("vtel.salesPay")}: {Object.entries(sales.data.pay_totals).map(([k, v]) => `${k} ${v}`).join(" · ")}</span>}
+              <a href={`/api/saferpay/machines/${sales.machine.id}/sales.csv?days=${sales.days}`} className="ml-auto rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-100">{t("vtel.salesCsv")}</a>
+            </div>
+            {sales.data.days.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-400">{t("vtel.salesEmpty")}</p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-xs">
+                  <thead><tr className="border-b border-slate-200 text-left text-[10px] uppercase tracking-wide text-slate-500">
+                    <th className="sticky left-0 bg-white px-2 py-1.5">{t("vtel.salesDays")}</th><th className="px-2 py-1.5 text-right">{t("vtel.salesOrders")}</th><th className="px-2 py-1.5 text-right">{t("vtel.salesOk")}</th>
+                    {sales.data.products.map((p) => <th key={p.product_id} className="px-2 py-1.5 text-right" title={p.name_key}>{p.name}</th>)}
+                    <th className="px-2 py-1.5 text-right">🧮</th>
+                  </tr></thead>
+                  <tbody>
+                    {[...sales.data.days].reverse().map((d) => {
+                      const row = sales.data.matrix[d.day] ?? {};
+                      const max = Math.max(1, ...Object.values(row));
+                      return (
+                        <tr key={d.day} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="sticky left-0 bg-white px-2 py-1 font-mono">{d.day}</td>
+                          <td className="px-2 py-1 text-right tabular-nums text-slate-500">{d.orders}</td>
+                          <td className="px-2 py-1 text-right tabular-nums font-semibold">{d.drinks_ok}</td>
+                          {sales.data.products.map((p) => { const v = row[String(p.product_id)] ?? 0; return <td key={p.product_id} className="px-2 py-1 text-right tabular-nums" style={{ background: v > 0 ? `rgba(79,70,229,${0.08 + 0.35 * (v / max)})` : undefined }}>{v || ""}</td>; })}
+                          <td className="px-2 py-1 text-right tabular-nums text-slate-400">{d.counter_total ?? ""}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="bg-slate-50 font-semibold">
+                      <td className="sticky left-0 bg-slate-50 px-2 py-1">{t("vtel.salesTotal")}</td>
+                      <td className="px-2 py-1 text-right tabular-nums">{sales.data.days.reduce((a, d) => a + d.orders, 0)}</td>
+                      <td className="px-2 py-1 text-right tabular-nums">{sales.data.total_drinks}</td>
+                      {sales.data.products.map((p) => <td key={p.product_id} className="px-2 py-1 text-right tabular-nums">{p.total}</td>)}
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

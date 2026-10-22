@@ -8,7 +8,7 @@ Beállítások → Munkalap kártyán szerkeszthető (üresen a beépített alap
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -240,7 +240,9 @@ async def create_intake(
             raise HTTPException(status_code=422, detail={"code": "intake.bad_partner"})
     # Elérhetőség KÖTELEZŐ: telefonszám és e-mail nélkül nem vehető át gép —
     # ezek nélkül nem tudjuk értesíteni az ügyfelet (ajánlat, kész gép).
-    if not (body.client_phone or "").strip() or not (body.client_email or "").strip():
+    # Saját tárgyi gépnél (nem ügyfélé) nincs ügyfél-elérhetőség — nem kötelező (dc134f9f).
+    own_machine = bool(asset.tangible and not asset.customer_owned)
+    if not own_machine and (not (body.client_phone or "").strip() or not (body.client_email or "").strip()):
         raise HTTPException(status_code=422, detail={"code": "intake.contact_required"})
     row = MachineIntake(
         id=uuid.uuid4(),
@@ -364,19 +366,58 @@ async def intake_print(
 
     row = await _get_intake_or_404(db, intake_id)
     pdf = await _build_intake_pdf(db, row)
-    job = PrintJob(
-        kind="pdf",
-        label=f"Elismervény {row.serial}",
-        payload=base64.b64encode(pdf).decode("ascii"),
-        created_by=actor.id,
-    )
-    db.add(job)
+    # Példányszám (17966bd9): saját tárgyi gép 1, ügyfél gépe 2 (egy az ügyfélé, egy marad)
+    _asset = (await db.execute(select(Asset).where(Asset.id == row.asset_id))).scalar_one_or_none()
+    copies = 1 if (_asset is not None and _asset.tangible and not _asset.customer_owned) else 2
+    job = None
+    for i in range(copies):
+        job = PrintJob(
+            kind="pdf",
+            label=f"Elismervény {row.serial}" + (f" ({i + 1}/{copies})" if copies > 1 else ""),
+            payload=base64.b64encode(pdf).decode("ascii"),
+            created_by=actor.id,
+        )
+        db.add(job)
     await record_audit(
         db, actor=actor, action="intake.print", entity_type="intake",
         entity_id=row.serial, request=request,
     )
     await db.commit()
-    return {"ok": True, "job_id": str(job.id)}
+    return {"ok": True, "job_id": str(job.id), "copies": copies}
+
+
+@router.post("/{intake_id}/worksheet")
+async def intake_worksheet(
+    intake_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_any_perm("service", "intake")),
+):
+    """Munkalap (feladat) automatikus kiállítása az átvételből — kérdés nélkül
+    (653a4e59). Felelős: a bejelentkezett dolgozója, annak hiányában az első
+    aktív dolgozó. Ha már van munkalap, azt adja vissza."""
+    from app.api.tasks import TaskCreateBody, create_task
+    from app.models import Employee, Task
+
+    row = await _get_intake_or_404(db, intake_id)
+    existing = (await db.execute(select(Task).where(Task.intake_id == row.id))).scalars().first()
+    if existing is not None:
+        from app.api.tasks import _tasks_out
+
+        return (await _tasks_out(db, [existing]))[0]
+    emp = (await db.execute(select(Employee).where(Employee.user_id == actor.id, Employee.status == "active"))).scalars().first()
+    if emp is None:
+        emp = (await db.execute(select(Employee).where(Employee.status == "active").order_by(Employee.last_name, Employee.first_name))).scalars().first()
+    if emp is None:
+        raise HTTPException(status_code=422, detail={"code": "tasks.no_candidates"})
+    asset = (await db.execute(select(Asset).where(Asset.id == row.asset_id))).scalar_one_or_none()
+    title = f"Szerviz — {asset.name if asset else 'gép'}" + (f" ({asset.barcode})" if asset and asset.barcode else "")
+    body = TaskCreateBody(
+        title=title[:256], description=(row.faults or row.note or None), employee_id=str(emp.id),
+        due_date=date.today(), client_name=(row.client_company or row.client_name or None),
+        client_location=row.client_address, asset_id=str(row.asset_id) if row.asset_id else None, intake_id=str(row.id),
+    )
+    return await create_task(body, request, db, actor)
 
 
 @router.get("/{intake_id}/photos")

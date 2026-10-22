@@ -12,7 +12,6 @@ import SuggestInput from "@/components/SuggestInput";
 import { api, errorMessage } from "@/lib/api";
 import { COMPANY_SHORT } from "@/lib/companies";
 import { useT } from "@/lib/i18n";
-import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
 
 interface CashEntry {
@@ -76,7 +75,6 @@ const ENTRY_CHIP: Record<string, string> = {
 export default function KasszaPage() {
   const { t, lang } = useT();
   const { toast } = useUI();
-  const canManage = usePerms().can("invoicing");
   const ft = (n: number) => `${n.toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
 
   const [dateFrom, setDateFrom] = useState("");
@@ -145,11 +143,15 @@ export default function KasszaPage() {
       .catch(() => {});
     api.get<{ id: string; role?: string }>("/api/auth/me").then((m) => { setMeId(m.id); setMeRole(m.role ?? null); }).catch(() => {});
     api.get<{ user_id: string; name: string; role: string }[]>("/api/stats/cash/central-recipients").then(setCentralTargets).catch(() => {});
-    if (canManage) {
-      api.get<Overview>(`/api/stats/cash/overview?${params()}`).then(setOverview).catch(() => {});
-    }
-  }, [params, canManage]);
+  }, [params]);
   useEffect(load, [load]);
+  // Központi áttekintés + betét/kivét CSAK admin és manager (5870270b, e16fec86) —
+  // a képviselő a saját kasszáját látja és költséget rögzít.
+  const isMgr = meRole === "admin" || meRole === "manager";
+  useEffect(() => {
+    if (!isMgr) return;
+    api.get<Overview>(`/api/stats/cash/overview?${params()}`).then(setOverview).catch(() => {});
+  }, [isMgr, params]);
 
   useEffect(() => {
     if (!drillUser) { setDrill(null); return; }
@@ -378,7 +380,7 @@ export default function KasszaPage() {
         >
           − {t("cash.addExpense")}
         </button>
-        {canManage && (
+        {isMgr && (
           <>
             <button
               onClick={() => setForm({ entry_type: "deposit", amount: "", note: "", supplier: "", receipt_no: "", user_id: "" })}
@@ -429,7 +431,7 @@ export default function KasszaPage() {
         )}
         {mine && registerCard(mine, archiveMode ? t("cash.myRegisterArchive") : t("cash.myRegister"))}
 
-        {canManage && overview && (
+        {isMgr && overview && (
           <div className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-semibold">🏦 {t("cash.central")}</h2>
@@ -545,7 +547,7 @@ export default function KasszaPage() {
             <h2 className="text-lg font-semibold">
               {t(`cash.formTitles.${form.entry_type}`)}
             </h2>
-            {canManage && form.entry_type !== "expense" && overview && (
+            {isMgr && form.entry_type !== "expense" && overview && (
               <label className="block text-sm">
                 {t("cash.worker")}
                 <select

@@ -25,6 +25,8 @@ interface AssetOption {
   category: string | null;
   article_number: string | null;
   serial_number: string | null;
+  tangible?: boolean;
+  customer_owned?: boolean;
 }
 
 interface Intake {
@@ -179,6 +181,9 @@ export default function AtvetelPage() {
   // Új ügyfél (partner) felvétele minden adatával
   const [newPartnerMode, setNewPartnerMode] = useState(false);
   const [newPartner, setNewPartner] = useState(EMPTY_PARTNER);
+  // Saját tárgyi gép (nem az ügyfélé): nincs kinek szólni → az elérhetőség nem kötelező (dc134f9f)
+  const selectedAsset = assets.find((a) => a.id === form.asset_id);
+  const ownMachine = !newAssetMode && !!selectedAsset && !!selectedAsset.tangible && !selectedAsset.customer_owned;
 
   const load = useCallback(() => {
     api.get<Intake[]>("/api/intakes").then(setIntakes).catch(() => {});
@@ -280,7 +285,7 @@ export default function AtvetelPage() {
         toast(t("intake.partnerCreated", { name: p.name }), "success");
       }
       // Elérhetőség kötelező: telefon + e-mail nélkül nincs átvétel.
-      if (!(client.client_phone ?? "").trim() || !(client.client_email ?? "").trim()) {
+      if (!ownMachine && (!(client.client_phone ?? "").trim() || !(client.client_email ?? "").trim())) {
         setError(t("intake.contactRequired"));
         setBusy(false);
         return;
@@ -328,9 +333,15 @@ export default function AtvetelPage() {
           toast(errorMessage(err), "error");
         }
       }
-      // minden adat megvan → egyből munkalap is készíthető belőle
-      if (canTasks && (await confirm(t("intake.worksheetConfirm")))) {
-        router.push(`/feladatok?intake=${created.id}`);
+      // minden adat megvan → a munkalap kérdés nélkül, automatikusan elkészül (653a4e59)
+      if (canTasks) {
+        try {
+          const ws = await api.post<{ id: string; title: string }>(`/api/intakes/${created.id}/worksheet`, {});
+          toast(t("intake.worksheetAuto", { title: ws.title }), "success");
+          load();
+        } catch (err) {
+          toast(errorMessage(err), "error");
+        }
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -666,20 +677,23 @@ export default function AtvetelPage() {
                   </div>
                   {/* Telefonszám és e-mail KÖTELEZŐ — enélkül nem tudjuk
                       értesíteni az ügyfelet (ajánlat, kész gép). */}
+                  {ownMachine && (
+                    <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">🏭 {t("intake.ownMachineHint")}</p>
+                  )}
                   <div className="flex gap-2">
                     <input
-                      required
+                      required={!ownMachine}
                       value={form.client_phone}
                       onChange={(e) => setForm({ ...form, client_phone: e.target.value })}
-                      placeholder={`${t("intake.clientPhone")} *`}
+                      placeholder={`${t("intake.clientPhone")}${ownMachine ? "" : " *"}`}
                       className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
                     />
                     <input
-                      required
+                      required={!ownMachine}
                       type="email"
                       value={form.client_email}
                       onChange={(e) => setForm({ ...form, client_email: e.target.value })}
-                      placeholder={`${t("intake.clientEmail")} *`}
+                      placeholder={`${t("intake.clientEmail")}${ownMachine ? "" : " *"}`}
                       className="w-1/2 rounded-lg border border-slate-300 px-3 py-2"
                     />
                   </div>

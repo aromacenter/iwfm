@@ -521,7 +521,11 @@
     "lateFeeBanner": "30 napnál régebbi lejárt tartozás — +10% késedelmi felár kerül minden tételre (ÁSZF).",
     "lateFeeDetail": "Lejárt tétel: {date} elszámolás, határidő {due}, fennmaradó {amount}. A felár a számlán és a bizonylaton is látszik, a megjegyzésben ÁSZF-hivatkozással.",
     "lateFeeWaive": "Felár kikapcsolása ERRE az elszámolásra",
-    "lateFeeWaiveHint": "A kikapcsolás naplózódik, és az admin/manager Telegram-értesítést kap róla."
+    "lateFeeWaiveHint": "A kikapcsolás naplózódik, és az admin/manager Telegram-értesítést kap róla.",
+    "invoiceEmails": "Számla címzettje",
+    "invoiceEmailsPh": "pl. konyveles@partner.hu, boss@partner.hu",
+    "invoiceEmailsHint": "A számla erre/ezekre a címekre megy (vesszővel több is). Üresen a partner e-mailje.",
+    "replenishGls": "Feltöltés GLS-csomagként (a Csomagok oldal nyílik)"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1995,7 +1999,10 @@
     "worktime.not_found": "A korrekció nem található.",
     "ai.not_configured": "Nincs beállított AI-szolgáltató (Beállítások → AI).",
     "ai.failed": "Az AI-szolgáltató hibát adott.",
-    "vending.error_not_found": "A hiba nem található."
+    "vending.error_not_found": "A hiba nem található.",
+    "vending.bad_command": "Ismeretlen parancs.",
+    "tasks.reschedule_note_required": "Határidő-módosításhoz indok kell.",
+    "settlement.bad_invoice_email": "Érvénytelen számla-e-mail cím."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2237,7 +2244,8 @@
     "swapNewCountersHint": "A következő elszámolás ezekhez képest számolja a fogyást.",
     "swapPricesTitle": "Adagárak számlálónként (javaslat a kicserélt gép árai alapján)",
     "partsHistory": "🔩 Beépített alkatrészek",
-    "partsHistoryEmpty": "Még nincs beépített alkatrész ebben a gépben."
+    "partsHistoryEmpty": "Még nincs beépített alkatrész ebben a gépben.",
+    "newLabelConfirm": "Új gép mentve ({barcode}). Mehet a vonalkód-címke a Godex nyomtatási sorba?"
   },
   "wh": {
     "title": "Raktár",
@@ -2573,7 +2581,20 @@
     "more": "+{n} további…",
     "taskCount": "{n} feladat",
     "tlGap": "{from}-tól nincs feladat ({n} nap)",
-    "tlEmpty": "A következő 4 hétben nincs ütemezett feladat."
+    "tlEmpty": "A következő 4 hétben nincs ütemezett feladat.",
+    "search": "Keresés a naptárban…",
+    "searchHits": "{n} találat a szűrésre",
+    "edit": "Szerkeszt",
+    "editTitle": "Feladat ütemezése",
+    "dueDate": "Határidő",
+    "rescheduleNote": "Átütemezés indoka",
+    "rescheduleNotePh": "pl. az ügyfél kérte, kedd jobb nekik",
+    "rescheduleNoteRequired": "Határidő-módosításhoz indok kell (legalább 3 karakter).",
+    "visitWindow": "Időkapu (mikor lehet menni)",
+    "visitWindowPh": "pl. 8–10 h, csak délelőtt",
+    "partnerWindow": "A partnernél mentett időkapu: {w}",
+    "saveWindowPartner": "Az időkaput a partnerhez is mentem (a következő feladatoknál is látszik)",
+    "saved": "Feladat mentve."
   },
   "worksheet": {
     "empty": "Adj meg leírást vagy legalább egy munkatételt.",
@@ -2641,7 +2662,9 @@
     "officePrintQueued": "Elismervény a nyomtatási sorban — az irodai nyomtatón készül.",
     "loaner": "Cseregép az ügyfélnek (opcionális)",
     "loanerPh": "vonalkód vagy QR-beolvasás",
-    "loanerHint": "A munkalap kiállításakor automatikusan rákerül a cseregép — a QR a 📷 gombbal is beolvasható."
+    "loanerHint": "A munkalap kiállításakor automatikusan rákerül a cseregép — a QR a 📷 gombbal is beolvasható.",
+    "ownMachineHint": "Saját tárgyi gép — nincs ügyfél, az elérhetőség nem kötelező.",
+    "worksheetAuto": "Munkalap automatikusan kiállítva: {title}"
   },
   "handover": {
     "title": "Átadás",
@@ -2661,7 +2684,10 @@
     "submitDiscount": "Átadás kedvezménnyel",
     "submitHint": "Átadás után a gép átadott státuszt kap, a munkalap lezárul, a feladat befejeződik.",
     "doneInvoiced": "{serial} átadva — a Billingó-számla elkészült, a munkalap lezárva.",
-    "doneDiscount": "{serial} átadva kedvezménnyel — a munkalap lezárva."
+    "doneDiscount": "{serial} átadva kedvezménnyel — a munkalap lezárva.",
+    "transfer": "Átutalás",
+    "dueDays": "Fizetési határidő",
+    "dueDaysUnit": "nap (alapból 8)"
   },
   "gls": {
     "title": "GLS-csomagfeladás",
@@ -2870,7 +2896,10 @@
     "costHint": "Saját pénzből vett alkatrész/szolgáltatás — hozzáadódik a szerelőnek járó összeghez.",
     "costSaved": "Költés rögzítve a szerelő egyenlegén.",
     "worksheetLinkHint": "A feladat adatlapja — mi történt, mi a teendő.",
-    "technicianHint": "A cégen belüli szerelő, aki a munkát végezte"
+    "technicianHint": "A cégen belüli szerelő, aki a munkát végezte",
+    "payCash": "Készpénz",
+    "payTransfer": "Átutalás",
+    "payTransferHint": "Átutalásnál a kifizetés a szerelő folyószámlájára kerül, a kasszából NEM megy ki pénz — a szerelő számlázza."
   },
   "stk": {
     "title": "Leltár",
@@ -3136,7 +3165,47 @@
     "solution": "Megoldás",
     "aiExplanation": "AI-magyarázat",
     "explainBtn": "🤖 Magyarázat kérése",
-    "technical": "technikai részlet"
+    "technical": "technikai részlet",
+    "sales": "Fogyás",
+    "salesTitle": "{name} — Fogyás (italonként)",
+    "salesEmpty": "Még nincs napi fogyás-adat: az ügynök 3.5-től küldi a rendelésnaplóból (naponta + indításkor).",
+    "counter": "Számláló",
+    "counterDays": "{n} nap naplója",
+    "drinksToday": "ma {n} ital",
+    "salesDays": "Napok",
+    "salesProducts": "Italok",
+    "salesTotal": "Összesen",
+    "salesOrders": "Rendelés",
+    "salesOk": "Sikeres ital",
+    "salesPay": "Fizetési mód",
+    "salesCsv": "⬇ CSV",
+    "salesRange": "Időszak",
+    "d7": "7 nap",
+    "d30": "30 nap",
+    "d90": "90 nap",
+    "hist.productsToday": "Mai fogyás italonként",
+    "k.drinks_ok_today": "Sikeres ital ma",
+    "k.counter_total": "Számláló (összes sikeres ital)",
+    "k.counter_days": "Napló-napok",
+    "k.pay_today": "Fizetés ma",
+    "k.products_today": "Italok ma",
+    "online": "online",
+    "offline": "offline",
+    "pingNow": "📡 Most",
+    "pingNowHint": "Teljes jelentés + hibák + promó + receptek + képek a következő pingnél (≤ 5 perc)",
+    "queued": "Parancs vár: {list}",
+    "queuedToast": "Parancs elküldve — a gép a következő életjelnél (≤ 5 perc) végrehajtja.",
+    "geoIp": "IP alapján",
+    "geoAgent": "a gép helymeghatározása",
+    "map": "térkép",
+    "noLocation": "nincs helyadat (az ügynök 3.5-től küldi; IP-ből becslés, ha a gép publikus címről jelentkezik)",
+    "cmd.report": "jelentés",
+    "cmd.errors": "hibák",
+    "cmd.promos": "promó",
+    "cmd.recipes": "receptek",
+    "cmd.catalog": "katalógus",
+    "cmd.assets": "képek",
+    "cmd.update": "frissítés"
   },
   "vpromo": {
     "title": "Vending promóció",

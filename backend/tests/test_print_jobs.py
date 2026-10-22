@@ -145,8 +145,8 @@ async def test_pdf_print_jobs_and_qr_lookup(client, admin, manager):
     agent = {"X-Agent-Key": key}
     jobs = (await client.get("/api/print-agent/jobs", headers=agent)).json()["jobs"]
     pdf_jobs = [j for j in jobs if j["kind"] == "pdf"]
-    assert len(pdf_jobs) == 1
-    assert intake["serial"] in pdf_jobs[0]["label"]
+    assert len(pdf_jobs) == 2  # ugyfel gepe: 2 peldany (17966bd9)
+    assert all(intake["serial"] in j["label"] for j in pdf_jobs)
     raw = base64.b64decode(pdf_jobs[0]["payload"])
     assert raw.startswith(b"%PDF")  # valodi PDF megy az ugynoknek
 
@@ -176,7 +176,7 @@ async def test_pdf_print_jobs_and_qr_lookup(client, admin, manager):
     assert res3.status_code == 200, res3.text
 
     jobs2 = (await client.get("/api/print-agent/jobs", headers=agent)).json()["jobs"]
-    assert len([j for j in jobs2 if j["kind"] == "pdf"]) == 3
+    assert len([j for j in jobs2 if j["kind"] == "pdf"]) == 4  # 2 elismerveny + 2 munkalap
 
     # QR-token felodas: cimke-sorba tetel general qr_tokent, az by-barcode-dal
     # (szerviz-joggal is) feloldhato

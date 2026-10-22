@@ -89,6 +89,9 @@ class TaskPatchBody(BaseModel):
     due_date: date | None = None
     required_skill_id: int | None = None
     status: str | None = None  # manager bármit állíthat (pl. visszanyitás)
+    visit_window: str | None = Field(default=None, max_length=64)  # időkapu a partnernél
+    reschedule_note: str | None = Field(default=None, max_length=512)  # KÖTELEZŐ, ha a határidő változik
+    save_window_for_partner: bool | None = None  # az időkaput a partnerhez is mentjük
 
 
 class CommentBody(BaseModel):
@@ -126,6 +129,8 @@ class TaskOut(BaseModel):
     worksheet_onsite: bool = False  # helyszíni munkalap
     worksheet_loaner: str | None = None  # kiadott cseregép vonalkódja
     asset: dict | None = None  # a munkalaphoz kötött gép adatai (KSZ)
+    visit_window: str | None = None
+    reschedule_note: str | None = None
     client_name: str | None = None  # a munkalapon rögzített ügyfél
     ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
     ticket_images: list[str] = []  # szervizjegyből jött feladat csatolt képei (id-k)
@@ -755,7 +760,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
     if ws_asset_ids:
         asset_rows = (
             await db.execute(
-                select(Asset, Partner.name)
+                select(Asset, Partner.name, Partner.visit_window)
                 .outerjoin(Partner, Partner.id == Asset.partner_id)
                 .where(Asset.id.in_(set(ws_asset_ids.values())))
             )
@@ -767,10 +772,12 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
                 "serial_number": a.serial_number,
                 "category": a.category,
                 "partner_name": pname,
+                "partner_id": str(a.partner_id) if a.partner_id else None,
+                "partner_visit_window": pwindow,
                 "counter": a.counter,
                 "maintenance_fee": a.maintenance_fee,
             }
-            for a, pname in asset_rows
+            for a, pname, pwindow in asset_rows
         }
         task_assets = {
             tid: by_id[aid] for tid, aid in ws_asset_ids.items() if aid in by_id
@@ -866,6 +873,8 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             completed_by_name=t.completed_by_name,
             technician_name=t.technician_name,
             intake_id=str(t.intake_id) if t.intake_id else None,
+        visit_window=t.visit_window,
+        reschedule_note=t.reschedule_note,
             intake_photos=intake_photo_ids.get(t.id, []),
             worksheet_photos=ws_photo_ids.get(t.id, []),
         )
@@ -1084,6 +1093,23 @@ async def update_task(
 ):
     task = await _get_task_or_404(db, task_id)
     data = body.model_dump(exclude_unset=True)
+    save_window = bool(data.pop("save_window_for_partner", False))
+    note = (data.pop("reschedule_note", None) or "").strip()
+    if "due_date" in data and data["due_date"] is not None and data["due_date"] != task.due_date:
+        # Átütemezés: indok nélkül nem mehet (700ab5b2) — a naplóba és a feladatra kerül
+        if len(note) < 3:
+            raise HTTPException(status_code=422, detail={"code": "tasks.reschedule_note_required"})
+        data["reschedule_note"] = f"{task.due_date.isoformat()} → {data['due_date'].isoformat()}: {note}"[:512]
+    if "visit_window" in data:
+        data["visit_window"] = (data["visit_window"] or "").strip() or None
+        if save_window:
+            _ws_w = await _get_worksheet(db, task.id)
+            if _ws_w is not None and _ws_w.asset_id is not None:
+                _asset_w = (await db.execute(select(Asset).where(Asset.id == _ws_w.asset_id))).scalar_one_or_none()
+                if _asset_w is not None and _asset_w.partner_id is not None:
+                    _p = (await db.execute(select(Partner).where(Partner.id == _asset_w.partner_id))).scalar_one_or_none()
+                    if _p is not None:
+                        _p.visit_window = data["visit_window"]
     if "status" in data and data["status"] not in ALL_STATUSES:
         raise HTTPException(status_code=422, detail={"code": "tasks.bad_status"})
     if "employee_id" in data:
@@ -2699,6 +2725,8 @@ class ServicePickupBody(BaseModel):
     # kitöltő dolgozó kasszájából ÉS a szerelő folyószámlájáról. Lehet
     # kevesebb vagy több is, mint a járandóság (az egyenleg +/−/0).
     paid_amount: float | None = Field(default=None, ge=0, le=10_000_000)
+    # átutalás: a szerelő folyószámlájára könyveljük, de készpénz-mozgás NINCS (92ed8779)
+    payment_method: str = Field(default="cash", pattern="^(cash|transfer)$")
 
 
 @router.post("/service-handover/pickup")
@@ -2774,17 +2802,19 @@ async def service_handover_pickup(
             db.add(TechLedger(
                 employee_id=uuid.UUID(first_emp), kind="payout",
                 amount=float(round(body.paid_amount)),
-                note=f"Átadáskori kifizetés ({', '.join(serials)[:200]})",
+                note=(f"Átadáskori kifizetés ({', '.join(serials)[:200]})" if body.payment_method == "cash"
+                      else f"Átadáskori kifizetés — ÁTUTALÁS, a szerelő számlázza ({', '.join(serials)[:180]})"),
                 created_by=actor.id,
             ))
-        db.add(AgentExpense(
-            user_id=actor.id,
-            expense_date=date.today(),
-            amount_gross=float(round(body.paid_amount)),
-            note=f"Szerelő-kifizetés — {emp_name}"[:512],
-            entry_type="expense",
-            created_by=actor.id,
-        ))
+        if body.payment_method == "cash":
+            db.add(AgentExpense(
+                user_id=actor.id,
+                expense_date=date.today(),
+                amount_gross=float(round(body.paid_amount)),
+                note=f"Szerelő-kifizetés — {emp_name}"[:512],
+                entry_type="expense",
+                created_by=actor.id,
+            ))
     await record_audit(
         db, actor=actor, action="worksheet.service_pickup", entity_type="worksheet",
         entity_id=",".join(serials)[:256],
@@ -2972,9 +3002,14 @@ async def handover_detail(
     return await _handover_row(db, task, ws)
 
 
+PAY_LABEL = {"cash": "készpénz", "card": "kártya", "transfer": "átutalás"}
+
+
 class HandoverBody(BaseModel):
-    payment_method: str = Field(pattern="^(cash|card)$")
+    payment_method: str = Field(pattern="^(cash|card|transfer)$")
     discount: bool = False  # kedvezmény → NEM készül számla
+    # Átutalásnál a fizetési határidő napokban (alapból 8, átírható) — 12a07799
+    due_days: int | None = Field(default=None, ge=1, le=120)
 
 
 @router.post("/{task_id}/handover")
@@ -3041,6 +3076,7 @@ async def do_handover(
             document_id, _mode = await invoicing.create_handover_invoice(
                 db, partner, serial=ws.serial, items=items,
                 payment_method=body.payment_method,
+                due_days=(body.due_days or 8) if body.payment_method == "transfer" else None,
             )
         except ValueError:
             raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
@@ -3049,10 +3085,24 @@ async def do_handover(
 
     ws.handed_over_at = datetime.now(UTC)
     ws.handover_payment_method = body.payment_method
+    ws.handover_due_days = (body.due_days or 8) if body.payment_method == "transfer" else None
     ws.handover_discount = body.discount
     ws.handover_total_net = 0.0 if body.discount else total
     ws.handover_document_id = document_id
     task.status = "done"
+    # Kassza (12a07799): CSAK a készpénzes átadás kerül az átadó kasszájába;
+    # átutalás/kártya nem; a saját tárgyi gép átadásakor mindig 0 Ft.
+    own_tangible = False
+    if ws.asset_id is not None:
+        _a = (await db.execute(select(Asset).where(Asset.id == ws.asset_id))).scalar_one_or_none()
+        own_tangible = bool(_a and _a.tangible and not _a.customer_owned)
+    if body.payment_method == "cash" and not body.discount and total > 0 and not own_tangible:
+        from app.models import AgentExpense
+
+        db.add(AgentExpense(
+            user_id=actor.id, expense_date=date.today(), amount_gross=float(round(total * 1.27)),
+            note=f"Átadás {ws.serial} — készpénz"[:512], entry_type="deposit", created_by=actor.id,
+        ))
     # A gép átadott státuszt kap
     if ws.asset_id is not None:
         asset = (
@@ -3067,7 +3117,7 @@ async def do_handover(
                 actor_user_id=actor.id,
                 detail=f"Átadva az ügyfélnek ({ws.serial})"
                 + (" — kedvezmény, számla nélkül" if body.discount
-                   else f" — {('kártya' if body.payment_method == 'card' else 'készpénz')}, {total:.0f} Ft nettó"),
+                   else f" — {PAY_LABEL.get(body.payment_method, body.payment_method)}, {total:.0f} Ft nettó"),
             ))
     await record_audit(
         db, actor=actor, action="worksheet.handed_over", entity_type="worksheet",
@@ -3084,7 +3134,7 @@ async def do_handover(
             "sorszam": ws.serial,
             "ugyfel": ws.client_name or "",
             "osszeg_netto": f"{total:.0f}" if not body.discount else "0",
-            "fizetes_mod": "kártya" if body.payment_method == "card" else "készpénz",
+            "fizetes_mod": PAY_LABEL.get(body.payment_method, body.payment_method),
             "kedvezmeny": "igen" if body.discount else "nem",
         })
     except Exception:

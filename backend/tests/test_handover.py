@@ -73,7 +73,7 @@ async def test_handover_with_invoice(client, admin, manager, monkeypatch):
     # Billingó elfogása
     calls: list[dict] = []
 
-    async def fake_invoice(db, partner, *, serial, items, payment_method, vat_percent=27):
+    async def fake_invoice(db, partner, *, serial, items, payment_method, vat_percent=27, due_days=None):
         calls.append({"serial": serial, "items": items, "pm": payment_method})
         return "DOC-H1", "invoice"
 

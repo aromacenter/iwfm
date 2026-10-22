@@ -395,10 +395,20 @@ export default function GepekPage() {
         rented: assetForm.rented,
         notes: assetForm.notes || null,
       };
+      let created: { id: string; barcode: string } | null = null;
       if (assetForm.id) await api.patch(`/api/assets/${assetForm.id}`, body);
-      else await api.post("/api/assets", body);
+      else created = await api.post<{ id: string; barcode: string }>("/api/assets", body);
       setAssetForm(null);
       loadAssets();
+      // Új gép: a vonalkód-címke felkínálása a Godex nyomtatási sorba (87858798)
+      if (created && (await confirm(t("inv.newLabelConfirm", { barcode: created.barcode })))) {
+        try {
+          await api.post("/api/print-jobs", { ids: [created.id] });
+          toast(t("inv.godexQueued", { count: 1 }), "success");
+        } catch (err) {
+          toast(errorMessage(err), "error");
+        }
+      }
     } catch (err) {
       setError(errorMessage(err));
     } finally {

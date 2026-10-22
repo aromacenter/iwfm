@@ -326,6 +326,9 @@ class Task(Base):
     required_skill_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("skills.id", ondelete="SET NULL"), nullable=True
     )
+    # Időkapu a partnernél + az átütemezés indoka (700ab5b2)
+    visit_window: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reschedule_note: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # Szervizjegyből kiosztott feladat: a jegy adatai (képekkel) a felelős
     # Feladataim nézetében is elérhetők — szerviz-jogosultság nélkül is.
     service_ticket_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -457,6 +460,7 @@ class Worksheet(Base):
     handover_discount: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     handover_total_net: Mapped[float | None] = mapped_column(Float, nullable=True)
     handover_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    handover_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)  # átutalásnál (12a07799)
     hours_spent: Mapped[float | None] = mapped_column(Float, nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     client_location: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -906,6 +910,10 @@ class VendingMachine(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     telemetry: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # utolsó pillanatkép
+    # adminból sorba tett parancsok az ügynöknek (a következő pingnél elviszi)
+    pending_commands: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)  # a gép publikus IP-je (utolsó kérés)
+    geo: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # IP-alapú hely-becslés {city, country, lat, lon, ip, at}
     # Promóció: ha igaz, a gépen csak a mi képeink maradnak az adott mappában
     # (a gyári képeket az ügynök a saját mentés-mappájába teszi át).
     promo_exclusive_making: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -1373,6 +1381,49 @@ class PartsStocktake(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class VendingSalesDay(Base):
+    """Kávégép napi fogyás-összesítő (az ügynök a rendelésnaplóból küldi):
+    rendelések, sikeres italok, fizetési módok, halmozott számláló."""
+
+    __tablename__ = "vending_sales_days"
+    __table_args__ = (UniqueConstraint("machine_id", "day", name="uq_vsd_machine_day"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("vending_machines.id", ondelete="CASCADE", name="fk_vsd_machine"), nullable=False
+    )
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    orders: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    drinks_ok: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pay: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    counter_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class VendingSalesProduct(Base):
+    """Kávégép napi fogyás italonként (gép × nap × ital id)."""
+
+    __tablename__ = "vending_sales_products"
+    __table_args__ = (
+        UniqueConstraint("machine_id", "day", "product_id", name="uq_vsp_machine_day_product"),
+        Index("ix_vsp_machine_day", "machine_id", "day"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    machine_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("vending_machines.id", ondelete="CASCADE", name="fk_vsp_machine"), nullable=False
+    )
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    product_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    name_key: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class VendingAsset(Base):
     """A gépen lévő médiafájlok másolata (gyári reklámképek, termékikonok,
     képernyővédő): az ügynök tölti fel binárisan, az admin listázza / ZIP-ben
@@ -1713,6 +1764,8 @@ class Partner(Base):
     # Több cím vesszővel/pontosvesszővel elválasztva — minden számla és
     # értesítés az összes címre megy (partner_emails helper bontja).
     contact_email: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # Időkapu: mikor lehet a partnerhez érkezni (pl. „8–10 h”) — a feladat-ütemezésből menthető (700ab5b2)
+    visit_window: Mapped[str | None] = mapped_column(String(64), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     website: Mapped[str | None] = mapped_column(String(256), nullable=True)
     # Összerakott (legacy) címek — a strukturált részekből számolódnak, ha azok
@@ -2114,6 +2167,8 @@ class Settlement(Base):
     # Az aláíráshoz KÖTELEZŐEN begépelt név (ki írta alá a partnernél).
     signer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     receipt_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Számla címzettjei ERRE az elszámolásra (vesszővel) — a partner e-mailje helyett (b08956c7)
+    invoice_emails: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # CashBook könyvelési feladás állapota: a beküldéskor kapott hash + mikor.
     # status: sent (számla feladva) | paid_sent (kiegyenlítéssel újraküldve) | error
     cashbook_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

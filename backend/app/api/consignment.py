@@ -808,6 +808,7 @@ class SettlementContextOut(BaseModel):
     # A ma érvényes szerződésen bekapcsolt automata számlázás — az űrlap
     # jelzi, hogy mentés után a számla magától kiállítódik.
     auto_billing: bool = False
+    invoice_norma: int | None = None  # szerződéses „lefőzhető adag a számlán” opció (b08956c7)
 
 
 @stock_router.get("/{partner_id}/settlement-context", response_model=SettlementContextOut)
@@ -1072,6 +1073,7 @@ async def settlement_context(
         contract_product_id=contract_pid,
         contract_product_name=contract_pname,
         auto_billing=ctx_auto_billing,
+        invoice_norma=(active_contract.invoice_norma if active_contract is not None else None),
     )
 
 
@@ -1230,6 +1232,21 @@ class HandoverIn(BaseModel):
     price: float | None = Field(default=None, ge=0)
 
 
+def _split_emails(raw: str | None) -> list[str]:
+    return [x.strip() for x in (raw or "").replace(";", ",").split(",") if x.strip()]
+
+
+def _clean_emails(raw: str | None) -> str | None:
+    """Vesszővel elválasztott e-mail lista normalizálva; érvénytelen cím → 422."""
+    import re as _re
+
+    items = _split_emails(raw)
+    for e in items:
+        if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", e):
+            raise HTTPException(status_code=422, detail={"code": "settlement.bad_invoice_email", "email": e[:64]})
+    return ", ".join(items)[:512] or None
+
+
 class SettlementCreate(BaseModel):
     partner_id: str
     payment_method: str  # cash | card | transfer
@@ -1247,6 +1264,8 @@ class SettlementCreate(BaseModel):
     # Késedelmi felár kikapcsolása ERRE az elszámolásra (30+ napja lejárt
     # tartozásnál alapból +10% minden tételre) — naplózva + TG-értesítés.
     late_fee_waived: bool = False
+    # A számla címzettjei ERRE az elszámolásra (vesszővel) — üresen a partner e-mailje (b08956c7)
+    invoice_emails: str | None = Field(default=None, max_length=512)
 
 
 class SettlementLineOut(BaseModel):
@@ -1294,6 +1313,7 @@ class SettlementOut(BaseModel):
     billingo_status: str | None
     has_signature: bool = False
     receipt_sent_at: datetime | None = None
+    invoice_emails: str | None = None  # számla-címzettek erre az elszámolásra (b08956c7)
     payment_status: str = "none"
     due_date: date | None = None
     paid_at: datetime | None = None
@@ -1338,6 +1358,7 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         invoicing_company=s.invoicing_company,
         payment_method=s.payment_method,
         no_vat=s.no_vat,
+        invoice_emails=s.invoice_emails,
         total_net=s.total_net,
         total_gross=s.total_gross,
         invoiced=s.invoiced,
@@ -1664,6 +1685,7 @@ async def create_settlement(
         note=body.note,
         due_days=body.due_days,
     )
+    settlement.invoice_emails = _clean_emails(body.invoice_emails)
     db.add(settlement)
     await db.flush()
 
@@ -2890,9 +2912,10 @@ async def create_expense(
     from app.models import AgentExpense
 
     target_id = actor.id
-    needs_invoicing = (body.user_id and body.user_id != str(actor.id)) or (
-        body.entry_type in ("deposit", "withdrawal")
-    )
+    # Betét/kivét CSAK admin és manager (5870270b, e16fec86) — a képviselő csak költséget rögzít.
+    if body.entry_type in ("deposit", "withdrawal") and actor.role not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+    needs_invoicing = bool(body.user_id and body.user_id != str(actor.id))
     if needs_invoicing:
         matrix = await get_permission_matrix(db)
         if "invoicing" not in permissions_for(actor.role, matrix):
@@ -3486,11 +3509,11 @@ async def settlement_invoice_email(
     partner = (
         await db.execute(select(Partner).where(Partner.id == s.partner_id))
     ).scalar_one_or_none()
-    to = (str(body.to) if body.to else None) or (partner.contact_email if partner else None)
+    to = (str(body.to) if body.to else None) or s.invoice_emails or (partner.contact_email if partner else None)
     if not to:
         raise HTTPException(status_code=422, detail={"code": "settlement.no_email"})
     try:
-        await send_invoice_email(db, s.billingo_document_id, [to], s.invoicing_company)
+        await send_invoice_email(db, s.billingo_document_id, _split_emails(to), s.invoicing_company)
     except ValueError:
         raise HTTPException(status_code=422, detail={"code": "settlement.invoice_pdf_unavailable"})
     except Exception:
@@ -3677,7 +3700,7 @@ async def sign_settlement(
 
     notif = await _notif(db)
     await db.commit()
-    partner_email = partner.contact_email if partner else None
+    partner_email = s.invoice_emails or (partner.contact_email if partner else None)
     if notif.auto_receipt and partner_email:
         background_tasks.add_task(_auto_send_receipt, str(s.id), partner_email)
 

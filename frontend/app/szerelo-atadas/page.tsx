@@ -53,6 +53,7 @@ export default function SzereloAtadasPage() {
   const [fees, setFees] = useState<FeeRow[]>([]);
   // Átadáskor készpénzben kifizetett összeg (a kitöltő kasszájából levonódik)
   const [paidAmount, setPaidAmount] = useState("");
+  const [payMethod, setPayMethod] = useState<"cash" | "transfer">("cash"); // átutalásnál nincs kassza-mozgás
   // Szerelő saját költése (alkatrész a saját pénzéből) — a tartozást növeli
   const [costForm, setCostForm] = useState<{
     employee_id: string; employee_name: string;
@@ -97,6 +98,7 @@ export default function SzereloAtadasPage() {
           task_ids: [...selected],
           notify,
           paid_amount: paidAmount !== "" ? Number(paidAmount) : null,
+          payment_method: payMethod,
         },
       );
       toast(t("svcHo.done", {
@@ -155,6 +157,20 @@ export default function SzereloAtadasPage() {
             />
             <span className="text-xs text-slate-400">Ft</span>
           </label>
+        )}
+        {selected.size > 0 && paidAmount !== "" && (
+          <div className="flex gap-1.5" title={t("svcHo.payTransferHint")}>
+            {(["cash", "transfer"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setPayMethod(m)}
+                className={`rounded-lg border px-3 py-1.5 text-sm ${payMethod === m ? "border-indigo-500 bg-indigo-50 text-indigo-800" : "border-slate-300 bg-white hover:bg-slate-100"}`}
+              >
+                {m === "cash" ? `💵 ${t("svcHo.payCash")}` : `🏦 ${t("svcHo.payTransfer")}`}
+              </button>
+            ))}
+          </div>
         )}
         {selected.size > 0 && (
           <button

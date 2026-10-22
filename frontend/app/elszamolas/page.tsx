@@ -181,6 +181,7 @@ interface SettlementContext {
   contract_product_id: string | null; // a szerződésben rögzített alap-kávé
   contract_product_name: string | null;
   auto_billing: boolean; // a szerződés szerint mentés után azonnal számláz
+  invoice_norma?: number | null; // szerződéses „lefőzhető adag a számlán” opció
 }
 
 interface MachineInput {
@@ -255,6 +256,13 @@ export default function ElszamolasPage() {
   const [dueDays, setDueDays] = useState("");
   // GLS-feladás az elszámolás mentése után (utánvétnél a fizetendő az utánvét).
   const [shipGls, setShipGls] = useState(false);
+  // A számla címzettjei (vesszővel) — a partner e-mailje az alap, partnerenként átírható (b08956c7)
+  const [invoiceEmailsEdit, setInvoiceEmailsEdit] = useState<{ partner: string; value: string } | null>(null);
+  const [replenishGls, setReplenishGls] = useState(false); // feltöltés után GLS-feladás (b74d5045)
+  const invoiceEmailsValue =
+    invoiceEmailsEdit && invoiceEmailsEdit.partner === partnerId
+      ? invoiceEmailsEdit.value
+      : (partners.find((p) => p.id === partnerId)?.contact_email ?? "");
   // Gép-soros elszámolás: kontextus + gépenkénti beviteli mezők
   const [ctx, setCtx] = useState<SettlementContext | null>(null);
   const [machineInputs, setMachineInputs] = useState<Record<string, MachineInput>>({});
@@ -1132,6 +1140,11 @@ export default function ElszamolasPage() {
       setReplenish(null);
       loadStock();
       loadDue(); // a készlet-riasztások frissülnek
+      if (replenishGls) {
+        // Feltöltés GLS-sel: a Csomagok oldal nyílik előtöltve (b74d5045)
+        setReplenishGls(false);
+        router.push(`/csomagok?${new URLSearchParams({ partner: partnerId, content: t("cons.glsContentTag") })}`);
+      }
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -1206,6 +1219,7 @@ export default function ElszamolasPage() {
       note: note || null,
       due_days: payment === "transfer" && dueDays !== "" ? Number(dueDays) : null,
       late_fee_waived: lateFeeWaived,
+      invoice_emails: invoiceEmailsValue.trim() || null,
     };
     setBusy(true);
     try {
@@ -1226,6 +1240,7 @@ export default function ElszamolasPage() {
       setPaidAmount("");
       setDueDays("");
       setShipGls(false);
+      setInvoiceEmailsEdit(null);
       loadStock();
       loadCtx();
       loadHistory();
@@ -2653,6 +2668,18 @@ export default function ElszamolasPage() {
                     ⚡ {t("cons.autoBillingBadge")}
                   </span>
                 )}
+                {(ctx?.auto_billing || (ctx?.invoice_norma ?? null) !== null) && (
+                  <label className="flex items-center gap-1.5 text-xs text-slate-700" title={t("cons.invoiceEmailsHint")}>
+                    ✉ {t("cons.invoiceEmails")}
+                    <input
+                      type="text"
+                      value={invoiceEmailsValue}
+                      onChange={(e) => setInvoiceEmailsEdit({ partner: partnerId, value: e.target.value })}
+                      placeholder={t("cons.invoiceEmailsPh")}
+                      className="w-64 max-w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                )}
                 <label
                   className="flex items-center gap-1.5 text-xs text-sky-800"
                   title={t("cons.shipGlsHint")}
@@ -3325,6 +3352,10 @@ export default function ElszamolasPage() {
                 <span className="mt-1 block text-xs text-slate-400">{t("cons.sourceWarehouseNote")}</span>
               </label>
             )}
+            <label className="flex items-center gap-1.5 text-sm text-sky-800" title={t("cons.shipGlsHint")}>
+              <input type="checkbox" checked={replenishGls} onChange={(e) => setReplenishGls(e.target.checked)} className="h-4 w-4" />
+              📦 {t("cons.replenishGls")}
+            </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setReplenish(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>

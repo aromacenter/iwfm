@@ -43,7 +43,8 @@ export default function AtadasPage() {
 
   const [rows, setRows] = useState<Handover[]>([]);
   const [selected, setSelected] = useState<Handover | null>(null);
-  const [payment, setPayment] = useState<"cash" | "card">("cash");
+  const [payment, setPayment] = useState<"cash" | "card" | "transfer">("cash");
+  const [dueDays, setDueDays] = useState("8"); // átutalásnál a fizetési határidő (nap)
   const [discount, setDiscount] = useState(false);
   const [busy, setBusy] = useState(false);
   const [doneInfo, setDoneInfo] = useState<{ serial: string; discount: boolean; document_id: string | null } | null>(null);
@@ -81,14 +82,14 @@ export default function AtadasPage() {
       : t("handover.confirmPay", {
           serial: selected.serial,
           total: ft(selected.total_gross),
-          method: payment === "card" ? t("handover.card") : t("handover.cash"),
+          method: payment === "card" ? t("handover.card") : payment === "transfer" ? t("handover.transfer") : t("handover.cash"),
         });
     if (!(await confirm(text))) return;
     setBusy(true);
     try {
       const res = await api.post<{ ok: boolean; document_id: string | null }>(
         `/api/tasks/${selected.task_id}/handover`,
-        { payment_method: payment, discount }
+        { payment_method: payment, discount, due_days: payment === "transfer" ? Number(dueDays) || 8 : null }
       );
       setDoneInfo({ serial: selected.serial, discount, document_id: res.document_id });
       setSelected(null);
@@ -197,7 +198,7 @@ export default function AtadasPage() {
 
             {!discount && (
               <div className="mt-3 flex gap-2">
-                {(["cash", "card"] as const).map((m) => (
+                {(["cash", "card", "transfer"] as const).map((m) => (
                   <button
                     key={m}
                     type="button"
@@ -208,10 +209,24 @@ export default function AtadasPage() {
                         : "border-slate-200 hover:border-slate-300"
                     }`}
                   >
-                    {m === "cash" ? `💵 ${t("handover.cash")}` : `💳 ${t("handover.card")}`}
+                    {m === "cash" ? `💵 ${t("handover.cash")}` : m === "card" ? `💳 ${t("handover.card")}` : `🏦 ${t("handover.transfer")}`}
                   </button>
                 ))}
               </div>
+            )}
+            {!discount && payment === "transfer" && (
+              <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+                {t("handover.dueDays")}
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={dueDays}
+                  onChange={(e) => setDueDays(e.target.value)}
+                  className="w-20 rounded-lg border border-slate-300 px-2 py-1.5"
+                />
+                <span className="text-xs text-slate-400">{t("handover.dueDaysUnit")}</span>
+              </label>
             )}
 
             <button
