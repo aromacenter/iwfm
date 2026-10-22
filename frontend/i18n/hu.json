@@ -3205,7 +3205,11 @@
     "cmd.recipes": "receptek",
     "cmd.catalog": "katalógus",
     "cmd.assets": "képek",
-    "cmd.update": "frissítés"
+    "cmd.update": "frissítés",
+    "recipeFiles": "{n} receptfájl",
+    "activeFile": "a gép ezt használja",
+    "noRecipe": "nincs recept",
+    "noRecipeHint": "A gomb a(z) „{name}” receptet hivatkozza, de egyik receptfájlban sincs ilyen nevű. Ügynök 3.6-tól minden receptfájlt beolvasunk — ha ez utána is itt marad, a receptet a gépen kell létrehozni."
   },
   "vpromo": {
     "title": "Vending promóció",

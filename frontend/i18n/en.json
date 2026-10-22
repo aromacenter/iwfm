@@ -3205,7 +3205,11 @@
     "cmd.recipes": "recipes",
     "cmd.catalog": "catalog",
     "cmd.assets": "images",
-    "cmd.update": "update"
+    "cmd.update": "update",
+    "recipeFiles": "{n} recipe files",
+    "activeFile": "used by the machine",
+    "noRecipe": "no recipe",
+    "noRecipeHint": "The button references recipe “{name}”, but no recipe file contains it. From agent 3.6 every recipe file is read — if this stays, the recipe must be created on the machine."
   },
   "vpromo": {
     "title": "Vending promotion",

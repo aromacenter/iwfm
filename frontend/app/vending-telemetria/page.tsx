@@ -61,7 +61,7 @@ interface TelemetryRow {
 
 /** Az ügynök által a gép Product/Recipe fájljaiból összeállított katalógus. */
 interface CatalogStep { canister: number; water_ml: number; coffee_g: number; order?: number }
-interface CatalogRecipe { name: string; key?: string; steps: CatalogStep[] }
+interface CatalogRecipe { name: string; key?: string; file?: string; steps: CatalogStep[] }
 interface CatalogProduct {
   id: number; product_id?: number; name: string; name_en?: string; price: number; sale_price?: number;
   recipe: string; cup?: number; enabled?: boolean; visible?: boolean; order?: number;
@@ -70,7 +70,8 @@ interface Catalog {
   products: CatalogProduct[];
   recipes: CatalogRecipe[];
   canisters?: { id: number; name: string }[];
-  files?: Record<string, string>;
+  // 3.6-os ügynöktől: products/recipes = minden fájl neve, active_* = amit a gép használ
+  files?: { product?: string; recipe?: string; products?: string[]; recipes?: string[]; active_recipe?: string; active_product?: string };
 }
 interface MachineFile { id: string; kind: string; name: string; size: number; created_at: string; text?: string }
 interface RecipeEdit {
@@ -121,7 +122,7 @@ export default function VendingTelemetriaPage() {
   const [sales, setSales] = useState<{ machine: Machine; days: number; data: SalesData } | null>(null);
   async function pingNow(m: Machine) {
     try {
-      await api.post(`/api/saferpay/machines/${m.id}/commands`, { commands: ["report", "errors", "promos", "recipes", "assets"] });
+      await api.post(`/api/saferpay/machines/${m.id}/commands`, { commands: ["report", "errors", "promos", "recipes", "catalog", "assets"] });
       toast(t("vtel.queuedToast"), "success");
       load();
     } catch (err) {
@@ -389,9 +390,10 @@ export default function VendingTelemetriaPage() {
   /** Egy ital adagjai a receptjéből: kávé g, víz ml, tej-lépések. */
   const portions = (p: CatalogProduct, cat: Catalog) => {
     const r = cat.recipes.find((x) => x.name === p.recipe);
-    if (!r) return { coffee: 0, water: 0, milk: [] as string[], steps: [] as CatalogStep[] };
+    if (!r) return { coffee: 0, water: 0, milk: [] as string[], steps: [] as CatalogStep[], recipeFile: null as string | null };
     const steps = [...r.steps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     return {
+      recipeFile: (r.file ?? "") as string | null,
       coffee: steps.reduce((s, x) => s + (Number(x.coffee_g) || 0), 0),
       water: steps.reduce((s, x) => s + (Number(x.water_ml) || 0), 0),
       milk: steps.filter((x) => x.canister === 225 || x.canister === 226).map((x) => `${canisterLabel(x.canister, cat)} ${x.water_ml} ml`),
@@ -672,7 +674,9 @@ export default function VendingTelemetriaPage() {
                   <span>
                     {catalog.updated_at && t("vtel.catalogUpdated", { at: fmt(catalog.updated_at) })}
                     {catalog.catalog.files?.product && ` · ${catalog.catalog.files.product}`}
-                    {catalog.catalog.files?.recipe && ` · ${catalog.catalog.files.recipe}`}
+                    {(catalog.catalog.files?.recipes?.length ?? 0) > 1
+                      ? ` · ${t("vtel.recipeFiles", { n: catalog.catalog.files!.recipes!.length })}: ${catalog.catalog.files!.recipes!.map((f) => f === catalog.catalog!.files!.active_recipe ? `${f} (${t("vtel.activeFile")})` : f).join(", ")}`
+                      : catalog.catalog.files?.recipe && ` · ${catalog.catalog.files.recipe}`}
                   </span>
                   <span className={`rounded px-1.5 py-0.5 ${edits.originals_saved ? "bg-emerald-50 text-emerald-700" : "bg-slate-100"}`}>
                     {edits.originals_saved ? `🛡 ${t("vtel.originalsSaved")}` : t("vtel.originalsMissing")}
@@ -782,12 +786,15 @@ export default function VendingTelemetriaPage() {
                                 {p.visible === false && <span className="ml-1 rounded bg-slate-100 px-1 text-[10px]">{t("vtel.hidden")}</span>}
                                 {p.enabled === false && <span className="ml-1 rounded bg-rose-50 px-1 text-[10px] text-rose-600">{t("vtel.disabled")}</span>}
                                 {positions.length > 1 && <span className="ml-1 rounded bg-slate-100 px-1 text-[10px] text-slate-500" title={positions.join(", ")}>{t("vtel.dupButtons", { n: positions.length })}</span>}
+                                {q.recipeFile === null && (
+                                  <span className="ml-1 rounded bg-amber-50 px-1 text-[10px] text-amber-700" title={t("vtel.noRecipeHint", { name: p.recipe ?? "?" })}>⚠ {t("vtel.noRecipe")}</span>
+                                )}
                               </td>
                               <td className="py-1.5 pr-2 text-right tabular-nums">{ft(p.sale_price ?? p.price)}</td>
                               <td className="py-1.5 pr-2 text-right tabular-nums">{q.coffee || "—"}</td>
                               <td className="py-1.5 pr-2 text-right tabular-nums">{q.water || "—"}</td>
                               <td className="py-1.5 pr-2 text-xs">{q.milk.length ? q.milk.join(", ") : "—"}</td>
-                              <td className="py-1.5 text-xs text-slate-500">
+                              <td className="py-1.5 text-xs text-slate-500" title={q.recipeFile ?? undefined}>
                                 {q.steps.map((s, i) => (
                                   <span key={i} className="mr-1 inline-block rounded bg-slate-100 px-1.5 py-0.5">
                                     {canisterLabel(s.canister, cat)}{s.coffee_g ? ` ${s.coffee_g} g` : ""}{s.water_ml ? ` ${s.water_ml} ml` : ""}
