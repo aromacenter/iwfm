@@ -3214,7 +3214,14 @@
     "nextPingLate": "was due {n} min ago — the machine has not checked in (offline?)",
     "nextPingNoAgent": "the machine does not ping yet (agent {agent}, needs 3.5+) — update it on the machine, commands wait until then",
     "agentVersionHint": "Version of the X-admin config agent running on the machine (from the last report)",
-    "agentVersionUnknown": "agent: no data"
+    "agentVersionUnknown": "agent: no data",
+    "createRecipe": "Create recipe",
+    "createHint": "no “{name}” recipe on the machine — saving makes the agent create it and the button becomes a real drink (agent 3.9+)",
+    "createQueued": "Recipe creation queued: “{name}” — the machine writes it on the next ping.",
+    "newRecipeNeedsStep": "A new recipe needs at least one step with a portion above 0.",
+    "addStep": "New step",
+    "addStepHint": "The step is appended to the recipe on the machine. Existing steps only change their portions.",
+    "removeStep": "Discard step (only steps added now can be removed)"
   },
   "vpromo": {
     "title": "Vending promotion",

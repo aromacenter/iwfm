@@ -3214,7 +3214,14 @@
     "nextPingLate": "esedékes volt {n} perce — a gép nem jelentkezett (offline?)",
     "nextPingNoAgent": "a gép még nem pingel (ügynök {agent}, 3.5+ kell) — a gépen frissíteni kell, addig a parancsok várnak",
     "agentVersionHint": "A gépen futó X-admin config ügynök verziója (a legutóbbi jelentésből)",
-    "agentVersionUnknown": "ügynök: nincs adat"
+    "agentVersionUnknown": "ügynök: nincs adat",
+    "createRecipe": "Recept létrehozása",
+    "createHint": "nincs „{name}” recept a gépen — a mentéssel az ügynök létrehozza, és a gomb valódi itallá válik (3.9+ ügynök kell)",
+    "createQueued": "Recept létrehozása sorba állítva: „{name}” — a gép a következő pingnél írja be.",
+    "newRecipeNeedsStep": "Új recepthez legalább egy lépés kell, 0-nál nagyobb adaggal.",
+    "addStep": "Új lépés",
+    "addStepHint": "A lépés a recept végére kerül a gépen. Meglévő lépésnél csak az adag módosul.",
+    "removeStep": "Lépés elvetése (csak a most hozzáadott törölhető)"
   },
   "vpromo": {
     "title": "Vending promóció",
