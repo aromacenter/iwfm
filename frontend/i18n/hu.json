@@ -3209,7 +3209,12 @@
     "recipeFiles": "{n} receptfájl",
     "activeFile": "a gép ezt használja",
     "noRecipe": "nincs recept",
-    "noRecipeHint": "A gomb a(z) „{name}” receptet hivatkozza, de egyik receptfájlban sincs ilyen nevű. Ügynök 3.6-tól minden receptfájlt beolvasunk — ha ez utána is itt marad, a receptet a gépen kell létrehozni."
+    "noRecipeHint": "A gomb a(z) „{name}” receptet hivatkozza, de egyik receptfájlban sincs ilyen nevű. Ügynök 3.6-tól minden receptfájlt beolvasunk — ha ez utána is itt marad, a receptet a gépen kell létrehozni.",
+    "nextPingIn": "végrehajtás kb. {t} múlva",
+    "nextPingLate": "esedékes volt {n} perce — a gép nem jelentkezett (offline?)",
+    "nextPingNoAgent": "a gép még nem pingel (ügynök {agent}, 3.5+ kell) — a gépen frissíteni kell, addig a parancsok várnak",
+    "agentVersionHint": "A gépen futó X-admin config ügynök verziója (a legutóbbi jelentésből)",
+    "agentVersionUnknown": "ügynök: nincs adat"
   },
   "vpromo": {
     "title": "Vending promóció",

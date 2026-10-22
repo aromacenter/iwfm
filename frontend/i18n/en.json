@@ -3209,7 +3209,12 @@
     "recipeFiles": "{n} recipe files",
     "activeFile": "used by the machine",
     "noRecipe": "no recipe",
-    "noRecipeHint": "The button references recipe “{name}”, but no recipe file contains it. From agent 3.6 every recipe file is read — if this stays, the recipe must be created on the machine."
+    "noRecipeHint": "The button references recipe “{name}”, but no recipe file contains it. From agent 3.6 every recipe file is read — if this stays, the recipe must be created on the machine.",
+    "nextPingIn": "runs in about {t}",
+    "nextPingLate": "was due {n} min ago — the machine has not checked in (offline?)",
+    "nextPingNoAgent": "the machine does not ping yet (agent {agent}, needs 3.5+) — update it on the machine, commands wait until then",
+    "agentVersionHint": "Version of the X-admin config agent running on the machine (from the last report)",
+    "agentVersionUnknown": "agent: no data"
   },
   "vpromo": {
     "title": "Vending promotion",

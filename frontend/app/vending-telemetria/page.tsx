@@ -114,6 +114,27 @@ export default function VendingTelemetriaPage() {
     new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "medium" });
 
   const [machines, setMachines] = useState<Machine[]>([]);
+  // Visszaszámlálás a következő pingig (a gép 5 percenként jelentkezik) — másodpercenként frissül
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const PING_INTERVAL_MS = 5 * 60 * 1000;
+  /** Mikor várható a következő életjel: utolsó ping + 5 perc. null = a gép (még) nem pingel. */
+  const nextPingText = (m: Machine): string => {
+    const pingAt = typeof m.telemetry?.ping_at === "string" ? Date.parse(m.telemetry.ping_at as string) : NaN;
+    if (!Number.isFinite(pingAt)) return t("vtel.nextPingNoAgent", { agent: String(m.telemetry?.agent ?? "?") });
+    const due = pingAt + PING_INTERVAL_MS;
+    const diff = due - now;
+    if (diff > 0) {
+      const mm = Math.floor(diff / 60000);
+      const ss = Math.floor((diff % 60000) / 1000);
+      return t("vtel.nextPingIn", { t: `${mm}:${String(ss).padStart(2, "0")}` });
+    }
+    const late = Math.round(-diff / 60000);
+    return t("vtel.nextPingLate", { n: late });
+  };
   const [form, setForm] = useState<{
     id: string | null; code: string; name: string; note: string; active: boolean;
   } | null>(null);
@@ -461,7 +482,14 @@ export default function VendingTelemetriaPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-semibold">🤖 {m.name}</h2>
                   <span className="font-mono text-xs text-slate-400">{m.machine_code}</span>
-                  <span className={`ml-auto rounded px-2 py-0.5 text-xs font-medium ${STATE_CHIP[state]}`}>
+                  {/* a gépen futó ügynök verziója (a legutóbbi jelentésből) — user-kérés */}
+                  <span
+                    className="ml-auto rounded border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-xs text-slate-600"
+                    title={t("vtel.agentVersionHint")}
+                  >
+                    🤖 {m.telemetry?.agent ? `v${String(m.telemetry.agent)}` : t("vtel.agentVersionUnknown")}
+                  </span>
+                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATE_CHIP[state]}`}>
                     {t(`vtel.state.${state}`)}
                   </span>
                 </div>
@@ -478,7 +506,12 @@ export default function VendingTelemetriaPage() {
                 {(() => { const g = geoText(m); return (
                   <p className="mt-0.5 text-xs text-slate-500">📍 {g ? <>{g.text} · <a href={`https://www.google.com/maps?q=${g.lat},${g.lon}`} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{t("vtel.map")}</a></> : t("vtel.noLocation")}{m.ip && <span className="ml-1 font-mono text-[10px] text-slate-400">· {m.ip}</span>}</p>
                 ); })()}
-                {m.pending_commands.length > 0 && <p className="mt-0.5 text-xs text-amber-700">⏳ {t("vtel.queued", { list: m.pending_commands.map((c) => t(`vtel.cmd.${c}`)).join(", ") })}</p>}
+                {m.pending_commands.length > 0 && (
+                  <p className="mt-0.5 text-xs text-amber-700">
+                    ⏳ {t("vtel.queued", { list: m.pending_commands.map((c) => t(`vtel.cmd.${c}`)).join(", ") })}
+                    <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600">{nextPingText(m)}</span>
+                  </p>
+                )}
                 {keyShown === m.id && m.api_key && (
                   <input
                     readOnly
