@@ -411,16 +411,25 @@ export default function VendingTelemetriaPage() {
     }
   }
 
-  const telemetryChips = (data: Record<string, unknown> | null) => {
-    if (!data || Object.keys(data).length === 0) return null;
+  /** Egy csempe a gépkártyán: nagy ikon, cím, kis állapot-sor; kiemelés hibánál / a „Most” gombnál. */
+  const tile = (icon: string, label: string, sub: string | null, onClick: () => void, tone?: "alert" | "accent", title?: string) => {
+    const toneCls = tone === "alert"
+      ? "border-rose-300 ring-1 ring-rose-200 hover:border-rose-400"
+      : tone === "accent"
+        ? "border-indigo-300 ring-1 ring-indigo-200 hover:border-indigo-400"
+        : "border-slate-200 hover:border-indigo-300";
+    const subCls = tone === "alert" ? "text-rose-600 font-semibold" : tone === "accent" ? "text-indigo-600" : "text-slate-400";
     return (
-      <div className="mt-1 flex flex-wrap gap-1.5">
-        {Object.entries(data).slice(0, 10).map(([k, v]) => (
-          <span key={k} className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
-            {k}: <b>{v === null || v === undefined ? "—" : String(v)}</b>
-          </span>
-        ))}
-      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        title={title}
+        className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-0.5 rounded-xl border bg-slate-50 px-1 py-2 text-center transition hover:shadow-sm ${toneCls}`}
+      >
+        <span className="text-xl leading-none">{icon}</span>
+        <span className="text-[11px] font-medium leading-tight text-slate-700">{label}</span>
+        {sub && <span className={`text-[10px] leading-tight ${subCls}`}>{sub}</span>}
+      </button>
     );
   };
 
@@ -470,15 +479,6 @@ export default function VendingTelemetriaPage() {
                   <p className="mt-0.5 text-xs text-slate-500">📍 {g ? <>{g.text} · <a href={`https://www.google.com/maps?q=${g.lat},${g.lon}`} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{t("vtel.map")}</a></> : t("vtel.noLocation")}{m.ip && <span className="ml-1 font-mono text-[10px] text-slate-400">· {m.ip}</span>}</p>
                 ); })()}
                 {m.pending_commands.length > 0 && <p className="mt-0.5 text-xs text-amber-700">⏳ {t("vtel.queued", { list: m.pending_commands.map((c) => t(`vtel.cmd.${c}`)).join(", ") })}</p>}
-                {m.open_errors > 0 && (
-                  <button
-                    onClick={() => void openErrors(m)}
-                    className="mt-1 rounded-lg bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800 hover:bg-rose-200"
-                  >
-                    {t("vtel.errorsBadge", { n: m.open_errors })}
-                  </button>
-                )}
-                {telemetryChips(m.telemetry)}
                 {keyShown === m.id && m.api_key && (
                   <input
                     readOnly
@@ -487,38 +487,29 @@ export default function VendingTelemetriaPage() {
                     className="mt-2 w-full rounded-lg border border-slate-300 bg-slate-50 px-2 py-1 font-mono text-xs"
                   />
                 )}
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <button onClick={() => void openHistory(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
-                    📜 {t("vtel.history")}
-                  </button>
-                  <button onClick={() => void openSales(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
-                    📊 {t("vtel.sales")}
-                  </button>
-                  <button onClick={() => void pingNow(m)} title={t("vtel.pingNowHint")} className="rounded-lg border border-indigo-300 px-2.5 py-1 text-xs text-indigo-700 hover:bg-indigo-50">
-                    {t("vtel.pingNow")}
-                  </button>
-                  <button onClick={() => void openCatalog(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
-                    ☕ {t("vtel.catalog")}
-                  </button>
-                  <button onClick={() => void openFiles(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
-                    📄 {t("vtel.files")}
-                  </button>
-                  <button onClick={() => void openErrors(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
-                    ⚠️ {t("vtel.errors")}
-                  </button>
-                  <button onClick={() => void copyKey(m)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100">
+                {/* Csempék: a gép fő nézetei kiemelve, az adminisztráció halkabban alatta (user-kérés) */}
+                <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                  {tile("📜", t("vtel.history"), m.last_seen_at ? fmt(m.last_seen_at).split(" ").slice(-1)[0] : "—", () => void openHistory(m))}
+                  {tile("📊", t("vtel.sales"), m.drinks_today != null ? t("vtel.drinksToday", { n: m.drinks_today }) : ft(m.revenue_today), () => void openSales(m))}
+                  {tile("☕", t("vtel.catalog"), null, () => void openCatalog(m))}
+                  {tile("⚠️", t("vtel.errors"), m.open_errors > 0 ? t("vtel.errorsBadge", { n: m.open_errors }) : "0", () => void openErrors(m), m.open_errors > 0 ? "alert" : undefined)}
+                  {tile("📄", t("vtel.files"), null, () => void openFiles(m))}
+                  {tile("📡", t("vtel.pingNow"), m.pending_commands.length > 0 ? `⏳ ${m.pending_commands.length}` : (m.online ? t("vtel.online") : t("vtel.offline")), () => void pingNow(m), "accent", t("vtel.pingNowHint"))}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <button onClick={() => void copyKey(m)} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100">
                     🔑 {t("vtel.copyKey")}
                   </button>
-                  <button onClick={() => void regenKey(m)} className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs text-amber-700 hover:bg-amber-50">
+                  <button onClick={() => void regenKey(m)} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100">
                     ♻️ {t("vtel.regenKey")}
                   </button>
                   <button
                     onClick={() => setForm({ id: m.id, code: m.machine_code, name: m.name, note: m.note ?? "", active: m.is_active })}
-                    className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-100"
+                    className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100"
                   >
                     ✏️ {t("common.edit")}
                   </button>
-                  <button onClick={() => void deleteMachine(m)} className="rounded-lg border border-rose-300 px-2.5 py-1 text-xs text-rose-700 hover:bg-rose-50">
+                  <button onClick={() => void deleteMachine(m)} className="ml-auto rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50">
                     🗑 {t("common.delete")}
                   </button>
                 </div>
