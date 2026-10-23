@@ -36,6 +36,8 @@ export default function SearchSelect({
   allowEmpty = false,
   emptyLabel,
   className = "",
+  onCreate,
+  createLabel,
 }: {
   items: SearchItem[];
   value: string;
@@ -46,6 +48,9 @@ export default function SearchSelect({
   allowEmpty?: boolean;
   emptyLabel?: string;
   className?: string;
+  /** Szabad szavas létrehozás: ha a beírt névre nincs pontos találat, „+ Létrehozás: …” sor. */
+  onCreate?: (label: string) => void;
+  createLabel?: string;
 }) {
   const { t } = useT();
   const [query, setQuery] = useState("");
@@ -134,12 +139,21 @@ export default function SearchSelect({
       e.preventDefault();
       const it = results[highlight];
       if (it) pick(it.id);
+      else if (canCreate) create();
     } else if (e.key === "Escape") {
       setOpen(false);
     }
   }
 
   const shown = results.slice(0, MAX_SHOWN);
+  const trimmed = query.trim();
+  const canCreate = !!onCreate && trimmed.length >= 2 && !items.some((i) => norm(i.label) === norm(trimmed));
+  function create() {
+    if (!onCreate || !canCreate) return;
+    onCreate(trimmed);
+    setQuery("");
+    setOpen(false);
+  }
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
@@ -203,7 +217,16 @@ export default function SearchSelect({
               {emptyLabel ?? "—"}
             </button>
           )}
-          {shown.length === 0 && (
+          {canCreate && (
+            <button
+              type="button"
+              onClick={create}
+              className="block w-full border-b border-emerald-100 bg-emerald-50 px-3 py-2 text-left text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+            >
+              ＋ {createLabel ?? t("picker.create")}: „{trimmed}”
+            </button>
+          )}
+          {shown.length === 0 && !canCreate && (
             <div className="px-3 py-3 text-sm text-slate-500">{t("picker.noResults")}</div>
           )}
           {shown.map((it, i) => (

@@ -50,6 +50,16 @@ export default function SajatAlkatreszekPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  async function createPartInline(name: string) {
+    try {
+      const p = await api.post<{ id: string; name: string; sku: string }>("/api/parts", { name, unit: "db" });
+      load();
+      setForm((f) => (f ? { ...f, part_id: p.id } : f));
+      toast(t("parts.createdInline", { name: p.name, sku: p.sku }), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
   const catalogItems = useMemo(
     () => (wh?.catalog ?? []).map((c) => ({ id: c.id, label: c.name, badge: c.sku, sublabel: c.unit })),
     [wh],
@@ -258,7 +268,14 @@ export default function SajatAlkatreszekPage() {
             <h2 className="text-lg font-semibold">🔁 {t("myParts.newRequest")}</h2>
             <div className="text-sm">
               <p className="mb-1 text-xs text-slate-500">{t("myParts.part")} *</p>
-              <SearchSelect items={catalogItems} value={form.part_id} onChange={(id) => setForm({ ...form, part_id: id })} placeholder={t("parts.search")} />
+              <SearchSelect
+                items={catalogItems}
+                value={form.part_id}
+                onChange={(id) => setForm({ ...form, part_id: id })}
+                placeholder={t("parts.search")}
+                createLabel={t("parts.createInline")}
+                onCreate={(name) => void createPartInline(name)}
+              />
             </div>
             <label className="block text-sm">{t("myParts.quantity")} *<input required type="number" min={0} step="any" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
             <label className="block text-sm">{t("myParts.note")}<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>

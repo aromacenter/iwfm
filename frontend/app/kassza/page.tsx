@@ -503,22 +503,25 @@ export default function KasszaPage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
               >
                 <option value="">{t("tasks.choose")}</option>
-                {agents
-                  .filter((a) => a.user_id && a.user_id !== meId)
-                  // Admin nem átadás-címzett (78dfd3e1): felé a "Pénz
-                  // leadása" gomb az út (az marad előválasztva), ott a
-                  // leadás végállomás.
-                  .filter((a) =>
-                    a.user_id === transferForm.to
-                    || !centralTargets.some((c) => c.user_id === a.user_id && c.role === "admin"))
-                  .map((a) => (
-                    <option key={a.user_id} value={a.user_id!}>{a.name}</option>
-                  ))}
-                {/* Előválasztott központi címzett, ha nem elszámoló (nincs az agents-ben) */}
-                {transferForm.to && !agents.some((a) => a.user_id === transferForm.to) &&
-                  centralTargets.filter((c) => c.user_id === transferForm.to).map((c) => (
-                    <option key={c.user_id} value={c.user_id}>{c.name}</option>
-                  ))}
+                {/* Címzettek (2817884b): az elszámolók ÉS a központi címzettek (manager,
+                    képviselők) együtt, saját magam nélkül — így az is választható, aki még
+                    nem számolt el. Admin csak a „Pénz átadása” gombbal (előválasztva). */}
+                {(() => {
+                  const seen = new Set<string>();
+                  const opts: { id: string; name: string }[] = [];
+                  for (const a of agents) {
+                    if (!a.user_id || a.user_id === meId || seen.has(a.user_id)) continue;
+                    const isAdmin = centralTargets.some((c) => c.user_id === a.user_id && c.role === "admin");
+                    if (isAdmin && a.user_id !== transferForm.to) continue;
+                    seen.add(a.user_id); opts.push({ id: a.user_id, name: a.name });
+                  }
+                  for (const c of centralTargets) {
+                    if (c.user_id === meId || seen.has(c.user_id)) continue;
+                    if (c.role === "admin" && c.user_id !== transferForm.to) continue;
+                    seen.add(c.user_id); opts.push({ id: c.user_id, name: c.name });
+                  }
+                  return opts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>);
+                })()}
               </select>
             </label>
             <label className="block text-sm">

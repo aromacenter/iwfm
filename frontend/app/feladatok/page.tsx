@@ -167,13 +167,17 @@ export default function FeladatokPage() {
   // Az átvétel azonosítója, amiből a feladat készül — a mentéskor a
   // kapcsolat is tárolódik (az átvétel-lista így tudja: már van munkalap).
   const [intakeIdForTask, setIntakeIdForTask] = useState<string | null>(null);
+  // Átvételből kötelezően: az űrlap nem zárható be mentés nélkül (653a4e59)
+  const [forcedIntake, setForcedIntake] = useState(false);
   // Az átvételkor megadott cseregép — a feladat létrejötte után rögzítjük
   const [intakeLoaner, setIntakeLoaner] = useState<string | null>(null);
 
   useEffect(() => {
-    const intakeId = new URLSearchParams(window.location.search).get("intake");
+    const params = new URLSearchParams(window.location.search);
+    const intakeId = params.get("intake");
     if (!intakeId) return;
     setIntakeIdForTask(intakeId);
+    setForcedIntake(params.get("force") === "1");
     api
       .get<{
         id: string; asset_id: string | null; asset_name: string | null;
@@ -308,6 +312,7 @@ export default function FeladatokPage() {
       setExternalService(false);
       setOnsite(false);
       setIntakeIdForTask(null);
+      setForcedIntake(false);
       setTaskAssetId("");
       setNewAssetMode(false);
       setNewAsset({ name: "", manufacturer: "", serial_number: "", partner_id: "" });
@@ -885,10 +890,12 @@ export default function FeladatokPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <form onSubmit={submit} className="relative max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés) */}
-            <button type="button" onClick={() => setShowForm(false)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            {/* ✕ bezárás — a mellé-kattintás szándékosan NEM zár (user-kérés); átvételből NINCS bezárás */}
+            {!forcedIntake && (
+              <button type="button" onClick={() => setShowForm(false)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            )}
             <h2 className="text-lg font-semibold">{t("tasks.newTitle")}</h2>
-            <p className="text-xs text-slate-500">{t("tasks.newHint")}</p>
+            <p className="text-xs text-slate-500">{forcedIntake ? t("tasks.intakeForcedHint") : t("tasks.newHint")}</p>
             <label className="block text-sm">
               {t("tasks.taskTitle")}
               <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
@@ -1058,7 +1065,9 @@ export default function FeladatokPage() {
             )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              {!forcedIntake && (
+                <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              )}
               <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{t("tasks.assign")}</button>
             </div>
           </form>

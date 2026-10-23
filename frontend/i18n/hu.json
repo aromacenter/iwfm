@@ -100,7 +100,8 @@
     "clear": "Törlés",
     "noResults": "Nincs találat.",
     "inactive": "Inaktív",
-    "more": "…és még {count} találat — pontosítsd a keresést"
+    "more": "…és még {count} találat — pontosítsd a keresést",
+    "create": "Létrehozás"
   },
   "common": {
     "icons": "Ikonok:",
@@ -525,7 +526,10 @@
     "invoiceEmails": "Számla címzettje",
     "invoiceEmailsPh": "pl. konyveles@partner.hu, boss@partner.hu",
     "invoiceEmailsHint": "A számla erre/ezekre a címekre megy (vesszővel több is). Üresen a partner e-mailje.",
-    "replenishGls": "Feltöltés GLS-csomagként (a Csomagok oldal nyílik)"
+    "replenishGls": "Feltöltés GLS-csomagként (a Csomagok oldal nyílik)",
+    "printTitle": "Bizonylat nyomtatása",
+    "printHint": "A4-es lap, vagy 50 / 80 mm-es nyugtanyomtató. A nyomtatási ablak a böngészőben nyílik.",
+    "printNo": "Most nem nyomtatok"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1369,7 +1373,8 @@
     "timerTravel": "út",
     "timerWait": "várakozás",
     "applyMeasured": "⏱ Mért idő → írt óra",
-    "applyMeasuredDone": "Írt óra beállítva: {h} ó."
+    "applyMeasuredDone": "Írt óra beállítva: {h} ó.",
+    "intakeForcedHint": "Az átvételből a munkalap kötelezően elkészül: válaszd ki a szervizest és a határidőt, majd mentsd. Mégse nincs."
   },
   "myTasks": {
     "title": "Feladataim",
@@ -2002,7 +2007,9 @@
     "vending.error_not_found": "A hiba nem található.",
     "vending.bad_command": "Ismeretlen parancs.",
     "tasks.reschedule_note_required": "Határidő-módosításhoz indok kell.",
-    "settlement.bad_invoice_email": "Érvénytelen számla-e-mail cím."
+    "settlement.bad_invoice_email": "Érvénytelen számla-e-mail cím.",
+    "warehouse.manage_forbidden": "Raktárat csak admin vagy manager hozhat létre, módosíthat vagy törölhet.",
+    "warehouse.forbidden": "Ezt a raktárat nem láthatod — az admin adhat hozzá hozzáférést."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2304,7 +2311,10 @@
     "transferCancelConfirm": "Visszavonod az átadást ({product})? A mennyiség visszakerül a raktárba.",
     "transfer_acceptDone": "Átvétel igazolva — a készlet rákerült a raktárra.",
     "transfer_rejectDone": "Átadás elutasítva — a készlet visszakerült a küldőhöz.",
-    "transfer_cancelDone": "Átadás visszavonva."
+    "transfer_cancelDone": "Átadás visszavonva.",
+    "allowedUsers": "Ki láthatja még ezt a raktárat",
+    "allowedUsersHint": "Admin és manager mindent lát. A többiek a saját autójukat és az itt bepipált raktárakat. Új raktárat csak admin/manager hozhat létre.",
+    "visibleTo": "látja: {names}"
   },
   "po": {
     "title": "Beszerzési rendelések",
@@ -3416,7 +3426,9 @@
     "st.over": "küszöb felett",
     "st.progress": "{counted} / {total} sor számolva",
     "st.emptyList": "Még nincs leltár-munkamenet.",
-    "st.rowsHint": "Vak leltárnál a nyilvántartott mennyiség beküldésig rejtve; a nem számolt sorok beküldéskor a nyilvántartott értéket kapják."
+    "st.rowsHint": "Vak leltárnál a nyilvántartott mennyiség beküldésig rejtve; a nem számolt sorok beküldéskor a nyilvántartott értéket kapják.",
+    "createInline": "Új alkatrész",
+    "createdInline": "Alkatrész létrehozva: {name} ({sku})"
   },
   "myParts": {
     "title": "Saját alkatrészeim",

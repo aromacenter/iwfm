@@ -333,15 +333,11 @@ export default function AtvetelPage() {
           toast(errorMessage(err), "error");
         }
       }
-      // minden adat megvan → a munkalap kérdés nélkül, automatikusan elkészül (653a4e59)
+      // minden adat megvan → a munkalap-űrlap kérdés NÉLKÜL nyílik (az átvevő
+      // választja a szervizest), és ott nincs Mégse (653a4e59, újranyitva)
       if (canTasks) {
-        try {
-          const ws = await api.post<{ id: string; title: string }>(`/api/intakes/${created.id}/worksheet`, {});
-          toast(t("intake.worksheetAuto", { title: ws.title }), "success");
-          load();
-        } catch (err) {
-          toast(errorMessage(err), "error");
-        }
+        router.push(`/feladatok?intake=${created.id}&force=1`);
+        return;
       }
     } catch (err) {
       setError(errorMessage(err));

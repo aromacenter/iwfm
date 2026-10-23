@@ -49,6 +49,33 @@ def _parse_uuid(raw: str, code: str) -> uuid.UUID:
         raise HTTPException(status_code=404, detail={"code": code})
 
 
+def _is_manager(actor: User) -> bool:
+    return actor.role in ("admin", "manager")
+
+
+def _can_see(wh: Warehouse, actor: User) -> bool:
+    """Admin/manager mindent lát; más a saját autóját és azt, amit az admin
+    engedélyezett neki (2b3aba3d)."""
+    if _is_manager(actor):
+        return True
+    if wh.user_id is not None and wh.user_id == actor.id:
+        return True
+    return str(actor.id) in (wh.allowed_user_ids or [])
+
+
+def _require_manager(actor: User) -> None:
+    """Raktárat létrehozni/módosítani/törölni csak admin és manager tud."""
+    if not _is_manager(actor):
+        raise HTTPException(status_code=403, detail={"code": "warehouse.manage_forbidden"})
+
+
+async def _get_visible_warehouse(db: AsyncSession, warehouse_id: str, actor: User) -> Warehouse:
+    wh = await _get_warehouse_or_404(db, warehouse_id)
+    if not _can_see(wh, actor):
+        raise HTTPException(status_code=403, detail={"code": "warehouse.forbidden"})
+    return wh
+
+
 async def _get_warehouse_or_404(db: AsyncSession, warehouse_id: str) -> Warehouse:
     wh = (
         await db.execute(
@@ -213,6 +240,7 @@ class WarehouseBody(BaseModel):
     user_id: str | None = None  # autónál: az üzletkötő
     notes: str | None = None
     is_active: bool = True
+    allowed_user_ids: list[str] = Field(default_factory=list, max_length=200)  # kik láthatják még
 
     @field_validator("kind")
     @classmethod
@@ -232,6 +260,8 @@ class WarehouseOut(BaseModel):
     is_active: bool
     product_count: int
     total_quantity: float
+    allowed_user_ids: list[str] = []
+    allowed_user_names: list[str] = []
 
 
 async def _warehouse_out(db: AsyncSession, wh: Warehouse) -> WarehouseOut:
@@ -245,24 +275,37 @@ async def _warehouse_out(db: AsyncSession, wh: Warehouse) -> WarehouseOut:
         u = (await db.execute(select(User).where(User.id == wh.user_id))).scalar_one_or_none()
         user_name = u.display_name if u else None
     nonzero = [r for r in rows if abs(r.quantity) > 1e-9]
+    allowed = [str(x) for x in (wh.allowed_user_ids or [])]
+    names: list[str] = []
+    if allowed:
+        ids = []
+        for x in allowed:
+            try:
+                ids.append(uuid.UUID(x))
+            except ValueError:
+                continue
+        if ids:
+            names = [u.display_name for u in (await db.execute(select(User).where(User.id.in_(ids)))).scalars().all()]
     return WarehouseOut(
         id=str(wh.id), name=wh.name, kind=wh.kind,
         user_id=str(wh.user_id) if wh.user_id else None, user_name=user_name,
         notes=wh.notes, is_active=wh.is_active,
         product_count=len(nonzero),
         total_quantity=round(sum(r.quantity for r in rows), 2),
+        allowed_user_ids=allowed, allowed_user_names=sorted(names),
     )
 
 
 @router.get("", response_model=list[WarehouseOut])
 async def list_warehouses(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("settlements")),
 ):
     rows = (
         await db.execute(select(Warehouse).order_by(Warehouse.kind, Warehouse.name))
     ).scalars().all()
-    return [await _warehouse_out(db, wh) for wh in rows]
+    # Láthatóság (2b3aba3d): admin/manager mindent, más a sajátját + az engedélyezetteket
+    return [await _warehouse_out(db, wh) for wh in rows if _can_see(wh, actor)]
 
 
 @router.post("", response_model=WarehouseOut, status_code=201)
@@ -272,8 +315,10 @@ async def create_warehouse(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("settlements")),
 ):
+    _require_manager(actor)  # új raktárat NEM hozhat létre bárki (2b3aba3d)
     data = body.model_dump()
     data["user_id"] = _parse_uuid(body.user_id, "user.not_found") if body.user_id else None
+    data["allowed_user_ids"] = [str(_parse_uuid(x, "user.not_found")) for x in body.allowed_user_ids]
     wh = Warehouse(**data)
     db.add(wh)
     await db.flush()
@@ -293,9 +338,11 @@ async def update_warehouse(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("settlements")),
 ):
+    _require_manager(actor)
     wh = await _get_warehouse_or_404(db, warehouse_id)
     data = body.model_dump()
     data["user_id"] = _parse_uuid(body.user_id, "user.not_found") if body.user_id else None
+    data["allowed_user_ids"] = [str(_parse_uuid(x, "user.not_found")) for x in body.allowed_user_ids]
     for key, value in data.items():
         setattr(wh, key, value)
     await record_audit(
@@ -316,6 +363,7 @@ async def delete_warehouse(
     """Raktár/autó törlése. Védőkorlátok: nem üres készlettel vagy nyitott
     (piszkozat/megrendelt) beszerzési rendeléssel nem törölhető. A mozgás-
     történet a raktárral együtt törlődik (az audit-napló megmarad)."""
+    _require_manager(actor)
     wh = await _get_warehouse_or_404(db, warehouse_id)
     nonzero = [
         s for s in (
@@ -372,12 +420,12 @@ class WarehouseStockOut(BaseModel):
 async def warehouse_stock(
     warehouse_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("settlements")),
 ):
     """A raktárhoz KÉZZEL hozzárendelt termékek készlete. A katalógusból a
     /stock/add végponttal kerül be termék (a katalógus és a raktár-választék
     tudatosan eltérhet)."""
-    wh = await _get_warehouse_or_404(db, warehouse_id)
+    wh = await _get_visible_warehouse(db, warehouse_id, actor)
     rows = (
         await db.execute(
             select(WarehouseStock, Product)
@@ -408,7 +456,7 @@ async def add_stock_product(
     actor: User = Depends(require_perm("settlements")),
 ):
     """Termék kézi hozzárendelése a raktárhoz (0 induló készlettel)."""
-    wh = await _get_warehouse_or_404(db, warehouse_id)
+    wh = await _get_visible_warehouse(db, warehouse_id, actor)
     product = await _get_product_or_404(db, body.product_id)
     existing = (
         await db.execute(
@@ -442,7 +490,7 @@ async def remove_stock_product(
     actor: User = Depends(require_perm("settlements")),
 ):
     """Termék levétele a raktár választékáról — csak nulla készletnél."""
-    wh = await _get_warehouse_or_404(db, warehouse_id)
+    wh = await _get_visible_warehouse(db, warehouse_id, actor)
     product = await _get_product_or_404(db, product_id)
     row = (
         await db.execute(
@@ -483,13 +531,13 @@ async def warehouse_movements(
     warehouse_id: str,
     days: int = 31,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("settlements")),
 ):
     """Raktári mozgásnapló: ki, mikor, mit, mennyit vételezett / adott ki /
     vett be — a napi forgalom követéséhez."""
     from datetime import timedelta
 
-    wh = await _get_warehouse_or_404(db, warehouse_id)
+    wh = await _get_visible_warehouse(db, warehouse_id, actor)
     days = max(1, min(days, 366))
     since = datetime.now(UTC) - timedelta(days=days)
     rows = (
@@ -584,7 +632,7 @@ async def receive_stock(
     actor: User = Depends(require_perm("settlements")),
 ):
     """Közvetlen bevételezés a raktárba (beszerzési rendelés nélkül)."""
-    wh = await _get_warehouse_or_404(db, warehouse_id)
+    wh = await _get_visible_warehouse(db, warehouse_id, actor)
     product = await _get_product_or_404(db, body.product_id)
     stock = await _stock_row(db, wh.id, product.id)
     stock.quantity += body.quantity
@@ -969,7 +1017,7 @@ async def adjust_stock(
 ):
     """Leltár-korrekció: a készletet a számolt értékre állítja, az eltérés
     mozgásként rögzül."""
-    wh = await _get_warehouse_or_404(db, warehouse_id)
+    wh = await _get_visible_warehouse(db, warehouse_id, actor)
     product = await _get_product_or_404(db, body.product_id)
     stock = await _stock_row(db, wh.id, product.id)
     delta = body.counted_qty - stock.quantity
@@ -1013,7 +1061,7 @@ class ReorderSuggestionOut(BaseModel):
 @router.get("/reorder-suggestions", response_model=list[ReorderSuggestionOut])
 async def reorder_suggestions(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("settlements")),
 ):
     """Küszöb alá csökkent raktárkészletek + javasolt rendelési mennyiség
     (a küszöb kétszereséig való feltöltés)."""
@@ -1138,7 +1186,7 @@ async def _get_po_or_404(db: AsyncSession, po_id: str) -> PurchaseOrder:
 @po_router.get("", response_model=list[POOut])
 async def list_purchase_orders(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("settlements")),
+    actor: User = Depends(require_perm("settlements")),
 ):
     rows = (
         await db.execute(select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc()).limit(200))
@@ -1157,7 +1205,7 @@ async def create_purchase_order(
 
     from app.services.wfm.codes import generate_po_number
 
-    wh = await _get_warehouse_or_404(db, body.warehouse_id)
+    wh = await _get_visible_warehouse(db, body.warehouse_id, actor)
     supplier_id = None
     if body.supplier_partner_id:
         supplier = (

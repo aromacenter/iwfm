@@ -286,3 +286,151 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
     c.showPage()
     c.save()
     return buf.getvalue()
+
+
+def build_settlement_receipt_pdf(data: dict, settings: dict | None = None, *, width_mm: int = 80) -> bytes:
+    """Nyugta-szélességű (50 vagy 80 mm) bizonylat hőnyomtatóra (11e969d6):
+    egy hosszú oldal, a tartalomhoz méretezett magassággal, aláírás-kép
+    nélkül (az aláíró neve szöveggel). Ugyanazok az adatok, mint az A4-esen."""
+    s = settings or {}
+    narrow = width_mm <= 60
+    W = width_mm * mm
+    margin = 3 * mm
+    left = margin
+    right = W - margin
+    base = 7.5 if narrow else 8.5
+    small = 6.5 if narrow else 7.5
+    lh = (3.6 if narrow else 4.2) * mm
+
+    lines_out: list[tuple] = []  # (kind, *args) — először összegyűjtjük, utána rajzolunk
+
+    def txt(text: str, size: float = base, bold: bool = False, align: str = "l") -> None:
+        lines_out.append(("t", text, size, bold, align))
+
+    def kv(label: str, value: str) -> None:
+        lines_out.append(("kv", label, value or "—"))
+
+    def rule() -> None:
+        lines_out.append(("r",))
+
+    def gap(n: float = 0.5) -> None:
+        lines_out.append(("g", n))
+
+    company_name = s.get("company_name") or "iwfm"
+    txt(company_name, base + 2, True, "c")
+    if s.get("company_address"):
+        txt(str(s["company_address"])[:48], small, False, "c")
+    gap()
+    txt("ELSZÁMOLÁSI BIZONYLAT", base + 1, True, "c")
+    txt(str(data.get("receipt_no", "")), base, True, "c")
+    txt(f"Kelt: {data.get('created_at', '')}", small, False, "c")
+    rule()
+    kv("Partner:", str(data.get("partner_name", "")))
+    if data.get("partner_code"):
+        kv("Azonosító:", str(data["partner_code"]))
+    if data.get("partner_address"):
+        txt(str(data["partner_address"])[:60], small)
+    if data.get("partner_tax_number"):
+        kv("Adószám:", str(data["partner_tax_number"]))
+    rule()
+    if data.get("previous_at"):
+        kv("Előző elsz.:", str(data["previous_at"]))
+    kv("Végezte:", str(data.get("settled_by_name", "")))
+    kv("Fizetés:", PAYMENT_LABELS.get(data.get("payment_method", ""), str(data.get("payment_method", ""))))
+    if data.get("invoiced"):
+        doc_id = data.get("billingo_document_id")
+        kv("Számla:", f"kiállítva #{doc_id}" if doc_id else "kiállítva")
+    machines = data.get("machines") or []
+    if machines:
+        rule()
+        txt("GÉPEK", base, True)
+        for m in machines[:30]:
+            name = str(m.get("asset_name", ""))[:22]
+            if m.get("discount_pct"):
+                name += f" −{m['discount_pct']:g}%"
+            txt(f"{m.get('barcode', '')} {name}", small, True)
+            txt(f"{m.get('prev_counter', 0)} → {m.get('new_counter', 0)}  szerviz {m.get('service_portions', 0)}  adag {m.get('portions_billed', 0):.0f}", small)
+            lines_out.append(("amt", "", _fmt_money(m.get("amount_net", 0))))
+    items = data.get("lines") or []
+    if items:
+        rule()
+        txt("TÉTELEK", base, True)
+        for item in items[:40]:
+            txt(str(item.get("product_name", ""))[:30], small, True)
+            txt(f"{_fmt_qty(item.get('previous_qty', 0))} → {_fmt_qty(item.get('physical_qty', 0))}  fogy. {_fmt_qty(item.get('consumed_qty', 0))}  {item.get('portions', 0):.0f} adag × {_fmt_money(item.get('price_per_portion', 0))}", small)
+            lines_out.append(("amt", "", _fmt_money(item.get("amount_net", 0))))
+    rule()
+    lines_out.append(("amt", "Összesen nettó:", _fmt_money(data.get("total_net", 0))))
+    lines_out.append(("amtb", "Összesen bruttó:", _fmt_money(data.get("total_gross", 0))))
+    debt_before = data.get("debt_before")
+    paid_amount = data.get("paid_amount")
+    if debt_before:
+        lines_out.append(("amt", "Korábbi tartozás:", _fmt_money(debt_before)))
+        lines_out.append(("amt", "Összes fizetendő:", _fmt_money(data.get("total_gross", 0) + debt_before)))
+    if paid_amount is not None:
+        lines_out.append(("amt", "Fizetve:", _fmt_money(paid_amount)))
+        remaining = data.get("total_gross", 0) + (debt_before or 0) - paid_amount
+        if remaining > 0.5:
+            lines_out.append(("amtb", "Fennmaradó:", _fmt_money(remaining)))
+    rule()
+    if data.get("note"):
+        txt(f"Megj.: {str(data['note'])[:80]}", small)
+    if data.get("partner_signature"):
+        txt("Partner aláírta" + (f": {str(data.get('signer_name') or '')[:30]}" if data.get("signer_name") else ""), small)
+    else:
+        gap(2.5)
+        rule()
+        txt("Partner aláírása", small, False, "c")
+    if s.get("footer_text"):
+        gap()
+        txt(str(s["footer_text"])[:70], small, False, "c")
+    gap()
+    txt(f"generálva: {data.get('generated_at', '')}", small - 0.5, False, "c")
+
+    # magasság a sorok számából (+ a szöveges sorok esetleges törése nélkül)
+    total_h = margin * 2
+    for row in lines_out:
+        if row[0] == "g":
+            total_h += lh * row[1]
+        elif row[0] == "r":
+            total_h += lh * 0.7
+        else:
+            total_h += lh
+    H = max(total_h + 6 * mm, 60 * mm)
+
+    buf = io.BytesIO()
+    c = pdf_canvas.Canvas(buf, pagesize=(W, H))
+    y = H - margin - lh
+    for row in lines_out:
+        kind = row[0]
+        if kind == "g":
+            y -= lh * row[1]
+        elif kind == "r":
+            c.setLineWidth(0.4)
+            c.line(left, y + lh * 0.35, right, y + lh * 0.35)
+            y -= lh * 0.7
+        elif kind == "t":
+            _, text, size, bold, align = row
+            c.setFont(FONT_BOLD if bold else FONT, size)
+            if align == "c":
+                c.drawCentredString(W / 2, y, text)
+            else:
+                c.drawString(left, y, text)
+            y -= lh
+        elif kind == "kv":
+            _, label, value = row
+            c.setFont(FONT_BOLD, small)
+            c.drawString(left, y, label)
+            c.setFont(FONT, small)
+            c.drawRightString(right, y, str(value)[: 34 if narrow else 48])
+            y -= lh
+        elif kind in ("amt", "amtb"):
+            _, label, value = row
+            c.setFont(FONT_BOLD if kind == "amtb" else FONT, base if kind == "amtb" else small)
+            if label:
+                c.drawString(left, y, label)
+            c.drawRightString(right, y, value)
+            y -= lh
+    c.showPage()
+    c.save()
+    return buf.getvalue()

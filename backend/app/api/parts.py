@@ -195,8 +195,20 @@ async def delete_warehouse(
 # ─── Cikktörzs ───────────────────────────────────────────────────────────────
 
 
+async def _next_auto_sku(db: AsyncSession) -> str:
+    """Automatikus cikkszám a szabad szavas létrehozáshoz: AUTO-0001, AUTO-0002 …"""
+    rows = (await db.execute(select(Part.sku).where(Part.sku.like("AUTO-%")))).scalars().all()
+    n = 0
+    for r in rows:
+        try:
+            n = max(n, int(str(r).split("-", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return f"AUTO-{n + 1:04d}"
+
+
 class PartBody(BaseModel):
-    sku: str = Field(min_length=1, max_length=64)
+    sku: str | None = Field(default=None, max_length=64)  # üresen automatikus cikkszám (dcdae1bc)
     name: str = Field(min_length=1, max_length=256)
     manufacturer_code: str | None = Field(default=None, max_length=128)
     unit: str = Field(default="db", max_length=16)
@@ -290,7 +302,7 @@ async def create_part(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("parts")),
 ):
-    sku = body.sku.strip().upper()
+    sku = (body.sku or "").strip().upper() or await _next_auto_sku(db)
     dup = (await db.execute(select(Part).where(Part.sku == sku))).scalar_one_or_none()
     if dup is not None:
         raise HTTPException(status_code=409, detail={"code": "parts.sku_taken"})
@@ -322,7 +334,7 @@ async def update_part(
     actor: User = Depends(require_perm("parts")),
 ):
     p = await _part_or_404(db, part_id)
-    sku = body.sku.strip().upper()
+    sku = ((body.sku or "").strip().upper() or p.sku)
     if sku != p.sku:
         dup = (await db.execute(select(Part).where(Part.sku == sku))).scalar_one_or_none()
         if dup is not None:

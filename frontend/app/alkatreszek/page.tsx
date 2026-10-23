@@ -107,6 +107,18 @@ export default function AlkatreszekPage() {
     return parts.filter((p) => [p.name, p.sku, p.manufacturer_code ?? "", p.supplier ?? ""].some((x) => x.toLowerCase().includes(s)));
   }, [parts, q]);
 
+  /** Szabad szavas létrehozás a mozgatás-ablakból (dcdae1bc): csak név, a
+   *  cikkszám automatikus (AUTO-0001…), utána rögtön kiválasztva. */
+  async function createPartInline(name: string) {
+    try {
+      const p = await api.post<Part>("/api/parts", { name, unit: "db" });
+      setParts((list) => [p, ...list]);
+      setMove((m) => (m ? { ...m, part_id: p.id } : m));
+      toast(t("parts.createdInline", { name: p.name, sku: p.sku }), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
   const partItems = useMemo(() => parts.filter((p) => p.is_active).map((p) => ({ id: p.id, label: p.name, badge: p.sku, sublabel: `${p.total_qty} ${p.unit}`, keywords: p.manufacturer_code })), [parts]);
   const whItems = useMemo(() => warehouses.filter((w) => w.is_active).map((w) => ({ id: w.id, label: w.name, badge: w.kind === "vehicle" ? "🚚" : w.kind === "quarantine" ? "🚧" : "🏬" })), [warehouses]);
 
@@ -801,7 +813,14 @@ export default function AlkatreszekPage() {
             <h2 className="flex items-center gap-2 text-lg font-semibold">{t(`parts.${move.kind}`)}{cameraScanSupported() && <button type="button" onClick={() => setScanFor("move")} className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs font-normal hover:bg-slate-100">{t("parts.scan")}</button>}</h2>
             <div className="text-sm">
               <p className="mb-1 text-xs text-slate-500">{t("parts.part")} *</p>
-              <SearchSelect items={partItems} value={move.part_id} onChange={(id) => setMove({ ...move, part_id: id })} placeholder={t("parts.search")} />
+              <SearchSelect
+                items={partItems}
+                value={move.part_id}
+                onChange={(id) => setMove({ ...move, part_id: id })}
+                placeholder={t("parts.search")}
+                createLabel={t("parts.createInline")}
+                onCreate={(name) => void createPartInline(name)}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="text-sm">

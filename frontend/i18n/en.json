@@ -100,7 +100,8 @@
     "clear": "Clear",
     "noResults": "No matches.",
     "inactive": "Inactive",
-    "more": "…and {count} more — refine your search"
+    "more": "…and {count} more — refine your search",
+    "create": "Create"
   },
   "common": {
     "icons": "Icons:",
@@ -525,7 +526,10 @@
     "invoiceEmails": "Invoice recipient",
     "invoiceEmailsPh": "e.g. accounting@partner.com, boss@partner.com",
     "invoiceEmailsHint": "The invoice goes to these addresses (comma-separated). Empty = partner's e-mail.",
-    "replenishGls": "Replenish as a GLS parcel (opens the Parcels page)"
+    "replenishGls": "Replenish as a GLS parcel (opens the Parcels page)",
+    "printTitle": "Print receipt",
+    "printHint": "A4 sheet, or a 50 / 80 mm receipt printer. The print dialog opens in the browser.",
+    "printNo": "Not now"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1369,7 +1373,8 @@
     "timerTravel": "travel",
     "timerWait": "waiting",
     "applyMeasured": "⏱ Measured → written hours",
-    "applyMeasuredDone": "Written hours set: {h} h."
+    "applyMeasuredDone": "Written hours set: {h} h.",
+    "intakeForcedHint": "The worksheet from the intake is mandatory: pick the technician and the due date, then save. There is no cancel."
   },
   "myTasks": {
     "title": "My tasks",
@@ -2002,7 +2007,9 @@
     "vending.error_not_found": "Error not found.",
     "vending.bad_command": "Unknown command.",
     "tasks.reschedule_note_required": "Changing the due date requires a reason.",
-    "settlement.bad_invoice_email": "Invalid invoice e-mail address."
+    "settlement.bad_invoice_email": "Invalid invoice e-mail address.",
+    "warehouse.manage_forbidden": "Only an admin or manager can create, edit or delete warehouses.",
+    "warehouse.forbidden": "You cannot see this warehouse — an admin can grant access."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2304,7 +2311,10 @@
     "transferCancelConfirm": "Cancel this transfer ({product})? The quantity returns to the warehouse.",
     "transfer_acceptDone": "Receipt confirmed — stock added to the warehouse.",
     "transfer_rejectDone": "Transfer rejected — stock returned to the sender.",
-    "transfer_cancelDone": "Transfer cancelled."
+    "transfer_cancelDone": "Transfer cancelled.",
+    "allowedUsers": "Who else can see this warehouse",
+    "allowedUsersHint": "Admin and manager see everything. Others see their own van and the warehouses ticked here. Only admin/manager can create warehouses.",
+    "visibleTo": "visible to: {names}"
   },
   "po": {
     "title": "Purchase orders",
@@ -3416,7 +3426,9 @@
     "st.over": "over threshold",
     "st.progress": "{counted} / {total} rows counted",
     "st.emptyList": "No stocktake sessions yet.",
-    "st.rowsHint": "In a blind count the book quantity stays hidden until submission; uncounted rows take the book value on submit."
+    "st.rowsHint": "In a blind count the book quantity stays hidden until submission; uncounted rows take the book value on submit.",
+    "createInline": "New part",
+    "createdInline": "Part created: {name} ({sku})"
   },
   "myParts": {
     "title": "My parts",

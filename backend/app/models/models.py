@@ -2704,6 +2704,8 @@ class Warehouse(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Kik láthatják a sajátjukon kívül (user id-k) — admin/manager mindent lát (2b3aba3d)
+    allowed_user_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

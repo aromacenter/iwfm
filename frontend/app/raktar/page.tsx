@@ -23,6 +23,8 @@ interface Warehouse {
   is_active: boolean;
   product_count: number;
   total_quantity: number;
+  allowed_user_ids?: string[];
+  allowed_user_names?: string[];
 }
 
 interface WhStock {
@@ -126,6 +128,9 @@ export default function RaktarPage() {
   const { t } = useT();
   const { toast, confirm } = useUI();
   const canDelete = usePerms().can("delete");
+  // Raktárat csak admin/manager kezelhet (2b3aba3d); a többiek a sajátjukat + az engedélyezetteket látják
+  const [meRole, setMeRole] = useState<string | null>(null);
+  const isMgr = meRole === "admin" || meRole === "manager";
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [stock, setStock] = useState<WhStock[]>([]);
@@ -149,6 +154,7 @@ export default function RaktarPage() {
     api.get<PO[]>("/api/purchase-orders").then(setPos).catch(() => {});
     api.get<Suggestion[]>("/api/warehouses/reorder-suggestions").then(setSuggestions).catch(() => {});
     api.get<AssignableUser[]>("/api/warehouses/assignable-users").then(setAssignUsers).catch(() => {});
+    api.get<{ role?: string }>("/api/auth/me").then((m) => setMeRole(m.role ?? null)).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
@@ -189,7 +195,7 @@ export default function RaktarPage() {
   );
 
   // ── Raktár űrlap ──
-  const [whForm, setWhForm] = useState<{ id: string; name: string; kind: "site" | "van"; user_id: string; notes: string; is_active: boolean } | null>(null);
+  const [whForm, setWhForm] = useState<{ id: string; name: string; kind: "site" | "van"; user_id: string; notes: string; is_active: boolean; allowed_user_ids: string[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -203,6 +209,7 @@ export default function RaktarPage() {
         name: whForm.name, kind: whForm.kind,
         user_id: whForm.kind === "van" && whForm.user_id ? whForm.user_id : null,
         notes: whForm.notes || null, is_active: whForm.is_active,
+        allowed_user_ids: whForm.allowed_user_ids,
       };
       if (whForm.id) await api.patch(`/api/warehouses/${whForm.id}`, body);
       else await api.post("/api/warehouses", body);
@@ -407,12 +414,14 @@ export default function RaktarPage() {
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">{t("wh.title")}</h1>
-        <button
-          onClick={() => { setError(null); setWhForm({ id: "", name: "", kind: "site", user_id: "", notes: "", is_active: true }); }}
-          className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          {t("wh.new")}
-        </button>
+        {isMgr && (
+          <button
+            onClick={() => { setError(null); setWhForm({ id: "", name: "", kind: "site", user_id: "", notes: "", is_active: true, allowed_user_ids: [] }); }}
+            className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            {t("wh.new")}
+          </button>
+        )}
       </div>
 
       {/* Függő átadások: a fogadó fél igazolja az átvételt */}
@@ -492,18 +501,20 @@ export default function RaktarPage() {
             <div className="flex items-center justify-between">
               <span className="font-semibold">{w.kind === "van" ? "🚐" : "🏬"} {w.name}</span>
               <span className="flex gap-1">
+                {isMgr && (
                 <span
                   onClick={(e) => {
                     e.stopPropagation();
                     setError(null);
-                    setWhForm({ id: w.id, name: w.name, kind: w.kind, user_id: w.user_id ?? "", notes: w.notes ?? "", is_active: w.is_active });
+                    setWhForm({ id: w.id, name: w.name, kind: w.kind, user_id: w.user_id ?? "", notes: w.notes ?? "", is_active: w.is_active, allowed_user_ids: w.allowed_user_ids ?? [] });
                   }}
                   title={t("common.edit")}
                   className="cursor-pointer rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-100"
                 >
                   ✏️
                 </span>
-                {canDelete && (
+                )}
+                {canDelete && isMgr && (
                   <span
                     onClick={(e) => { e.stopPropagation(); deleteWarehouse(w); }}
                     title={t("wh.delete")}
@@ -515,7 +526,7 @@ export default function RaktarPage() {
               </span>
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              {t(w.kind === "van" ? "wh.kindVan" : "wh.kindSite")}
+              {t(w.kind === "van" ? "wh.kindVan" : "wh.kindSite")}{(w.allowed_user_names?.length ?? 0) > 0 && ` · 👁 ${t("wh.visibleTo", { names: w.allowed_user_names!.join(", ") })}`}
               {!w.is_active && ` · ${t("partners.inactive")}`}
             </div>
             <div className="mt-2 text-sm text-slate-700">
@@ -770,6 +781,24 @@ export default function RaktarPage() {
                 />
               </label>
             )}
+            {/* Láthatóság (2b3aba3d): kik látják ezt a raktárat a sajátjukon kívül */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="font-medium">👁 {t("wh.allowedUsers")}</p>
+              <p className="mb-2 text-xs text-slate-500">{t("wh.allowedUsersHint")}</p>
+              <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+                {assignUsers.filter((u) => u.role !== "admin" && u.role !== "manager" && u.id !== whForm.user_id).map((u) => (
+                  <label key={u.id} className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={whForm.allowed_user_ids.includes(u.id)}
+                      onChange={(e) => setWhForm({ ...whForm, allowed_user_ids: e.target.checked ? [...whForm.allowed_user_ids, u.id] : whForm.allowed_user_ids.filter((x) => x !== u.id) })}
+                      className="h-4 w-4"
+                    />
+                    {u.display_name} <span className="text-slate-400">({u.role})</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <label className="block text-sm">
               {t("cons.notes")}
               <textarea value={whForm.notes} onChange={(e) => setWhForm({ ...whForm, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

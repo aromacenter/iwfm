@@ -3545,10 +3545,10 @@ def _receipt_no(s: Settlement) -> str:
     return f"ELSZ-{_budapest(s.created_at):%Y%m%d}-{str(s.id)[:8].upper()}"
 
 
-async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes, str]:
+async def _build_settlement_pdf(db: AsyncSession, s: Settlement, width_mm: int | None = None) -> tuple[bytes, str]:
     """A bizonylat PDF-je — (pdf_bytes, bizonylatszám)."""
     from app.models import WorksheetSettings
-    from app.services.wfm.settlement_pdf import build_settlement_pdf
+    from app.services.wfm.settlement_pdf import build_settlement_pdf, build_settlement_receipt_pdf
 
     partner = (
         await db.execute(select(Partner).where(Partner.id == s.partner_id))
@@ -3567,19 +3567,23 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes,
     branding = (
         await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
     ).scalar_one_or_none()
-    settings = None
-    if branding is not None:
-        settings = {
-            "company_name": branding.company_name,
-            "company_address": branding.company_address,
-            "footer_text": branding.footer_text,
-            "accent_color": branding.accent_color,
-            "logo_bytes": bytes(branding.logo_data) if branding.logo_data else None,
-        }
+    # A fejlécben AZ a cég szerepel, amelyik a partnerhez be van állítva
+    # (xp / pc), nem mindig a globális arculaté; a logó marad (8b48f283).
+    from app.services.wfm.billingo_service import COMPANIES as _COMPANIES
+
+    _company = _COMPANIES.get(s.invoicing_company or "xp")
+    _is_default = (s.invoicing_company or "xp") == "xp"
+    settings = {
+        "company_name": _company or (branding.company_name if branding is not None else None),
+        "company_address": branding.company_address if (branding is not None and _is_default) else None,
+        "footer_text": branding.footer_text if branding is not None else None,
+        "accent_color": branding.accent_color if branding is not None else None,
+        "logo_bytes": bytes(branding.logo_data) if (branding is not None and branding.logo_data) else None,
+    }
 
     previous_at = await _previous_settlement_at(db, s)
     receipt_no = _receipt_no(s)
-    pdf = build_settlement_pdf(
+    pdf = (build_settlement_receipt_pdf if width_mm else build_settlement_pdf)(
         {
             "receipt_no": receipt_no,
             "created_at": f"{_budapest(s.created_at):%Y-%m-%d %H:%M}",
@@ -3629,6 +3633,7 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
         },
         settings,
+        **({"width_mm": width_mm} if width_mm else {}),
     )
     return pdf, receipt_no
 
@@ -3637,11 +3642,14 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement) -> tuple[bytes,
 async def settlement_pdf(
     settlement_id: str,
     request: Request,
+    format: str = Query(default="a4", pattern="^(a4|50|80)$"),  # 50/80 mm-es nyugtanyomtató (11e969d6)
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_perm("settlements")),
 ):
     s = await _get_settlement_or_404(db, settlement_id)
-    pdf, receipt_no = await _build_settlement_pdf(db, s)
+    pdf, receipt_no = await _build_settlement_pdf(db, s, width_mm=int(format) if format != "a4" else None)
+    if format != "a4":
+        receipt_no = f"{receipt_no}-{format}mm"
     await record_audit(
         db, actor=actor, action="settlement.pdf", entity_type="settlement",
         entity_id=str(s.id), request=request,

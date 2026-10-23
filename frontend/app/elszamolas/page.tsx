@@ -13,7 +13,7 @@ import PartnerInfo from "@/components/PartnerInfo";
 import PartnerPicker from "@/components/PartnerPicker";
 import SearchSelect from "@/components/SearchSelect";
 import SignatureCanvas from "@/components/SignatureCanvas";
-import { api, ApiError, downloadFile, errorMessage } from "@/lib/api";
+import { api, printFile, ApiError, downloadFile, errorMessage } from "@/lib/api";
 import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT } from "@/lib/companies";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -359,6 +359,8 @@ export default function ElszamolasPage() {
 
   // Késedelmi felár kikapcsolása erre az elszámolásra (9c7f54e5)
   const [lateFeeWaived, setLateFeeWaived] = useState(false);
+  // Bizonylat nyomtatása az elszámolás végén: A4 / 50 mm / 80 mm nyugta / nem (11e969d6)
+  const [printChoice, setPrintChoice] = useState<{ id: string; label: string; download?: boolean } | null>(null);
 
   const loadCtx = useCallback(() => {
     setDiscountAll(false);
@@ -1382,9 +1384,20 @@ export default function ElszamolasPage() {
   }
 
   async function downloadReceipt(s: Settlement) {
+    // az előzményekből is választható a formátum (A4 letöltés / 50 / 80 mm nyomtatás)
+    setPrintChoice({ id: s.id, label: `${s.partner_name ?? ""} · ${ft(s.total_gross)}`, download: true });
+  }
+
+  async function printReceipt(format: "a4" | "50" | "80") {
+    if (!printChoice) return;
+    const { id, download } = printChoice;
+    setPrintChoice(null);
     try {
-      const day = s.created_at.slice(0, 10).replaceAll("-", "");
-      await downloadFile(`/api/settlements/${s.id}/pdf`, `ELSZ-${day}-${s.id.slice(0, 8).toUpperCase()}.pdf`);
+      if (format === "a4" && download) {
+        await downloadFile(`/api/settlements/${id}/pdf`, `ELSZ-${id.slice(0, 8).toUpperCase()}.pdf`);
+      } else {
+        await printFile(`/api/settlements/${id}/pdf?format=${format}`);
+      }
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -1404,11 +1417,15 @@ export default function ElszamolasPage() {
         partner_email: signEmail.trim() || null,
       });
       toast(t("cons.signatureSaved"), "success");
+      const signedId = signing.id;
+      const signedLabel = `${signing.partner_name} · ${ft(signing.total_gross)}`;
       setSigning(null);
       setSignature(null);
       setSignName("");
       setSignEmail("");
       loadHistory();
+      // utolsó lépés: kinyomtatjuk-e a bizonylatot (A4 / 50 / 80 mm)?
+      setPrintChoice({ id: signedId, label: signedLabel });
     } catch (err) {
       toast(errorMessage(err), "error");
     } finally {
@@ -2973,6 +2990,22 @@ export default function ElszamolasPage() {
                 {busy ? t("common.saving") : t("common.save")}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {printChoice && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="relative w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">🖨 {t("cons.printTitle")}</h2>
+            <p className="text-sm text-slate-600">{printChoice.label}</p>
+            <p className="text-xs text-slate-500">{t("cons.printHint")}</p>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => void printReceipt("a4")} className="rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium hover:bg-slate-100">📄 A4</button>
+              <button onClick={() => void printReceipt("50")} className="rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium hover:bg-slate-100">🧾 50 mm</button>
+              <button onClick={() => void printReceipt("80")} className="rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium hover:bg-slate-100">🧾 80 mm</button>
+            </div>
+            <button onClick={() => setPrintChoice(null)} className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-500 hover:bg-slate-100">{t("cons.printNo")}</button>
           </div>
         </div>
       )}
