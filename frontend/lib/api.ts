@@ -240,6 +240,12 @@ export function errorMessage(err: unknown): string {
         ? translate(`errors.${err.code}.withMessage`, { message: detailMsg })
         : detailMsg;
     }
+    // Jogosultság-tiltás (RBAC v2): „Nincs jogosultságod: Feladatok · módosítás”
+    if (err.code === "auth.forbidden_action" && err.detail && typeof err.detail === "object") {
+      const d = err.detail as { feature?: string; action?: string };
+      const feat = d.feature?.startsWith("role:") ? translate(`perms.levels.${d.feature.slice(5)}`) : translate(`features.${d.feature ?? ""}`);
+      return translate("errors.auth.forbidden_action", { feature: feat, action: translate(`perms.actions.${d.action ?? "view"}.label`) });
+    }
     // A backend detail-mezői ({limit}, {name}...) behelyettesítődnek a szövegbe
     const params =
       err.detail && typeof err.detail === "object" && !Array.isArray(err.detail)

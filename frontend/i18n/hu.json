@@ -179,7 +179,8 @@
     "myParts": "Saját alkatrészeim",
     "worktime": "Munkaidő-mérés",
     "partsProc": "Beszerzés",
-    "partsReports": "Riportok (alkatrész)"
+    "partsReports": "Riportok (alkatrész)",
+    "manual": "Kézikönyv"
   },
   "roles": {
     "admin": "Admin",
@@ -2009,7 +2010,13 @@
     "tasks.reschedule_note_required": "Határidő-módosításhoz indok kell.",
     "settlement.bad_invoice_email": "Érvénytelen számla-e-mail cím.",
     "warehouse.manage_forbidden": "Raktárat csak admin vagy manager hozhat létre, módosíthat vagy törölhet.",
-    "warehouse.forbidden": "Ezt a raktárat nem láthatod — az admin adhat hozzá hozzáférést."
+    "warehouse.forbidden": "Ezt a raktárat nem láthatod — az admin adhat hozzá hozzáférést.",
+    "auth.forbidden_action": "Nincs jogosultságod: {feature} · {action}. A próbálkozás naplózva.",
+    "settings.role_exists": "Ilyen kulcsú szerepkör már van.",
+    "settings.role_not_found": "Nincs ilyen szerepkör.",
+    "settings.role_system": "Beépített szerepkör: nem törölhető, a szintje nem változtatható.",
+    "settings.role_in_use": "A szerepkör használatban van ({users} felhasználó) — előbb tedd át őket más szerepkörbe.",
+    "manual.not_found": "Nincs ilyen fejezet."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -3613,5 +3620,90 @@
     "expired": "lejárt",
     "activeUntil": "érvényes eddig",
     "empty": "Nincs adat."
+  },
+  "perms": {
+    "hint": "Szerepkörönként (beépített és saját) állítható, melyik funkció érhető el, és azon belül a ⚙ ikonnal a négy művelet: megtekintés, létrehozás, módosítás, törlés. Vidd az egeret a funkció nevére a részletes magyarázathoz. Az admin mindig mindent elér. A módosítás azonnal érvényes (a felhasználóknak újra be kell tölteniük az oldalt). Aki tiltott területre téved, hibaüzenetet kap, és a tiltás a Naplóba kerül.",
+    "newRole": "Új szerepkör",
+    "editRole": "Szerepkör szerkesztése",
+    "roleFormHint": "Pl. „auditor”: csak néz, nem nyúl. A létrehozás után a mátrixban személyre szabható minden funkció és művelet.",
+    "roleKey": "Kulcs (azonosító)",
+    "roleKeyHint": "kisbetű, szám, aláhúzás; később nem változtatható (pl. auditor, konyveles)",
+    "roleName": "Megjelenített név",
+    "roleDesc": "Leírás",
+    "roleDescPh": "Kiknek való, mit csinálhat — ez jelenik meg a buborékban.",
+    "roleLevel": "Szint",
+    "levels": {
+      "employee": "dolgozói szint",
+      "manager": "vezetői szint",
+      "admin": "admin"
+    },
+    "levelsTitle": "Szintek",
+    "levelsDesc": "Dolgozói szint: csak a mátrixban adott jogok. Vezetői szint: ezen felül a „csak admin/manager” szabályok is engedik (raktár létrehozása, kassza betét/kivét és központi áttekintés, pénzátadás-címzett). Az admin-szint nem adható: az a beépített admin.",
+    "copyFrom": "Jogok másolása innen",
+    "copyNone": "— üresen indul —",
+    "custom": "saját",
+    "roleMeta": "Szint: {level} · felhasználók: {users}",
+    "adminDesc": "Az admin minden funkciót és műveletet elér, kezeli a beállításokat, jogosultságokat, naplót és a törléseket. Nem szűkíthető.",
+    "toggleFeature": "A funkció be/ki ennél a szerepkörnél",
+    "openActions": "Művelet-szintű kapcsolók (megtekintés / létrehozás / módosítás / törlés)",
+    "unsaved": "Mentetlen módosítások",
+    "saved": "Jogosultságok mentve.",
+    "roleSaved": "Szerepkör mentve.",
+    "roleDeleteConfirm": "Törlöd a(z) „{name}” szerepkört? Csak akkor lehet, ha senki nincs benne.",
+    "roleDeleted": "Szerepkör törölve.",
+    "deniedTitle": "Nincs jogosultságod ehhez az oldalhoz",
+    "deniedPage": "A(z) „{feature}” funkció nincs engedélyezve a szerepkörödnek ({role}). Ha kell, kérd az admintól a Beállítások → Jogosultságok alatt.",
+    "deniedLogged": "Ez a próbálkozás a naplóba került.",
+    "backToCalendar": "Vissza a naptárhoz",
+    "actions": {
+      "view": {
+        "label": "megtekintés",
+        "desc": "Listák, részletek, PDF-ek és exportok olvasása a funkción belül (HTTP GET). Enélkül a funkció gyakorlatilag nem használható."
+      },
+      "create": {
+        "label": "létrehozás",
+        "desc": "Új rekord vagy művelet indítása: új feladat, partner, elszámolás, jegy, bevételezés, aláírás, küldés (HTTP POST)."
+      },
+      "edit": {
+        "label": "módosítás",
+        "desc": "Meglévő rekord átírása: adatok, státusz, árak, beállítások (HTTP PUT/PATCH)."
+      },
+      "delete": {
+        "label": "törlés",
+        "desc": "Rekord törlése vagy visszavonása a funkción belül (HTTP DELETE). A végleges törlésekhez a külön „Törlés funkciók” jog is kell."
+      }
+    },
+    "desc": {
+      "dashboard": "Vezérlőpult: a cég napi helyzete egy képernyőn — esedékes elszámolások, nyitott jegyek és feladatok, kifogyó készletek, kintlévőség, forgalom. Csak olvasás; nem ad hozzáférést a mögöttes listákhoz (azokhoz a saját funkciójuk kell).",
+      "tasks": "Feladatok kezelése (vezetői oldal): munkalap/feladat kiállítása bármelyik dolgozónak, kiosztás, határidő és átütemezés (indokkal), ár-szerkesztő (a mi áraink), munkalap nyomtatás/e-mail, ajánlat-folyamat kezelése, lezárás. Ez adja a Szerelő-átadás oldalt is. A dolgozó a SAJÁT feladataihoz a „Saját feladatok” jogot kapja, nem ezt.",
+      "schedule": "Beosztás: műszakok tervezése és kiosztása minden dolgozónak, skill-alapú javaslat. A dolgozó a sajátját a „Saját beosztás” joggal látja.",
+      "attendance": "Jelenlét (vezetői): napi jelenlét, be-/kijelentkezések, hiányzók, távollét közvetlen rögzítése. Önkiszolgáló be-/kijelentkezéshez nem kell.",
+      "timeoff": "Távollét (vezetői): szabadság- és távollét-kérelmek jóváhagyása/elutasítása, éves keret kezelése, helyettes beállítása.",
+      "employees": "Dolgozók: a dolgozói törzs megtekintése és szerkesztése (név, elérhetőség, belépés, szerepkör, skillek). Érzékeny adat (TAJ, bankszámla) felfedése külön admin-művelet. Létrehozás/módosítás/törlés a művelet-kapcsolókkal szűkíthető (pl. csak megtekintés).",
+      "partners": "Partnerek: partner-törzs (PT-kód, adószám, számlázó cég, elérhetőség, időkapu), szerződések (min. adag, árak, ciklus, automata számlázás), ajánlatkérések, térkép.",
+      "machines": "Gépek: eszköz-nyilvántartás (vonalkód, típus, számlálók, normák), telepítés partnerhez, QR- és Godex-címke, gép-történet (jegyek, munkalapok, beépített alkatrészek, garancia).",
+      "products": "Termékek: kávék és kellékek törzse (ár/adag, egység, ÁFA, bizományi-e), ár-érvényesség.",
+      "settlements": "Elszámolás: bizományi elszámolás rögzítése a partnereknél (leltár, számlálók, fizetési mód, tartozás), aláíratás, bizonylat, feltöltés a partner készletére, GLS-feladás, saját raktár (telephely/autó) és leltár, csomagok. Ez a terepi munka alapjoga; adja az alkatrész-raktár jogot is (örökölve).",
+      "invoicing": "Kiszámlázás: számla kiállítása és újraküldése a számlázóval (Billingó/Számlázz.hu), átadás számlával, kávé-fizetés és vending-telemetria oldalak, promóciók. Kényes: pénzügyi dokumentumot hoz létre a partner nevére.",
+      "agent_report": "Üzletkötő-elszámolás és statisztika: üzletkötőnkénti forgalom és jutalék, térkép, trendek, havi zárás, munkaidő-összesítés (vezetői). Más dolgozók adatait is látja.",
+      "service": "Szerviz: hibajegyek nyitása/kezelése, karbantartási ciklusok, a gép szerviz-történetének szerkesztése. Automatikusan adja az Átvétel és a Tudásbázis jogot is (régen egy jog volt).",
+      "intake": "Átvétel: ügyfél gépének behozatala elismervénnyel (AT-sorszám), fotók, cseregép, nyomtatás, majd a kötelező munkalap-űrlap. Külsős szervizesnek önállóan is adható.",
+      "knowledge": "Tudásbázis: gép-típusonkénti hibák és bevált megoldások olvasása/bővítése; az AI-asszisztens is ebből dolgozik. A rendszer-kézikönyv (/kezikonyv) ettől függetlenül mindenkinek elérhető.",
+      "import_export": "Import / Export: partnerek, gépek, termékek tömeges be- és kivitele táblázatból, teljes mentés. Nagy tömegű adatváltozást okozhat — csak megbízható szerepkörnek.",
+      "payroll": "Bérexport: bérszámfejtési CSV (TAJ-jal), munkaidő- és távollét-adatok exportja. Személyes adat — szűken adandó.",
+      "my_schedule": "Saját beosztás (önkiszolgáló): a dolgozó a saját műszakjait látja, be-/kijelentkezik, távollétet kérelmez.",
+      "my_tasks": "Saját feladatok / munkalap (önkiszolgáló): a dolgozó a neki kiosztott feladatokat látja, munkalapot tölt ki (timer, munkák, anyagok, beépített alkatrészek a saját autójából, fotó), munkaidő-korrekciót kér. Mások feladatait nem látja.",
+      "delete": "Törlés funkciók: végleges törlések bárhol (partner, gép, munkalap, raktár, elszámolás…). Alapból csak admin. A művelet-kapcsolók itt nem értelmezettek: ez maga a „törlés” képesség a többi funkcióhoz.",
+      "parts": "Alkatrész-raktár kezelése (raktáros): cikkek, bevételezés, mozgatás, helykódok, címkék, autónkénti min/max, kérések kiadása, beszerzés, leltár, riportok. A szerelő saját autó-készletéhez a „Saját feladatok” elég; ez a központi raktáros jog."
+    }
+  },
+  "manual": {
+    "title": "Rendszer-kézikönyv",
+    "subtitle": "A felület működése és folyamatai lépésről lépésre — ugyanebben keres az AI-asszisztens is.",
+    "search": "Keresés: pl. átadás átutalással, auditor szerepkör, 80 mm nyugta…",
+    "hits": "{n} találat",
+    "empty": "Nincs találat.",
+    "pick": "Válassz egy fejezetet.",
+    "askAi": "Tipp: a ✨ AI-asszisztensnek is felteheted a kérdést („hogyan…?”), ő ebből a kézikönyvből válaszol a teljes folyamattal."
   }
 }

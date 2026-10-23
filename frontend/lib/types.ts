@@ -1,4 +1,5 @@
-export type Role = "admin" | "manager" | "uzletkoto" | "szervizes" | "employee";
+// RBAC v2: a beépített öt mellett saját szerepkör-kulcsok is (pl. "auditor")
+export type Role = "admin" | "manager" | "uzletkoto" | "szervizes" | "employee" | (string & {});
 
 export interface AuthUser {
   id: string;

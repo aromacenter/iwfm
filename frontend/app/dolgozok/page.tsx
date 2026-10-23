@@ -27,7 +27,7 @@ const LOGIN_ROLES = ["employee", "szervizes", "uzletkoto", "manager", "admin"] a
 const EMPTY_FORM = {
   email: "",
   username: "",
-  role: "employee" as (typeof LOGIN_ROLES)[number],
+  role: "employee" as string,
   last_name: "",
   first_name: "",
   birth_name: "",
@@ -84,6 +84,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 
 export default function DolgozokPage() {
+  // Szerepkörök a szerverről (beépített + saját, RBAC v2)
+  const [roleOptions, setRoleOptions] = useState<{ key: string; name: string }[]>([]);
+  useEffect(() => {
+    api.get<{ key: string; name: string }[]>("/api/settings/roles").then(setRoleOptions).catch(() => {});
+  }, []);
   const [me, setMe] = useState<AuthUser | null>(null);
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -161,7 +166,7 @@ export default function DolgozokPage() {
       ...EMPTY_FORM,
       email: emp.email ?? "",
       username: emp.username ?? "",
-      role: (emp.role as (typeof LOGIN_ROLES)[number]) ?? "employee",
+      role: (emp.role as string) ?? "employee",
       last_name: emp.last_name,
       first_name: emp.first_name,
       birth_name: emp.birth_name ?? "",
@@ -859,11 +864,11 @@ export default function DolgozokPage() {
               <Field label={t("emp.loginRole")}>
                 <select
                   value={form.role}
-                  onChange={(e) => set("role", e.target.value as (typeof LOGIN_ROLES)[number])}
+                  onChange={(e) => set("role", e.target.value)}
                   className={inputCls}
                 >
-                  {LOGIN_ROLES.map((r) => (
-                    <option key={r} value={r}>{t(`roles.${r}`)}</option>
+                  {(roleOptions.length ? roleOptions : LOGIN_ROLES.map((r) => ({ key: r, name: t(`roles.${r}`) }))).map((r) => (
+                    <option key={r.key} value={r.key}>{r.name}</option>
                   ))}
                 </select>
               </Field>

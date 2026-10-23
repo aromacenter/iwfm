@@ -25,7 +25,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, record_audit, require_perm
+from app.api.deps import get_current_user, is_manager, record_audit, require_perm
 from app.db import get_db
 from app.services.wfm import license as license_service
 from app.models import (
@@ -2913,7 +2913,7 @@ async def create_expense(
 
     target_id = actor.id
     # Betét/kivét CSAK admin és manager (5870270b, e16fec86) — a képviselő csak költséget rögzít.
-    if body.entry_type in ("deposit", "withdrawal") and actor.role not in ("admin", "manager"):
+    if body.entry_type in ("deposit", "withdrawal") and not is_manager(actor):
         raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
     needs_invoicing = bool(body.user_id and body.user_id != str(actor.id))
     if needs_invoicing:

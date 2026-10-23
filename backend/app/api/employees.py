@@ -10,6 +10,8 @@ temporary password the admin hands over; the employee should change it later.
 
 from __future__ import annotations
 
+import re
+
 import re as _re
 import secrets
 import uuid
@@ -20,7 +22,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_perm, require_role
+from app.api.deps import get_role_levels, record_audit, require_perm, require_role
 from app.core.crypto import decrypt_pii, encrypt_pii, mask_tail
 from app.core.security import hash_password
 from app.db import get_db
@@ -176,7 +178,8 @@ class EmployeeCreate(EmployeeBase, SensitiveFields):
     @field_validator("role")
     @classmethod
     def _role(cls, v: str) -> str:
-        if v not in LOGIN_ROLES:
+        # RBAC v2: bármely létező szerepkör-kulcs (a handler ellenőrzi a roles táblában)
+        if not re.fullmatch(r"[a-z][a-z0-9_]{1,31}", v or ""):
             raise ValueError("employee.bad_role")
         return v
 
@@ -447,6 +450,8 @@ async def create_employee(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_role("admin")),
 ):
+    if body.role not in await get_role_levels(db):
+        raise HTTPException(status_code=422, detail={"code": "employee.bad_role"})
     sensitive = _validate_sensitive(body)
 
     # licenc-limit: új dolgozó = +1 fiók és +1 aktív munkavállaló
@@ -563,7 +568,7 @@ async def update_employee(
 
     new_role = data.pop("role", None)
     if new_role is not None:
-        if new_role not in LOGIN_ROLES:
+        if new_role not in await get_role_levels(db):
             raise HTTPException(status_code=422, detail={"code": "employee.bad_role"})
         role_user = (
             await db.execute(select(User).where(User.id == emp.user_id))

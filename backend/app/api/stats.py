@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_permission_matrix, permissions_for, require_perm
+from app.api.deps import get_current_user, get_permission_matrix, is_manager, permissions_for, require_perm
 from app.db import get_db
 from app.models import (
     AgentExpense,
@@ -549,7 +549,7 @@ async def cash_overview(
     )
     all_ids = set(rev_rows) | exp_users | active_users
     # Képviselő (és minden nem admin/manager): CSAK a saját kasszája (e16fec86)
-    if actor.role not in ("admin", "manager"):
+    if not is_manager(actor):
         all_ids = {actor.id}
         user_id = None
     if user_id:

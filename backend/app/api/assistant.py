@@ -71,3 +71,29 @@ async def chat(
         reply=result["reply"],
         events=[ChatEvent(**e) for e in result["events"]],
     )
+
+
+# ─── Rendszer-kézikönyv (a /kezikonyv oldal + onboarding) ────────────────────
+
+
+@router.get("/manual")
+async def manual_index(
+    q: str | None = None,
+    _: User = Depends(get_current_user),
+):
+    """Tartalomjegyzék, vagy ``q``-val keresés (a how_to eszköz ugyanezt használja)."""
+    from app.services.wfm import system_manual
+
+    if q and q.strip():
+        return {"query": q, "sections": system_manual.search(q, limit=5)}
+    return {"sections": [dict(s) for s in system_manual.SECTIONS]}
+
+
+@router.get("/manual/{key}")
+async def manual_section(key: str, _: User = Depends(get_current_user)):
+    from app.services.wfm import system_manual
+
+    sec = system_manual.get(key)
+    if sec is None:
+        raise HTTPException(status_code=404, detail={"code": "manual.not_found"})
+    return sec

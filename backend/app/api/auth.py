@@ -16,10 +16,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
+    denied_actions_for,
+    get_action_matrix,
     get_current_user,
     get_permission_matrix,
+    get_roles,
     permissions_for,
     record_audit,
+    role_level,
 )
 from app.core.config import get_settings
 from app.core.security import SESSION_COOKIE, hash_password, mint_token, verify_password
@@ -67,22 +71,37 @@ class UserOut(BaseModel):
     username: str | None = None
     display_name: str
     role: str
+    role_name: str | None = None  # a szerepkör megjelenített neve (saját szerepkörnél is)
+    level: int = 0  # 0 dolgozói, 1 vezetői, 2 admin
     permissions: list[str] = []
+    denied_actions: list[str] = []  # „feature.action” amit NEM tehet
     substitute_user_id: str | None = None  # helyettes távollét idejére
 
 
-def _user_out(user: User, permissions: list[str] | None = None) -> UserOut:
+def _user_out(
+    user: User, permissions: list[str] | None = None, denied: list[str] | None = None, role_name: str | None = None,
+) -> UserOut:
     return UserOut(
         id=str(user.id),
         email=user.email,
         username=user.username,
         display_name=user.display_name,
         role=user.role,
+        role_name=role_name,
+        level=2 if user.role == "admin" else role_level(user.role),
         permissions=permissions or [],
+        denied_actions=denied or [],
         substitute_user_id=(
             str(user.substitute_user_id) if user.substitute_user_id else None
         ),
     )
+
+
+async def _me(db: AsyncSession, user: User) -> UserOut:
+    matrix = await get_permission_matrix(db)
+    actions = await get_action_matrix(db)
+    name = next((r.name for r in await get_roles(db) if r.key == user.role), None)
+    return _user_out(user, permissions_for(user.role, matrix), denied_actions_for(user.role, actions), role_name=name)
 
 
 def set_session_cookie(response: Response, token: str) -> None:
@@ -128,8 +147,7 @@ async def bootstrap_admin(
     )
     await db.commit()
     set_session_cookie(response, mint_token(user_id=user.id, role=user.role, token_version=user.token_version))
-    matrix = await get_permission_matrix(db)
-    return _user_out(user, permissions_for(user.role, matrix))
+    return await _me(db, user)
 
 
 @router.post("/login", response_model=UserOut)
@@ -175,8 +193,7 @@ async def login(
     )
     await db.commit()
     set_session_cookie(response, mint_token(user_id=user.id, role=user.role, token_version=user.token_version))
-    matrix = await get_permission_matrix(db)
-    return _user_out(user, permissions_for(user.role, matrix))
+    return await _me(db, user)
 
 
 @router.post("/logout")
@@ -218,8 +235,7 @@ async def me(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    matrix = await get_permission_matrix(db)
-    return _user_out(user, permissions_for(user.role, matrix))
+    return await _me(db, user)
 
 
 # ─── Jelszó-visszaállítás admin által küldött linkkel (b3640159) ─────────────
@@ -381,5 +397,27 @@ async def set_my_substitute(
         detail={"substitute": body.user_id}, request=request,
     )
     await db.commit()
-    matrix = await get_permission_matrix(db)
-    return _user_out(user, permissions_for(user.role, matrix))
+    return await _me(db, user)
+
+
+class DeniedBody(BaseModel):
+    path: str = Field(max_length=256)
+    feature: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/denied")
+async def report_denied(
+    body: DeniedBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """A felület jelzi, ha valaki olyan oldalra tévedt, amihez nincs joga —
+    naplósor lesz belőle (user-kérés: a tiltás is látszódjon a naplóban)."""
+    await record_audit(
+        db, actor=user, action="auth.denied", entity_type="permission", entity_id=body.feature or "page",
+        detail={"feature": body.feature, "action": "view", "role": user.role, "method": "PAGE", "path": body.path[:256]},
+        request=request,
+    )
+    await db.commit()
+    return {"ok": True}

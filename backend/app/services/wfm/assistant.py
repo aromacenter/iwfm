@@ -44,7 +44,7 @@ MAX_STEPS = 8
 
 # A navigate eszköz csak ezekre az útvonalakra engedhet.
 NAV_PATHS = (
-    "/", "/vezerlopult", "/gepek", "/partnerek", "/elszamolas", "/termekek",
+    "/", "/vezerlopult", "/gepek", "/partnerek", "/elszamolas", "/termekek", "/kezikonyv",
     "/uzletkoto", "/szerviz", "/tudasbazis", "/feladatok", "/feladataim",
     "/dolgozok", "/beosztas", "/jelenlet", "/tavollet", "/naplo",
     "/beallitasok", "/import-export", "/berexport", "/sajat-beosztas",
@@ -739,10 +739,38 @@ async def _t_navigate(db: AsyncSession, actor: User, args: dict):
     )
 
 
+async def _t_how_to(db: AsyncSession, actor: User, args: dict):
+    """Rendszer-kézikönyv keresése: a folyamatok lépésről lépésre (user-kérés:
+    „ha megkérdezzük, hogyan kell valamit csinálni, mondja el a teljes folyamatot”)."""
+    from app.services.wfm import system_manual
+
+    query = str(args.get("query") or "").strip()
+    hits = system_manual.search(query, limit=3)
+    return (
+        {
+            "sections": [{"title": h["title"], "body": h["body"]} for h in hits],
+            "hint": "Mondd el a teljes folyamatot számozott lépésekben a szekció(k) alapján; ha több szekció is illik, a legrelevánssal kezdd. Hivatkozz a menüpontra (pl. Elszámolás → Feltöltés). A /kezikonyv oldalon a teljes leírás olvasható.",
+        },
+        None,
+    )
+
+
 # ─── Eszköz-regiszter ────────────────────────────────────────────────────────
 # feature: melyik jogosultság kell hozzá (None = bármely bejelentkezett user).
 
 TOOLS: list[dict] = [
+    {
+        "name": "how_to",
+        "feature": None,
+        "description": (
+            "A rendszer-kézikönyv keresése: hogyan kell valamit csinálni a programban (átvétel, átadás, "
+            "elszámolás, raktár, alkatrész, kassza, jogosultságok, vending-ügynök, beállítások…). "
+            "MINDIG ezt használd, ha a felhasználó azt kérdezi, hogyan/hol/mivel lehet valamit megcsinálni, "
+            "vagy mi egy funkció/folyamat. A választ a kapott szekciókból építsd fel, teljes lépéssorral."
+        ),
+        "schema": {"type": "object", "properties": {"query": {"type": "string", "description": "a kérdés kulcsszavai"}}, "required": ["query"]},
+        "run": _t_how_to,
+    },
     {
         "name": "search_partners",
         "feature": "partners",
@@ -988,9 +1016,19 @@ def _system_prompt(actor: User, context: dict | None = None) -> str:
         "- Ha egy keresés több találatot ad, sorold fel és kérdezd meg, melyik.\n"
         "- Tömören, magyarul válaszolj (vagy a felhasználó nyelvén). "
         "A végrehajtott műveletet erősítsd meg egy mondatban.\n"
-        "- Ha a felhasználó egy oldalt akar látni, használd a navigate eszközt."
+        "- Ha a felhasználó egy oldalt akar látni, használd a navigate eszközt.\n"
+        "- Ha azt kérdezi, HOGYAN kell valamit csinálni a rendszerben (folyamat, menüpont, "
+        "beállítás), a how_to eszközzel keress a rendszer-kézikönyvben, és a teljes "
+        "folyamatot mondd el számozott lépésekben, a menüutakkal. Ne találj ki lépést, "
+        "ami nincs a kézikönyvben. Kézikönyv-fejezetek: " + _manual_index_text() + "."
         + ctx_lines
     )
+
+
+def _manual_index_text() -> str:
+    from app.services.wfm import system_manual
+
+    return "; ".join(x["title"] for x in system_manual.index())
 
 
 async def _anthropic_step(

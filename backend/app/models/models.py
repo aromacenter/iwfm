@@ -50,11 +50,8 @@ class User(Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
         UniqueConstraint("username", name="uq_users_username"),
-        CheckConstraint(
-            "role IN ('admin','manager','uzletkoto','szervizes','employee')",
-            name="ck_users_role",
-        ),
     )
+    # A role bármely roles.key lehet (beépített + saját szerepkörök, RBAC v2)
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     # Belépés email-lel VAGY sima felhasználónévvel — bármely szerepkörnél
@@ -1927,8 +1924,32 @@ class PermissionSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     matrix: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Művelet-szintű finomítás: {role: {feature: ["view","create","edit","delete"]}}
+    # — hiányzó bejegyzés = a funkción belül minden művelet engedett (RBAC v2)
+    actions: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class Role(Base):
+    """Szerepkör (RBAC v2): a beépített öt (is_system) mellett az admin
+    sajátokat is létrehozhat (pl. „auditor”), és azoknak is szerepkörönként
+    állítja a funkció- és művelet-jogokat. ``level``: 0 = dolgozói szint,
+    1 = vezetői (manager-egyenértékű a kassza/raktár szabályoknál),
+    2 = admin (csak a beépített admin)."""
+
+    __tablename__ = "roles"
+    __table_args__ = (UniqueConstraint("key", name="uq_roles_key"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    key: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    level: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

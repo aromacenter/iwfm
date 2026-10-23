@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_perm
+from app.api.deps import is_manager, record_audit, require_perm
 from app.db import get_db
 from app.models import (
     Partner,
@@ -50,7 +50,7 @@ def _parse_uuid(raw: str, code: str) -> uuid.UUID:
 
 
 def _is_manager(actor: User) -> bool:
-    return actor.role in ("admin", "manager")
+    return is_manager(actor)
 
 
 def _can_see(wh: Warehouse, actor: User) -> bool:

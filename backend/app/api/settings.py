@@ -7,14 +7,18 @@ import base64
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
-    CONFIGURABLE_ROLES,
+    ACTIONS,
     FEATURES,
+    get_action_matrix,
     get_current_user,
     get_permission_matrix,
+    get_role_levels,
+    get_roles,
+    invalidate_role_cache,
     record_audit,
     require_role,
 )
@@ -27,6 +31,7 @@ from app.models import (
     EmployeeSkill,
     LicenseSettings,
     PermissionSettings,
+    Role,
     Skill,
     User,
     WorksheetSettings,
@@ -1208,11 +1213,33 @@ async def update_support_settings(
     return {"knowledge_base": row.knowledge_base, "auto_kb": row.auto_kb}
 
 
-# ─── Jogosultságok (szerepkör × funkció mátrix) ─────────────────────────────
+# ─── Jogosultságok (szerepkör × funkció × művelet) + saját szerepkörök (RBAC v2) ──
 
 
 class PermissionsBody(BaseModel):
     matrix: dict[str, list[str]]
+    # {role: {feature: ["view","create","edit","delete"]}} — hiányzó = minden engedett
+    actions: dict[str, dict[str, list[str]]] | None = None
+
+
+def _role_out(r: Role, users: int) -> dict:
+    return {
+        "key": r.key, "name": r.name, "description": r.description, "level": r.level,
+        "is_system": r.is_system, "users": users,
+    }
+
+
+async def _roles_payload(db: AsyncSession) -> dict:
+    roles = await get_roles(db)
+    counts = dict((await db.execute(select(User.role, sa_func.count()).group_by(User.role))).all())
+    return {
+        "roles": [_role_out(r, int(counts.get(r.key, 0))) for r in roles if r.key != "admin"],
+        "admin": next((_role_out(r, int(counts.get(r.key, 0))) for r in roles if r.key == "admin"), None),
+        "features": list(FEATURES),
+        "actions_catalog": list(ACTIONS),
+        "matrix": await get_permission_matrix(db),
+        "actions": await get_action_matrix(db),
+    }
 
 
 @router.get("/permissions")
@@ -1220,11 +1247,7 @@ async def get_permissions(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role("admin")),
 ):
-    return {
-        "roles": list(CONFIGURABLE_ROLES),
-        "features": list(FEATURES),
-        "matrix": await get_permission_matrix(db),
-    }
+    return await _roles_payload(db)
 
 
 @router.put("/permissions")
@@ -1234,11 +1257,12 @@ async def update_permissions(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_role("admin")),
 ):
-    """A szerepkörönkénti funkció-engedélyek mentése. Az admin nem
-    konfigurálható (mindig minden funkciója megvan)."""
+    """A szerepkörönkénti funkció- és művelet-engedélyek mentése. Az admin nem
+    konfigurálható (mindig minden funkciója és művelete megvan)."""
+    valid_roles = [k for k in await get_role_levels(db) if k != "admin"]
     cleaned: dict[str, list[str]] = {}
     for role, features in body.matrix.items():
-        if role not in CONFIGURABLE_ROLES:
+        if role not in valid_roles:
             raise HTTPException(status_code=422, detail={"code": "settings.bad_role"})
         if not isinstance(features, list):
             raise HTTPException(status_code=422, detail={"code": "settings.bad_matrix"})
@@ -1246,6 +1270,16 @@ async def update_permissions(
             if feature not in FEATURES:
                 raise HTTPException(status_code=422, detail={"code": "settings.bad_matrix"})
         cleaned[role] = sorted(set(features))
+    cleaned_actions: dict[str, dict[str, list[str]]] = {}
+    for role, feats in (body.actions or {}).items():
+        if role not in valid_roles or not isinstance(feats, dict):
+            raise HTTPException(status_code=422, detail={"code": "settings.bad_matrix"})
+        cleaned_actions[role] = {}
+        for feature, acts in feats.items():
+            if feature not in FEATURES or not isinstance(acts, list) or any(a not in ACTIONS for a in acts):
+                raise HTTPException(status_code=422, detail={"code": "settings.bad_matrix"})
+            if len(acts) < len(ACTIONS):  # csak a szűkítést tároljuk
+                cleaned_actions[role][feature] = [a for a in ACTIONS if a in acts]
 
     row = (
         await db.execute(select(PermissionSettings).where(PermissionSettings.id == 1))
@@ -1257,16 +1291,131 @@ async def update_permissions(
     current = await get_permission_matrix(db)
     current.update(cleaned)
     row.matrix = current
+    if body.actions is not None:
+        cur_actions = await get_action_matrix(db)
+        for role in body.actions:
+            cur_actions[role] = cleaned_actions.get(role, {})
+        row.actions = cur_actions
     await record_audit(
         db, actor=actor, action="settings.permissions_update", entity_type="settings",
         entity_id="permissions", request=request,
     )
     await db.commit()
-    return {
-        "roles": list(CONFIGURABLE_ROLES),
-        "features": list(FEATURES),
-        "matrix": await get_permission_matrix(db),
-    }
+    return await _roles_payload(db)
+
+
+class RoleBody(BaseModel):
+    key: str = Field(min_length=2, max_length=32, pattern=r"^[a-z][a-z0-9_]{1,31}$")
+    name: str = Field(min_length=1, max_length=64)
+    description: str | None = Field(default=None, max_length=2000)
+    level: int = Field(default=0, ge=0, le=1)  # 0 dolgozói, 1 vezetői szint
+    copy_from: str | None = None  # melyik szerepkör jogait másolja induláskor
+
+
+class RolePatchBody(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    description: str | None = Field(default=None, max_length=2000)
+    level: int | None = Field(default=None, ge=0, le=1)
+
+
+@router.get("/roles")
+async def list_roles(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Minden szerepkör (a dolgozó-űrlap legördülőjéhez is) — a jogok nélkül."""
+    roles = await get_roles(db)
+    return [{"key": r.key, "name": r.name, "description": r.description, "level": r.level, "is_system": r.is_system} for r in roles]
+
+
+@router.post("/roles", status_code=201)
+async def create_role(
+    body: RoleBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """Saját szerepkör (pl. „auditor”): üresen vagy egy meglévő jogaival indul,
+    utána a mátrixban teljesen személyre szabható."""
+    if body.key in await get_role_levels(db) or body.key == "admin":
+        raise HTTPException(status_code=409, detail={"code": "settings.role_exists"})
+    role = Role(key=body.key, name=body.name.strip(), description=(body.description or "").strip() or None, level=body.level, is_system=False)
+    db.add(role)
+    await db.flush()
+    invalidate_role_cache()
+    row = (await db.execute(select(PermissionSettings).where(PermissionSettings.id == 1))).scalar_one_or_none()
+    if row is None:
+        row = PermissionSettings(id=1)
+        db.add(row)
+    matrix = await get_permission_matrix(db)
+    actions = await get_action_matrix(db)
+    if body.copy_from:
+        src = body.copy_from
+        matrix[body.key] = list(FEATURES) if src == "admin" else list(matrix.get(src, []))
+        actions[body.key] = dict(actions.get(src, {}))
+    else:
+        matrix[body.key] = []
+        actions[body.key] = {}
+    row.matrix = matrix
+    row.actions = actions
+    await record_audit(
+        db, actor=actor, action="settings.role_create", entity_type="role", entity_id=body.key,
+        detail={"name": body.name, "level": body.level, "copy_from": body.copy_from}, request=request,
+    )
+    await db.commit()
+    return await _roles_payload(db)
+
+
+@router.patch("/roles/{key}")
+async def update_role(
+    key: str,
+    body: RolePatchBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    role = (await db.execute(select(Role).where(Role.key == key))).scalar_one_or_none()
+    if role is None:
+        raise HTTPException(status_code=404, detail={"code": "settings.role_not_found"})
+    if body.name is not None:
+        role.name = body.name.strip()
+    if body.description is not None:
+        role.description = body.description.strip() or None
+    if body.level is not None:
+        if role.is_system:
+            raise HTTPException(status_code=422, detail={"code": "settings.role_system"})
+        role.level = body.level
+        invalidate_role_cache()
+    await record_audit(db, actor=actor, action="settings.role_update", entity_type="role", entity_id=key, request=request)
+    await db.commit()
+    return await _roles_payload(db)
+
+
+@router.delete("/roles/{key}")
+async def delete_role(
+    key: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """Csak saját szerepkör törölhető, és csak ha senki nincs benne."""
+    role = (await db.execute(select(Role).where(Role.key == key))).scalar_one_or_none()
+    if role is None:
+        raise HTTPException(status_code=404, detail={"code": "settings.role_not_found"})
+    if role.is_system:
+        raise HTTPException(status_code=422, detail={"code": "settings.role_system"})
+    users = (await db.execute(select(sa_func.count()).select_from(User).where(User.role == key))).scalar_one()
+    if users:
+        raise HTTPException(status_code=409, detail={"code": "settings.role_in_use", "users": int(users)})
+    row = (await db.execute(select(PermissionSettings).where(PermissionSettings.id == 1))).scalar_one_or_none()
+    if row is not None:
+        m = dict(row.matrix or {}); m.pop(key, None); row.matrix = m
+        a = dict(row.actions or {}); a.pop(key, None); row.actions = a
+    await db.delete(role)
+    invalidate_role_cache()
+    await record_audit(db, actor=actor, action="settings.role_delete", entity_type="role", entity_id=key, request=request)
+    await db.commit()
+    return await _roles_payload(db)
 
 
 # ─── Értesítések ─────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 /** Bejelentkezett keret: függőleges, témakör szerint csoportosított oldalsáv
  *  + szerepkör-függő navigáció. Mobilon kihúzható (hamburger). */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import AssistantChat from "@/components/AssistantChat";
@@ -11,6 +11,7 @@ import BrandLogo from "@/components/BrandLogo";
 import BugReporter from "@/components/BugReporter";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
+import { usePerms } from "@/lib/perms";
 import type { AuthUser } from "@/lib/types";
 
 interface NavItem {
@@ -46,6 +47,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/sajat-raktar", key: "nav.myWarehouse", perm: "always", icon: "🚚", module: "warehouse" },
       { href: "/sajat-alkatreszek", key: "nav.myParts", perm: "always", icon: "🔩", module: "parts" },
       { href: "/tudasbazis", key: "nav.kb", perm: "knowledge", icon: "📚", module: "support" },
+      { href: "/kezikonyv", key: "nav.manual", perm: "always", icon: "📖" },
       { href: "/beosztas", key: "nav.schedule", perm: "schedule", icon: "🗓️" },
       { href: "/jelenlet", key: "nav.attendance", perm: "attendance", icon: "⏱️" },
       { href: "/tavollet", key: "nav.timeOff", perm: "timeoff", icon: "🏖️" },
@@ -225,6 +227,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // Útvonalváltáskor a mobil oldalsáv csukódjon be.
   useEffect(() => setMobileOpen(false), [pathname]);
+
+  // Oldal-szintű jogosultság (RBAC v2): ha valaki olyan oldalra téved, amihez a
+  // szerepkörének nincs joga, hibapanelt kap, és a tiltás a naplóba kerül.
+  const permState = usePerms();
+  const deniedFeature = useMemo(() => {
+    if (!permState.loaded || !user) return null;
+    const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href !== "/" && pathname.startsWith(i.href));
+    if (!item) return null;
+    if (item.perm === "always") return null;
+    if (item.perm === "admin-only") return user.role === "admin" ? null : "admin-only";
+    return permState.can(item.perm) ? null : item.perm;
+  }, [permState, pathname, user]);
+  useEffect(() => {
+    if (!deniedFeature) return;
+    api.post("/api/auth/denied", { path: pathname, feature: deniedFeature === "admin-only" ? "role:admin" : deniedFeature }).catch(() => {});
+  }, [deniedFeature, pathname]);
 
   async function logout() {
     await api.post("/api/auth/logout");
@@ -420,7 +438,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <div className="mx-auto max-w-6xl px-4 py-6">
-          {children}
+          {deniedFeature ? (
+            <div className="rounded-2xl border border-rose-200 bg-white p-8 text-center shadow-sm">
+              <p className="text-3xl">🚫</p>
+              <h2 className="mt-2 text-lg font-semibold text-rose-700">{t("perms.deniedTitle")}</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {t("perms.deniedPage", { feature: deniedFeature === "admin-only" ? t("perms.levels.admin") : t(`features.${deniedFeature}`), role: permState.roleName ?? permState.role ?? "" })}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">{t("perms.deniedLogged")}</p>
+              <Link href="/naptar" className="mt-4 inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("perms.backToCalendar")}</Link>
+            </div>
+          ) : children}
         </div>
       </main>
 

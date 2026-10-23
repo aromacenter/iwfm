@@ -179,7 +179,8 @@
     "myParts": "My parts",
     "worktime": "Work time",
     "partsProc": "Procurement",
-    "partsReports": "Parts reports"
+    "partsReports": "Parts reports",
+    "manual": "Manual"
   },
   "roles": {
     "admin": "Admin",
@@ -2009,7 +2010,13 @@
     "tasks.reschedule_note_required": "Changing the due date requires a reason.",
     "settlement.bad_invoice_email": "Invalid invoice e-mail address.",
     "warehouse.manage_forbidden": "Only an admin or manager can create, edit or delete warehouses.",
-    "warehouse.forbidden": "You cannot see this warehouse — an admin can grant access."
+    "warehouse.forbidden": "You cannot see this warehouse — an admin can grant access.",
+    "auth.forbidden_action": "No permission: {feature} · {action}. The attempt has been logged.",
+    "settings.role_exists": "A role with this key already exists.",
+    "settings.role_not_found": "No such role.",
+    "settings.role_system": "Built-in role: cannot be deleted, its level cannot be changed.",
+    "settings.role_in_use": "The role is in use ({users} users) — move them to another role first.",
+    "manual.not_found": "No such chapter."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -3613,5 +3620,90 @@
     "expired": "expired",
     "activeUntil": "valid until",
     "empty": "No data."
+  },
+  "perms": {
+    "hint": "Per role (built-in and custom) choose which functions are available and, with the ⚙ icon, the four actions: view, create, edit, delete. Hover a function name for the detailed explanation. Admin always has everything. Changes apply immediately (users must reload). Anyone entering a forbidden area gets an error and the attempt is logged.",
+    "newRole": "New role",
+    "editRole": "Edit role",
+    "roleFormHint": "E.g. “auditor”: looks but does not touch. After creation every function and action can be tailored in the matrix.",
+    "roleKey": "Key (identifier)",
+    "roleKeyHint": "lowercase, digits, underscore; cannot be changed later (e.g. auditor, accounting)",
+    "roleName": "Display name",
+    "roleDesc": "Description",
+    "roleDescPh": "Who it is for, what they may do — shown in the tooltip.",
+    "roleLevel": "Level",
+    "levels": {
+      "employee": "employee level",
+      "manager": "manager level",
+      "admin": "admin"
+    },
+    "levelsTitle": "Levels",
+    "levelsDesc": "Employee level: only the rights given in the matrix. Manager level: additionally the “admin/manager only” rules apply (creating warehouses, cash deposits/withdrawals and central overview, cash transfer recipient). Admin level cannot be granted: that is the built-in admin.",
+    "copyFrom": "Copy rights from",
+    "copyNone": "— start empty —",
+    "custom": "custom",
+    "roleMeta": "Level: {level} · users: {users}",
+    "adminDesc": "Admin has every function and action, manages settings, permissions, the log and deletions. Cannot be narrowed.",
+    "toggleFeature": "Toggle the function for this role",
+    "openActions": "Action-level switches (view / create / edit / delete)",
+    "unsaved": "Unsaved changes",
+    "saved": "Permissions saved.",
+    "roleSaved": "Role saved.",
+    "roleDeleteConfirm": "Delete role “{name}”? Only possible when nobody has it.",
+    "roleDeleted": "Role deleted.",
+    "deniedTitle": "You have no permission for this page",
+    "deniedPage": "The “{feature}” function is not enabled for your role ({role}). Ask an admin under Settings → Permissions.",
+    "deniedLogged": "This attempt has been logged.",
+    "backToCalendar": "Back to the calendar",
+    "actions": {
+      "view": {
+        "label": "view",
+        "desc": "Reading lists, details, PDFs and exports within the function (HTTP GET). Without it the function is practically unusable."
+      },
+      "create": {
+        "label": "create",
+        "desc": "Starting a new record or action: new task, partner, settlement, ticket, receipt, signature, sending (HTTP POST)."
+      },
+      "edit": {
+        "label": "edit",
+        "desc": "Changing an existing record: data, status, prices, settings (HTTP PUT/PATCH)."
+      },
+      "delete": {
+        "label": "delete",
+        "desc": "Deleting or revoking a record within the function (HTTP DELETE). Permanent deletions also need the separate “Delete functions” right."
+      }
+    },
+    "desc": {
+      "dashboard": "Dashboard: the company's daily status on one screen — due settlements, open tickets and tasks, low stock, receivables, revenue. Read-only; it does not grant access to the underlying lists.",
+      "tasks": "Task management (manager side): issue worksheets/tasks to any employee, assign, due dates and rescheduling (with reason), price editor (our prices), worksheet print/e-mail, quote flow, closing. Also gives the Technician handover page. Employees get their OWN tasks via “My tasks”, not this.",
+      "schedule": "Schedule: plan and assign shifts for all employees, skill-based suggestions. Employees see their own via “My schedule”.",
+      "attendance": "Attendance (manager): daily presence, clock in/out records, absentees, direct absence entry. Not needed for self-service clock in/out.",
+      "timeoff": "Time off (manager): approve/reject leave requests, yearly quota, substitutes.",
+      "employees": "Employees: view and edit the employee master (name, contact, login, role, skills). Revealing sensitive data (social security, bank) is a separate admin action. Narrow with the action switches (e.g. view only).",
+      "partners": "Partners: partner master (code, tax number, invoicing company, contact, visit window), contracts (min portions, prices, cycle, auto billing), quote requests, map.",
+      "machines": "Machines: asset register (barcode, type, counters, norms), deployment to partners, QR and Godex labels, machine history (tickets, worksheets, installed parts, warranty).",
+      "products": "Products: coffee and supplies master (price per portion, unit, VAT, consignment flag), price validity.",
+      "settlements": "Settlement: consignment settlements at partners (stock count, counters, payment method, debt), signature, receipt, replenishing partner stock, GLS shipping, own warehouse (site/van) and stocktake, parcels. The core field permission; also grants the parts warehouse (inherited).",
+      "invoicing": "Invoicing: issue and resend invoices via the invoicing provider, handover with invoice, coffee payment and vending telemetry pages, promotions. Sensitive: creates financial documents in the partner's name.",
+      "agent_report": "Sales rep report and statistics: revenue and commission per rep, map, trends, monthly closing, work-time summary (manager). Sees other employees' data.",
+      "service": "Service: open/manage tickets, maintenance cycles, edit a machine's service history. Automatically grants Intake and Knowledge base too (they used to be one permission).",
+      "intake": "Intake: bringing in a customer's machine with a receipt (AT number), photos, loaner, printing, then the mandatory worksheet form. Can be granted alone to external technicians.",
+      "knowledge": "Knowledge base: machine-type faults and proven fixes, reading/adding; the AI assistant uses it. The system manual (/kezikonyv) is available to everyone regardless.",
+      "import_export": "Import / Export: bulk import/export of partners, machines, products, full backup. Can change data in bulk — trusted roles only.",
+      "payroll": "Payroll export: payroll CSV (with social security number), work-time and leave exports. Personal data — grant narrowly.",
+      "my_schedule": "My schedule (self-service): own shifts, clock in/out, leave requests.",
+      "my_tasks": "My tasks / worksheet (self-service): assigned tasks, filling the worksheet (timer, works, materials, parts from own van, photo), work-time correction requests. No access to others' tasks.",
+      "delete": "Delete functions: permanent deletions anywhere (partner, machine, worksheet, warehouse, settlement…). Admin only by default. Action switches do not apply here: this is the “delete” capability itself.",
+      "parts": "Parts warehouse management (storekeeper): items, receipts, moves, location codes, labels, per-van min/max, issuing requests, procurement, stocktake, reports. Technicians only need “My tasks” for their van stock; this is the central storekeeper right."
+    }
+  },
+  "manual": {
+    "title": "System manual",
+    "subtitle": "How the application and its processes work, step by step — the AI assistant searches the same text.",
+    "search": "Search: e.g. handover by transfer, auditor role, 80 mm receipt…",
+    "hits": "{n} hits",
+    "empty": "No results.",
+    "pick": "Pick a chapter.",
+    "askAi": "Tip: you can also ask the ✨ AI assistant (“how do I…?”); it answers from this manual with the full process."
   }
 }

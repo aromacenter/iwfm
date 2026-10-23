@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import record_audit, require_perm
+from app.api.deps import is_manager, record_audit, require_perm
 from app.db import get_db
 from app.models import (
     DeliveryNote,
@@ -155,7 +155,7 @@ async def create_delivery(
 
     # Mindenki csak a SAJÁT raktárából tehet árut szállítólevélre — kivéve az
     # admin/manager, aki bármelyik raktárból (vagy raktár nélkül) küldhet.
-    if actor.role not in ("admin", "manager"):
+    if not is_manager(actor):
         if src is None or src.user_id != actor.id:
             raise HTTPException(
                 status_code=403, detail={"code": "delivery.own_warehouse_only"}
