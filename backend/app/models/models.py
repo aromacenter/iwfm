@@ -407,6 +407,11 @@ class Worksheet(Base):
     materials: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     # Elvégzett munkák tételesen: [{name, price_net}] — soronként ár (nettó Ft).
     works: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Tudástár-mezők (687f2352): a szervizes hibaleírása és a megoldás; a
+    # megoldás az ügyfél-példányra csak print_solution-nel kerül rá.
+    problem_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    solution_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    print_solution: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # A KSZ ügyfél-példányára (−1) szánt megjegyzés — a képviselő írja; a
     # szervizes belső leírása SOSEM kerül az ügyfél elé.
     customer_note: Mapped[str | None] = mapped_column(Text, nullable=True)

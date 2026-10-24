@@ -530,7 +530,8 @@
     "replenishGls": "Feltöltés GLS-csomagként (a Csomagok oldal nyílik)",
     "printTitle": "Bizonylat nyomtatása",
     "printHint": "A4-es lap, vagy 50 / 80 mm-es nyugtanyomtató. A nyomtatási ablak a böngészőben nyílik.",
-    "printNo": "Most nem nyomtatok"
+    "printNo": "Most nem nyomtatok",
+    "printBtn": "Nyomtatás (A4 / 50 / 80 mm)"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1492,7 +1493,15 @@
     "timerCorrection": "± korrekció",
     "timerCorrectionPrompt": "Hány perccel korrigáljuk a mért időt? (pl. -15 vagy 30) és miért — írd egy sorba: perc; indok",
     "timerCorrectionSent": "Korrekció-kérés elküldve, a vezető hagyja jóvá.",
-    "timerCorrectionPending": "korrekció elbírálás alatt"
+    "timerCorrectionPending": "korrekció elbírálás alatt",
+    "wsQuoteOnlyOptions": "Árajánlat-fázis: csak a javítási konstrukciókat add meg (bármennyit) — az ügyfél ezek közül választ. A tételes munka az elfogadás után jön vissza.",
+    "wsKbTitle": "Tudástár — mi volt a hiba, mi lett a megoldás",
+    "wsProblem": "Probléma leírása (szervizes)",
+    "wsProblemPh": "pl. E8 hiba, a bojler nem fűt fel, a termosztát szakadt",
+    "wsSolution": "Megoldás / javítás",
+    "wsSolutionPh": "pl. SP 90 °C termosztát csere, vízkőtelenítés, próbafőzés rendben",
+    "wsPrintSolution": "A megoldás kerüljön rá az ügyfél-példányra is",
+    "wsKbHint": "Mentéskor a hiba + megoldás + munkák + cserélt alkatrészek a Tudásbázisba kerülnek a géptípushoz; az AI és a kollégák is ebből tanulnak."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -3435,7 +3444,12 @@
     "st.emptyList": "Még nincs leltár-munkamenet.",
     "st.rowsHint": "Vak leltárnál a nyilvántartott mennyiség beküldésig rejtve; a nem számolt sorok beküldéskor a nyilvántartott értéket kapják.",
     "createInline": "Új alkatrész",
-    "createdInline": "Alkatrész létrehozva: {name} ({sku})"
+    "createdInline": "Alkatrész létrehozva: {name} ({sku})",
+    "importCsv": "Import CSV",
+    "importHint": "Fejléc: sku;name;manufacturer_code;cost_net;price_net;min_stock;unit — cikkszám szerint frissít vagy létrehoz (cikkszám nélkül automatikus).",
+    "importEmpty": "Üres vagy fejléc nélküli fájl.",
+    "importConfirm": "{n} sor importálása? A meglévő cikkszámoknál az árak és a min. készlet frissülnek.",
+    "importDone": "Import kész: {created} új, {updated} frissítve, {skipped} kihagyva."
   },
   "myParts": {
     "title": "Saját alkatrészeim",

@@ -12,6 +12,7 @@ import io
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
+from reportlab.lib.utils import simpleSplit
 from reportlab.pdfgen import canvas as pdf_canvas
 
 from app.services.wfm.worksheet_pdf import (
@@ -305,7 +306,14 @@ def build_settlement_receipt_pdf(data: dict, settings: dict | None = None, *, wi
     lines_out: list[tuple] = []  # (kind, *args) — először összegyűjtjük, utána rajzolunk
 
     def txt(text: str, size: float = base, bold: bool = False, align: str = "l") -> None:
-        lines_out.append(("t", text, size, bold, align))
+        # Több sorba tördelve, hogy semmi ne lógjon le a keskeny nyugtáról (ba0ae04d)
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+
+        avail = W - 2 * margin
+        font = FONT_BOLD if bold else FONT
+        for part in simpleSplit(str(text), font, size, avail) or [""]:
+            lines_out.append(("t", part, size, bold, align))
+        _ = stringWidth
 
     def kv(label: str, value: str) -> None:
         lines_out.append(("kv", label, value or "—"))
@@ -394,6 +402,8 @@ def build_settlement_receipt_pdf(data: dict, settings: dict | None = None, *, wi
             total_h += lh * row[1]
         elif row[0] == "r":
             total_h += lh * 0.7
+        elif row[0] == "kv":
+            total_h += lh * 3  # tördelt érték ráhagyása
         else:
             total_h += lh
     H = max(total_h + 6 * mm, 60 * mm)
@@ -422,8 +432,17 @@ def build_settlement_receipt_pdf(data: dict, settings: dict | None = None, *, wi
             c.setFont(FONT_BOLD, small)
             c.drawString(left, y, label)
             c.setFont(FONT, small)
-            c.drawRightString(right, y, str(value)[: 34 if narrow else 48])
-            y -= lh
+            # ha a címke + érték nem fér el egy sorban, az érték a következő sor(ok)ba tördelve
+            from reportlab.pdfbase.pdfmetrics import stringWidth as _sw
+
+            if _sw(label, FONT_BOLD, small) + _sw(str(value), FONT, small) + 2 * mm <= (right - left):
+                c.drawRightString(right, y, str(value))
+                y -= lh
+            else:
+                y -= lh
+                for part in simpleSplit(str(value), FONT, small, right - left - 2 * mm):
+                    c.drawString(left + 2 * mm, y, part)
+                    y -= lh
         elif kind in ("amt", "amtb"):
             _, label, value = row
             c.setFont(FONT_BOLD if kind == "amtb" else FONT, base if kind == "amtb" else small)

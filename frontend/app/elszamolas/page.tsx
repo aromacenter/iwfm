@@ -2850,10 +2850,10 @@ export default function ElszamolasPage() {
                   <div className="flex items-center justify-end gap-1.5">
                     <button
                       onClick={() => downloadReceipt(s)}
-                      title={t("cons.receiptPdf")}
+                      title={`${t("cons.receiptPdf")} — ${t("cons.printHint")}`}
                       className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                     >
-                      📄
+                      📄🖨
                     </button>
                     {s.has_signature ? (
                       <span title={t("cons.signed")} className="rounded bg-slate-100 px-2 py-1 text-sm leading-none text-slate-600">✍✓</span>
@@ -3040,7 +3040,15 @@ export default function ElszamolasPage() {
                 />
               </label>
             )}
-            <div className="flex justify-end gap-2 pt-1">
+            <div className="flex flex-wrap justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setPrintChoice({ id: signing.id, label: `${signing.partner_name} · ${ft(signing.total_gross)}` })}
+                title={t("cons.printHint")}
+                className="mr-auto rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+              >
+                🖨 {t("cons.printBtn")}
+              </button>
               <button
                 type="button"
                 onClick={() => { setSigning(null); setSignature(null); }}

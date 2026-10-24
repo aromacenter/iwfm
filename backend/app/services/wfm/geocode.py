@@ -52,15 +52,37 @@ async def geocode_address(
     for params in queries:
         params.update({"format": "jsonv2", "limit": "1", "countrycodes": "hu"})
         try:
-            async with httpx.AsyncClient(timeout=8.0, headers={"User-Agent": _UA}) as cx:
+            async with httpx.AsyncClient(timeout=8.0, headers={"User-Agent": _UA, "Referer": "https://program.x-presso.hu/"}) as cx:
                 res = await cx.get(f"{_base_url()}/search", params=params)
+            if res.status_code in (403, 429):
+                logger.warning("Nominatim %s — átváltás a tartalék geokódolóra (Photon)", res.status_code)
+                return await _photon(params.get("q") or " ".join(str(v) for v in params.values() if v and v not in ("jsonv2", "1", "hu")))
             res.raise_for_status()
             items = res.json()
             if items:
                 return (float(items[0]["lat"]), float(items[0]["lon"]))
         except Exception:  # pragma: no cover - hálózati hiba: best-effort
-            logger.info("Geokódolás sikertelen (%s)", params, exc_info=True)
+            logger.warning("Geokódolás sikertelen (%s)", params, exc_info=True)
             return None
+    # strukturált + szabad keresés nélkül: tartalék
+    text = fallback_text or " ".join(x for x in (zip_code, city, street, number) if x)
+    return await _photon(text) if text else None
+
+
+async def _photon(text: str) -> tuple[float, float] | None:
+    """Tartalék geokódoló (Photon / komoot, OSM-adat, kulcs nélkül) — ha a
+    Nominatim 403/429-et ad (7836fee3)."""
+    url = os.environ.get("WFM_PHOTON_URL", "https://photon.komoot.io/api/")
+    try:
+        async with httpx.AsyncClient(timeout=8.0, headers={"User-Agent": _UA}) as cx:
+            res = await cx.get(url, params={"q": f"{text}, Magyarország", "limit": "1", "lang": "de"})
+        res.raise_for_status()
+        feats = (res.json() or {}).get("features") or []
+        if feats:
+            lon, lat = feats[0]["geometry"]["coordinates"][:2]
+            return (float(lat), float(lon))
+    except Exception:  # pragma: no cover
+        logger.warning("Photon geokódolás sikertelen (%s)", text, exc_info=True)
     return None
 
 

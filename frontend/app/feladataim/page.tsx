@@ -97,6 +97,9 @@ interface WorksheetForm {
   work_description: string;
   technician_name: string; // alvállalkozó cégnél: a cégen belüli szerelő
   public_note: string; // az ügyfélnek szánt megjegyzés (munkalap + ajánlat)
+  problem_text: string; // hibaleírás (tudástár)
+  solution_text: string; // megoldás (tudástár)
+  print_solution: boolean; // a megoldás az ügyfél-példányra is
   works: WorkRow[];
   repairs: WorkRow[]; // javítási konstrukciók (alternatív ajánlatok árral)
   hours_spent: string;
@@ -115,6 +118,9 @@ const EMPTY_WS: WorksheetForm = {
   work_description: "",
   technician_name: "",
   public_note: "",
+  problem_text: "",
+  solution_text: "",
+  print_solution: false,
   works: [],
   repairs: [],
   hours_spent: "",
@@ -388,6 +394,9 @@ export default function FeladataimPage() {
           work_description: existing.work_description,
           technician_name: (existing as { technician_name?: string | null }).technician_name ?? "",
           public_note: existing.public_note ?? "",
+          problem_text: (existing as { problem_text?: string | null }).problem_text ?? "",
+          solution_text: (existing as { solution_text?: string | null }).solution_text ?? "",
+          print_solution: Boolean((existing as { print_solution?: boolean }).print_solution),
           works: (existing.works ?? []).map((w) => {
             const fee = task.worksheet_external ? w.cost_net : w.price_net;
             return { name: w.name, fee: fee != null ? String(fee) : "" };
@@ -552,6 +561,9 @@ export default function FeladataimPage() {
         client_name: ws.client_name || null,
         client_location: ws.client_location || null,
         public_note: ws.public_note.trim() || null,
+        problem_text: ws.problem_text.trim() || null,
+        solution_text: ws.solution_text.trim() || null,
+        print_solution: ws.print_solution,
         employee_signature: ws.employee_signature,
         client_signature: ws.client_signature,
         client_signer_name: ws.client_signer_name.trim() || null,
@@ -1099,6 +1111,9 @@ export default function FeladataimPage() {
                 className="hidden"
               />
             </label>
+            {/* KSZ-en az ajánlat-fázisban a tételes munka felesleges: az ügyfél a
+                konstrukciók közül választ (6bdaa987) — elfogadás után jön vissza. */}
+            {!(wsTask?.worksheet_external && wsQuote.status !== "accepted") && (
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-sm text-slate-600">{t("myTasks.wsWorks")}</span>
@@ -1148,6 +1163,10 @@ export default function FeladataimPage() {
                 <p className="text-xs text-slate-400">{t("myTasks.wsWorksInternalHint")}</p>
               )}
             </div>
+            )}
+            {wsTask?.worksheet_external && wsQuote.status !== "accepted" && (
+              <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">{t("myTasks.wsQuoteOnlyOptions")}</p>
+            )}
 
             {/* Javítási konstrukciók: alternatív ajánlatok árral */}
             <div>
@@ -1248,6 +1267,35 @@ export default function FeladataimPage() {
               />
               <span className="mt-0.5 block text-xs text-emerald-700">{t("myTasks.wsPublicNoteHint")}</span>
             </label>
+            {/* Tudástár-mezők (687f2352): hibaleírás + megoldás — a megoldásból KB-bejegyzés lesz */}
+            <div className="rounded-xl border border-sky-200 bg-slate-50 p-3">
+              <p className="mb-2 text-xs font-medium text-sky-800">📚 {t("myTasks.wsKbTitle")}</p>
+              <label className="block text-sm">
+                {t("myTasks.wsProblem")}
+                <textarea
+                  value={ws.problem_text}
+                  onChange={(e) => setWs({ ...ws, problem_text: e.target.value })}
+                  rows={2}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  placeholder={t("myTasks.wsProblemPh")}
+                />
+              </label>
+              <label className="mt-2 block text-sm">
+                {t("myTasks.wsSolution")}
+                <textarea
+                  value={ws.solution_text}
+                  onChange={(e) => setWs({ ...ws, solution_text: e.target.value })}
+                  rows={3}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  placeholder={t("myTasks.wsSolutionPh")}
+                />
+              </label>
+              <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" checked={ws.print_solution} onChange={(e) => setWs({ ...ws, print_solution: e.target.checked })} className="h-4 w-4" />
+                {t("myTasks.wsPrintSolution")}
+              </label>
+              <p className="mt-1 text-xs text-slate-400">{t("myTasks.wsKbHint")}</p>
+            </div>
             <label className="block text-sm">
               {t("myTasks.wsHours")}
               <input

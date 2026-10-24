@@ -530,7 +530,8 @@
     "replenishGls": "Replenish as a GLS parcel (opens the Parcels page)",
     "printTitle": "Print receipt",
     "printHint": "A4 sheet, or a 50 / 80 mm receipt printer. The print dialog opens in the browser.",
-    "printNo": "Not now"
+    "printNo": "Not now",
+    "printBtn": "Print (A4 / 50 / 80 mm)"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1492,7 +1493,15 @@
     "timerCorrection": "± correction",
     "timerCorrectionPrompt": "By how many minutes should the measured time be corrected? (e.g. -15 or 30) and why — one line: minutes; reason",
     "timerCorrectionSent": "Correction request sent, a manager will approve it.",
-    "timerCorrectionPending": "correction pending"
+    "timerCorrectionPending": "correction pending",
+    "wsQuoteOnlyOptions": "Quote phase: only enter the repair options (any number) — the customer picks one. Itemised work returns after acceptance.",
+    "wsKbTitle": "Knowledge base — what was wrong, how it was fixed",
+    "wsProblem": "Problem description (technician)",
+    "wsProblemPh": "e.g. E8 error, boiler does not heat, thermostat open",
+    "wsSolution": "Solution / repair",
+    "wsSolutionPh": "e.g. replaced SP 90 °C thermostat, descaled, test brew OK",
+    "wsPrintSolution": "Print the solution on the customer copy too",
+    "wsKbHint": "On save the problem + solution + works + replaced parts go to the Knowledge base for the machine type; the AI and colleagues learn from it."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -3435,7 +3444,12 @@
     "st.emptyList": "No stocktake sessions yet.",
     "st.rowsHint": "In a blind count the book quantity stays hidden until submission; uncounted rows take the book value on submit.",
     "createInline": "New part",
-    "createdInline": "Part created: {name} ({sku})"
+    "createdInline": "Part created: {name} ({sku})",
+    "importCsv": "Import CSV",
+    "importHint": "Header: sku;name;manufacturer_code;cost_net;price_net;min_stock;unit — updates or creates by SKU (auto SKU if empty).",
+    "importEmpty": "Empty file or missing header.",
+    "importConfirm": "Import {n} rows? Prices and min. stock of existing SKUs will be updated.",
+    "importDone": "Import done: {created} new, {updated} updated, {skipped} skipped."
   },
   "myParts": {
     "title": "My parts",

@@ -1351,3 +1351,67 @@ async def export_csv(
         name = "alkatresz_keszlet"
     resp.headers["Content-Disposition"] = f'attachment; filename="{name}_{datetime.now(UTC):%Y%m%d}.csv"'
     return resp
+
+
+class PartImportRow(BaseModel):
+    sku: str | None = Field(default=None, max_length=64)
+    name: str = Field(min_length=1, max_length=256)
+    manufacturer_code: str | None = Field(default=None, max_length=128)
+    cost_net: float | None = Field(default=None, ge=0)
+    price_net: float | None = Field(default=None, ge=0)
+    min_stock: float | None = Field(default=None, ge=0)
+    unit: str | None = Field(default=None, max_length=16)
+
+
+class PartImportBody(BaseModel):
+    rows: list[PartImportRow] = Field(min_length=1, max_length=5000)
+    update_existing: bool = True  # meglévő cikkszámnál ár/min. készlet frissítése
+
+
+@router.post("/import")
+async def import_parts(
+    body: PartImportBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("parts")),
+):
+    """Tömeges alkatrész-import (pl. a régi X-presso adatbázis cikkei, 12606a3b):
+    cikkszám szerint frissít vagy létrehoz; cikkszám nélkül név szerint keres,
+    új cikknél automatikus cikkszám. Vissza: létrehozott / frissített / kihagyott."""
+    created = updated = skipped = 0
+    existing_by_sku = {p.sku.upper(): p for p in (await db.execute(select(Part))).scalars().all()}
+    existing_by_name = {p.name.strip().lower(): p for p in existing_by_sku.values()}
+    for r in body.rows:
+        sku = (r.sku or "").strip().upper()
+        name = r.name.strip()
+        p = existing_by_sku.get(sku) if sku else existing_by_name.get(name.lower())
+        if p is None:
+            if not sku:
+                sku = await _next_auto_sku(db)
+                await db.flush()
+            p = Part(sku=sku, name=name, manufacturer_code=(r.manufacturer_code or None), unit=(r.unit or "db").strip() or "db",
+                     min_stock=float(r.min_stock or 0), price_net=r.price_net, cost_net=r.cost_net, is_active=True)
+            db.add(p)
+            await db.flush()
+            existing_by_sku[sku] = p
+            existing_by_name[name.lower()] = p
+            created += 1
+        elif body.update_existing:
+            p.name = name or p.name
+            if r.manufacturer_code:
+                p.manufacturer_code = r.manufacturer_code
+            if r.price_net is not None:
+                p.price_net = r.price_net
+            if r.cost_net is not None:
+                p.cost_net = r.cost_net
+            if r.min_stock is not None:
+                p.min_stock = float(r.min_stock)
+            updated += 1
+        else:
+            skipped += 1
+    await record_audit(
+        db, actor=actor, action="parts.import", entity_type="part", entity_id="import",
+        detail={"created": created, "updated": updated, "skipped": skipped}, request=request,
+    )
+    await db.commit()
+    return {"created": created, "updated": updated, "skipped": skipped}

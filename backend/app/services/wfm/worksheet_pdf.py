@@ -113,8 +113,22 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
     right = width - 18 * mm
     y = height - 18 * mm
 
+    def need(h: float) -> None:
+        """Lapozás: ha a következő blokk nem fér az aláírás-sáv fölé, új oldal
+        (a belső példány a költség-összesítővel hosszabb lehet egy lapnál)."""
+        nonlocal y
+        if y - h < 50 * mm:
+            c.showPage()
+            y = height - 18 * mm
+            c.setFont(FONT, 8)
+            c.setFillColorRGB(0.5, 0.5, 0.55)
+            c.drawRightString(right, y, f"{data.get('serial', '')} — folytatás")
+            c.setFillColorRGB(0, 0, 0)
+            y -= 8 * mm
+
     def line(label: str, value: str, *, label_w: float = 42 * mm) -> None:
         nonlocal y
+        need(6 * mm)
         c.setFont(FONT_BOLD, 9)
         c.drawString(left, y, label)
         c.setFont(FONT, 9)
@@ -128,9 +142,13 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             while len(paragraph) > max_chars:
                 cut = paragraph.rfind(" ", 0, max_chars)
                 cut = cut if cut > 0 else max_chars
+                need(5 * mm)
+                c.setFont(FONT, font_size)
                 c.drawString(left, y, paragraph[:cut])
                 paragraph = paragraph[cut:].lstrip()
                 y -= 4.5 * mm
+            need(5 * mm)
+            c.setFont(FONT, font_size)
             c.drawString(left, y, paragraph)
             y -= 4.5 * mm
 
@@ -150,6 +168,7 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
 
     def section(title: str) -> None:
         nonlocal y
+        need(18 * mm)
         y -= 3 * mm
         c.setFillColorRGB(*accent_tint)
         c.rect(left, y - 1.5 * mm, right - left, 6.5 * mm, fill=1, stroke=0)
@@ -180,8 +199,9 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
     # logónál a cégnév-felirat NEM kerül alá — a logó maga a cégjelzés
 
     c.setFillColorRGB(0, 0, 0)
-    c.setFont(FONT_BOLD, 16)
-    c.drawRightString(right, y, data.get("title") or "MUNKALAP")
+    _title = data.get("title") or "MUNKALAP"
+    c.setFont(FONT_BOLD, 16 if len(_title) <= 22 else 11.5)  # hosszú cím ne fusson a cégnévre
+    c.drawRightString(right, y, _title)
     c.setFont(FONT_BOLD, 11)
     c.drawRightString(right, y - 6 * mm, data.get("serial", ""))
     c.setFont(FONT, 8)
@@ -228,6 +248,14 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             y -= 1 * mm
             line("Ráfordított idő:", f"{data['hours_spent']:g} óra")
 
+    # ─── Hibaleírás + megoldás (tudástár-mezők, 687f2352) ───
+    if (data.get("problem_text") or "").strip():
+        section("Hiba leírása (szervizes)")
+        wrapped(str(data["problem_text"]).strip())
+    if (data.get("solution_text") or "").strip():
+        section("Megoldás / elvégzett javítás")
+        wrapped(str(data["solution_text"]).strip())
+
     # ─── Elvégzett munkák tételesen (soronkénti munkadíjjal) ───
     works = data.get("works") or []
     if works:
@@ -239,7 +267,8 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         y -= 5 * mm
         c.setFont(FONT, 9)
         works_total = 0.0
-        for item in works[:25]:
+        for item in works[:100]:
+            need(6 * mm)
             rows = name_lines(item.get("name", ""), 70)
             c.drawString(left, y, rows[0])
             price = item.get(works_field)
@@ -267,7 +296,8 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         c.drawRightString(right, y, "Ár (Ft, nettó)")
         y -= 5 * mm
         c.setFont(FONT, 9)
-        for item in repair_options[:25]:
+        for item in repair_options[:100]:
+            need(6 * mm)
             rows = name_lines(item.get("name", ""), 70)
             c.drawString(left, y, rows[0])
             price = item.get(r_field)
@@ -296,6 +326,7 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         c.setFont(FONT, 9)
         total = 0.0
         for item in materials[:25]:
+            need(6 * mm)
             mat_rows = name_lines(item.get("name", ""), 50)
             c.drawString(left, y, mat_rows[0])
             c.drawString(left + 95 * mm, y, str(item.get("qty", "")))
@@ -319,6 +350,46 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             c.drawRightString(right, y, f"Összesen (nettó): {total:,.0f} Ft".replace(",", " "))
             y -= 5 * mm
 
+    # ─── Költség-összesítő (belső példány): mibe került a cégnek (0589e92e) ───
+    cs = data.get("cost_summary")
+    if cs and (cs.get("total_cost") or cs.get("total_price")):
+        section("Költség-összesítő (belső)")
+        c.setFont(FONT, 9)
+
+        def _money(v: float) -> str:
+            return f"{float(v or 0):,.0f} Ft".replace(",", " ")
+
+        rows_cs = []
+        if cs.get("work_cost"):
+            rows_cs.append(("Munkadíj — szerviz költsége:", _money(cs["work_cost"])))
+        if cs.get("option_cost"):
+            rows_cs.append((f"Elfogadott konstrukció költsége ({str(cs.get('option_name') or '')[:40]}):", _money(cs["option_cost"])))
+        if cs.get("parts_cost"):
+            rows_cs.append(("Beépített alkatrészek (átlagáron):", _money(cs["parts_cost"])))
+        if cs.get("mat_cost"):
+            rows_cs.append(("Anyagok költsége:", _money(cs["mat_cost"])))
+        if cs.get("hours") is not None:
+            rows_cs.append(("Ráfordított idő:", f"{float(cs['hours']):g} óra"))
+        for label, value in rows_cs:
+            need(6 * mm)
+            c.setFont(FONT, 9)
+            c.drawString(left, y, label)
+            c.drawRightString(right, y, value)
+            y -= 4.5 * mm
+        c.setFont(FONT_BOLD, 10)
+        c.drawString(left, y, "Összes költség a cégnek (nettó):")
+        c.drawRightString(right, y, _money(cs.get("total_cost")))
+        y -= 5 * mm
+        c.drawString(left, y, "Ügyfél felé számlázható (nettó):")
+        c.drawRightString(right, y, _money(cs.get("total_price")))
+        y -= 5 * mm
+        margin_v = float(cs.get("total_price") or 0) - float(cs.get("total_cost") or 0)
+        c.setFillColorRGB(0.1, 0.5, 0.2) if margin_v >= 0 else c.setFillColorRGB(0.7, 0.1, 0.1)
+        c.drawString(left, y, "Fedezet:")
+        c.drawRightString(right, y, _money(margin_v))
+        c.setFillColorRGB(0, 0, 0)
+        y -= 6 * mm
+
     # ─── Ajánlat-előzmény (belső példány): felkínált konstrukciók + döntés ───
     qh = data.get("quote_history")
     if qh:
@@ -333,6 +404,7 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         when = (qh.get("accepted_at") or "")[:16].replace("T", " ")
         wrapped(f"{decision} — {who}{f' ({when})' if when else ''}")
         for opt in (qh.get("options") or [])[:12]:
+            need(6 * mm)
             mark = "✓" if opt.get("name") == qh.get("selected") else "·"
             price = opt.get("price_net")
             line_text = f"  {mark} {str(opt.get('name') or '')[:90]}"
@@ -416,7 +488,7 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
     if extra_footer:
         qr_narrow = bool(data.get("handover_url"))
         top_limit = 33 * mm   # az aláírás-címkék alatt kezdődhet
-        bottom_limit = 9 * mm
+        bottom_limit = 14 * mm  # a lábléc (cégszöveg + generálás) ALATTA marad (f7d345ca)
         wrapped_lines: list[str] = []
         chosen = (7, 3.2)
         for fsize, leading, max_line in (
@@ -451,16 +523,17 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
 
     # ─── Lábléc ───
     footer_text = s.get("footer_text")
+    # A garanciális blokk alatt: cégszöveg 9,5 mm-en, generálás 5,5 mm-en — nem
+    # kerülhetnek egy helyre (f7d345ca). QR-nél a szöveg balra zárt, rövidebb.
+    footer_right = (right - 26 * mm) if data.get("handover_url") else right
     if footer_text:
-        c.setFont(FONT, 8)
+        c.setFont(FONT, 7.5)
         c.setFillColorRGB(0.3, 0.3, 0.35)
-        c.drawCentredString(width / 2, 17 * mm, footer_text[:160])
+        c.drawString(left, 9.5 * mm, footer_text[:120])
     c.setFont(FONT, 7)
     c.setFillColorRGB(0.5, 0.5, 0.55)
-    c.drawCentredString(
-        width / 2, 12 * mm,
-        f"{data.get('serial', '')} · generálva: {data.get('generated_at', '')}",
-    )
+    c.drawString(left, 5.5 * mm, f"{data.get('serial', '')} · generálva: {data.get('generated_at', '')}")
+    _ = footer_right
 
     c.showPage()
     c.save()

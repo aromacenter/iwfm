@@ -119,6 +119,38 @@ export default function AlkatreszekPage() {
       toast(errorMessage(err), "error");
     }
   }
+  /** CSV-import (12606a3b): fejléc sku;name;manufacturer_code;cost_net;price_net;min_stock;unit
+   *  (pontosvessző vagy vessző), cikkszám szerint frissít vagy létrehoz. */
+  async function importCsv(file: File) {
+    try {
+      const text = (await file.text()).replace(/^\uFEFF/, "");
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) { toast(t("parts.importEmpty"), "error"); return; }
+      const sep = lines[0].includes(";") ? ";" : ",";
+      const head = lines[0].split(sep).map((h) => h.trim().toLowerCase());
+      const idx = (k: string) => head.indexOf(k);
+      const num = (v: string | undefined) => { const n = Number((v ?? "").replace(",", ".")); return v && Number.isFinite(n) ? n : null; };
+      const rows = lines.slice(1).map((l) => {
+        const c = l.split(sep).map((x) => x.trim());
+        return {
+          sku: idx("sku") >= 0 ? c[idx("sku")] || null : null,
+          name: idx("name") >= 0 ? c[idx("name")] : c[0],
+          manufacturer_code: idx("manufacturer_code") >= 0 ? c[idx("manufacturer_code")] || null : null,
+          cost_net: idx("cost_net") >= 0 ? num(c[idx("cost_net")]) : null,
+          price_net: idx("price_net") >= 0 ? num(c[idx("price_net")]) : null,
+          min_stock: idx("min_stock") >= 0 ? num(c[idx("min_stock")]) : null,
+          unit: idx("unit") >= 0 ? c[idx("unit")] || null : null,
+        };
+      }).filter((r) => r.name);
+      if (!(await confirm(t("parts.importConfirm", { n: rows.length })))) return;
+      const res = await api.post<{ created: number; updated: number; skipped: number }>("/api/parts/import", { rows, update_existing: true });
+      toast(t("parts.importDone", res), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   const partItems = useMemo(() => parts.filter((p) => p.is_active).map((p) => ({ id: p.id, label: p.name, badge: p.sku, sublabel: `${p.total_qty} ${p.unit}`, keywords: p.manufacturer_code })), [parts]);
   const whItems = useMemo(() => warehouses.filter((w) => w.is_active).map((w) => ({ id: w.id, label: w.name, badge: w.kind === "vehicle" ? "🚚" : w.kind === "quarantine" ? "🚧" : "🏬" })), [warehouses]);
 
@@ -342,6 +374,10 @@ export default function AlkatreszekPage() {
           <p className="text-sm text-slate-500">{t("parts.subtitle")}</p>
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
+          <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100" title={t("parts.importHint")}>
+            📥 {t("parts.importCsv")}
+            <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void importCsv(f); e.target.value = ""; }} />
+          </label>
           <button onClick={() => openMove("receipt")} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700">{t("parts.receipt")}</button>
           <button onClick={() => openMove("transfer")} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("parts.transfer")}</button>
           <button onClick={() => openMove("adjust")} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100">{t("parts.adjust")}</button>

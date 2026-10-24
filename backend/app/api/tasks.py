@@ -172,7 +172,7 @@ class WorksheetBody(BaseModel):
     technician_name: str | None = Field(default=None, max_length=256)
     works: list[WorkItem] = Field(default_factory=list, max_length=25)
     # Javítási konstrukciók: alternatív ajánlatok árral (nem összegződnek).
-    repair_options: list[WorkItem] = Field(default_factory=list, max_length=25)
+    repair_options: list[WorkItem] = Field(default_factory=list, max_length=100)  # korlátlan konstrukció (6bdaa987)
     materials: list[MaterialItem] = Field(default_factory=list, max_length=25)
     hours_spent: float | None = Field(default=None, ge=0, le=1000)
     client_name: str | None = Field(default=None, max_length=256)
@@ -192,6 +192,11 @@ class WorksheetBody(BaseModel):
     customer_note: str | None = Field(default=None, max_length=8000)
     # A szervizes ügyfélnek szánt megjegyzése (munkalapon + ajánlat-oldalon).
     public_note: str | None = Field(default=None, max_length=8000)
+    # Tudástár-mezők (687f2352): hibaleírás + megoldás; a megoldás az
+    # ügyfél-példányra csak print_solution-nel. None = nem nyúlunk hozzá.
+    problem_text: str | None = Field(default=None, max_length=8000)
+    solution_text: str | None = Field(default=None, max_length=8000)
+    print_solution: bool | None = None
 
 
 class WorksheetOut(BaseModel):
@@ -227,6 +232,9 @@ class WorksheetOut(BaseModel):
     invoiced: bool = False  # az auto-számla már kiment
     customer_note: str | None = None
     public_note: str | None = None
+    problem_text: str | None = None
+    solution_text: str | None = None
+    print_solution: bool = False
     # Ügyfél-árajánlat állapota (none → sent → accepted)
     quote_status: str = "none"
     quote_email: str | None = None
@@ -297,6 +305,9 @@ def _worksheet_out(
         invoiced=ws.billingo_document_id is not None,
         customer_note=None if hide else ws.customer_note,
         public_note=ws.public_note,
+        problem_text=ws.problem_text,
+        solution_text=ws.solution_text,
+        print_solution=bool(ws.print_solution),
         quote_status=ws.quote_status or "none",
         quote_email=None if hide else ws.quote_email,
         suggested_email=None if hide else suggested_email,
@@ -493,6 +504,12 @@ async def _upsert_worksheet(
             if m.get("price_net") is None:
                 m["price_net"] = old_prices.get(str(m.get("name", "")).strip().lower())
     ws.materials = materials
+    if body.problem_text is not None:
+        ws.problem_text = body.problem_text.strip() or None
+    if body.solution_text is not None:
+        ws.solution_text = body.solution_text.strip() or None
+    if body.print_solution is not None:
+        ws.print_solution = bool(body.print_solution)
     ws.hours_spent = body.hours_spent
     ws.client_name = (body.client_name or "").strip() or None
     ws.client_location = (body.client_location or "").strip() or None
@@ -530,6 +547,7 @@ async def _upsert_worksheet(
         db, actor=actor, action="worksheet.create" if created else "worksheet.update",
         entity_type="worksheet", entity_id=ws.serial, request=request,
     )
+    await _sync_worksheet_knowledge(db, task, ws, actor)
     await db.commit()
     await db.refresh(ws)  # az onupdate-es updated_at lejárt attribútum lenne
 
@@ -1207,6 +1225,57 @@ async def manager_upsert_worksheet(
     return _worksheet_out(ws, used_parts=await _used_parts(db, ws))
 
 
+async def _sync_worksheet_knowledge(db: AsyncSession, task: Task, ws: Worksheet, actor: User) -> None:
+    """Tudástár a munkalapból (687f2352): ha van megoldás, a hibaleírás +
+    megoldás + munkák + cserélt alkatrészek egy KnowledgeEntry-be kerülnek a
+    géptípushoz (frissítés ugyanarra a munkalapra, nem duplikál)."""
+    if not (ws.solution_text or "").strip():
+        return
+    from app.models import Asset, KnowledgeEntry
+    from app.services.wfm.kb_auto import machine_label as _ml
+
+    label = ""
+    if ws.asset_id is not None:
+        a = (await db.execute(select(Asset).where(Asset.id == ws.asset_id))).scalar_one_or_none()
+        if a is not None:
+            label = _ml(a.manufacturer, a.name)
+    if not label:
+        label = (task.title or "Általános")[:120]
+    marker = f"[Munkalap {ws.serial}]"
+    problem = (ws.problem_text or "").strip()
+    title = (problem.splitlines()[0] if problem else task.title or ws.serial)[:120]
+    parts_lines = []
+    try:
+        for u in await _used_parts(db, ws):
+            parts_lines.append(f"- {u.name} ({u.sku}) × {u.quantity:g} {u.unit}" + (f", gy.sz. {u.serial_no}" if u.serial_no else ""))
+    except Exception:  # pragma: no cover
+        parts_lines = []
+    for m in (ws.materials or []):
+        if m.get("name"):
+            parts_lines.append(f"- {m['name']} × {m.get('qty', '')} {m.get('unit', '')}".rstrip())
+    works_lines = [f"- {w.get('name')}" for w in (ws.works or []) if w.get("name")]
+    content = marker + "\n"
+    if problem:
+        content += f"Hiba leírása: {problem}\n"
+    content += f"Megoldás: {ws.solution_text.strip()}\n"
+    if works_lines:
+        content += "Elvégzett munkák:\n" + "\n".join(works_lines) + "\n"
+    if parts_lines:
+        content += "Cserélt / felhasznált alkatrészek:\n" + "\n".join(parts_lines) + "\n"
+    existing = (
+        await db.execute(select(KnowledgeEntry).where(KnowledgeEntry.content.like(f"{marker}%")))
+    ).scalars().first()
+    if existing is None:
+        db.add(KnowledgeEntry(
+            machine_label=label[:256], title=title, content=content[:20000], source="manual",
+            created_by=actor.id, created_by_name=actor.display_name,
+        ))
+    else:
+        existing.machine_label = label[:256]
+        existing.title = title
+        existing.content = content[:20000]
+
+
 async def _build_worksheet_pdf(
     db: AsyncSession, task: Task, variant: str = "internal"
 ) -> tuple[bytes, str]:
@@ -1283,6 +1352,36 @@ async def _build_worksheet_pdf(
     # kerülnek rá — helyettük a képviselő ügyfél-megjegyzése (ha van).
     work_description = ws.work_description
     hours_spent = ws.hours_spent
+    # Tudástár-mezők: belső és szervizes példányon mindig; ügyfél-példányon a
+    # megoldás csak a kapcsolóval (687f2352)
+    problem_text = ws.problem_text if variant != "customer" else None
+    solution_text = ws.solution_text if (variant != "customer" or ws.print_solution) else None
+    # Költség-összesítő a BELSŐ példányra: mibe került a cégnek (0589e92e)
+    cost_summary = None
+    if variant == "internal":
+        def _num(v):
+            try:
+                return float(v or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        work_cost = sum(_num(w.get("cost_net")) for w in (ws.works or []))
+        selected = None
+        if (ws.quote_status or "none") == "accepted" and ws.quote_selected_name:
+            selected = next((r for r in (ws.repair_options or []) if r.get("name") == ws.quote_selected_name), None)
+        option_cost = _num(selected.get("cost_net")) if selected else 0.0
+        option_price = _num(selected.get("price_net")) if selected else 0.0
+        mat_cost = sum(_num(m.get("cost_net")) * (_num(m.get("qty")) or 1.0) for m in (ws.materials or []))
+        parts_cost = sum(_num(u.get("cost_net")) * (_num(u.get("qty")) or 1.0) for u in used_parts)
+        work_price = sum(_num(w.get("price_net")) for w in (ws.works or []))
+        parts_price = sum(_num(u.get("price_net")) * (_num(u.get("qty")) or 1.0) for u in used_parts)
+        mat_price = sum(_num(m.get("price_net")) * (_num(m.get("qty")) or 1.0) for m in (ws.materials or []))
+        cost_summary = {
+            "work_cost": work_cost, "option_cost": option_cost, "option_name": selected.get("name") if selected else None,
+            "mat_cost": mat_cost, "parts_cost": parts_cost,
+            "total_cost": work_cost + option_cost + mat_cost + parts_cost,
+            "total_price": (option_price if selected else work_price) + parts_price + mat_price + (ws.maintenance_fee or 0 if not ws.fee_discount else 0),
+            "hours": hours_spent,
+        }
     pdf_comments = [{"author": c.author_name, "text": c.text} for c in comments]
     pdf_settings = await _worksheet_pdf_settings(db)
     extra_footer = None
@@ -1363,6 +1462,9 @@ async def _build_worksheet_pdf(
             "employee_code": emp.employee_code if emp else None,
             "job_title": emp.job_title if emp else None,
             "work_description": work_description,
+            "problem_text": problem_text,
+            "solution_text": solution_text,
+            "cost_summary": cost_summary,
             "remark": customer_remark,
             "works": works,
             "repair_options": repair_options,
