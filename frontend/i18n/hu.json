@@ -1327,7 +1327,7 @@
     "repairCol": "Javítási konstrukció",
     "quoteSend": "Árajánlat küldése az ügyfélnek",
     "quoteResend": "Árajánlat újraküldése",
-    "quoteEmailPrompt": "Az ügyfél e-mail címe (ide megy az ajánlat-link):",
+    "quoteEmailPrompt": "Az ügyfél e-mail címe(i) — több cím vesszővel (ide megy az ajánlat-link):",
     "quoteSent": "Árajánlat elküldve: {to}",
     "quoteSentInfo": "Árajánlat kiküldve ({date}) — {to}. Várjuk az ügyfél jóváhagyását.",
     "quoteAccepted": "Az ügyfél jóváhagyta: {option} — a szerviz értesítést kapott, a munka kezdhető.",
@@ -2025,7 +2025,9 @@
     "settings.role_not_found": "Nincs ilyen szerepkör.",
     "settings.role_system": "Beépített szerepkör: nem törölhető, a szintje nem változtatható.",
     "settings.role_in_use": "A szerepkör használatban van ({users} felhasználó) — előbb tedd át őket más szerepkörbe.",
-    "manual.not_found": "Nincs ilyen fejezet."
+    "manual.not_found": "Nincs ilyen fejezet.",
+    "tasks.bad_quote_email": "Érvénytelen e-mail cím az ajánlat címzettjei között (több cím vesszővel).",
+    "billingo.request_failed.withMessage": "A számlázó (Billingó) elutasította: {message}"
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",

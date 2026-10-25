@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import PhotoLightbox from "@/components/PhotoLightbox";
 import PartnerInfo from "@/components/PartnerInfo";
 import ScanAssetButton from "@/components/ScanAssetButton";
 import SearchSelect from "@/components/SearchSelect";
@@ -166,6 +167,8 @@ export default function FeladatokPage() {
   // választani.
   // Az átvétel azonosítója, amiből a feladat készül — a mentéskor a
   // kapcsolat is tárolódik (az átvétel-lista így tudja: már van munkalap).
+  // Fotónéző nagyítással (2aeefcbd)
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const [intakeIdForTask, setIntakeIdForTask] = useState<string | null>(null);
   // Átvételből kötelezően: az űrlap nem zárható be mentés nélkül (653a4e59)
   const [forcedIntake, setForcedIntake] = useState(false);
@@ -538,8 +541,8 @@ export default function FeladatokPage() {
   async function sendQuote() {
     if (!priceEdit) return;
     const to = await prompt(t("tasks.quoteEmailPrompt"), {
-      type: "email",
-      placeholder: "ugyfel@example.com",
+      type: "text", // több cím vesszővel (db347fbd) — az e-mail típus tiltja a „;”-t
+      placeholder: "ugyfel@example.com, masik@example.com",
       // előtöltve a munkalapról / átvételi elismervényről / partnertől
       initial: priceEdit.ws.quote_email ?? priceEdit.ws.suggested_email ?? "",
     });
@@ -566,8 +569,8 @@ export default function FeladatokPage() {
       if (!(await confirm(t("tasks.pickupConfirm", { to })))) return;
     } else {
       to = await prompt(t("tasks.quoteEmailPrompt"), {
-        type: "email",
-        placeholder: "ugyfel@example.com",
+        type: "text",
+        placeholder: "ugyfel@example.com, masik@example.com",
         initial: priceEdit.ws.suggested_email ?? "",
       });
       if (!to) return;
@@ -758,7 +761,7 @@ export default function FeladatokPage() {
                       return (
                         <button
                           key={pid}
-                          onClick={() => window.open(src, "_blank")}
+                          onClick={() => setLightbox(src)}
                           title={t("tasks.wsPhoto")}
                           className="overflow-hidden rounded-lg border border-slate-200 shadow-sm hover:ring-2 hover:ring-indigo-300"
                         >
@@ -1421,6 +1424,7 @@ export default function FeladatokPage() {
           </div>
         </div>
       )}
+      <PhotoLightbox src={lightbox} onClose={() => setLightbox(null)} />
     </AppShell>
   );
 }

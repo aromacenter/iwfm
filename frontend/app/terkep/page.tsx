@@ -130,9 +130,11 @@ export default function TerkepPage() {
       // átváltunk a Carto alaptérképre (9192f8d5). A CSP img-src engedi őket.
       // Az OSM közvetlen csempe-szervere az appot blokkolta („Access blocked”,
       // tile usage policy — 7836fee3), ezért a CARTO az elsődleges forrás.
+      // A CARTO csempe már API-kulcsot kér, az OSM fő szerver blokkolt (7836fee3):
+      // a német OSM-tükör az elsődleges, az Esri utcatérkép a tartalék.
       const TILE_SOURCES = [
-        { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png", attribution: "© OpenStreetMap · © CARTO" },
-        { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", attribution: "© OpenStreetMap · © CARTO" },
+        { url: "https://tile.openstreetmap.de/{z}/{x}/{y}.png", attribution: "© OpenStreetMap contributors" },
+        { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", attribution: "© Esri, OpenStreetMap contributors" },
       ];
       let tileIdx = 0;
       let errCount = 0;

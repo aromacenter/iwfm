@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
+import PhotoLightbox from "@/components/PhotoLightbox";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import SearchSelect from "@/components/SearchSelect";
 import SuggestInput from "@/components/SuggestInput";
@@ -162,6 +163,8 @@ export default function FeladataimPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [noEmployee, setNoEmployee] = useState(false);
   const [wsTask, setWsTask] = useState<TaskOut | null>(null);
+  // Fotónéző nagyítással (2aeefcbd)
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const [ws, setWs] = useState<WorksheetForm>(EMPTY_WS);
   // Beépített alkatrészek: a saját autós raktár készlete + a munkalap sorai.
   // null = nincs parts modul / nincs autós raktár → a blokk nem jelenik meg.
@@ -901,7 +904,7 @@ export default function FeladataimPage() {
                   return (
                     <button
                       key={imgId}
-                      onClick={() => window.open(src, "_blank")}
+                      onClick={() => setLightbox(src)}
                       className="overflow-hidden rounded-xl border border-slate-200 shadow-sm transition hover:ring-2 hover:ring-indigo-300"
                       title={t("myTasks.ticketImage")}
                     >
@@ -923,7 +926,7 @@ export default function FeladataimPage() {
                     return (
                       <button
                         key={pid}
-                        onClick={() => window.open(src, "_blank")}
+                        onClick={() => setLightbox(src)}
                         className="overflow-hidden rounded-xl border border-slate-200 shadow-sm transition hover:ring-2 hover:ring-indigo-300"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -943,7 +946,7 @@ export default function FeladataimPage() {
                     return (
                       <button
                         key={pid}
-                        onClick={() => window.open(src, "_blank")}
+                        onClick={() => setLightbox(src)}
                         className="overflow-hidden rounded-xl border border-slate-200 shadow-sm transition hover:ring-2 hover:ring-indigo-300"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1571,6 +1574,7 @@ export default function FeladataimPage() {
           </div>
         </div>
       )}
+      <PhotoLightbox src={lightbox} onClose={() => setLightbox(null)} />
     </AppShell>
   );
 }

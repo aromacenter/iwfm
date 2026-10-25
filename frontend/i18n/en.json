@@ -1327,7 +1327,7 @@
     "repairCol": "Repair option",
     "quoteSend": "Send quote to customer",
     "quoteResend": "Resend quote",
-    "quoteEmailPrompt": "Customer email (the quote link is sent here):",
+    "quoteEmailPrompt": "Customer e-mail address(es) — several separated by commas (the quote link goes here):",
     "quoteSent": "Quote sent: {to}",
     "quoteSentInfo": "Quote sent ({date}) — {to}. Waiting for the customer's approval.",
     "quoteAccepted": "Customer approved: {option} — the technician was notified and can start.",
@@ -2025,7 +2025,9 @@
     "settings.role_not_found": "No such role.",
     "settings.role_system": "Built-in role: cannot be deleted, its level cannot be changed.",
     "settings.role_in_use": "The role is in use ({users} users) — move them to another role first.",
-    "manual.not_found": "No such chapter."
+    "manual.not_found": "No such chapter.",
+    "tasks.bad_quote_email": "Invalid e-mail address among the quote recipients (separate several with commas).",
+    "billingo.request_failed.withMessage": "The invoicing provider (Billingó) rejected it: {message}"
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",

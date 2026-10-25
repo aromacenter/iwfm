@@ -248,6 +248,11 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
             y -= 1 * mm
             line("Ráfordított idő:", f"{data['hours_spent']:g} óra")
 
+    # ─── A szervizes megjegyzése az ügyfélnek — külön szakasz (06b87417) ───
+    if (data.get("public_remark") or "").strip():
+        section("Szervizes megjegyzése az ügyfélnek")
+        wrapped(str(data["public_remark"]).strip())
+
     # ─── Hibaleírás + megoldás (tudástár-mezők, 687f2352) ───
     if (data.get("problem_text") or "").strip():
         section("Hiba leírása (szervizes)")

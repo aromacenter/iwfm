@@ -11,6 +11,8 @@ API: https://api.billingo.hu/v3 (X-API-KEY fejléc).
 
 from __future__ import annotations
 
+import re
+
 import logging
 from datetime import date, timedelta
 
@@ -168,8 +170,51 @@ async def _api(
             headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
             json=json_body,
         )
-        res.raise_for_status()
+        if res.status_code >= 400:
+            # A Billingó válasza (422-nél a mezőhibák) kerüljön a naplóba és a
+            # hívóhoz — eddig csak „502 Szerverhiba” látszott (3fe1fdcb).
+            snippet = (res.text or "")[:400]
+            logger.warning("Billingó %s %s → %s: %s", method, path, res.status_code, snippet)
+            raise BillingoApiError(res.status_code, path, snippet)
         return res.json() if res.content else {}
+
+
+class BillingoApiError(RuntimeError):
+    """Billingó API hiba: státusz + útvonal + a válasz eleje (üzenetnek)."""
+
+    def __init__(self, status: int, path: str, snippet: str):
+        super().__init__(f"Billingó {status} {path}: {snippet}")
+        self.status = status
+        self.path = path
+        self.snippet = snippet
+
+    def message(self) -> str:
+        try:
+            import json as _json
+
+            data = _json.loads(self.snippet)
+            msg = data.get("message") or data.get("error") or ""
+            errs = data.get("errors") or {}
+            if isinstance(errs, dict):
+                parts = [f"{k}: {', '.join(map(str, v)) if isinstance(v, list) else v}" for k, v in errs.items()]
+                msg = f"{msg} — {'; '.join(parts)}" if parts else msg
+            return (msg or self.snippet)[:300]
+        except Exception:
+            return self.snippet[:300]
+
+
+def _parse_free_address(text: str | None) -> tuple[str | None, str | None, str | None]:
+    """„1234, Város, Utca 12.” vagy „1234 Város, Utca 12.” → (irsz, város, utca)."""
+    t = (text or "").strip()
+    if not t:
+        return None, None, None
+    m = re.match(r"^\s*(\d{4})\s*[,;]?\s*([^,;]+?)\s*[,;]\s*(.+)$", t)
+    if m:
+        return m.group(1), m.group(2).strip(), m.group(3).strip()
+    m = re.match(r"^\s*(\d{4})\s+(\S+)\s+(.+)$", t)
+    if m:
+        return m.group(1), m.group(2).strip(), m.group(3).strip()
+    return None, None, t
 
 
 async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> int:
@@ -181,27 +226,40 @@ async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> in
         if item.get("name", "").strip().lower() == invoice_name.strip().lower():
             return int(item["id"])
 
-    # Strukturált számlázási cím előnyben; visszaesés a székhelyre / egysorosra.
-    zip_ = partner.billing_zip or partner.address_zip or "0000"
-    city = partner.billing_city or partner.address_city or "-"
+    # Strukturált számlázási cím előnyben; visszaesés a székhelyre, majd az
+    # egysoros cím felbontására (átvételből jövő ügyfélnél csak az van).
+    p_zip, p_city, p_street = _parse_free_address(partner.billing_address or partner.address)
+    zip_ = partner.billing_zip or partner.address_zip or p_zip or "1000"
+    city = partner.billing_city or partner.address_city or p_city or "Budapest"
     street = " ".join(
         x for x in (
             partner.billing_street or partner.address_street,
             partner.billing_number or partner.address_number,
         ) if x
-    ) or (partner.billing_address or partner.address or "-")
-    body = {
+    ) or p_street or (partner.billing_address or partner.address or "n/a")
+    body: dict = {
         "name": invoice_name,
         "address": {
             "country_code": "HU",
-            "post_code": zip_,
-            "city": city,
-            "address": street,
+            "post_code": str(zip_)[:10],
+            "city": str(city)[:100],
+            "address": str(street)[:200],
         },
-        "emails": split_addresses(partner.contact_email),
-        "taxcode": partner.tax_number or "",
     }
-    created = await _api(api_key, "POST", "/partners", body)
+    # Üres mezőt NEM küldünk: a Billingó az üres adószámot / e-mailt 422-vel dobja.
+    emails = [e for e in split_addresses(partner.contact_email) if "@" in e]
+    if emails:
+        body["emails"] = emails
+    taxcode = (partner.tax_number or "").strip()
+    if taxcode:
+        body["taxcode"] = taxcode
+    try:
+        created = await _api(api_key, "POST", "/partners", body)
+    except BillingoApiError as exc:
+        if exc.status != 422 or "taxcode" not in exc.snippet.lower() and "emails" not in exc.snippet.lower():
+            raise
+        # második kör: csak név + cím (ha az adószám/e-mail formátuma nem tetszik neki)
+        created = await _api(api_key, "POST", "/partners", {"name": body["name"], "address": body["address"]})
     return int(created["id"])
 
 

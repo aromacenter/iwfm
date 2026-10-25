@@ -8,13 +8,16 @@ komment írása, státusz: 'done' (befejezett) / 'needs_more_work'
 
 from __future__ import annotations
 
+import logging
+import re
+
 import base64
 import json
 import uuid
 from datetime import UTC, date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1387,10 +1390,15 @@ async def _build_worksheet_pdf(
     extra_footer = None
     handover_url = None
     customer_remark = None
+    public_remark = None
     if ws.external_service and variant == "customer":
         # Elvégzett munka = a szervizes publikus összefoglalója; a képviselő
         # megjegyzése KÜLÖN "Megjegyzés" szakaszba kerül (b83391bc).
-        work_description = ws.public_note or ""
+        # „Elvégzett munka” alá NEM a szervizes megjegyzése kerül (06b87417): az a
+        # saját „Szervizes megjegyzése az ügyfélnek” szakaszba megy; az elvégzett
+        # javítás a megoldás-szövegből jön, ha az ügyfél-példányra engedett.
+        work_description = ""
+        public_remark = ws.public_note
         customer_remark = ws.customer_note
         pdf_comments = []
         # Elfogadott (vagy lezárt) árajánlatnál a KIVÁLASZTOTT konstrukció a
@@ -1463,6 +1471,7 @@ async def _build_worksheet_pdf(
             "job_title": emp.job_title if emp else None,
             "work_description": work_description,
             "problem_text": problem_text,
+            "public_remark": public_remark,
             "solution_text": solution_text,
             "cost_summary": cost_summary,
             "remark": customer_remark,
@@ -2251,7 +2260,18 @@ async def my_worksheet_from_photo(
 
 
 class QuoteSendBody(BaseModel):
-    to: EmailStr
+    # Több cím vesszővel/pontosvesszővel (db347fbd) — minden címre megy a link
+    to: str = Field(min_length=3, max_length=512)
+
+    @field_validator("to")
+    @classmethod
+    def _emails(cls, v: str) -> str:
+        from app.services.wfm.email_service import split_addresses
+
+        items = split_addresses(v)
+        if not items or any(not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", e) for e in items):
+            raise ValueError("tasks.bad_quote_email")
+        return ", ".join(items)
 
 
 @router.post("/{task_id}/worksheet/send-quote", response_model=WorksheetOut)
@@ -3182,8 +3202,14 @@ async def do_handover(
             )
         except ValueError:
             raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
-        except Exception:
-            raise HTTPException(status_code=502, detail={"code": "billingo.request_failed"})
+        except Exception as exc:
+            # A számlázó konkrét hibaszövege a felületre is (3fe1fdcb): pl. a
+            # Billingó 422-je a partner adatainál — ne csak „Szerverhiba (502)”.
+            from app.services.wfm.billingo_service import BillingoApiError
+
+            msg = exc.message() if isinstance(exc, BillingoApiError) else str(exc)[:300]
+            logging.getLogger(__name__).warning("handover invoice failed: %s", msg)
+            raise HTTPException(status_code=502, detail={"code": "billingo.request_failed", "message": msg})
 
     ws.handed_over_at = datetime.now(UTC)
     ws.handover_payment_method = body.payment_method

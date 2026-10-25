@@ -19,7 +19,7 @@ const CSP = [
   "default-src 'self'",
   // A térkép-csempék külső képek (9192f8d5/d8b2bbe3: az img-src 'self'
   // némán blokkolta őket — ezért volt "vaktérkép"). OSM + Carto tartalék.
-  "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com",
+  "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://tile.openstreetmap.de https://*.tile.openstreetmap.de https://server.arcgisonline.com https://*.basemaps.cartocdn.com",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "connect-src 'self'",
