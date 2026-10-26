@@ -951,7 +951,13 @@
     "toBootstrap": "Első indítás? Admin fiók létrehozása",
     "toLogin": "Vissza a bejelentkezéshez",
     "kioskLink": "⏱ Munkaidő-terminál (blokkolás törzsszámmal) →",
-    "identifier": "Email vagy felhasználónév"
+    "identifier": "Email vagy felhasználónév",
+    "forgotTitle": "Elfelejtett jelszó",
+    "forgotHint": "Add meg a fiókod e-mail címét — ha létezik, küldünk egy linket, amin új jelszót állíthatsz be.",
+    "forgotSend": "Link küldése",
+    "forgotSent": "Ha van ilyen fiók, a jelszó-link úton van. Nézd meg a leveleidet (a spam mappát is).",
+    "forgotLink": "Elfelejtetted a jelszavad?",
+    "welcomeHint": "Üdv az X-adminban! Hozd létre az első admin fiókodat — ezzel lépsz majd be, és ezzel hívod meg a kollégáidat."
   },
   "dash": {
     "title": "Vezérlőpult",
@@ -1548,7 +1554,8 @@
       "mpl": "MPL",
       "foxpost": "FoxPost",
       "dpd": "DPD",
-      "license": "Licenc"
+      "license": "Licenc",
+      "saferpay": "Saferpay (QR-fizetés)"
     },
     "tabGroups": {
       "company": "Cég és eszközök",
@@ -2031,7 +2038,8 @@
     "manual.not_found": "Nincs ilyen fejezet.",
     "tasks.bad_quote_email": "Érvénytelen e-mail cím az ajánlat címzettjei között (több cím vesszővel).",
     "billingo.request_failed.withMessage": "A számlázó (Billingó) elutasította: {message}",
-    "handover.no_invoice": "Ehhez a munkalaphoz nincs számla."
+    "handover.no_invoice": "Ehhez a munkalaphoz nincs számla.",
+    "settings.demo_data_in_use": "A mintaadatokhoz már élő adat kapcsolódik (munkalap, elszámolás) — előbb azokat töröld."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2068,7 +2076,26 @@
     "doneTip3": "A munkalapok, ajánlatok és a raktár innentől élesben mennek — jó munkát!",
     "skip": "Kihagyom",
     "next": "Tovább →",
-    "finish": "Irány a naptár!"
+    "finish": "Irány a naptár!",
+    "stepBilling": "Számlázás",
+    "stepDemo": "Minta",
+    "billingTitle": "Számlázás bekötése (Billingó)",
+    "billingHint": "A Billingó API-kulcsoddal a munkalapok és elszámolások számlái egy kattintással készülnek és mennek ki. Később is megadható a Beállításokban.",
+    "billingKey": "Billingó API-kulcs",
+    "billingBlock": "Számlatömb azonosító (opcionális)",
+    "billingOk": "Billingó-kapcsolat rendben ✓",
+    "billingTestFailed": "A kulcs mentve, de a kapcsolat-próba nem sikerült — ellenőrizd a Beállításokban.",
+    "billingUnavailable": "A számlázó modul ezen az előfizetésen nincs bekapcsolva — csomagváltással elérhető.",
+    "billingAlready": "A Billingó már be van kötve.",
+    "demoTitle": "Mintaadatok",
+    "demoHint": "Üres rendszer helyett élő példákon könnyebb tanulni: 3 minta-partner és 3 minta-gép, jól felismerhető [MINTA] jelöléssel.",
+    "demoCreate": "Mintaadatok létrehozása",
+    "demoCreated": "Mintaadatok kész ✓",
+    "demoDone": "{partners} minta-partner és {assets} minta-gép létrehozva.",
+    "demoRemoveHint": "Bármikor eltávolíthatók: Beállítások → Adatok → Mintaadatok törlése.",
+    "demoSettingsHint": "Mintaadatok (a [MINTA] partnerek és MINTA- gépek) eltávolítása.",
+    "demoRemove": "Mintaadatok törlése",
+    "demoRemoved": "{partners} minta-partner és {assets} minta-gép törölve."
   },
   "bugs": {
     "buttonTitle": "Hibabejelentés",
@@ -2146,9 +2173,18 @@
     "plansTitle": "Elérhető csomagok",
     "currentPlan": "Jelenlegi csomag",
     "requestPlan": "Váltást kérek →",
-    "paymentNote": "💳 A díjfizetés jelenleg átutalással, számla alapján történik — a csomagváltás-kérés után küldjük a díjbekérőt. A bankkártyás online fizetés hamarosan érkezik.",
+    "paymentNote": "💳 A díjfizetés díjbekérő alapján, átutalással történik — a csomagválasztás után a díjbekérő automatikusan megy e-mailben, az utalás beérkezése után a rendszer magától átáll. A bankkártyás online fizetés később érkezik.",
     "graceBanner": "Az előfizetés lejárt — még {days} nap türelmi idő van hátra, utána a rendszer csak-olvasásra vált.",
-    "expiredBanner": "Az előfizetés lejárt — a rendszer csak-olvasás módban van. Az adatok biztonságban vannak, minden megtekinthető."
+    "expiredBanner": "Az előfizetés lejárt — a rendszer csak-olvasás módban van. Az adatok biztonságban vannak, minden megtekinthető.",
+    "trialBanner": "Próbaidő: még {days} nap. Minden funkció elérhető — a folytatáshoz válassz csomagot.",
+    "trialGraceBanner": "A próbaidő lejárt — még {days} nap türelmi idő, utána a rendszer csak-olvasásra vált.",
+    "trialExpiredBanner": "A próbaidő lejárt — a rendszer csak-olvasás módban van. Az adataid megmaradnak, csomagválasztás után minden folytatódik.",
+    "choosePlan": "Csomagot választok →",
+    "trialNote": "Próbaidőszak: még {days} nap, minden modullal. Válassz csomagot és ciklust — a díjbekérőt e-mailben küldjük, utalás után a rendszer automatikusan átáll.",
+    "cycle": {
+      "monthly": "Havi",
+      "yearly": "Éves"
+    }
   },
   "inv": {
     "title": "Gépek",

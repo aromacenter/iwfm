@@ -124,6 +124,7 @@ interface PlanCard {
   max_users: number | null;
   max_employees: number | null;
   price_monthly?: number | null;
+  price_yearly?: number | null;
 }
 
 interface LicenseInfo {
@@ -132,6 +133,8 @@ interface LicenseInfo {
   plans: Record<string, { max_users: number | null; max_employees: number | null }>;
   plan_list?: PlanCard[];
   requested_plan?: string | null;
+  requested_cycle?: string | null;
+  is_trial?: boolean;
   max_users: number | null;
   max_employees: number | null;
   state: "ok" | "grace" | "expired";
@@ -165,6 +168,10 @@ export default function BeallitasokPage() {
   // --- Fülek: a beállítások logikus alcsoportokban ---
   const [tab, setTabState] = useState<(typeof SETTINGS_TABS)[number][0]>(() => {
     if (typeof window !== "undefined") {
+      const fromUrl = new URLSearchParams(window.location.search).get("tab");
+      if (fromUrl && SETTINGS_TABS.some(([k]) => k === fromUrl)) {
+        return fromUrl as (typeof SETTINGS_TABS)[number][0];
+      }
       const saved = sessionStorage.getItem("iwfm-settings-tab");
       if (saved && SETTINGS_TABS.some(([k]) => k === saved)) {
         return saved as (typeof SETTINGS_TABS)[number][0];
@@ -300,9 +307,10 @@ export default function BeallitasokPage() {
       .catch(() => {});
   }, []);
 
+  const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
   async function requestPlan(plan: string | null) {
     try {
-      const l = await api.post<LicenseInfo>("/api/settings/license/request", { plan });
+      const l = await api.post<LicenseInfo>("/api/settings/license/request", { plan, cycle });
       setLic(l);
       toast(plan ? t("license.requestSent") : t("license.requestCancelled"), "success");
     } catch (err) {
@@ -1610,10 +1618,29 @@ export default function BeallitasokPage() {
               </div>
             </div>
           )}
+          {lic?.is_trial && (
+            <p className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-800">
+              🧪 {t("license.trialNote", { days: lic.days_left ?? 0 })}
+            </p>
+          )}
           {/* Elérhető csomagok — váltás-kérés az üzemeltetőnek */}
           {lic && (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{t("license.plansTitle")}</p>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("license.plansTitle")}</p>
+                <div className="flex rounded-full border border-slate-200 p-0.5 text-xs">
+                  {(["monthly", "yearly"] as const).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCycle(c)}
+                      className={`rounded-full px-3 py-1 font-medium ${cycle === c ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                    >
+                      {t(`license.cycle.${c}`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {(() => {
                   const list: PlanCard[] =
@@ -1645,10 +1672,16 @@ export default function BeallitasokPage() {
                             ? `${p.max_users} ${t("license.usersShort")} / ${p.max_employees} ${t("license.employeesShort")}`
                             : t("license.unlimited")}
                         </div>
-                        {p.price_monthly != null && (
+                        {cycle === "monthly" && p.price_monthly != null && (
                           <div className="font-mono text-sm font-semibold">
                             {Number(p.price_monthly).toLocaleString("hu-HU")} Ft
                             <span className="text-[10px] font-normal text-slate-400">/hó</span>
+                          </div>
+                        )}
+                        {cycle === "yearly" && (p.price_yearly != null || p.price_monthly != null) && (
+                          <div className="font-mono text-sm font-semibold">
+                            {Number(p.price_yearly ?? Number(p.price_monthly) * 12).toLocaleString("hu-HU")} Ft
+                            <span className="text-[10px] font-normal text-slate-400">/év</span>
                           </div>
                         )}
                         {current ? (
@@ -2540,6 +2573,21 @@ export default function BeallitasokPage() {
         {/* Adatbázis-mentés (csak admin) */}
         <div className={cardCls("data", "space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
           <h2 className="font-semibold">{t("backup.title")}</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 p-3 text-sm">
+            <span className="text-slate-600">🧪 {t("onboard.demoSettingsHint")}</span>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const r = await api.delete<{ partners: number; assets: number }>("/api/settings/demo-data");
+                  toast(t("onboard.demoRemoved", { partners: r.partners, assets: r.assets }), "success");
+                } catch (err) { toast(errorMessage(err), "error"); }
+              }}
+              className="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+            >
+              {t("onboard.demoRemove")}
+            </button>
+          </div>
           <p className="text-xs text-slate-500">{t("backup.hint")}</p>
           <button
             type="button"

@@ -14,7 +14,7 @@ SECTIONS: list[dict] = [
     {
         "key": "attekintes",
         "title": "Áttekintés — mi micsoda a rendszerben",
-        "keywords": "bevezetés kezdés mi ez a program menü navigáció modulok licenc szerepkörök onboarding első lépések",
+        "keywords": "bevezetés kezdés mi ez a program menü navigáció modulok licenc szerepkörök onboarding első lépések próbaidő varázsló mintaadatok díjbekérő csomag elfelejtett jelszó",
         "body": """## Mi ez?
 Az X-admin (Iwfm) a kávégép-üzemeltetés és a munkaerő-kezelés egy rendszerben: partnerek és gépek, bizományi elszámolás és számlázás, szerviz (jegyek, átvétel, munkalap, átadás), saját raktár és alkatrész-raktár, kassza, beosztás/jelenlét/távollét, bérexport, vending-telemetria (a gépeken futó ügynök) és AI-asszisztens.
 
@@ -35,7 +35,12 @@ Amit nem látsz a menüben, ahhoz vagy nincs jogod (Beállítások → Jogosults
 3. Termékek (kávék, kellékek) és Partnerek (PT-kód, adószám, számlázó cég) felvitele; gépek felvétele és telepítése a partnerhez.
 4. Raktárak: telephely + üzletkötőnként egy autó; kezdőkészlet bevételezése.
 5. Szerződések a partnereknél (min. adag, árak, elszámolási ciklus, automata számlázás).
-6. Jogosultságok finomhangolása, majd a hibajelentő gomb használata, ha valami nem úgy megy.""",
+6. Jogosultságok finomhangolása, majd a hibajelentő gomb használata, ha valami nem úgy megy.
+
+## Beüzemelő varázsló és próbaidő
+Friss rendszerben az első admin létrehozása után a beüzemelő varázsló fogad: cégadatok és logó, első telephely, kollégák meghívása (generált jelszóval), Billingó-számlázás bekötése, mintaadatok (3 [MINTA] partner és 3 MINTA- gép — Beállítások → Adatok → Mintaadatok törlése gombbal eltávolíthatók). Minden lépés kihagyható és később pótolható a Beállításokban.
+A próbaidő alatt minden modul elérhető; a felső sáv mutatja, hány nap van hátra. A próbaidő végén 3 nap türelmi idő jár, utána a rendszer csak-olvasásra vált — adat nem vész el. Csomagot a Beállítások → Licenc fülön lehet választani (havi vagy éves ciklussal): a díjbekérő e-mailben érkezik, az utalás beérkezése után a rendszer automatikusan átáll a választott csomagra.
+Elfelejtett jelszó: a belépő oldalon az „Elfelejtetted a jelszavad?” linkkel e-mailben jön a jelszó-beállító link (ha van beállított SMTP).""",
     },
     {
         "key": "jogosultsagok",

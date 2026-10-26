@@ -993,6 +993,8 @@ class LicenseBody(BaseModel):
     customer_name: str | None = Field(default=None, max_length=256)
     # None = minden modul (X-Presso mód); lista = csak a felsoroltak
     enabled_modules: list[str] | None = None
+    # Próbaidős példány-jelző — csak ha a kérés kifejezetten küldi, változik
+    is_trial: bool | None = None
 
     @field_validator("enabled_modules")
     @classmethod
@@ -1016,7 +1018,14 @@ async def _license_status_payload(db: AsyncSession) -> dict:
         "usage": used,
         "valid_until": row.valid_until.isoformat() if row and row.valid_until else None,
         "customer_name": row.customer_name if row else None,
-        "grace_days": license_service.GRACE_DAYS,
+        "grace_days": (
+            license_service.TRIAL_GRACE_DAYS
+            if row is not None and row.is_trial
+            else license_service.GRACE_DAYS
+        ),
+        # próbaidő: a felület külön bannert mutat, a lejárat után rövid türelmi idő
+        "is_trial": bool(row.is_trial) if row is not None else False,
+        "requested_cycle": row.requested_cycle if row else None,
         # None = minden modul elérhető (licenc-sor + env-alapértelmezés együtt)
         "modules": license_service.effective_modules(row),
         "all_modules": list(license_service.MODULES),
@@ -1082,10 +1091,13 @@ async def apply_license_update(
     # a példány-beli licenc-mentés így nem nyitja ki véletlenül a modulokat
     if "enabled_modules" in body.model_fields_set:
         row.enabled_modules = body.enabled_modules
+    if body.is_trial is not None:
+        row.is_trial = body.is_trial
     # az üzemeltetői mentés a függő csomagváltás-kérést lezárja
     row.requested_plan = None
     row.requested_at = None
     row.requested_by = None
+    row.requested_cycle = None
     await record_audit(
         db, actor=actor, action="settings.license_update", entity_type="settings",
         entity_id="license",
@@ -1105,6 +1117,8 @@ async def apply_license_update(
 class PlanRequestBody(BaseModel):
     # None = a kérés visszavonása
     plan: str | None = Field(default=None, pattern="^[a-z0-9_-]{1,16}$")
+    # számlázási ciklus a díjbekérőhöz: havi vagy éves
+    cycle: str = Field(default="monthly", pattern="^(monthly|yearly)$")
 
 
 @router.post("/license/request")
@@ -1133,16 +1147,119 @@ async def request_plan_change(
         row.requested_plan = body.plan
         row.requested_at = _dt.now(_UTC)
         row.requested_by = actor.display_name or actor.email
+        row.requested_cycle = body.cycle
     else:
         row.requested_plan = None
         row.requested_at = None
         row.requested_by = None
+        row.requested_cycle = None
     await record_audit(
         db, actor=actor, action="license.plan_request", entity_type="settings",
         entity_id="license", detail={"plan": body.plan}, request=request,
     )
     await db.commit()
     return await _license_status_payload(db)
+
+
+# ─── Mintaadatok a beüzemelő varázslóhoz ─────────────────────────────────────
+# Generált, jól felismerhető minta-partnerek és -gépek ("[MINTA]" / "MINTA-"
+# előtaggal), hogy az új ügyfél üres rendszer helyett élő példákon tanuljon.
+# Egy kattintással törölhetők.
+
+DEMO_PARTNERS = [
+    {"name": "[MINTA] Napfény Kávézó", "company_name": "Napfény Kávézó Kft.",
+     "address": "1052 Budapest, Minta utca 1.", "address_zip": "1052", "address_city": "Budapest",
+     "contact_name": "Minta Mária", "contact_email": "minta.maria@example.com", "contact_phone": "+36 30 000 0001"},
+    {"name": "[MINTA] Irodaház Recepció", "company_name": "Minta Irodaház Zrt.",
+     "address": "9021 Győr, Példa tér 2.", "address_zip": "9021", "address_city": "Győr",
+     "contact_name": "Teszt Tamás", "contact_email": "teszt.tamas@example.com", "contact_phone": "+36 30 000 0002"},
+    {"name": "[MINTA] Autószerviz Pihenő", "company_name": "Minta Szerviz Bt.",
+     "address": "6000 Kecskemét, Próba út 3.", "address_zip": "6000", "address_city": "Kecskemét",
+     "contact_name": "Példa Péter", "contact_email": "pelda.peter@example.com", "contact_phone": "+36 30 000 0003"},
+]
+DEMO_ASSETS = [
+    {"barcode": "MINTA-0001", "name": "Automata kávégép 1.", "manufacturer": "MintaGép", "serial_number": "SN-MINTA-0001", "counter": 12480, "partner": 0},
+    {"barcode": "MINTA-0002", "name": "Automata kávégép 2.", "manufacturer": "MintaGép", "serial_number": "SN-MINTA-0002", "counter": 3310, "partner": 1},
+    {"barcode": "MINTA-0003", "name": "Raktári tartalék gép", "manufacturer": "MintaGép", "serial_number": "SN-MINTA-0003", "counter": 0, "partner": None},
+]
+
+
+@router.post("/demo-data")
+async def create_demo_data(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """Minta-partnerek és -gépek létrehozása (idempotens: ami már van, kimarad)."""
+    from datetime import UTC as _UTC, datetime as _dt
+
+    from app.models import Asset, Partner
+
+    existing_p = (
+        await db.execute(select(Partner).where(Partner.name.like("[MINTA]%")))
+    ).scalars().all()
+    by_name = {p.name: p for p in existing_p}
+    created_p = 0
+    partners: list[Partner] = []
+    for d in DEMO_PARTNERS:
+        p = by_name.get(d["name"])
+        if p is None:
+            p = Partner(partner_type="customer", **d)
+            db.add(p)
+            created_p += 1
+        partners.append(p)
+    await db.flush()
+    existing_a = {
+        a.barcode
+        for a in (await db.execute(select(Asset).where(Asset.barcode.like("MINTA-%")))).scalars().all()
+    }
+    created_a = 0
+    for d in DEMO_ASSETS:
+        if d["barcode"] in existing_a:
+            continue
+        partner = partners[d["partner"]] if d["partner"] is not None else None
+        db.add(Asset(
+            barcode=d["barcode"], name=d["name"], manufacturer=d["manufacturer"],
+            serial_number=d["serial_number"], counter=d["counter"],
+            status="deployed" if partner else "in_stock",
+            partner_id=partner.id if partner else None,
+            deployed_at=_dt.now(_UTC) if partner else None,
+        ))
+        created_a += 1
+    await record_audit(
+        db, actor=actor, action="settings.demo_data_create", entity_type="settings",
+        entity_id="demo", detail={"partners": created_p, "assets": created_a}, request=request,
+    )
+    await db.commit()
+    return {"ok": True, "partners": created_p, "assets": created_a}
+
+
+@router.delete("/demo-data")
+async def delete_demo_data(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """A mintaadatok eltávolítása — csak a [MINTA]/MINTA- előtagú tételek."""
+    from app.models import Asset, Partner
+
+    assets = (await db.execute(select(Asset).where(Asset.barcode.like("MINTA-%")))).scalars().all()
+    for a in assets:
+        await db.delete(a)
+    partners = (await db.execute(select(Partner).where(Partner.name.like("[MINTA]%")))).scalars().all()
+    for p in partners:
+        await db.delete(p)
+    try:
+        await db.flush()
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "settings.demo_data_in_use"})
+    await record_audit(
+        db, actor=actor, action="settings.demo_data_delete", entity_type="settings",
+        entity_id="demo", detail={"partners": len(partners), "assets": len(assets)}, request=request,
+    )
+    await db.commit()
+    return {"ok": True, "partners": len(partners), "assets": len(assets)}
 
 
 @router.post("/gls/test")

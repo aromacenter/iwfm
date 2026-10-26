@@ -951,7 +951,13 @@
     "toBootstrap": "First run? Create admin account",
     "toLogin": "Back to sign in",
     "kioskLink": "⏱ Time clock terminal (clock in with your code) →",
-    "identifier": "Email or username"
+    "identifier": "Email or username",
+    "forgotTitle": "Forgot password",
+    "forgotHint": "Enter your account e-mail — if it exists, we send a link to set a new password.",
+    "forgotSend": "Send link",
+    "forgotSent": "If the account exists, the reset link is on its way. Check your inbox (and spam).",
+    "forgotLink": "Forgot your password?",
+    "welcomeHint": "Welcome to X-admin! Create your first admin account — you will sign in with it and invite your colleagues."
   },
   "dash": {
     "title": "Dashboard",
@@ -1548,7 +1554,8 @@
       "mpl": "MPL",
       "foxpost": "FoxPost",
       "dpd": "DPD",
-      "license": "Licence"
+      "license": "Licence",
+      "saferpay": "Saferpay (QR payment)"
     },
     "tabGroups": {
       "company": "Company & tools",
@@ -2031,7 +2038,8 @@
     "manual.not_found": "No such chapter.",
     "tasks.bad_quote_email": "Invalid e-mail address among the quote recipients (separate several with commas).",
     "billingo.request_failed.withMessage": "The invoicing provider (Billingó) rejected it: {message}",
-    "handover.no_invoice": "This worksheet has no invoice."
+    "handover.no_invoice": "This worksheet has no invoice.",
+    "settings.demo_data_in_use": "Live data is linked to the sample records (worksheet, settlement) — delete those first."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2068,7 +2076,26 @@
     "doneTip3": "Worksheets, quotes and stock are live from here — happy working!",
     "skip": "Skip",
     "next": "Next →",
-    "finish": "Go to the calendar!"
+    "finish": "Go to the calendar!",
+    "stepBilling": "Invoicing",
+    "stepDemo": "Sample",
+    "billingTitle": "Connect invoicing (Billingó)",
+    "billingHint": "With your Billingó API key, worksheet and settlement invoices are created and sent in one click. Can be set later in Settings.",
+    "billingKey": "Billingó API key",
+    "billingBlock": "Document block id (optional)",
+    "billingOk": "Billingó connection OK ✓",
+    "billingTestFailed": "Key saved, but the connection test failed — check it in Settings.",
+    "billingUnavailable": "The invoicing module is not enabled on this subscription — available with a plan change.",
+    "billingAlready": "Billingó is already connected.",
+    "demoTitle": "Sample data",
+    "demoHint": "Learning is easier on live examples: 3 sample partners and 3 sample machines, clearly marked [MINTA].",
+    "demoCreate": "Create sample data",
+    "demoCreated": "Sample data ready ✓",
+    "demoDone": "{partners} sample partners and {assets} sample machines created.",
+    "demoRemoveHint": "Removable any time: Settings → Data → Delete sample data.",
+    "demoSettingsHint": "Remove the sample data ([MINTA] partners and MINTA- machines).",
+    "demoRemove": "Delete sample data",
+    "demoRemoved": "{partners} sample partners and {assets} sample machines deleted."
   },
   "bugs": {
     "buttonTitle": "Report a bug",
@@ -2146,9 +2173,18 @@
     "plansTitle": "Available plans",
     "currentPlan": "Current plan",
     "requestPlan": "Request switch →",
-    "paymentNote": "💳 Billing is currently invoice-based via bank transfer — after a plan-change request we send the invoice. Online card payment is coming soon.",
+    "paymentNote": "💳 Payment is by bank transfer against a pro-forma invoice — after choosing a plan the pro-forma is e-mailed automatically, and the system switches over when the transfer arrives. Card payment comes later.",
     "graceBanner": "The subscription has expired — {days} grace day(s) left before the system turns read-only.",
-    "expiredBanner": "The subscription has expired — the system is read-only. Your data is safe and everything can be viewed."
+    "expiredBanner": "The subscription has expired — the system is read-only. Your data is safe and everything can be viewed.",
+    "trialBanner": "Trial: {days} days left. Every feature is available — pick a plan to continue.",
+    "trialGraceBanner": "The trial has ended — {days} days of grace left, then the system becomes read-only.",
+    "trialExpiredBanner": "The trial has ended — the system is read-only. Your data is kept; everything resumes after choosing a plan.",
+    "choosePlan": "Choose a plan →",
+    "trialNote": "Trial period: {days} days left, all modules on. Pick a plan and a cycle — the pro-forma goes out by e-mail, and the system switches automatically once the transfer arrives.",
+    "cycle": {
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    }
   },
   "inv": {
     "title": "Machines",

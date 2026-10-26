@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     # env) = minden modul (saját példány); beállítva = vesszős lista, üres
     # string = csak az alap-funkciók (bérelt példány így születik).
     default_modules: str | None = None
+    # Platform-SMTP tartalék (a Flotta adja át provisioningkor): amíg az
+    # ügyfél nem állít be saját SMTP-t, a rendszer-levelek (jelszó-
+    # emlékeztető) ezen mennek. Üres host = nincs tartalék.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_tls: bool = True
 
     model_config = {"env_prefix": "WFM_", "env_file": ".env", "extra": "ignore"}
 

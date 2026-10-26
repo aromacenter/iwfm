@@ -133,7 +133,50 @@ export default function OnboardingPage() {
     }
   }
 
-  const steps = [t("onboard.step1"), t("onboard.step2"), t("onboard.step3"), t("onboard.step4")];
+  // 4. lépés: Billingó-számlázás (ha a modul él ezen a példányon)
+  const [bill, setBill] = useState({ api_key: "", block_id: "" });
+  const [billAvailable, setBillAvailable] = useState(true);
+  const [billSaved, setBillSaved] = useState(false);
+  useEffect(() => {
+    api.get<{ has_api_key: boolean }>("/api/settings/billingo")
+      .then((b) => setBillSaved(b.has_api_key))
+      .catch(() => setBillAvailable(false));
+  }, []);
+  async function saveBilling() {
+    if (!bill.api_key.trim()) { setStep(4); return; }
+    setBusy(true);
+    try {
+      await api.put("/api/settings/billingo", {
+        enabled: true, provider: "billingo", api_key: bill.api_key.trim(),
+        block_id: bill.block_id ? Number(bill.block_id) : null, test_mode: false,
+      });
+      try { await api.post("/api/settings/billingo/test"); toast(t("onboard.billingOk"), "success"); }
+      catch { toast(t("onboard.billingTestFailed"), "error"); }
+      setBillSaved(true);
+      setStep(4);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 5. lépés: mintaadatok (generált minta-partnerek + gépek, egy kattintással törölhetők)
+  const [demoDone, setDemoDone] = useState<{ partners: number; assets: number } | null>(null);
+  async function createDemo() {
+    setBusy(true);
+    try {
+      const r = await api.post<{ partners: number; assets: number }>("/api/settings/demo-data");
+      setDemoDone(r);
+      toast(t("onboard.demoCreated"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const steps = [t("onboard.step1"), t("onboard.step2"), t("onboard.step3"), t("onboard.stepBilling"), t("onboard.stepDemo"), t("onboard.step4")];
 
   return (
     <AppShell>
@@ -255,6 +298,58 @@ export default function OnboardingPage() {
           )}
 
           {step === 3 && (
+            <>
+              <h2 className="font-semibold">{t("onboard.billingTitle")}</h2>
+              <p className="text-sm text-slate-500">{t("onboard.billingHint")}</p>
+              {!billAvailable ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">{t("onboard.billingUnavailable")}</p>
+              ) : billSaved ? (
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">✓ {t("onboard.billingAlready")}</p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+                  <label className="block text-sm">
+                    {t("onboard.billingKey")}
+                    <input type="password" autoComplete="off" value={bill.api_key} onChange={(e) => setBill({ ...bill, api_key: e.target.value })} className={inputCls} />
+                  </label>
+                  <label className="block text-sm">
+                    {t("onboard.billingBlock")}
+                    <input type="number" min={1} value={bill.block_id} onChange={(e) => setBill({ ...bill, block_id: e.target.value })} className={inputCls} />
+                  </label>
+                </div>
+              )}
+              <div className="flex justify-between pt-2">
+                <button type="button" onClick={() => setStep(4)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
+                <button type="button" onClick={billSaved || !billAvailable ? () => setStep(4) : saveBilling} disabled={busy} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                  {t("onboard.next")}
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 4 && (
+            <>
+              <h2 className="font-semibold">{t("onboard.demoTitle")}</h2>
+              <p className="text-sm text-slate-500">{t("onboard.demoHint")}</p>
+              {demoDone ? (
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                  ✓ {t("onboard.demoDone", { partners: demoDone.partners, assets: demoDone.assets })}
+                </p>
+              ) : (
+                <button type="button" onClick={createDemo} disabled={busy} className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">
+                  🧪 {t("onboard.demoCreate")}
+                </button>
+              )}
+              <p className="text-xs text-slate-400">{t("onboard.demoRemoveHint")}</p>
+              <div className="flex justify-between pt-2">
+                <button type="button" onClick={() => setStep(5)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
+                <button type="button" onClick={() => setStep(5)} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                  {t("onboard.next")}
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 5 && (
             <>
               <h2 className="font-semibold">🎉 {t("onboard.doneTitle")}</h2>
               <p className="text-sm text-slate-500">{t("onboard.doneHint")}</p>

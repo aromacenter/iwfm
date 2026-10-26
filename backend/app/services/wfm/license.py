@@ -79,6 +79,8 @@ PLANS: dict[str, dict] = {
     "xl": {"max_users": None, "max_employees": None},
 }
 GRACE_DAYS = 14
+# Próbaidő lejárta után rövidebb a türelmi idő — a próba nem nyúlik a végtelenbe.
+TRIAL_GRACE_DAYS = 3
 
 # A lejárat-középréteg minden írásnál fut — rövid ideig gyorsítótárazunk,
 # hogy ne menjen kérésenként adatbázis-lekérdezés.
@@ -121,7 +123,8 @@ def license_state(row: LicenseSettings | None, today: date | None = None) -> dic
     days = (row.valid_until - today).days
     if days >= 0:
         return {"state": "ok", "days_left": days, "grace_days_left": None}
-    grace_left = GRACE_DAYS + days  # days negatív
+    grace = TRIAL_GRACE_DAYS if getattr(row, "is_trial", False) else GRACE_DAYS
+    grace_left = grace + days  # days negatív
     if grace_left >= 0:
         return {"state": "grace", "days_left": days, "grace_days_left": grace_left}
     return {"state": "expired", "days_left": days, "grace_days_left": 0}

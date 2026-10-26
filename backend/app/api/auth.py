@@ -273,6 +273,51 @@ async def create_reset_link(
     return {"url": url, "expires_hours": RESET_TOKEN_HOURS, "name": user.display_name}
 
 
+class ForgotBody(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+
+@router.post("/forgot")
+async def forgot_password(
+    body: ForgotBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Elfelejtett jelszó: ha van ilyen aktív fiók ÉS van SMTP (saját vagy
+    platform-tartalék), e-mailben megy a jelszó-link. A válasz mindig
+    {ok: true} — nem árulja el, létezik-e a cím. IP-nként throttle-olt."""
+    from app.core.security import RESET_TOKEN_HOURS, mint_reset_token
+    from app.services.wfm.email_service import load_smtp_config, send_email
+
+    ip = request.client.host if request.client else "?"
+    if _throttled(f"forgot:{ip}", limit=5, window=15 * 60):
+        raise HTTPException(status_code=429, detail={"code": "auth.throttled"})
+    _record_failure(f"forgot:{ip}")
+    email = body.email.strip().lower()
+    user = (
+        await db.execute(select(User).where(func.lower(User.email) == email))
+    ).scalar_one_or_none()
+    if user is None or not user.is_active:
+        return {"ok": True}
+    config = await load_smtp_config(db)
+    if config is None:
+        return {"ok": True, "mail_unavailable": True}
+    token = mint_reset_token(user_id=user.id, token_version=user.token_version)
+    url = f"{get_settings().frontend_origin.rstrip('/')}/jelszo?token={token}"
+    await send_email(
+        config, user.email, "X-admin — új jelszó beállítása",
+        f"Szia {user.display_name}!\n\nÚj jelszót kértél az X-admin fiókodhoz. "
+        f"Ezen a linken állíthatod be ({RESET_TOKEN_HOURS} óráig érvényes):\n{url}\n\n"
+        "Ha nem te kérted, hagyd figyelmen kívül ezt a levelet — a jelszavad nem változik.",
+    )
+    await record_audit(
+        db, actor=None, action="auth.forgot", entity_type="user",
+        entity_id=str(user.id), request=request,
+    )
+    await db.commit()
+    return {"ok": True}
+
+
 class ResetPasswordBody(BaseModel):
     token: str = Field(min_length=10, max_length=2048)
     password: str = Field(min_length=10, max_length=128)

@@ -38,7 +38,7 @@ async def load_smtp_config(db: AsyncSession) -> SmtpConfig | None:
         await db.execute(select(EmailSettings).where(EmailSettings.id == 1))
     ).scalar_one_or_none()
     if row is None or not row.enabled or not row.host or not row.from_address:
-        return None
+        return platform_smtp_config()
     return SmtpConfig(
         host=row.host,
         port=row.port,
@@ -46,6 +46,21 @@ async def load_smtp_config(db: AsyncSession) -> SmtpConfig | None:
         password=decrypt_pii(row.password_encrypted),
         from_address=row.from_address,
         use_tls=row.use_tls,
+    )
+
+
+def platform_smtp_config() -> SmtpConfig | None:
+    """A WFM_SMTP_* env-ből származó tartalék (a Flotta állítja be az új
+    példányokra) — None, ha nincs host vagy feladó."""
+    from app.core.config import get_settings
+
+    s = get_settings()
+    if not s.smtp_host or not s.smtp_from:
+        return None
+    return SmtpConfig(
+        host=s.smtp_host, port=int(s.smtp_port or 587),
+        username=s.smtp_user or None, password=s.smtp_password or None,
+        from_address=s.smtp_from, use_tls=bool(s.smtp_tls),
     )
 
 

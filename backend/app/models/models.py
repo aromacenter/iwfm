@@ -784,6 +784,13 @@ class LicenseSettings(Base):
         DateTime(timezone=True), nullable=True
     )
     requested_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Próbaidős példány (a Flotta állítja a regisztrációkor): külön banner a
+    # felületen és rövidebb türelmi idő a lejárat után.
+    is_trial: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # A csomagváltás-kéréshez választott számlázási ciklus: monthly | yearly
+    requested_cycle: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
 
 class GlsSettings(Base):
