@@ -302,6 +302,7 @@ class MapPartnerOut(BaseModel):
     zip: str | None
     lat: float | None
     lng: float | None
+    address: str | None = None  # a cím nélküliek listájához (7836fee3)
     machines: int  # FIZIKAI gépek (0e8c6908)
     counters: int = 0  # számláló-sorok ("régi gépszám", érdekesség)
     revenue: float  # összes elszámolás-bevétel (bruttó)
@@ -363,6 +364,7 @@ async def stats_map(
         # szerződés nélküli jelölten (a kliens szürkén rajzolja, szűrhető)
         out.append(MapPartnerOut(
             id=str(p.id), name=p.name, city=p.address_city, zip=p.address_zip,
+            address=p.address or " ".join(x for x in (p.address_zip, p.address_city, p.address_street, p.address_number) if x) or None,
             lat=p.lat, lng=p.lng, machines=machines,
             counters=int(counter_rows.get(p.id, 0)), revenue=_money(revenue),
             agent_user_id=str(p.agent_user_id) if p.agent_user_id else None,

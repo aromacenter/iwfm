@@ -72,6 +72,7 @@ interface Settlement {
   total_gross: number;
   invoiced: boolean;
   billingo_status: string | null;
+  billingo_document_id?: string | null;
   has_signature: boolean;
   receipt_sent_at: string | null;
   debt_before: number | null;
@@ -1378,6 +1379,16 @@ export default function ElszamolasPage() {
         "success",
       );
       loadHistory();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  // A Billingó publikus számla-linkje (3fe1fdcb) — az ügyfélnél is látszik, nyomon követhető
+  async function openInvoiceLink(settlementId: string) {
+    try {
+      const r = await api.get<{ url: string }>(`/api/settlements/${settlementId}/invoice-link`);
+      window.open(r.url, "_blank", "noopener");
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -2855,6 +2866,15 @@ export default function ElszamolasPage() {
                     >
                       📄🖨
                     </button>
+                    {s.billingo_document_id && (
+                      <button
+                        onClick={() => void openInvoiceLink(s.id)}
+                        title={t("cons.invoiceLinkHint")}
+                        className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none text-emerald-700 hover:bg-emerald-50"
+                      >
+                        🔗
+                      </button>
+                    )}
                     {s.has_signature ? (
                       <span title={t("cons.signed")} className="rounded bg-slate-100 px-2 py-1 text-sm leading-none text-slate-600">✍✓</span>
                     ) : (

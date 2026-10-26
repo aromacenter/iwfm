@@ -47,7 +47,7 @@ export default function AtadasPage() {
   const [dueDays, setDueDays] = useState("8"); // átutalásnál a fizetési határidő (nap)
   const [discount, setDiscount] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [doneInfo, setDoneInfo] = useState<{ serial: string; discount: boolean; document_id: string | null } | null>(null);
+  const [doneInfo, setDoneInfo] = useState<{ serial: string; discount: boolean; document_id: string | null; task_id: string; sent_to: string[] } | null>(null);
 
   const load = useCallback(() => {
     api.get<Handover[]>("/api/tasks/handovers/list").then(setRows).catch(() => {});
@@ -75,6 +75,16 @@ export default function AtadasPage() {
     setDoneInfo(null);
   }
 
+  // A Billingó publikus számla-linkje (3fe1fdcb): a szerver kéri le, mi megnyitjuk
+  async function openInvoiceLink(path: string) {
+    try {
+      const r = await api.get<{ url: string }>(path);
+      window.open(r.url, "_blank", "noopener");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function doHandover() {
     if (!selected) return;
     const text = discount
@@ -87,11 +97,11 @@ export default function AtadasPage() {
     if (!(await confirm(text))) return;
     setBusy(true);
     try {
-      const res = await api.post<{ ok: boolean; document_id: string | null }>(
+      const res = await api.post<{ ok: boolean; document_id: string | null; invoice_sent_to?: string[] }>(
         `/api/tasks/${selected.task_id}/handover`,
         { payment_method: payment, discount, due_days: payment === "transfer" ? Number(dueDays) || 8 : null }
       );
-      setDoneInfo({ serial: selected.serial, discount, document_id: res.document_id });
+      setDoneInfo({ serial: selected.serial, discount, document_id: res.document_id, task_id: selected.task_id, sent_to: res.invoice_sent_to ?? [] });
       setSelected(null);
       load();
     } catch (err) {
@@ -114,6 +124,20 @@ export default function AtadasPage() {
           {doneInfo.discount
             ? t("handover.doneDiscount", { serial: doneInfo.serial })
             : t("handover.doneInvoiced", { serial: doneInfo.serial })}
+          {doneInfo.document_id && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void openInvoiceLink(`/api/tasks/${doneInfo.task_id}/handover/invoice-link`)}
+                className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+              >
+                🔗 {t("handover.openInvoice")}
+              </button>
+              <span className="text-xs">
+                {doneInfo.sent_to.length > 0 ? t("handover.invoiceSentTo", { to: doneInfo.sent_to.join(", ") }) : t("handover.invoiceNotSent")}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

@@ -531,7 +531,8 @@
     "printTitle": "Print receipt",
     "printHint": "A4 sheet, or a 50 / 80 mm receipt printer. The print dialog opens in the browser.",
     "printNo": "Not now",
-    "printBtn": "Print (A4 / 50 / 80 mm)"
+    "printBtn": "Print (A4 / 50 / 80 mm)",
+    "invoiceLinkHint": "Open the invoice in Billingó (tracks who opened it and when)"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1376,7 +1377,9 @@
     "timerWait": "waiting",
     "applyMeasured": "⏱ Measured → written hours",
     "applyMeasuredDone": "Written hours set: {h} h.",
-    "intakeForcedHint": "The worksheet from the intake is mandatory: pick the technician and the due date, then save. There is no cancel."
+    "intakeForcedHint": "The worksheet from the intake is mandatory: pick the technician and the due date, then save. There is no cancel.",
+    "invoiceLink": "Invoice",
+    "invoiceLinkHint": "Clickable Billingó invoice link (opens in a new tab)"
   },
   "myTasks": {
     "title": "My tasks",
@@ -2027,7 +2030,8 @@
     "settings.role_in_use": "The role is in use ({users} users) — move them to another role first.",
     "manual.not_found": "No such chapter.",
     "tasks.bad_quote_email": "Invalid e-mail address among the quote recipients (separate several with commas).",
-    "billingo.request_failed.withMessage": "The invoicing provider (Billingó) rejected it: {message}"
+    "billingo.request_failed.withMessage": "The invoicing provider (Billingó) rejected it: {message}",
+    "handover.no_invoice": "This worksheet has no invoice."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2715,7 +2719,10 @@
     "doneDiscount": "{serial} handed over with discount — worksheet closed.",
     "transfer": "Bank transfer",
     "dueDays": "Payment due",
-    "dueDaysUnit": "days (default 8)"
+    "dueDaysUnit": "days (default 8)",
+    "openInvoice": "Open invoice",
+    "invoiceSentTo": "Sent by Billingó to: {to}",
+    "invoiceNotSent": "Not e-mailed (no e-mail at the partner / intake) — can be sent from Billingó."
   },
   "gls": {
     "title": "GLS shipping",
@@ -2975,7 +2982,11 @@
     "noMachines": "no machines",
     "geocodeMissing": "📍 Geocode missing ({n})",
     "geocodeQueued": "Geocoding {n} partner(s) in the background (~1.2 s each) — reload in a few minutes.",
-    "geocodeNone": "Every active partner has coordinates."
+    "geocodeNone": "Every active partner has coordinates.",
+    "showList": "list",
+    "hideList": "hide list",
+    "missingHint": "The geocoder could not find these partners' addresses — fix them on the partner (zip, city, street, number); after saving they appear on the map automatically.",
+    "fixAddress": "Fix address"
   },
   "streq": {
     "title": "My warehouse & requests",

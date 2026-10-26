@@ -224,6 +224,12 @@ async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> in
     data = await _api(api_key, "GET", f"/partners?query={httpx.QueryParams({'q': invoice_name})['q']}")
     for item in data.get("data", []):
         if item.get("name", "").strip().lower() == invoice_name.strip().lower():
+            # Meglévő Billingó-partner hiányos adatokkal (3fe1fdcb: a számlán
+            # üres vevő) → a nálunk meglévő adószámot/címet/e-mailt felvisszük.
+            try:
+                await _complete_billingo_partner(api_key, int(item["id"]), item, partner)
+            except Exception:  # pragma: no cover — best-effort
+                logger.warning("Billingó partner-kiegészítés sikertelen", exc_info=True)
             return int(item["id"])
 
     # Strukturált számlázási cím előnyben; visszaesés a székhelyre, majd az
@@ -517,7 +523,7 @@ async def create_handover_invoice(
         "electronic": False,
         "items": [
             {
-                "name": f"{it['name']} ({serial})"[:255],
+                "name": (it["name"] if serial in str(it["name"]) else f"{it['name']} ({serial})")[:255],
                 "unit_price": it["amount_net"],
                 "unit_price_type": "net",
                 "quantity": 1,
@@ -529,6 +535,42 @@ async def create_handover_invoice(
     }
     created = await _api(api_key, "POST", "/documents", body)
     return str(created.get("id", "")), doc_type
+
+
+async def _complete_billingo_partner(api_key: str, bid: int, remote: dict, partner: Partner) -> None:
+    """Csak a hiányzó mezőket pótoljuk a Billingóban (adószám, cím, e-mail)."""
+    body: dict = {}
+    taxcode = (partner.tax_number or "").strip()
+    if taxcode and not (remote.get("taxcode") or "").strip():
+        body["taxcode"] = taxcode
+    emails = [e for e in split_addresses(partner.contact_email) if "@" in e]
+    if emails and not remote.get("emails"):
+        body["emails"] = emails
+    addr = remote.get("address") or {}
+    p_zip, p_city, p_street = _parse_free_address(partner.billing_address or partner.address)
+    zip_ = partner.billing_zip or partner.address_zip or p_zip
+    city = partner.billing_city or partner.address_city or p_city
+    street = " ".join(x for x in (partner.billing_street or partner.address_street, partner.billing_number or partner.address_number) if x) or p_street
+    if zip_ and city and street and (not (addr.get("city") or "").strip() or not (addr.get("address") or "").strip()):
+        body["address"] = {"country_code": "HU", "post_code": str(zip_)[:10], "city": str(city)[:100], "address": str(street)[:200]}
+    if body:
+        body.setdefault("name", remote.get("name") or partner.name)
+        body.setdefault("address", addr if addr.get("city") else {"country_code": "HU", "post_code": str(zip_ or "1000"), "city": str(city or "Budapest"), "address": str(street or "n/a")})
+        await _api(api_key, "PUT", f"/partners/{bid}", body)
+
+
+async def get_document_public_url(
+    db: AsyncSession, document_id: str, company: str | None = None
+) -> str | None:
+    """A bizonylat publikus (kattintható) linkje a Billingóból
+    (GET /documents/{id}/public-url) — a munkalapnál és az ügyfélnél mutatjuk."""
+    settings = await get_or_create_settings(db)
+    api_key, _block, _test = _account(settings, company)
+    if not settings.enabled or not api_key:
+        raise ValueError("billingo_not_configured")
+    data = await _api(api_key, "GET", f"/documents/{document_id}/public-url")
+    url = data.get("public_url") or data.get("url")
+    return str(url) if url else None
 
 
 async def download_document_pdf(

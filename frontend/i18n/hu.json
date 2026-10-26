@@ -531,7 +531,8 @@
     "printTitle": "Bizonylat nyomtatása",
     "printHint": "A4-es lap, vagy 50 / 80 mm-es nyugtanyomtató. A nyomtatási ablak a böngészőben nyílik.",
     "printNo": "Most nem nyomtatok",
-    "printBtn": "Nyomtatás (A4 / 50 / 80 mm)"
+    "printBtn": "Nyomtatás (A4 / 50 / 80 mm)",
+    "invoiceLinkHint": "Számla megnyitása a Billingóban (nyomon követhető, ki mikor nyitotta meg)"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1376,7 +1377,9 @@
     "timerWait": "várakozás",
     "applyMeasured": "⏱ Mért idő → írt óra",
     "applyMeasuredDone": "Írt óra beállítva: {h} ó.",
-    "intakeForcedHint": "Az átvételből a munkalap kötelezően elkészül: válaszd ki a szervizest és a határidőt, majd mentsd. Mégse nincs."
+    "intakeForcedHint": "Az átvételből a munkalap kötelezően elkészül: válaszd ki a szervizest és a határidőt, majd mentsd. Mégse nincs.",
+    "invoiceLink": "Számla",
+    "invoiceLinkHint": "A Billingó-számla kattintható linkje (megnyitás új lapon)"
   },
   "myTasks": {
     "title": "Feladataim",
@@ -2027,7 +2030,8 @@
     "settings.role_in_use": "A szerepkör használatban van ({users} felhasználó) — előbb tedd át őket más szerepkörbe.",
     "manual.not_found": "Nincs ilyen fejezet.",
     "tasks.bad_quote_email": "Érvénytelen e-mail cím az ajánlat címzettjei között (több cím vesszővel).",
-    "billingo.request_failed.withMessage": "A számlázó (Billingó) elutasította: {message}"
+    "billingo.request_failed.withMessage": "A számlázó (Billingó) elutasította: {message}",
+    "handover.no_invoice": "Ehhez a munkalaphoz nincs számla."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2715,7 +2719,10 @@
     "doneDiscount": "{serial} átadva kedvezménnyel — a munkalap lezárva.",
     "transfer": "Átutalás",
     "dueDays": "Fizetési határidő",
-    "dueDaysUnit": "nap (alapból 8)"
+    "dueDaysUnit": "nap (alapból 8)",
+    "openInvoice": "Számla megnyitása",
+    "invoiceSentTo": "A Billingó elküldte: {to}",
+    "invoiceNotSent": "Nem ment ki e-mailben (nincs e-mail cím a partnernél / átvételnél) — a Billingóból küldhető."
   },
   "gls": {
     "title": "GLS-csomagfeladás",
@@ -2975,7 +2982,11 @@
     "noMachines": "gép nélkül",
     "geocodeMissing": "📍 Hiányzó koordináták geokódolása ({n})",
     "geocodeQueued": "{n} partner geokódolása elindult a háttérben (~1,2 mp/partner) — frissítsd az oldalt pár perc múlva.",
-    "geocodeNone": "Minden aktív partnernek van koordinátája."
+    "geocodeNone": "Minden aktív partnernek van koordinátája.",
+    "showList": "lista",
+    "hideList": "lista elrejtése",
+    "missingHint": "Ezeknek a partnereknek a címét a geokódoló nem találta — javítsd a partnernél (irányítószám, település, utca, házszám), mentés után automatikusan a térképre kerül.",
+    "fixAddress": "Cím javítása"
   },
   "streq": {
     "title": "Saját raktár és igénylés",

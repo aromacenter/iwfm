@@ -341,12 +341,15 @@ export default function PartnerekPage() {
   const contractsParamDone = useRef(false);
   useEffect(() => {
     if (contractsParamDone.current || partners.length === 0) return;
-    const pid = new URLSearchParams(window.location.search).get("contracts");
-    if (!pid) { contractsParamDone.current = true; return; }
-    const p = partners.find((x) => x.id === pid);
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get("contracts");
+    const editId = params.get("edit"); // a térkép „Cím javítása” linkje (7836fee3)
+    if (!pid && !editId) { contractsParamDone.current = true; return; }
+    const p = partners.find((x) => x.id === (pid ?? editId));
     if (p) {
       contractsParamDone.current = true;
-      void openContracts({ id: p.id, name: p.name });
+      if (pid) void openContracts({ id: p.id, name: p.name });
+      else edit(p);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partners]);

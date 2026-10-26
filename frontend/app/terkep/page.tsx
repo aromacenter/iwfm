@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
+import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -19,6 +20,7 @@ import { useUI } from "@/lib/ui";
 interface MapPartner {
   id: string;
   name: string;
+  address?: string | null;
   city: string | null;
   zip: string | null;
   lat: number | null;
@@ -90,6 +92,7 @@ export default function TerkepPage() {
     [rows, bp, agentFilter, onlyMachines],
   );
   const missingGeo = rows.filter((r) => r.lat == null).length;
+  const [showMissing, setShowMissing] = useState(false);
 
   const cities = useMemo(() => {
     const by: Record<string, { partners: number; machines: number; revenue: number; lat: number; lng: number; n: number }> = {};
@@ -246,9 +249,29 @@ export default function TerkepPage() {
         </div>
       </div>
       {filtered.length > 0 && geocoded < filtered.length && (
-        <p className="mb-2 text-xs text-amber-700">
-          ⚠️ {t("map.missingGeo", { n: filtered.length - geocoded })}
-        </p>
+        <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <button type="button" onClick={() => setShowMissing((v) => !v)} className="w-full text-left">
+            ⚠️ {t("map.missingGeo", { n: filtered.length - geocoded })} <span className="underline">{showMissing ? t("map.hideList") : t("map.showList")}</span>
+          </button>
+          {showMissing && (
+            <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-amber-200 bg-white">
+              <p className="px-3 py-1.5 text-xs text-slate-500">{t("map.missingHint")}</p>
+              <table className="w-full text-xs text-slate-700">
+                <tbody>
+                  {filtered.filter((r) => r.lat == null).map((r) => (
+                    <tr key={r.id} className="border-t border-slate-100">
+                      <td className="px-3 py-1.5 font-medium">{r.name}</td>
+                      <td className="px-3 py-1.5 text-slate-500">{r.address ?? ([r.zip, r.city].filter(Boolean).join(" ") || "—")}</td>
+                      <td className="px-3 py-1.5 text-right">
+                        <Link href={`/partnerek?edit=${r.id}`} className="rounded border border-slate-300 px-2 py-0.5 text-indigo-700 hover:bg-slate-100">✏️ {t("map.fixAddress")}</Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         {/* világos háttér: csempe-betöltés közben se legyen fekete (9192f8d5) */}

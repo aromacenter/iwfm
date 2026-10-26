@@ -414,6 +414,7 @@ export default function FeladatokPage() {
     maintenance_fee: number | null;
     fee_discount: boolean;
     invoiced: boolean;
+  handover_document_id?: string | null;
     timer?: { state: string; first_started_at: string | null; last_ended_at: string | null; active_seconds: number; pause_seconds: number; pause_count: number; travel_seconds?: number; wait_seconds?: number } | null;
     customer_note: string | null;
     quote_status: "none" | "sent" | "accepted" | "declined";
@@ -532,6 +533,16 @@ export default function FeladatokPage() {
       await savePricesInner();
       setPriceEdit(null);
       toast(t("common.saved"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  // A Billingó publikus számla-linkje a munkalaphoz (3fe1fdcb)
+  async function openInvoiceLink(taskId: string) {
+    try {
+      const r = await api.get<{ url: string }>(`/api/tasks/${taskId}/handover/invoice-link`);
+      window.open(r.url, "_blank", "noopener");
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -1276,6 +1287,16 @@ export default function FeladatokPage() {
                   <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
                     ✓ {t("tasks.maintFeeInvoiced")}
                   </span>
+                )}
+                {priceEdit.ws.handover_document_id && (
+                  <button
+                    type="button"
+                    onClick={() => void openInvoiceLink(priceEdit.task.id)}
+                    className="rounded border border-emerald-300 px-2 py-0.5 text-xs font-medium text-emerald-800 hover:bg-emerald-50"
+                    title={t("tasks.invoiceLinkHint")}
+                  >
+                    🔗 {t("tasks.invoiceLink")}
+                  </button>
                 )}
               </div>
             </div>

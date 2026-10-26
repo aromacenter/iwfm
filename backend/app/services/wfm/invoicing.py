@@ -56,6 +56,13 @@ async def download_invoice_pdf(
     return await billingo_service.download_document_pdf(db, document_id, company)
 
 
+async def get_invoice_public_url(db: AsyncSession, document_id: str, company: str | None = None) -> str | None:
+    """A bizonylat publikus linkje (csak Billingónál)."""
+    if await _provider(db) == "szamlazz":
+        return None
+    return await billingo_service.get_document_public_url(db, document_id, company)
+
+
 async def send_invoice_email(
     db: AsyncSession, document_id: str, emails: list[str], company: str | None = None
 ) -> None:

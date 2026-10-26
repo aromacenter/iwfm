@@ -1232,6 +1232,48 @@ class HandoverIn(BaseModel):
     price: float | None = Field(default=None, ge=0)
 
 
+async def _auto_send_invoice(db: AsyncSession, s: Settlement, partner: Partner | None, document_id: str) -> None:
+    """MINDEN számlát a Billingó küld ki (3fe1fdcb): a kiállítás után azonnal,
+    az elszámolás címzettjeire / a partner e-mailjére. Best-effort."""
+    from app.services.wfm.invoicing import send_invoice_email
+
+    to = s.invoice_emails or (partner.contact_email if partner else None)
+    emails = [e for e in _split_emails(to) if "@" in e]
+    if not emails or not document_id:
+        return
+    try:
+        await send_invoice_email(db, document_id, emails, s.invoicing_company)
+        s.receipt_sent_at = s.receipt_sent_at or datetime.now(UTC)
+    except Exception:
+        logging.getLogger(__name__).warning("settlement invoice auto-send failed", exc_info=True)
+
+
+@settlements_router.get("/{settlement_id}/invoice-link")
+async def settlement_invoice_link(
+    settlement_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("settlements")),
+):
+    """Az elszámolás Billingó-számlájának kattintható linkje (3fe1fdcb)."""
+    s = await _get_settlement_or_404(db, settlement_id)
+    if not s.billingo_document_id:
+        raise HTTPException(status_code=404, detail={"code": "settlement.not_invoiced"})
+    from app.services.wfm.invoicing import get_invoice_public_url
+
+    try:
+        url = await get_invoice_public_url(db, s.billingo_document_id, s.invoicing_company)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
+    except Exception as exc:
+        from app.services.wfm.billingo_service import BillingoApiError
+
+        msg = exc.message() if isinstance(exc, BillingoApiError) else str(exc)[:200]
+        raise HTTPException(status_code=502, detail={"code": "billingo.request_failed", "message": msg})
+    if not url:
+        raise HTTPException(status_code=404, detail={"code": "settlement.not_invoiced"})
+    return {"document_id": s.billingo_document_id, "url": url}
+
+
 def _split_emails(raw: str | None) -> list[str]:
     return [x.strip() for x in (raw or "").replace(";", ",").split(",") if x.strip()]
 
@@ -2484,6 +2526,7 @@ async def create_settlement(
             settlement.invoiced = True
             settlement.billingo_document_id = document_id
             settlement.billingo_status = mode
+            await _auto_send_invoice(db, settlement, partner, document_id)
             # Utánvét/készpénz/kártya: azonnal fizetve; utalásnál határidő.
             if settlement.payment_method in ("cash", "card", "cod"):
                 settlement.payment_status = "paid"
@@ -3444,6 +3487,7 @@ async def invoice_settlement(
         raise HTTPException(status_code=502, detail={"code": "settlement.invoice_failed"})
 
     s.invoiced = True
+    await _auto_send_invoice(db, s, partner, document_id)
     s.billingo_document_id = document_id
     s.billingo_status = mode  # 'proforma' (teszt) | 'invoice' (éles)
     # Kintlévőség: utánvét/készpénz/kártya azonnal fizetve; utalásnál

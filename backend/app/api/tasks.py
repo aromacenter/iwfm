@@ -25,6 +25,7 @@ from app.api.deps import (
     get_current_user,
     get_own_employee,
     record_audit,
+    require_any_perm,
     require_perm,
 )
 from app.db import get_db
@@ -235,6 +236,7 @@ class WorksheetOut(BaseModel):
     invoiced: bool = False  # az auto-számla már kiment
     customer_note: str | None = None
     public_note: str | None = None
+    handover_document_id: str | None = None  # a Billingó számla azonosítója (link a /handover/invoice-link-en)
     problem_text: str | None = None
     solution_text: str | None = None
     print_solution: bool = False
@@ -308,6 +310,7 @@ def _worksheet_out(
         invoiced=ws.billingo_document_id is not None,
         customer_note=None if hide else ws.customer_note,
         public_note=ws.public_note,
+        handover_document_id=ws.handover_document_id,
         problem_text=ws.problem_text,
         solution_text=ws.solution_text,
         print_solution=bool(ws.print_solution),
@@ -3194,9 +3197,13 @@ async def do_handover(
             )
         from app.services.wfm import invoicing
 
+        # A számlázandó tétel MINDEN javításnál egy sor (3fe1fdcb): „Kávéfőző
+        # gép javítás”, 1 db, egységár = a javítás nettó értéke, a munkalap
+        # számával — a részletezés a munkalapon van.
+        invoice_items = [{"name": f"Kávéfőző gép javítás (Munkalap: {ws.serial})", "amount_net": total}]
         try:
             document_id, _mode = await invoicing.create_handover_invoice(
-                db, partner, serial=ws.serial, items=items,
+                db, partner, serial=ws.serial, items=invoice_items,
                 payment_method=body.payment_method,
                 due_days=(body.due_days or 8) if body.payment_method == "transfer" else None,
             )
@@ -3211,6 +3218,19 @@ async def do_handover(
             logging.getLogger(__name__).warning("handover invoice failed: %s", msg)
             raise HTTPException(status_code=502, detail={"code": "billingo.request_failed", "message": msg})
 
+    # MINDEN számlát a Billingó küld ki (3fe1fdcb): nyomon követhető, ki
+    # mikor nyitotta meg — a címzett a partner e-mailje / az átvételi e-mail.
+    invoice_sent_to: list[str] = []
+    if document_id and partner is not None:
+        from app.services.wfm.email_service import split_addresses as _split
+
+        emails = [e for e in _split(partner.contact_email) if "@" in e]
+        if emails:
+            try:
+                await invoicing.send_invoice_email(db, document_id, emails, partner.invoicing_company)
+                invoice_sent_to = emails
+            except Exception:  # best-effort: a számla megvan, a küldés pótolható
+                logging.getLogger(__name__).warning("handover invoice send failed", exc_info=True)
     ws.handed_over_at = datetime.now(UTC)
     ws.handover_payment_method = body.payment_method
     ws.handover_due_days = (body.due_days or 8) if body.payment_method == "transfer" else None
@@ -3268,4 +3288,37 @@ async def do_handover(
     except Exception:
         pass
     return {"ok": True, "document_id": document_id, "total_net": total,
-            "discount": body.discount}
+            "discount": body.discount, "invoice_sent_to": invoice_sent_to}
+
+
+@router.get("/{task_id}/handover/invoice-link")
+async def handover_invoice_link(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_any_perm("tasks", "invoicing")),
+):
+    """A munkalaphoz tartozó Billingó-számla kattintható linkje (3fe1fdcb)."""
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None or not ws.handover_document_id:
+        raise HTTPException(status_code=404, detail={"code": "handover.no_invoice"})
+    company = None
+    if ws.asset_id is not None:
+        a = (await db.execute(select(Asset).where(Asset.id == ws.asset_id))).scalar_one_or_none()
+        if a is not None and a.partner_id is not None:
+            p = (await db.execute(select(Partner).where(Partner.id == a.partner_id))).scalar_one_or_none()
+            company = p.invoicing_company if p else None
+    from app.services.wfm import invoicing
+
+    try:
+        url = await invoicing.get_invoice_public_url(db, ws.handover_document_id, company)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
+    except Exception as exc:
+        from app.services.wfm.billingo_service import BillingoApiError
+
+        msg = exc.message() if isinstance(exc, BillingoApiError) else str(exc)[:200]
+        raise HTTPException(status_code=502, detail={"code": "billingo.request_failed", "message": msg})
+    if not url:
+        raise HTTPException(status_code=404, detail={"code": "handover.no_invoice"})
+    return {"document_id": ws.handover_document_id, "url": url}
