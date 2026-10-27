@@ -2,7 +2,7 @@
 
 /** X-admin márka-logó: kövér piros X + szögletes betűk, alatta széles
  *  betűközű alcím. Az alcím a beállított cégnév (white-label) — enélkül a
- *  gyári "X-Presso management". Szövegként renderelődik (nem kép), így éles
+ *  gyári „X-Presso management” csak a saját példányon. Szövegként renderelődik (nem kép), így éles
  *  minden méretben, és sötét témában automatikusan világosra vált. */
 
 import { useEffect, useState } from "react";
@@ -10,6 +10,15 @@ import { api } from "@/lib/api";
 
 // modul-szintű gyorsítótár: az arculatot elég egyszer lekérni
 let cachedBrand: string | null | undefined;
+
+/** Gyári alcím: CSAK a saját (X-Presso) példányon és fejlesztéskor — a bérelt
+ *  példányok white-label módon, alcím nélkül indulnak, amíg a Beállításokban
+ *  nincs cégnév (user-kérés: új telepítésnél csak „X-admin” látszódjon). */
+function defaultSubtitle(): string {
+  if (typeof window === "undefined") return "";
+  const h = window.location.hostname;
+  return h.endsWith("x-presso.hu") || h === "localhost" || h === "127.0.0.1" ? "X-Presso management" : "";
+}
 
 function useBrandName(): string | null {
   const [brand, setBrand] = useState<string | null>(cachedBrand ?? null);
@@ -37,10 +46,11 @@ const SIZES = {
 export default function BrandLogo({ size = "md" }: { size?: keyof typeof SIZES }) {
   const s = SIZES[size];
   const brand = useBrandName();
+  const sub = brand ?? defaultSubtitle();
   return (
     <div
       className={`flex select-none flex-col items-center ${s.gap}`}
-      title={`X-admin — ${brand ?? "X-Presso management"}`}
+      title={sub ? `X-admin — ${sub}` : "X-admin"}
     >
       <div className="flex items-center leading-none text-[#E31E24]">
         <span
@@ -53,12 +63,14 @@ export default function BrandLogo({ size = "md" }: { size?: keyof typeof SIZES }
           -admin
         </span>
       </div>
-      <div
-        className={`uppercase tracking-[0.3em] text-slate-800 ${s.sub}`}
-        style={{ fontFamily: "var(--font-michroma)" }}
-      >
-        {brand ?? "X-Presso management"}
-      </div>
+      {sub && (
+        <div
+          className={`uppercase tracking-[0.3em] text-slate-800 ${s.sub}`}
+          style={{ fontFamily: "var(--font-michroma)" }}
+        >
+          {sub}
+        </div>
+      )}
     </div>
   );
 }

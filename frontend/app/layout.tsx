@@ -10,7 +10,7 @@ const orbitron = Orbitron({ subsets: ["latin"], weight: "900", variable: "--font
 const michroma = Michroma({ subsets: ["latin"], weight: "400", variable: "--font-michroma" });
 
 export const metadata: Metadata = {
-  title: "X-admin — X-Presso management",
+  title: "X-admin",
   description: "Workforce management: employees, schedules, attendance, payroll export",
   manifest: "/manifest.json",
 };
@@ -33,7 +33,7 @@ const SW_INIT = `if('serviceWorker' in navigator && location.hostname!=='localho
 // határidővel (ha a load-esemény bármiért elmaradna). FONTOS: a React által
 // renderelt csomópontot NEM távolítjuk el (az felborítaná a hidratálást),
 // csak elrejtjük.
-const PRELOADER_HIDE = `(function(){function h(){var e=document.getElementById('app-preloader');if(e){e.style.opacity='0';setTimeout(function(){e.style.display='none'},450);}}window.addEventListener('load',function(){setTimeout(h,150)});setTimeout(h,6000);})();`;
+const PRELOADER_HIDE = `(function(){try{var hn=location.hostname;if(!(/x-presso\.hu$/.test(hn)||hn==='localhost'||hn==='127.0.0.1')){var ps=document.getElementById('preloader-sub');if(ps){ps.textContent='';}}}catch(e){}function h(){var e=document.getElementById('app-preloader');if(e){e.style.opacity='0';setTimeout(function(){e.style.display='none'},450);}}window.addEventListener('load',function(){setTimeout(h,150)});setTimeout(h,6000);})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -51,7 +51,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <span className="preloader-x" style={{ fontFamily: "var(--font-orbitron)" }}>X</span>
               <span className="preloader-rest" style={{ fontFamily: "var(--font-michroma)" }}>-admin</span>
             </div>
-            <div className="preloader-sub" style={{ fontFamily: "var(--font-michroma)" }}>
+            {/* az alcím csak a saját (x-presso.hu) példányon marad — bérelt példányon üres */}
+            <div className="preloader-sub" id="preloader-sub" style={{ fontFamily: "var(--font-michroma)" }}>
               X-Presso management
             </div>
           </div>
