@@ -2113,7 +2113,17 @@
     "demoRemoveHint": "Removable any time: Settings → Data → Delete sample data.",
     "demoSettingsHint": "Remove the sample data ([MINTA] partners and MINTA- machines).",
     "demoRemove": "Delete sample data",
-    "demoRemoved": "{partners} sample partners and {assets} sample machines deleted."
+    "demoRemoved": "{partners} sample partners and {assets} sample machines deleted.",
+    "intro1": "Hi! I'll be your guide through the setup. 👋 Glad you're here — your system is already live, let's make it yours.",
+    "intro2": "Six short steps: company details, site, colleagues, invoicing, sample data, done. Skip any of them; everything can be set later in Settings. Just a few minutes.",
+    "introStart": "Let's start the setup →",
+    "introSkip": "Jump to the steps",
+    "tip1": "Enter your company name and address — these go on worksheets, quotes and receipts. You can upload a logo too.",
+    "tip2": "The first site is the home of stock and machines. Later you can add car warehouses for your reps.",
+    "tip3": "Invite your colleagues: everyone gets their own login and role. The generated password shows only now — hand it over safely.",
+    "tipBilling": "With your Billingó API key, invoices are created and sent in one click. No key yet? Just skip.",
+    "tipDemo": "An empty system is hard to learn — sample data gives you something to click right away. Removable any time.",
+    "tipDone": "All set! You can start working in the calendar. If you get stuck, I'm behind the ✨ button bottom right."
   },
   "bugs": {
     "buttonTitle": "Report a bug",

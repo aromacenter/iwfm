@@ -2113,7 +2113,17 @@
     "demoRemoveHint": "Bármikor eltávolíthatók: Beállítások → Adatok → Mintaadatok törlése.",
     "demoSettingsHint": "Mintaadatok (a [MINTA] partnerek és MINTA- gépek) eltávolítása.",
     "demoRemove": "Mintaadatok törlése",
-    "demoRemoved": "{partners} minta-partner és {assets} minta-gép törölve."
+    "demoRemoved": "{partners} minta-partner és {assets} minta-gép törölve.",
+    "intro1": "Szia! Én leszek a segítőd a beüzemelésben. 👋 Örülök, hogy itt vagy — a rendszered már él, most tegyük személyre.",
+    "intro2": "Hat rövid lépés jön: cégadatok, telephely, kollégák, számlázás, mintaadatok, és kész. Bármelyiket kihagyhatod, később a Beállításokban pótolható. Pár perc az egész.",
+    "introStart": "Kezdjük a beüzemelést →",
+    "introSkip": "Ugorjunk a lépésekhez",
+    "tip1": "Add meg a céged nevét és címét — ezek kerülnek a munkalapokra, ajánlatokra és bizonylatokra. Logót is feltölthetsz.",
+    "tip2": "Az első telephely a raktárkészlet és a gépek otthona. Később autó-raktárakat is nyithatsz az üzletkötőknek.",
+    "tip3": "Hívd meg a kollégáidat: mindenki saját belépést és szerepkört kap. A generált jelszót csak most látod, add át biztonságosan.",
+    "tipBilling": "A Billingó API-kulccsal a számlák egy kattintással készülnek és mennek ki. Ha még nincs, nyugodtan hagyd ki.",
+    "tipDemo": "Üres rendszerben nehéz tanulni — a mintaadatokkal azonnal van mit kattintgatni. Bármikor törölhetők.",
+    "tipDone": "Kész is vagy! A naptárban már dolgozhattok. Ha elakadsz, a jobb alsó ✨ gomb mögött én is ott leszek."
   },
   "bugs": {
     "buttonTitle": "Hibabejelentés",

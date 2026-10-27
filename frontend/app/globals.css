@@ -244,3 +244,23 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
 }
+
+/* ── Beüzemelő varázsló: menedzser-figura + buborék + lépcsőzetes beúszás ── */
+@keyframes onb-pop { 0% { opacity: 0; transform: translateY(40px) scale(.8); } 60% { transform: translateY(-6px) scale(1.04); } 100% { opacity: 1; transform: none; } }
+@keyframes onb-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes onb-wave { 0%, 100% { transform: rotate(0deg); } 20% { transform: rotate(-28deg); } 40% { transform: rotate(10deg); } 60% { transform: rotate(-24deg); } 80% { transform: rotate(6deg); } }
+@keyframes onb-blink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+@keyframes onb-bubble { 0% { opacity: 0; transform: translateY(8px) scale(.96); } 100% { opacity: 1; transform: none; } }
+@keyframes onb-caret { 50% { opacity: 0; } }
+@keyframes onb-rise { 0% { opacity: 0; transform: translateY(18px); } 100% { opacity: 1; transform: none; } }
+.onb-figure { animation: onb-pop .7s cubic-bezier(.2,.8,.2,1) both, onb-float 4s ease-in-out 1s infinite; }
+.onb-arm { animation: onb-wave 1.6s ease-in-out .6s 3; }
+.onb-eyes { animation: onb-blink 4.5s ease-in-out infinite; }
+.onb-bubble { animation: onb-bubble .4s ease .55s both; }
+.onb-caret { animation: onb-caret .8s steps(1) infinite; color: #6366f1; }
+.onb-rise { animation: onb-rise .55s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0ms); }
+.dark .onb-bubble { background: #1b2537; color: #e6ebf4; border-color: #334155; }
+.dark .onb-bubble > span { background: #1b2537; border-color: #334155; }
+@media (prefers-reduced-motion: reduce) {
+  .onb-figure, .onb-arm, .onb-eyes, .onb-bubble, .onb-caret, .onb-rise { animation: none !important; opacity: 1; transform: none; }
+}

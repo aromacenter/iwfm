@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
+import OnboardingGuide, { ManagerFigure, useTypewriter } from "@/components/OnboardingGuide";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -178,14 +179,74 @@ export default function OnboardingPage() {
 
   const steps = [t("onboard.step1"), t("onboard.step2"), t("onboard.step3"), t("onboard.stepBilling"), t("onboard.stepDemo"), t("onboard.step4")];
 
+  // Animált bevezető: a menedzser-figura köszön, elmondja, mi jön, aztán
+  // lépcsőzetesen beúszik a varázsló. Munkamenetenként egyszer (ujratöltésnél nem).
+  const [intro, setIntro] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try { return sessionStorage.getItem("iwfm-onb-intro") !== "done"; } catch { return true; }
+  });
+  const [introPhase, setIntroPhase] = useState(0); // 0 = köszönés, 1 = info
+  const introText = introPhase === 0 ? t("onboard.intro1") : t("onboard.intro2");
+  const introTyped = useTypewriter(intro ? introText : "", 20);
+  useEffect(() => {
+    if (!intro || !introTyped.done || introPhase !== 0) return;
+    const id = window.setTimeout(() => setIntroPhase(1), 900);
+    return () => window.clearTimeout(id);
+  }, [intro, introTyped.done, introPhase]);
+  function finishIntro() {
+    try { sessionStorage.setItem("iwfm-onb-intro", "done"); } catch {}
+    setIntro(false);
+  }
+  const stepTips = [t("onboard.tip1"), t("onboard.tip2"), t("onboard.tip3"), t("onboard.tipBilling"), t("onboard.tipDemo"), t("onboard.tipDone")];
+
+  if (intro) {
+    return (
+      <AppShell>
+        <div className="mx-auto flex min-h-[70vh] max-w-2xl flex-col items-center justify-center text-center">
+          <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-end sm:gap-4">
+            <ManagerFigure size={210} wave />
+            <div className="onb-bubble relative mb-10 max-w-md rounded-2xl border border-indigo-100 bg-white px-5 py-4 text-left text-base text-slate-700 shadow-lg">
+              <span className="absolute -left-2 bottom-8 hidden h-4 w-4 rotate-45 border-b border-l border-indigo-100 bg-white sm:block" />
+              <p className="min-h-[3.5rem]">
+                {introTyped.shown}
+                {!introTyped.done && <span className="onb-caret">▍</span>}
+              </p>
+            </div>
+          </div>
+          <div className="onb-rise mt-4 flex flex-wrap items-center justify-center gap-3" style={{ "--d": "300ms" } as React.CSSProperties}>
+            <button
+              type="button"
+              onClick={finishIntro}
+              className="rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-md hover:bg-indigo-700"
+            >
+              {t("onboard.introStart")}
+            </button>
+            <button type="button" onClick={finishIntro} className="text-sm font-medium text-slate-500 hover:text-slate-700">
+              {t("onboard.introSkip")}
+            </button>
+          </div>
+          <ol className="onb-rise mt-8 flex flex-wrap justify-center gap-2" style={{ "--d": "600ms" } as React.CSSProperties}>
+            {steps.map((label, i) => (
+              <li key={label} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">{i + 1}. {label}</li>
+            ))}
+          </ol>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-bold">{t("onboard.title")}</h1>
-        <p className="mt-1 text-sm text-slate-500">{t("onboard.subtitle")}</p>
+        <div className="onb-rise flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">{t("onboard.title")}</h1>
+            <p className="mt-1 text-sm text-slate-500">{t("onboard.subtitle")}</p>
+          </div>
+        </div>
 
         {/* lépés-jelző */}
-        <ol className="mt-6 flex gap-2">
+        <ol className="onb-rise mt-6 flex gap-2" style={{ "--d": "120ms" } as React.CSSProperties}>
           {steps.map((label, i) => (
             <li key={label} className={`flex-1 rounded-full px-3 py-1.5 text-center text-xs font-semibold ${
               i === step ? "bg-indigo-600 text-white"
@@ -197,7 +258,12 @@ export default function OnboardingPage() {
           ))}
         </ol>
 
-        <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        {/* a menedzser a varázsló mellett, lépésenként más tippel */}
+        <div className="onb-rise mt-4" style={{ "--d": "220ms" } as React.CSSProperties}>
+          <OnboardingGuide key={step} text={stepTips[step] ?? ""} size={84} />
+        </div>
+
+        <div className="onb-rise mt-2 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" style={{ "--d": "320ms" } as React.CSSProperties}>
           {step === 0 && (
             <>
               <h2 className="font-semibold">{t("onboard.companyTitle")}</h2>
