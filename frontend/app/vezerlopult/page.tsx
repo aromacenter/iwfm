@@ -390,45 +390,47 @@ export default function VezerlopultPage() {
                   </div>
                 ))}
               </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-slate-400">
-                    <th className="py-1.5 pr-3">{t("cons.partner")}</th>
-                    <th className="py-1.5 pr-3 text-right">{t("dash.recvAmount")}</th>
-                    <th className="py-1.5 pr-3 text-right">{t("dash.recvItems")}</th>
-                    <th className="py-1.5">{t("dash.recvSince")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {receivables.top_debtors.map((d) => (
-                    <tr key={d.partner_id} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-3">
-                        <button
-                          onClick={() => setInfoPartner(d.partner_id)}
-                          className="text-left font-medium text-indigo-700 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-900"
-                        >
-                          {d.partner_name}
-                        </button>
-                      </td>
-                      <td className="py-1.5 pr-3 text-right font-semibold text-rose-700 tabular-nums">
-                        {ft(Math.round(d.remaining))}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right text-slate-500">{d.items}</td>
-                      <td className="py-1.5 text-slate-500">
-                        {d.oldest_at}
-                        <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold ${d.oldest_days > 60 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"}`}>
-                          {t("dash.recvDays", { days: d.oldest_days })}
-                        </span>
-                        {d.overdue_items > 0 && (
-                          <span className="ml-1 rounded bg-rose-200 px-1.5 py-0.5 text-[11px] font-semibold text-rose-800">
-                            {t("cons.debtOverdue")}
-                          </span>
-                        )}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-400">
+                      <th className="py-1.5 pr-3">{t("cons.partner")}</th>
+                      <th className="py-1.5 pr-3 text-right">{t("dash.recvAmount")}</th>
+                      <th className="py-1.5 pr-3 text-right">{t("dash.recvItems")}</th>
+                      <th className="py-1.5">{t("dash.recvSince")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {receivables.top_debtors.map((d) => (
+                      <tr key={d.partner_id} className="border-t border-slate-100">
+                        <td className="py-1.5 pr-3">
+                          <button
+                            onClick={() => setInfoPartner(d.partner_id)}
+                            className="text-left font-medium text-indigo-700 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-900"
+                          >
+                            {d.partner_name}
+                          </button>
+                        </td>
+                        <td className="py-1.5 pr-3 text-right font-semibold text-rose-700 tabular-nums">
+                          {ft(Math.round(d.remaining))}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right text-slate-500">{d.items}</td>
+                        <td className="py-1.5 text-slate-500">
+                          {d.oldest_at}
+                          <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold ${d.oldest_days > 60 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"}`}>
+                            {t("dash.recvDays", { days: d.oldest_days })}
+                          </span>
+                          {d.overdue_items > 0 && (
+                            <span className="ml-1 rounded bg-rose-200 px-1.5 py-0.5 text-[11px] font-semibold text-rose-800">
+                              {t("cons.debtOverdue")}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
 
@@ -521,37 +523,39 @@ export default function VezerlopultPage() {
                           <p className="mb-2 text-xs font-semibold uppercase text-slate-400">
                             {t(key === "top" ? "dash.perfTop" : "dash.perfBottom")}
                           </p>
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-left text-xs uppercase text-slate-500">
-                                <th className="py-1.5">{t("cons.partner")}</th>
-                                <th className="py-1.5 text-right">{t("dash.perfGross")}</th>
-                                <th className="py-1.5 text-right">{t("dash.perfPerVisit")}</th>
-                                <th className="py-1.5 text-right" title={t("dash.perfServiceCostHint")}>{t("dash.perfServiceCost")}</th>
-                                <th className="py-1.5 text-right" title={t("dash.perfTicketsHint")}>🔧</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rows.map((r) => (
-                                <tr key={r.partner_id} className="border-t border-slate-100">
-                                  <td className="py-1.5">
-                                    <span className="font-medium">{r.name}</span>
-                                    <span className="ml-1 text-xs text-slate-400">
-                                      {r.machines > 0 ? `${r.machines} gép` : ""}
-                                    </span>
-                                  </td>
-                                  <td className="py-1.5 text-right font-semibold">{ft(r.gross)}</td>
-                                  <td className="py-1.5 text-right text-slate-500">{ft(r.per_visit)}</td>
-                                  <td className={`py-1.5 text-right ${r.service_cost > 0 && r.service_cost > r.gross * 0.2 ? "font-semibold text-rose-600" : "text-slate-500"}`}>
-                                    {r.service_cost > 0 ? ft(r.service_cost) : "—"}
-                                  </td>
-                                  <td className={`py-1.5 text-right ${r.tickets >= 3 ? "font-semibold text-rose-600" : "text-slate-500"}`}>
-                                    {r.tickets}
-                                  </td>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-left text-xs uppercase text-slate-500">
+                                  <th className="py-1.5">{t("cons.partner")}</th>
+                                  <th className="py-1.5 text-right">{t("dash.perfGross")}</th>
+                                  <th className="py-1.5 text-right">{t("dash.perfPerVisit")}</th>
+                                  <th className="py-1.5 text-right" title={t("dash.perfServiceCostHint")}>{t("dash.perfServiceCost")}</th>
+                                  <th className="py-1.5 text-right" title={t("dash.perfTicketsHint")}>🔧</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody>
+                                {rows.map((r) => (
+                                  <tr key={r.partner_id} className="border-t border-slate-100">
+                                    <td className="py-1.5">
+                                      <span className="font-medium">{r.name}</span>
+                                      <span className="ml-1 text-xs text-slate-400">
+                                        {r.machines > 0 ? `${r.machines} gép` : ""}
+                                      </span>
+                                    </td>
+                                    <td className="py-1.5 text-right font-semibold">{ft(r.gross)}</td>
+                                    <td className="py-1.5 text-right text-slate-500">{ft(r.per_visit)}</td>
+                                    <td className={`py-1.5 text-right ${r.service_cost > 0 && r.service_cost > r.gross * 0.2 ? "font-semibold text-rose-600" : "text-slate-500"}`}>
+                                      {r.service_cost > 0 ? ft(r.service_cost) : "—"}
+                                    </td>
+                                    <td className={`py-1.5 text-right ${r.tickets >= 3 ? "font-semibold text-rose-600" : "text-slate-500"}`}>
+                                      {r.tickets}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       ),
                   )}

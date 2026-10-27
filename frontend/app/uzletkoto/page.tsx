@@ -342,89 +342,91 @@ export default function UzletkotoPage() {
       </div>
 
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              {canDelete && (
-              <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={rows.length > 0 && rows.every((s) => selected.has(s.id))}
-                  onChange={(e) =>
-                    setSelected(e.target.checked ? new Set(rows.map((s) => s.id)) : new Set())
-                  }
-                  className="h-4 w-4"
-                />
-              </th>
-              )}
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.date")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.partner")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.payment")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("cons.amountGross")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.invoiced")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((s) => (
-              <tr key={s.id} className="border-b border-slate-100 last:border-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
                 {canDelete && (
-                <td className="px-3 py-3">
+                <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                   <input
                     type="checkbox"
-                    checked={selected.has(s.id)}
-                    onChange={() => toggleSelect(s.id)}
+                    checked={rows.length > 0 && rows.every((s) => selected.has(s.id))}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(rows.map((s) => s.id)) : new Set())
+                    }
                     className="h-4 w-4"
                   />
-                </td>
+                </th>
                 )}
-                <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => router.push(`/elszamolas?partner=${s.partner_id}`)}
-                    title={t("uzk.partnerLinkHint")}
-                    className="text-left font-medium text-indigo-700 hover:underline"
-                  >
-                    {s.partner_name}
-                  </button>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <span>{s.settled_by_name}</span>
-                    {s.invoicing_company && (
-                      <span
-                        title={COMPANIES[s.invoicing_company]}
-                        className={`rounded px-1 py-0.5 text-[10px] font-medium ${COMPANY_CHIP[s.invoicing_company]}`}
-                      >
-                        {COMPANY_SHORT[s.invoicing_company]}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => void openDetail(s)}
-                    title={t("uzk.detailHint")}
-                    className="text-right hover:underline"
-                  >
-                    <div className="font-medium">{ft(s.total_gross)}</div>
-                    <div className="text-xs text-slate-400">{t("cons.amountNet")}: {ft(s.total_net)}</div>
-                  </button>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => setInvoiceFor(s)}
-                    title={t("uzk.invoiceChipHint")}
-                    className={`rounded px-2 py-0.5 text-xs font-medium hover:ring-1 hover:ring-slate-300 ${s.invoiced ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}
-                  >
-                    {s.invoiced ? t("cons.invoiced") : t("cons.notInvoiced")}
-                  </button>
-                </td>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.date")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.partner")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.payment")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("cons.amountGross")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.invoiced")}</th>
               </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((s) => (
+                <tr key={s.id} className="border-b border-slate-100 last:border-0">
+                  {canDelete && (
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(s.id)}
+                      onChange={() => toggleSelect(s.id)}
+                      className="h-4 w-4"
+                    />
+                  </td>
+                  )}
+                  <td className="px-4 py-3 whitespace-nowrap">{fmt(s.created_at)}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => router.push(`/elszamolas?partner=${s.partner_id}`)}
+                      title={t("uzk.partnerLinkHint")}
+                      className="text-left font-medium text-indigo-700 hover:underline"
+                    >
+                      {s.partner_name}
+                    </button>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <span>{s.settled_by_name}</span>
+                      {s.invoicing_company && (
+                        <span
+                          title={COMPANIES[s.invoicing_company]}
+                          className={`rounded px-1 py-0.5 text-[10px] font-medium ${COMPANY_CHIP[s.invoicing_company]}`}
+                        >
+                          {COMPANY_SHORT[s.invoicing_company]}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => void openDetail(s)}
+                      title={t("uzk.detailHint")}
+                      className="text-right hover:underline"
+                    >
+                      <div className="font-medium">{ft(s.total_gross)}</div>
+                      <div className="text-xs text-slate-400">{t("cons.amountNet")}: {ft(s.total_net)}</div>
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setInvoiceFor(s)}
+                      title={t("uzk.invoiceChipHint")}
+                      className={`rounded px-2 py-0.5 text-xs font-medium hover:ring-1 hover:ring-slate-300 ${s.invoiced ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}
+                    >
+                      {s.invoiced ? t("cons.invoiced") : t("cons.notInvoiced")}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {canInvoice && receivables.length > 0 && (
@@ -591,35 +593,37 @@ export default function UzletkotoPage() {
             </button>
           </form>
         )}
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              <th className="px-4 py-2">{t("agent.expenseDate")}</th>
-              <th className="px-4 py-2">{t("audit.who")}</th>
-              <th className="px-4 py-2 text-right">{t("agent.expenseAmount")}</th>
-              <th className="px-4 py-2">{t("agent.expenseNote")}</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.map((x) => (
-              <tr key={x.id} className="border-t border-slate-100">
-                <td className="px-4 py-2">{x.expense_date}</td>
-                <td className="px-4 py-2">{x.user_name ?? "—"}</td>
-                <td className="px-4 py-2 text-right font-medium text-rose-700">− {ft(x.amount_gross)}</td>
-                <td className="px-4 py-2 text-slate-500">{x.note ?? "—"}</td>
-                <td className="px-4 py-2 text-right">
-                  {canInvoice && (
-                    <button onClick={() => deleteExpense(x)} title={t("common.delete")} className="rounded border border-slate-300 px-2 py-1 text-xs leading-none hover:bg-red-50">🗑️</button>
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
+                <th className="px-4 py-2">{t("agent.expenseDate")}</th>
+                <th className="px-4 py-2">{t("audit.who")}</th>
+                <th className="px-4 py-2 text-right">{t("agent.expenseAmount")}</th>
+                <th className="px-4 py-2">{t("agent.expenseNote")}</th>
+                <th className="px-4 py-2"></th>
               </tr>
-            ))}
-            {expenses.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400">{t("agent.noExpenses")}</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {expenses.map((x) => (
+                <tr key={x.id} className="border-t border-slate-100">
+                  <td className="px-4 py-2">{x.expense_date}</td>
+                  <td className="px-4 py-2">{x.user_name ?? "—"}</td>
+                  <td className="px-4 py-2 text-right font-medium text-rose-700">− {ft(x.amount_gross)}</td>
+                  <td className="px-4 py-2 text-slate-500">{x.note ?? "—"}</td>
+                  <td className="px-4 py-2 text-right">
+                    {canInvoice && (
+                      <button onClick={() => deleteExpense(x)} title={t("common.delete")} className="rounded border border-slate-300 px-2 py-1 text-xs leading-none hover:bg-red-50">🗑️</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {expenses.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400">{t("agent.noExpenses")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Helyettes távollét idejére: a felelős-képviselői értesítések ilyenkor hozzá futnak be */}

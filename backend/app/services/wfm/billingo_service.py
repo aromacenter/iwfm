@@ -290,6 +290,11 @@ async def settlement_invoice_comment(
     if partner is not None and (partner.address or "").strip():
         # Több boltos cégnél innen látszik, melyik egységre vonatkozik a számla.
         parts.append(f"Telephely: {partner.address.strip()}")
+    parts.append(
+        "A végösszeg a kerekítési szabályoknak megfelelően 5 forintra kerekítve."
+        if settlement.payment_method in ("cash", "cod")
+        else "A végösszeg a kerekítési szabályoknak megfelelően egész forintra kerekítve."
+    )
     # Számlára kerülő norma (szerződés): az átadott kávéból lefőzhető adagok.
     if partner is not None:
         from app.models import PartnerContract, SettlementLine as _SL
@@ -387,11 +392,16 @@ async def create_invoice_for_settlement(
         "language": "hu",
         "currency": "HUF",
         "electronic": False,
+        # Kerekítés a bizonylaton: készpénz/utánvét 5 Ft-ra, egyébként egész
+        # forintra — így a számla végösszege megegyezik az elszámoláséval.
+        "round": "five" if settlement.payment_method in ("cash", "cod") else "one",
         "comment": await settlement_invoice_comment(db, settlement, partner),
         "items": items,
     }
     created = await _api(api_key, "POST", "/documents", body)
     document_id = str(created.get("id", ""))
+    if created.get("invoice_number"):
+        settlement.billingo_document_number = str(created["invoice_number"])[:64]
     # Utánvét/készpénz/kártya: a bizonylat azonnal FIZETETT státuszba kerül a
     # Billingóban is (best-effort — a számla enélkül is érvényes).
     if settlement.payment_method in ("cash", "card", "cod") and document_id:
@@ -589,6 +599,20 @@ async def download_document_pdf(
         )
         res.raise_for_status()
         return res.content
+
+
+async def fetch_document_number(
+    db: AsyncSession, document_id: str, company: str | None = None
+) -> str | None:
+    """A bizonylat sorszáma (invoice_number) a Billingóból — régebbi
+    elszámolásokhoz, ahol még nem tároltuk."""
+    settings = await get_or_create_settings(db)
+    api_key, _block, _test = _account(settings, company)
+    if not settings.enabled or not api_key:
+        return None
+    data = await _api(api_key, "GET", f"/documents/{document_id}")
+    num = data.get("invoice_number")
+    return str(num)[:64] if num else None
 
 
 async def send_document_email(

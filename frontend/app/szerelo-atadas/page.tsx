@@ -198,81 +198,83 @@ export default function SzereloAtadasPage() {
                 {t("svcHo.feeDue")}: {ft(list.reduce((a, r) => a + r.fee_total, 0))}
               </span>
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase text-slate-500">
-                  <th className="w-8 py-1.5">
-                    <input
-                      type="checkbox"
-                      checked={list.every((r) => selected.has(r.task_id))}
-                      onChange={(e) =>
-                        setSelected((s) => {
-                          const next = new Set(s);
-                          list.forEach((r) => (e.target.checked ? next.add(r.task_id) : next.delete(r.task_id)));
-                          return next;
-                        })
-                      }
-                      className="h-4 w-4"
-                    />
-                  </th>
-                  <th className="py-1.5 pr-2">{t("svcHo.worksheet")}</th>
-                  <th className="py-1.5 pr-2">{t("svcHo.client")}</th>
-                  <th className="py-1.5 pr-2">{t("svcHo.status")}</th>
-                  <th className="py-1.5 text-right">{t("svcHo.fee")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((r) => (
-                  <tr key={r.task_id} className="border-t border-slate-100">
-                    <td className="py-1.5">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="w-8 py-1.5">
                       <input
                         type="checkbox"
-                        checked={selected.has(r.task_id)}
-                        onChange={() =>
+                        checked={list.every((r) => selected.has(r.task_id))}
+                        onChange={(e) =>
                           setSelected((s) => {
                             const next = new Set(s);
-                            if (next.has(r.task_id)) next.delete(r.task_id);
-                            else next.add(r.task_id);
+                            list.forEach((r) => (e.target.checked ? next.add(r.task_id) : next.delete(r.task_id)));
                             return next;
                           })
                         }
                         className="h-4 w-4"
                       />
-                    </td>
-                    <td className="py-1.5 pr-2">
-                      <Link
-                        href={`/feladatok?task=${r.task_id}`}
-                        title={t("svcHo.worksheetLinkHint")}
-                        className="font-mono text-xs font-semibold text-indigo-700 hover:underline"
-                      >
-                        {r.serial}
-                      </Link>{" "}
-                      <span className="text-slate-600">{r.title}</span>
-                      {r.technician && (
-                        <span
-                          title={t("svcHo.technicianHint")}
-                          className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-medium text-violet-800"
-                        >
-                          👷 {r.technician}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-1.5 pr-2 text-slate-600">{r.client_name ?? "—"}</td>
-                    <td className="py-1.5 pr-2">
-                      {r.completed ? (
-                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800">✔ {t("svcHo.ready")}</span>
-                      ) : (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">⏳ {t("svcHo.inProgress")}</span>
-                      )}
-                      {!r.quote_email && (
-                        <span title={t("svcHo.noEmailHint")} className="ml-1 text-xs text-slate-400">✉?</span>
-                      )}
-                    </td>
-                    <td className="py-1.5 text-right font-medium tabular-nums">{ft(r.fee_total)}</td>
+                    </th>
+                    <th className="py-1.5 pr-2">{t("svcHo.worksheet")}</th>
+                    <th className="py-1.5 pr-2">{t("svcHo.client")}</th>
+                    <th className="py-1.5 pr-2">{t("svcHo.status")}</th>
+                    <th className="py-1.5 text-right">{t("svcHo.fee")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {list.map((r) => (
+                    <tr key={r.task_id} className="border-t border-slate-100">
+                      <td className="py-1.5">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(r.task_id)}
+                          onChange={() =>
+                            setSelected((s) => {
+                              const next = new Set(s);
+                              if (next.has(r.task_id)) next.delete(r.task_id);
+                              else next.add(r.task_id);
+                              return next;
+                            })
+                          }
+                          className="h-4 w-4"
+                        />
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <Link
+                          href={`/feladatok?task=${r.task_id}`}
+                          title={t("svcHo.worksheetLinkHint")}
+                          className="font-mono text-xs font-semibold text-indigo-700 hover:underline"
+                        >
+                          {r.serial}
+                        </Link>{" "}
+                        <span className="text-slate-600">{r.title}</span>
+                        {r.technician && (
+                          <span
+                            title={t("svcHo.technicianHint")}
+                            className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-medium text-violet-800"
+                          >
+                            👷 {r.technician}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-2 text-slate-600">{r.client_name ?? "—"}</td>
+                      <td className="py-1.5 pr-2">
+                        {r.completed ? (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800">✔ {t("svcHo.ready")}</span>
+                        ) : (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">⏳ {t("svcHo.inProgress")}</span>
+                        )}
+                        {!r.quote_email && (
+                          <span title={t("svcHo.noEmailHint")} className="ml-1 text-xs text-slate-400">✉?</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-right font-medium tabular-nums">{ft(r.fee_total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ))}
       </div>
@@ -289,59 +291,61 @@ export default function SzereloAtadasPage() {
           </Link>
         </div>
         <p className="mb-2 text-xs text-slate-400">{t("svcHo.feesHint")}</p>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              <th className="py-1.5 pr-2">{t("svcHo.technician")}</th>
-              <th className="py-1.5 pr-2 text-right">{t("svcHo.feeDue")}</th>
-              <th className="py-1.5 pr-2 text-right">{t("svcHo.costsCol")}</th>
-              <th className="py-1.5 pr-2 text-right">{t("svcHo.payoutsCol")}</th>
-              <th className="py-1.5 pr-2 text-right">{t("svcHo.balance")}</th>
-              <th className="py-1.5 pr-2 text-right">{t("stats.count")}</th>
-              <th className="py-1.5">{t("svcHo.worksheets")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {fees.map((f) => (
-              <Fragment key={f.employee_id}>
-              <tr className="border-t border-slate-100">
-                <td className="py-1.5 pr-2 font-medium">
-                  {f.employee_name ?? "?"}
-                  <button
-                    onClick={() => setCostForm({ employee_id: f.employee_id, employee_name: f.employee_name ?? "?", amount: "", note: "", supplier: "", receipt_no: "" })}
-                    title={t("svcHo.addCostHint")}
-                    className="ml-2 rounded border border-orange-300 px-1.5 py-0.5 text-xs text-orange-700 hover:bg-orange-50"
-                  >
-                    + {t("svcHo.addCost")}
-                  </button>
-                </td>
-                <td className="py-1.5 pr-2 text-right tabular-nums">{ft(f.fee_total)}</td>
-                <td className="py-1.5 pr-2 text-right tabular-nums text-orange-700">+{ft(f.costs)}</td>
-                <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-700">-{ft(f.payouts)}</td>
-                <td className={`py-1.5 pr-2 text-right font-semibold tabular-nums ${f.balance > 0 ? "text-rose-700" : f.balance < 0 ? "text-amber-700" : "text-emerald-700"}`}>
-                  {ft(f.balance)}
-                </td>
-                <td className="py-1.5 pr-2 text-right tabular-nums text-slate-400">{f.count}</td>
-                <td className="py-1.5 font-mono text-xs text-slate-500">{f.serials.join(", ")}</td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
+                <th className="py-1.5 pr-2">{t("svcHo.technician")}</th>
+                <th className="py-1.5 pr-2 text-right">{t("svcHo.feeDue")}</th>
+                <th className="py-1.5 pr-2 text-right">{t("svcHo.costsCol")}</th>
+                <th className="py-1.5 pr-2 text-right">{t("svcHo.payoutsCol")}</th>
+                <th className="py-1.5 pr-2 text-right">{t("svcHo.balance")}</th>
+                <th className="py-1.5 pr-2 text-right">{t("stats.count")}</th>
+                <th className="py-1.5">{t("svcHo.worksheets")}</th>
               </tr>
-              {/* Alvállalkozó cég: szerelőnkénti bontás — a díjak a cég közös
-                  folyószámláján maradnak, de látszik, ki mit csinált (c7ef9ce9) */}
-              {(f.technicians ?? []).map((tr) => (
-                <tr key={`${f.employee_id}-${tr.name}`} className="bg-violet-50 text-xs">
-                  <td className="py-1 pl-6 pr-2 text-violet-800">👷 {tr.name}</td>
-                  <td className="py-1 pr-2 text-right tabular-nums text-violet-800">{ft(tr.fee_total)}</td>
-                  <td colSpan={3} />
-                  <td className="py-1 pr-2 text-right tabular-nums text-violet-500">{tr.count}</td>
-                  <td className="py-1 font-mono text-[11px] text-violet-500">{tr.serials.join(", ")}</td>
+            </thead>
+            <tbody>
+              {fees.map((f) => (
+                <Fragment key={f.employee_id}>
+                <tr className="border-t border-slate-100">
+                  <td className="py-1.5 pr-2 font-medium">
+                    {f.employee_name ?? "?"}
+                    <button
+                      onClick={() => setCostForm({ employee_id: f.employee_id, employee_name: f.employee_name ?? "?", amount: "", note: "", supplier: "", receipt_no: "" })}
+                      title={t("svcHo.addCostHint")}
+                      className="ml-2 rounded border border-orange-300 px-1.5 py-0.5 text-xs text-orange-700 hover:bg-orange-50"
+                    >
+                      + {t("svcHo.addCost")}
+                    </button>
+                  </td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums">{ft(f.fee_total)}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums text-orange-700">+{ft(f.costs)}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-700">-{ft(f.payouts)}</td>
+                  <td className={`py-1.5 pr-2 text-right font-semibold tabular-nums ${f.balance > 0 ? "text-rose-700" : f.balance < 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                    {ft(f.balance)}
+                  </td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums text-slate-400">{f.count}</td>
+                  <td className="py-1.5 font-mono text-xs text-slate-500">{f.serials.join(", ")}</td>
                 </tr>
+                {/* Alvállalkozó cég: szerelőnkénti bontás — a díjak a cég közös
+                    folyószámláján maradnak, de látszik, ki mit csinált (c7ef9ce9) */}
+                {(f.technicians ?? []).map((tr) => (
+                  <tr key={`${f.employee_id}-${tr.name}`} className="bg-violet-50 text-xs">
+                    <td className="py-1 pl-6 pr-2 text-violet-800">👷 {tr.name}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums text-violet-800">{ft(tr.fee_total)}</td>
+                    <td colSpan={3} />
+                    <td className="py-1 pr-2 text-right tabular-nums text-violet-500">{tr.count}</td>
+                    <td className="py-1 font-mono text-[11px] text-violet-500">{tr.serials.join(", ")}</td>
+                  </tr>
+                ))}
+                </Fragment>
               ))}
-              </Fragment>
-            ))}
-            {fees.length === 0 && (
-              <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
-            )}
-          </tbody>
-        </table>
+              {fees.length === 0 && (
+                <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
       {costForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

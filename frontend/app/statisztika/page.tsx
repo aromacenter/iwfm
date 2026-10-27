@@ -205,62 +205,66 @@ export default function StatisztikaPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-2 font-semibold">👥 {t("stats.byEmployee")}</h2>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-slate-500">
-                    <th className="py-1.5 pr-2">{t("cash.worker")}</th>
-                    <th className="py-1.5 pr-2 text-right">{t("stats.net")}</th>
-                    <th className="py-1.5 pr-2 text-right">{t("stats.gross")}</th>
-                    <th className="py-1.5 text-right">{t("stats.count")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.by_employee.map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2 font-medium">{r.name}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">
-                        <button onClick={() => void openDrill("revenue", r.name)} title={t("stats.drillRevenueHint")} className="text-indigo-700 hover:underline">{ft(r.net)}</button>
-                      </td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">
-                        <button onClick={() => void openDrill("revenue", r.name)} title={t("stats.drillRevenueHint")} className="hover:underline">{ft(r.gross)}</button>
-                      </td>
-                      <td className="py-1.5 text-right tabular-nums text-slate-400">{r.count}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-500">
+                      <th className="py-1.5 pr-2">{t("cash.worker")}</th>
+                      <th className="py-1.5 pr-2 text-right">{t("stats.net")}</th>
+                      <th className="py-1.5 pr-2 text-right">{t("stats.gross")}</th>
+                      <th className="py-1.5 text-right">{t("stats.count")}</th>
                     </tr>
-                  ))}
-                  {stats.by_employee.length === 0 && (
-                    <tr><td colSpan={4} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {stats.by_employee.map((r, i) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="py-1.5 pr-2 font-medium">{r.name}</td>
+                        <td className="py-1.5 pr-2 text-right tabular-nums">
+                          <button onClick={() => void openDrill("revenue", r.name)} title={t("stats.drillRevenueHint")} className="text-indigo-700 hover:underline">{ft(r.net)}</button>
+                        </td>
+                        <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">
+                          <button onClick={() => void openDrill("revenue", r.name)} title={t("stats.drillRevenueHint")} className="hover:underline">{ft(r.gross)}</button>
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-400">{r.count}</td>
+                      </tr>
+                    ))}
+                    {stats.by_employee.length === 0 && (
+                      <tr><td colSpan={4} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-2 font-semibold">💸 {t("stats.costs")}</h2>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-slate-500">
-                    <th className="py-1.5 pr-2">{t("cash.worker")}</th>
-                    <th className="py-1.5 pr-2 text-right">{t("cash.expenses")}</th>
-                    <th className="py-1.5 pr-2 text-right">{t("cash.deposits")}</th>
-                    <th className="py-1.5 text-right">{t("cash.withdrawals")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.costs_by_user.map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2 font-medium">{r.name ?? "?"}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">
-                        <button onClick={() => r.name && void openDrill("expense", r.name)} title={t("stats.drillExpenseHint")} className="text-rose-700 hover:underline">{ft(r.expense)}</button>
-                      </td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-700">{ft(r.deposit)}</td>
-                      <td className="py-1.5 text-right tabular-nums text-amber-700">{ft(r.withdrawal)}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-500">
+                      <th className="py-1.5 pr-2">{t("cash.worker")}</th>
+                      <th className="py-1.5 pr-2 text-right">{t("cash.expenses")}</th>
+                      <th className="py-1.5 pr-2 text-right">{t("cash.deposits")}</th>
+                      <th className="py-1.5 text-right">{t("cash.withdrawals")}</th>
                     </tr>
-                  ))}
-                  {stats.costs_by_user.length === 0 && (
-                    <tr><td colSpan={4} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {stats.costs_by_user.map((r, i) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="py-1.5 pr-2 font-medium">{r.name ?? "?"}</td>
+                        <td className="py-1.5 pr-2 text-right tabular-nums">
+                          <button onClick={() => r.name && void openDrill("expense", r.name)} title={t("stats.drillExpenseHint")} className="text-rose-700 hover:underline">{ft(r.expense)}</button>
+                        </td>
+                        <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-700">{ft(r.deposit)}</td>
+                        <td className="py-1.5 text-right tabular-nums text-amber-700">{ft(r.withdrawal)}</td>
+                      </tr>
+                    ))}
+                    {stats.costs_by_user.length === 0 && (
+                      <tr><td colSpan={4} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -268,39 +272,41 @@ export default function StatisztikaPage() {
             <h2 className="mb-2 font-semibold">☕ {t("stats.byMachine")}</h2>
             <p className="mb-2 text-xs text-slate-400">{t("stats.byMachineHint")}</p>
             <div className="max-h-[480px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="sticky top-0 bg-white text-left text-xs uppercase text-slate-500">
-                    <th className="py-1.5 pr-2">{t("cons.machineBarcode")}</th>
-                    <th className="py-1.5 pr-2">{t("cons.machineName")}</th>
-                    <th className="py-1.5 pr-2 text-right">{t("stats.portions")}</th>
-                    <th className="py-1.5 pr-2 text-right">{t("stats.net")}</th>
-                    <th className="py-1.5 text-right">{t("stats.count")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.by_machine.map((r) => (
-                    <tr key={r.barcode} className="border-t border-slate-100">
-                      {/* kattintható gép-sorszám → teljes történet (5404e465) */}
-                      <td className="py-1.5 pr-2 font-mono text-xs">
-                        <button
-                          onClick={() => void openMachine(r.barcode)}
-                          className="text-indigo-700 hover:underline"
-                        >
-                          {r.barcode}
-                        </button>
-                      </td>
-                      <td className="py-1.5 pr-2">{r.name}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">{r.portions.toLocaleString("hu-HU")}</td>
-                      <td className="py-1.5 pr-2 text-right font-medium tabular-nums">{ft(r.net)}</td>
-                      <td className="py-1.5 text-right tabular-nums text-slate-400">{r.count}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="sticky top-0 bg-white text-left text-xs uppercase text-slate-500">
+                      <th className="py-1.5 pr-2">{t("cons.machineBarcode")}</th>
+                      <th className="py-1.5 pr-2">{t("cons.machineName")}</th>
+                      <th className="py-1.5 pr-2 text-right">{t("stats.portions")}</th>
+                      <th className="py-1.5 pr-2 text-right">{t("stats.net")}</th>
+                      <th className="py-1.5 text-right">{t("stats.count")}</th>
                     </tr>
-                  ))}
-                  {stats.by_machine.length === 0 && (
-                    <tr><td colSpan={5} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {stats.by_machine.map((r) => (
+                      <tr key={r.barcode} className="border-t border-slate-100">
+                        {/* kattintható gép-sorszám → teljes történet (5404e465) */}
+                        <td className="py-1.5 pr-2 font-mono text-xs">
+                          <button
+                            onClick={() => void openMachine(r.barcode)}
+                            className="text-indigo-700 hover:underline"
+                          >
+                            {r.barcode}
+                          </button>
+                        </td>
+                        <td className="py-1.5 pr-2">{r.name}</td>
+                        <td className="py-1.5 pr-2 text-right tabular-nums">{r.portions.toLocaleString("hu-HU")}</td>
+                        <td className="py-1.5 pr-2 text-right font-medium tabular-nums">{ft(r.net)}</td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-400">{r.count}</td>
+                      </tr>
+                    ))}
+                    {stats.by_machine.length === 0 && (
+                      <tr><td colSpan={5} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -322,28 +328,30 @@ export default function StatisztikaPage() {
                 <p className="py-2 text-sm text-slate-400">{t("stats.empty")}</p>
               ) : (
                 <div className="max-h-64 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs uppercase text-slate-500">
-                        <th className="py-1 pr-2">{t("stats.mhDate")}</th>
-                        <th className="py-1 pr-2">{t("stats.mhPartner")}</th>
-                        <th className="py-1 pr-2 text-right">{t("stats.mhCounter")}</th>
-                        <th className="py-1 pr-2 text-right">{t("stats.portions")}</th>
-                        <th className="py-1 text-right">{t("stats.net")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {machineHist.settlements.map((s, i) => (
-                        <tr key={i} className="border-t border-slate-100">
-                          <td className="whitespace-nowrap py-1 pr-2 text-xs">{new Date(s.date).toLocaleDateString("hu-HU")}</td>
-                          <td className="py-1 pr-2">{s.partner ?? "—"}</td>
-                          <td className="py-1 pr-2 text-right tabular-nums text-xs">{s.prev_counter.toLocaleString("hu-HU")} → {s.new_counter.toLocaleString("hu-HU")}</td>
-                          <td className="py-1 pr-2 text-right tabular-nums">{Math.round(s.portions).toLocaleString("hu-HU")}</td>
-                          <td className="py-1 text-right tabular-nums">{ft(s.net)}</td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase text-slate-500">
+                          <th className="py-1 pr-2">{t("stats.mhDate")}</th>
+                          <th className="py-1 pr-2">{t("stats.mhPartner")}</th>
+                          <th className="py-1 pr-2 text-right">{t("stats.mhCounter")}</th>
+                          <th className="py-1 pr-2 text-right">{t("stats.portions")}</th>
+                          <th className="py-1 text-right">{t("stats.net")}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {machineHist.settlements.map((s, i) => (
+                          <tr key={i} className="border-t border-slate-100">
+                            <td className="whitespace-nowrap py-1 pr-2 text-xs">{new Date(s.date).toLocaleDateString("hu-HU")}</td>
+                            <td className="py-1 pr-2">{s.partner ?? "—"}</td>
+                            <td className="py-1 pr-2 text-right tabular-nums text-xs">{s.prev_counter.toLocaleString("hu-HU")} → {s.new_counter.toLocaleString("hu-HU")}</td>
+                            <td className="py-1 pr-2 text-right tabular-nums">{Math.round(s.portions).toLocaleString("hu-HU")}</td>
+                            <td className="py-1 text-right tabular-nums">{ft(s.net)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -392,54 +400,58 @@ export default function StatisztikaPage() {
             {drill.rows.length === 0 ? (
               <p className="py-6 text-center text-sm text-slate-400">{t("stats.empty")}</p>
             ) : drill.kind === "revenue" ? (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-slate-500">
-                    <th className="py-1.5 pr-2">{t("cons.debtDate")}</th>
-                    <th className="py-1.5 pr-2">{t("cons.partner")}</th>
-                    <th className="py-1.5 pr-2 text-right">{t("stats.net")}</th>
-                    <th className="py-1.5 pr-2 text-right">{t("stats.gross")}</th>
-                    <th className="py-1.5">{t("cons.payment")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(drill.rows as { id: string; created_at: string; partner_name: string; total_net: number; total_gross: number; payment_method: string; invoiced: boolean }[]).map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2 whitespace-nowrap text-slate-500">{new Date(r.created_at).toLocaleDateString("hu-HU")}</td>
-                      <td className="py-1.5 pr-2 font-medium">{r.partner_name}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.total_net)}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{ft(r.total_gross)}</td>
-                      <td className="py-1.5 text-xs text-slate-500">
-                        {t(`cons.payments.${r.payment_method}`)}
-                        {r.invoiced && <span className="ml-1 rounded bg-emerald-100 px-1 text-emerald-800">✓</span>}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-500">
+                      <th className="py-1.5 pr-2">{t("cons.debtDate")}</th>
+                      <th className="py-1.5 pr-2">{t("cons.partner")}</th>
+                      <th className="py-1.5 pr-2 text-right">{t("stats.net")}</th>
+                      <th className="py-1.5 pr-2 text-right">{t("stats.gross")}</th>
+                      <th className="py-1.5">{t("cons.payment")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(drill.rows as { id: string; created_at: string; partner_name: string; total_net: number; total_gross: number; payment_method: string; invoiced: boolean }[]).map((r) => (
+                      <tr key={r.id} className="border-t border-slate-100">
+                        <td className="py-1.5 pr-2 whitespace-nowrap text-slate-500">{new Date(r.created_at).toLocaleDateString("hu-HU")}</td>
+                        <td className="py-1.5 pr-2 font-medium">{r.partner_name}</td>
+                        <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.total_net)}</td>
+                        <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{ft(r.total_gross)}</td>
+                        <td className="py-1.5 text-xs text-slate-500">
+                          {t(`cons.payments.${r.payment_method}`)}
+                          {r.invoiced && <span className="ml-1 rounded bg-emerald-100 px-1 text-emerald-800">✓</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-slate-500">
-                    <th className="py-1.5 pr-2">{t("cash.date")}</th>
-                    <th className="py-1.5 pr-2">{t("cash.type")}</th>
-                    <th className="py-1.5 pr-2 text-right">{t("cash.amount")}</th>
-                    <th className="py-1.5">{t("cash.details")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(drill.rows as { expense_date: string; amount_gross: number; entry_type: string; note: string | null; supplier: string | null; receipt_no: string | null }[]).map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2 whitespace-nowrap text-slate-500">{r.expense_date}</td>
-                      <td className="py-1.5 pr-2 text-xs">{t(`cash.types.${r.entry_type}`)}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.amount_gross)}</td>
-                      <td className="py-1.5 text-xs text-slate-500">
-                        {[r.note, r.supplier, r.receipt_no && `#${r.receipt_no}`].filter(Boolean).join(" · ")}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-500">
+                      <th className="py-1.5 pr-2">{t("cash.date")}</th>
+                      <th className="py-1.5 pr-2">{t("cash.type")}</th>
+                      <th className="py-1.5 pr-2 text-right">{t("cash.amount")}</th>
+                      <th className="py-1.5">{t("cash.details")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(drill.rows as { expense_date: string; amount_gross: number; entry_type: string; note: string | null; supplier: string | null; receipt_no: string | null }[]).map((r, i) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="py-1.5 pr-2 whitespace-nowrap text-slate-500">{r.expense_date}</td>
+                        <td className="py-1.5 pr-2 text-xs">{t(`cash.types.${r.entry_type}`)}</td>
+                        <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.amount_gross)}</td>
+                        <td className="py-1.5 text-xs text-slate-500">
+                          {[r.note, r.supplier, r.receipt_no && `#${r.receipt_no}`].filter(Boolean).join(" · ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

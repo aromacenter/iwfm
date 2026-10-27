@@ -44,6 +44,45 @@ async def create_portal_link(
     return {"token": partner.portal_token, "path": f"/portal/{partner.portal_token}"}
 
 
+@manage_router.post("/{partner_id}/portal-link/send")
+async def send_portal_link(
+    partner_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("partners")),
+):
+    """A partner-portál linkjének elküldése e-mailben a partner beállított
+    címeire (26e6a4fc) — a felületen megerősítő kérdés után."""
+    from app.core.config import get_settings
+    from app.services.wfm.email_service import load_smtp_config, send_email, split_addresses
+
+    partner = await _get_partner_or_404(db, partner_id)
+    emails = [e for e in split_addresses(partner.contact_email) if "@" in e]
+    if not emails:
+        raise HTTPException(status_code=422, detail={"code": "portal.no_email"})
+    config = await load_smtp_config(db)
+    if config is None:
+        raise HTTPException(status_code=422, detail={"code": "email.not_configured"})
+    if not partner.portal_token:
+        partner.portal_token = secrets.token_urlsafe(32)
+    url = f"{get_settings().frontend_origin.rstrip('/')}/portal/{partner.portal_token}"
+    body = (
+        f"Tisztelt Partnerünk!\n\n"
+        f"A(z) {partner.name} partner-oldalát ezen a linken érheti el — itt látható az aktuális "
+        f"készlet, a korábbi elszámolások és a fizetésre váró számlák:\n{url}\n\n"
+        "A link személyes, kérjük, ne adja tovább.\n\nÜdvözlettel"
+    )
+    ok = await send_email(config, ", ".join(emails), f"Partner-oldal — {partner.name}", body)
+    if not ok:
+        raise HTTPException(status_code=502, detail={"code": "email.send_failed"})
+    await record_audit(
+        db, actor=actor, action="partner.portal_link_sent", entity_type="partner",
+        entity_id=str(partner.id), detail={"to": emails}, request=request,
+    )
+    await db.commit()
+    return {"ok": True, "sent_to": emails}
+
+
 @manage_router.delete("/{partner_id}/portal-link")
 async def revoke_portal_link(
     partner_id: str,

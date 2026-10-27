@@ -156,78 +156,80 @@ export default function AutomatizalasokPage() {
       <p className="mb-4 text-sm text-slate-500">{t("auto.hint")}</p>
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              <th className="border-b border-slate-200 px-4 py-3">{t("auto.name")}</th>
-              <th className="border-b border-slate-200 px-4 py-3">{t("auto.trigger")}</th>
-              <th className="border-b border-slate-200 px-4 py-3">{t("auto.actions")}</th>
-              <th className="border-b border-slate-200 px-4 py-3">{t("auto.runs")}</th>
-              <th className="border-b border-slate-200 px-4 py-3">{t("auto.lastRun")}</th>
-              <th className="border-b border-slate-200 px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rules.map((r) => (
-              <tr key={r.id} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-3">
-                  <div className="font-medium">{r.name}</div>
-                  {r.last_error && (
-                    <div className="text-xs text-red-600" title={r.last_error}>
-                      ⚠ {r.last_error.slice(0, 60)}
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
-                    {t(`auto.triggers.${r.trigger.replace(/\./g, "_")}`)}
-                  </span>
-                  {r.conditions.length > 0 && (
-                    <span className="ml-1 text-xs text-slate-400">
-                      +{r.conditions.length} {t("auto.conditionsShort")}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-600">
-                  {r.actions.map((a, i) => (
-                    <span key={i} className="mr-1 rounded bg-slate-100 px-2 py-0.5">
-                      {t(`auto.actionTypes.${a.type}`)}
-                    </span>
-                  ))}
-                </td>
-                <td className="px-4 py-3 text-slate-500">{r.run_count}</td>
-                <td className="px-4 py-3 text-slate-500">{fmt(r.last_run_at)}</td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-1.5">
-                    <button
-                      onClick={() => toggleRule(r)}
-                      className={`rounded px-2 py-1 text-xs font-medium ${r.enabled ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "bg-slate-200 text-slate-600 hover:bg-slate-300"}`}
-                    >
-                      {r.enabled ? t("auto.on") : t("auto.off")}
-                    </button>
-                    <button
-                      onClick={() => { setError(null); setForm({ ...r }); }}
-                      title={t("common.edit")}
-                      className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => removeRule(r)}
-                      title={t("common.delete")}
-                      className="rounded border border-red-200 px-2 py-1 text-sm leading-none text-red-600 hover:bg-red-50"
-                    >
-                      🗑
-                    </button>
-                  </div>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
+                <th className="border-b border-slate-200 px-4 py-3">{t("auto.name")}</th>
+                <th className="border-b border-slate-200 px-4 py-3">{t("auto.trigger")}</th>
+                <th className="border-b border-slate-200 px-4 py-3">{t("auto.actions")}</th>
+                <th className="border-b border-slate-200 px-4 py-3">{t("auto.runs")}</th>
+                <th className="border-b border-slate-200 px-4 py-3">{t("auto.lastRun")}</th>
+                <th className="border-b border-slate-200 px-4 py-3"></th>
               </tr>
-            ))}
-            {rules.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("auto.noRules")}</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rules.map((r) => (
+                <tr key={r.id} className="border-b border-slate-100 last:border-0">
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{r.name}</div>
+                    {r.last_error && (
+                      <div className="text-xs text-red-600" title={r.last_error}>
+                        ⚠ {r.last_error.slice(0, 60)}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+                      {t(`auto.triggers.${r.trigger.replace(/\./g, "_")}`)}
+                    </span>
+                    {r.conditions.length > 0 && (
+                      <span className="ml-1 text-xs text-slate-400">
+                        +{r.conditions.length} {t("auto.conditionsShort")}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    {r.actions.map((a, i) => (
+                      <span key={i} className="mr-1 rounded bg-slate-100 px-2 py-0.5">
+                        {t(`auto.actionTypes.${a.type}`)}
+                      </span>
+                    ))}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">{r.run_count}</td>
+                  <td className="px-4 py-3 text-slate-500">{fmt(r.last_run_at)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-1.5">
+                      <button
+                        onClick={() => toggleRule(r)}
+                        className={`rounded px-2 py-1 text-xs font-medium ${r.enabled ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "bg-slate-200 text-slate-600 hover:bg-slate-300"}`}
+                      >
+                        {r.enabled ? t("auto.on") : t("auto.off")}
+                      </button>
+                      <button
+                        onClick={() => { setError(null); setForm({ ...r }); }}
+                        title={t("common.edit")}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => removeRule(r)}
+                        title={t("common.delete")}
+                        className="rounded border border-red-200 px-2 py-1 text-sm leading-none text-red-600 hover:bg-red-50"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {rules.length === 0 && (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("auto.noRules")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {form && catalog && (

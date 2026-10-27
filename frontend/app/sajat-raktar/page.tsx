@@ -221,24 +221,26 @@ export default function SajatRaktarPage() {
             {wh && wh.stock.length === 0 ? (
               <p className="py-6 text-center text-sm text-slate-400">{t("streq.emptyStock")}</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-slate-500">
-                    <th className="py-1.5">{t("stk.product")}</th>
-                    <th className="py-1.5 text-right">{t("streq.qty")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(wh?.stock ?? []).map((s) => (
-                    <tr key={s.product_id} className="border-t border-slate-100">
-                      <td className="py-1.5">{s.product_name}</td>
-                      <td className="py-1.5 text-right tabular-nums">
-                        {s.quantity.toLocaleString("hu-HU")} {s.unit}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-500">
+                      <th className="py-1.5">{t("stk.product")}</th>
+                      <th className="py-1.5 text-right">{t("streq.qty")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(wh?.stock ?? []).map((s) => (
+                      <tr key={s.product_id} className="border-t border-slate-100">
+                        <td className="py-1.5">{s.product_name}</td>
+                        <td className="py-1.5 text-right tabular-nums">
+                          {s.quantity.toLocaleString("hu-HU")} {s.unit}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 

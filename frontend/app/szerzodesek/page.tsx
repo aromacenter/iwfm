@@ -253,86 +253,90 @@ export default function SzerzodesekPage() {
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
             {t("contracts.noContractHint")}
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase text-slate-500">
-                <th className="border-b border-slate-200 px-4 py-3">{t("cons.partner")}</th>
-                <th className="border-b border-slate-200 px-4 py-3">{t("pinfo.machines")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orphans.map((r) => (
-                <tr key={r.partner_id} className="border-b border-slate-100 align-top last:border-0">
-                  <td className="px-4 py-2.5">
-                    {partnerBtn(r.partner_id, r.partner_name, r.partner_active)}
-                    {r.has_machine_terms && (
-                      <span
-                        title={t("contracts.machineTermsHint")}
-                        className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800"
-                      >
-                        ⚙ {t("contracts.machineTerms")}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5">{machineCell(r.machines)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-slate-500">
+                  <th className="border-b border-slate-200 px-4 py-3">{t("cons.partner")}</th>
+                  <th className="border-b border-slate-200 px-4 py-3">{t("pinfo.machines")}</th>
                 </tr>
-              ))}
-              {orphans.length === 0 && (
-                <tr><td colSpan={2} className="px-4 py-10 text-center text-slate-400">{t("contracts.listEmpty")}</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {orphans.map((r) => (
+                  <tr key={r.partner_id} className="border-b border-slate-100 align-top last:border-0">
+                    <td className="px-4 py-2.5">
+                      {partnerBtn(r.partner_id, r.partner_name, r.partner_active)}
+                      {r.has_machine_terms && (
+                        <span
+                          title={t("contracts.machineTermsHint")}
+                          className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800"
+                        >
+                          ⚙ {t("contracts.machineTerms")}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">{machineCell(r.machines)}</td>
+                  </tr>
+                ))}
+                {orphans.length === 0 && (
+                  <tr><td colSpan={2} className="px-4 py-10 text-center text-slate-400">{t("contracts.listEmpty")}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase text-slate-500">
-                <th className="border-b border-slate-200 px-4 py-3">{t("cons.partner")}</th>
-                <th className="border-b border-slate-200 px-4 py-3">{t("contracts.validity")}</th>
-                <th className="border-b border-slate-200 px-4 py-3">{t("contracts.termsCol")}</th>
-                <th className="border-b border-slate-200 px-4 py-3">{t("pinfo.machines")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => (
-                <tr key={c.id} className="border-b border-slate-100 align-top last:border-0">
-                  <td className="px-4 py-2.5">
-                    {partnerBtn(c.partner_id, c.partner_name, c.partner_active)}
-                    <a
-                      href={`/partnerek?contracts=${c.partner_id}`}
-                      title={t("contracts.editFromList")}
-                      className="ml-2 rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
-                    >
-                      ✏️
-                    </a>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-2.5">
-                    <span className={`mr-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[c.status] ?? ""}`}>
-                      {t(`contracts.status_${c.status}`)}
-                    </span>
-                    {fmtDate(c.valid_from)} → {c.valid_to ? fmtDate(c.valid_to) : t("contracts.openEnded")}
-                  </td>
-                  <td className="px-4 py-2.5 text-slate-600">
-                    {terms(c).length === 0 ? (
-                      <span className="text-slate-400">{t("contracts.noTerms")}</span>
-                    ) : (
-                      <ul className="list-disc space-y-0.5 pl-4">
-                        {terms(c).map((s, i) => (
-                          <li key={i}>{s}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {c.note && <div className="mt-1 text-xs italic text-slate-400">{c.note}</div>}
-                  </td>
-                  <td className="px-4 py-2.5">{machineCell(c.machines)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-slate-500">
+                  <th className="border-b border-slate-200 px-4 py-3">{t("cons.partner")}</th>
+                  <th className="border-b border-slate-200 px-4 py-3">{t("contracts.validity")}</th>
+                  <th className="border-b border-slate-200 px-4 py-3">{t("contracts.termsCol")}</th>
+                  <th className="border-b border-slate-200 px-4 py-3">{t("pinfo.machines")}</th>
                 </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-400">{t("contracts.listEmpty")}</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.id} className="border-b border-slate-100 align-top last:border-0">
+                    <td className="px-4 py-2.5">
+                      {partnerBtn(c.partner_id, c.partner_name, c.partner_active)}
+                      <a
+                        href={`/partnerek?contracts=${c.partner_id}`}
+                        title={t("contracts.editFromList")}
+                        className="ml-2 rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+                      >
+                        ✏️
+                      </a>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5">
+                      <span className={`mr-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[c.status] ?? ""}`}>
+                        {t(`contracts.status_${c.status}`)}
+                      </span>
+                      {fmtDate(c.valid_from)} → {c.valid_to ? fmtDate(c.valid_to) : t("contracts.openEnded")}
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-600">
+                      {terms(c).length === 0 ? (
+                        <span className="text-slate-400">{t("contracts.noTerms")}</span>
+                      ) : (
+                        <ul className="list-disc space-y-0.5 pl-4">
+                          {terms(c).map((s, i) => (
+                            <li key={i}>{s}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {c.note && <div className="mt-1 text-xs italic text-slate-400">{c.note}</div>}
+                    </td>
+                    <td className="px-4 py-2.5">{machineCell(c.machines)}</td>
+                  </tr>
+                ))}
+                {rows.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-400">{t("contracts.listEmpty")}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

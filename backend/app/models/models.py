@@ -2188,6 +2188,12 @@ class Settlement(Base):
     invoiced: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     billingo_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     billingo_status: Mapped[str | None] = mapped_column(String(16), nullable=True)  # created|error|none
+    # A számlázóban kapott bizonylatszám (pl. XPSZLA/000011) — a bizonylatokra
+    # kerül, ezzel vételezik be az árut (83ef525b).
+    billingo_document_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Kerekítési különbözet a bruttó végösszegen (készpénz/utánvét: 5 Ft-ra,
+    # egyébként egész Ft-ra) — a bizonylaton külön sorként látszik (09637c9b).
+    rounding_adjust: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Kintlévőség: none (nincs számlázva) | paid | outstanding
     payment_status: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # fizetési határidő

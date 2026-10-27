@@ -45,7 +45,26 @@ interface Register {
   balance: number;
   contractor: ContractorLedger | null;
   entries: CashEntry[];
+  movements?: CashMovement[];
 }
+
+interface CashMovement {
+  id: string;
+  date: string;
+  kind: "revenue" | "deposit" | "withdrawal" | "expense" | "transfer_in" | "transfer_out";
+  amount: number;
+  label: string | null;
+}
+
+const MOVE_CHIP: Record<string, string> = {
+  revenue: "bg-sky-100 text-sky-800",
+  deposit: "bg-emerald-100 text-emerald-800",
+  withdrawal: "bg-amber-100 text-amber-800",
+  expense: "bg-rose-100 text-rose-800",
+  transfer_in: "bg-indigo-100 text-indigo-800",
+  transfer_out: "bg-slate-200 text-slate-700",
+};
+const MOVE_PLUS = new Set(["revenue", "deposit", "transfer_in"]);
 
 interface Transfer {
   id: string;
@@ -280,38 +299,72 @@ export default function KasszaPage() {
             </div>
           </div>
         )}
-        {r.entries.length > 0 && (
-          <div className="max-h-80 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase text-slate-500">
-                  <th className="py-1.5 pr-2">{t("cash.date")}</th>
-                  <th className="py-1.5 pr-2">{t("cash.type")}</th>
-                  <th className="py-1.5 pr-2 text-right">{t("cash.amount")}</th>
-                  <th className="py-1.5 pr-2">{t("cash.details")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {r.entries.map((e) => (
-                  <tr key={e.id} className="border-t border-slate-100">
-                    <td className="py-1.5 pr-2 whitespace-nowrap">{e.expense_date}</td>
-                    <td className="py-1.5 pr-2">
-                      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${ENTRY_CHIP[e.entry_type]}`}>
-                        {t(`cash.types.${e.entry_type}`)}
-                      </span>
-                    </td>
-                    <td className={`py-1.5 pr-2 text-right font-medium tabular-nums ${e.entry_type === "deposit" ? "text-emerald-700" : "text-rose-700"}`}>
-                      {e.entry_type === "deposit" ? "+" : "−"}{ft(e.amount_gross)}
-                    </td>
-                    <td className="py-1.5 pr-2 text-xs text-slate-500">
-                      {[e.note, e.supplier, e.receipt_no && `#${e.receipt_no}`, e.created_by_name && `(${e.created_by_name})`]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </td>
+        {/* Az időszak ÖSSZES mozgása (dbd12c93): bevétel, betét/kivét/költség, átadások */}
+        {(r.movements?.length ?? 0) > 0 && (
+          <div className="mb-3">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{t("cash.movementsTitle")}</p>
+            <div className="max-h-96 overflow-auto rounded-xl border border-slate-200">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="px-2 py-1.5">{t("cash.date")}</th>
+                    <th className="px-2 py-1.5">{t("cash.type")}</th>
+                    <th className="px-2 py-1.5 text-right">{t("cash.amount")}</th>
+                    <th className="px-2 py-1.5">{t("cash.details")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {r.movements!.map((m) => (
+                    <tr key={`${m.kind}-${m.id}`} className="border-t border-slate-100">
+                      <td className="px-2 py-1.5 whitespace-nowrap text-xs">{m.date.slice(0, 16).replace("T", " ")}</td>
+                      <td className="px-2 py-1.5">
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${MOVE_CHIP[m.kind] ?? ""}`}>{t(`cash.kinds.${m.kind}`)}</span>
+                      </td>
+                      <td className={`px-2 py-1.5 text-right font-medium tabular-nums ${MOVE_PLUS.has(m.kind) ? "text-emerald-700" : "text-rose-700"}`}>
+                        {MOVE_PLUS.has(m.kind) ? "+" : "−"}{ft(m.amount)}
+                      </td>
+                      <td className="px-2 py-1.5 text-xs text-slate-500">{m.label ?? ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {r.entries.length > 0 && !(r.movements?.length) && (
+          <div className="max-h-80 overflow-y-auto">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="py-1.5 pr-2">{t("cash.date")}</th>
+                    <th className="py-1.5 pr-2">{t("cash.type")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("cash.amount")}</th>
+                    <th className="py-1.5 pr-2">{t("cash.details")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.entries.map((e) => (
+                    <tr key={e.id} className="border-t border-slate-100">
+                      <td className="py-1.5 pr-2 whitespace-nowrap">{e.expense_date}</td>
+                      <td className="py-1.5 pr-2">
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${ENTRY_CHIP[e.entry_type]}`}>
+                          {t(`cash.types.${e.entry_type}`)}
+                        </span>
+                      </td>
+                      <td className={`py-1.5 pr-2 text-right font-medium tabular-nums ${e.entry_type === "deposit" ? "text-emerald-700" : "text-rose-700"}`}>
+                        {e.entry_type === "deposit" ? "+" : "−"}{ft(e.amount_gross)}
+                      </td>
+                      <td className="py-1.5 pr-2 text-xs text-slate-500">
+                        {[e.note, e.supplier, e.receipt_no && `#${e.receipt_no}`, e.created_by_name && `(${e.created_by_name})`]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -448,39 +501,41 @@ export default function KasszaPage() {
                 </span>
               ))}
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase text-slate-500">
-                  <th className="py-1.5 pr-2">{t("cash.worker")}</th>
-                  <th className="py-1.5 pr-2 text-right">{t("cash.revenue")}</th>
-                  <th className="py-1.5 pr-2 text-right">{t("cash.deposits")}</th>
-                  <th className="py-1.5 pr-2 text-right">{t("cash.withdrawals")}</th>
-                  <th className="py-1.5 pr-2 text-right">{t("cash.expenses")}</th>
-                  <th className="py-1.5 pr-2 text-right">{t("cash.balance")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {overview.registers.map((r) => (
-                  <tr key={r.user_id} className="border-t border-slate-100">
-                    <td className="py-1.5 pr-2">
-                      <button
-                        onClick={() => setDrillUser(drillUser === r.user_id ? "" : r.user_id)}
-                        className="font-medium text-indigo-700 hover:underline"
-                      >
-                        {r.user_name ?? r.user_id.slice(0, 8)}
-                      </button>
-                    </td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.cash_revenue)}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-700">+{ft(r.deposits)}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums text-amber-700">−{ft(r.withdrawals)}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums text-rose-700">−{ft(r.expenses)}</td>
-                    <td className={`py-1.5 pr-2 text-right font-semibold tabular-nums ${r.balance >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                      {ft(r.balance)}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="py-1.5 pr-2">{t("cash.worker")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("cash.revenue")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("cash.deposits")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("cash.withdrawals")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("cash.expenses")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("cash.balance")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {overview.registers.map((r) => (
+                    <tr key={r.user_id} className="border-t border-slate-100">
+                      <td className="py-1.5 pr-2">
+                        <button
+                          onClick={() => setDrillUser(drillUser === r.user_id ? "" : r.user_id)}
+                          className="font-medium text-indigo-700 hover:underline"
+                        >
+                          {r.user_name ?? r.user_id.slice(0, 8)}
+                        </button>
+                      </td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.cash_revenue)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-700">+{ft(r.deposits)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-amber-700">−{ft(r.withdrawals)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-rose-700">−{ft(r.expenses)}</td>
+                      <td className={`py-1.5 pr-2 text-right font-semibold tabular-nums ${r.balance >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                        {ft(r.balance)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

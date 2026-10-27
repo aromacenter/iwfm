@@ -1353,6 +1353,8 @@ class SettlementOut(BaseModel):
     invoiced: bool
     billingo_document_id: str | None
     billingo_status: str | None
+    billingo_document_number: str | None = None
+    rounding_adjust: float | None = None
     has_signature: bool = False
     receipt_sent_at: datetime | None = None
     invoice_emails: str | None = None  # számla-címzettek erre az elszámolásra (b08956c7)
@@ -1373,6 +1375,17 @@ class SettlementOut(BaseModel):
 
 def _money(value: float) -> float:
     return round(value, 2)
+
+
+def round_gross(value: float, payment_method: str) -> float:
+    """A bruttó végösszeg kerekítése a magyar szabály szerint: készpénz és
+    utánvét 5 Ft-ra, minden más egész forintra (fél felfelé)."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    d = Decimal(str(value))
+    if payment_method in ("cash", "cod"):
+        return float((d / 5).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * 5)
+    return float(d.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _line_out(line: SettlementLine) -> SettlementLineOut:
@@ -1406,6 +1419,8 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         invoiced=s.invoiced,
         billingo_document_id=s.billingo_document_id,
         billingo_status=s.billingo_status,
+        billingo_document_number=s.billingo_document_number,
+        rounding_adjust=s.rounding_adjust,
         has_signature=bool(s.partner_signature),
         receipt_sent_at=s.receipt_sent_at,
         payment_status=s.payment_status,
@@ -2094,6 +2109,11 @@ async def create_settlement(
             amount_net = _money(portions * unit_price)
             cross_portions = None
         line_vat = 0 if (body.no_vat and product.is_consignment) else product.vat_percent
+        # Gép-soros elszámolásnál az összeg a gép (szerződéses) adagárával
+        # készül — a bizonylaton is EZ az ár szerepeljen, ne a termék
+        # alapára (4061c36e: 120 Ft-os adag mellett 200 Ft látszott).
+        if product.is_consignment and portions and abs(amount_net / portions - unit_price) > 0.005:
+            unit_price = _money(amount_net / portions)
         amount_gross = _money(amount_net * (1 + line_vat / 100))
         total_net += amount_net
         total_gross += amount_gross
@@ -2128,22 +2148,31 @@ async def create_settlement(
             if shortage_kg >= 0.05:
                 # A képviselő átírhatja a hiány kg-árát; None → beszerzési
                 # ár, annak híján az adagár kg-egyenértéke.
+                default_kg_price = product.purchase_price or (
+                    unit_price * 1000.0 / max(product.grams_per_portion, 1)
+                )
                 kg_price = (
-                    line_in.kg_price
-                    if line_in.kg_price is not None
-                    else product.purchase_price or (
-                        unit_price * 1000.0 / max(product.grams_per_portion, 1)
-                    )
+                    line_in.kg_price if line_in.kg_price is not None else default_kg_price
                 )
                 short_net = _money(shortage_kg * kg_price)
+                # Elengedett hiány (0 Ft-ra írva): a bizonylaton kedvezményként
+                # látszik, mennyit ért volna (4061c36e — „érezze, hogy kapott”)
+                if short_net <= 0 and default_kg_price > 0:
+                    waived = _money(shortage_kg * default_kg_price)
+                    short_name = (
+                        f"Készlethiány — {product.name} ({shortage_kg:.2f} kg) — "
+                        f"kedvezményként elengedve: {waived:,.0f} Ft".replace(",", " ")
+                    )
+                else:
+                    short_name = (
+                        f"Készlethiány — {product.name} "
+                        f"({shortage_kg:.2f} kg, számláló-ellenőrzés)"
+                    )
                 db.add(
                     SettlementLine(
                         settlement_id=settlement.id,
                         product_id=product.id,
-                        product_name=(
-                            f"Készlethiány — {product.name} "
-                            f"({shortage_kg:.2f} kg, számláló-ellenőrzés)"
-                        ),
+                        product_name=short_name[:256],
                         previous_qty=0.0, physical_qty=0.0,
                         consumed_qty=0.0, portions=1.0,
                         price_per_portion=short_net, vat_percent=line_vat,
@@ -2246,9 +2275,10 @@ async def create_settlement(
                 settlement_id=settlement.id, note="Elszámoláskor átadva",
                 actor_user_id=actor.id,
             ))
-            # Számlára kerülő norma a szerződésen: az átadott kávé 0 Ft-os
-            # tételként a számlára kerül (a lefőzhető adagok a megjegyzésben).
-            if invoice_norma_contract is not None:
+            # Az átadott kávé 0 Ft-os tételként MINDIG a bizonylatra és a
+            # számlára kerül (3075a933: „8 kg utólagos adagelszámolásra”) —
+            # a normás szerződés csak a lefőzhető adagok megjegyzését adja.
+            if True:
                 db.add(SettlementLine(
                     settlement_id=settlement.id,
                     product_id=product.id,
@@ -2386,7 +2416,12 @@ async def create_settlement(
         settlement.note = f"{body.note}\n{aszf_line}" if body.note else aszf_line
 
     settlement.total_net = _money(total_net)
-    settlement.total_gross = _money(total_gross)
+    exact_gross = _money(total_gross)
+    rounded_gross = round_gross(exact_gross, body.payment_method)
+    settlement.total_gross = rounded_gross
+    settlement.rounding_adjust = (
+        _money(rounded_gross - exact_gross) if abs(rounded_gross - exact_gross) >= 0.005 else None
+    )
 
     # Tartozás-görgetés: nyitott egyenleg pillanatképe + a fizetett összeg.
     settlement.debt_before = await _partner_debt(db, partner.id, exclude_id=settlement.id)
@@ -3627,6 +3662,19 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement, width_mm: int |
 
     previous_at = await _previous_settlement_at(db, s)
     receipt_no = _receipt_no(s)
+    if s.invoiced and s.billingo_document_id and not s.billingo_document_number:
+        # régebbi elszámolás: a számlázói bizonylatszámot utólag kérjük le
+        try:
+            from app.services.wfm.billingo_service import fetch_document_number
+
+            num = await fetch_document_number(
+                db, s.billingo_document_id, s.invoicing_company or (partner.invoicing_company if partner else None)
+            )
+            if num:
+                s.billingo_document_number = num
+                await db.commit()
+        except Exception:
+            pass
     pdf = (build_settlement_receipt_pdf if width_mm else build_settlement_pdf)(
         {
             "receipt_no": receipt_no,
@@ -3640,6 +3688,8 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement, width_mm: int |
             "payment_method": s.payment_method,
             "invoiced": s.invoiced,
             "billingo_document_id": s.billingo_document_id,
+            "billingo_document_number": s.billingo_document_number,
+            "rounding_adjust": s.rounding_adjust,
             "note": s.note,
             "lines": [
                 {

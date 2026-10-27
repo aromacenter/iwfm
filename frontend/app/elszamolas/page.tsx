@@ -73,6 +73,8 @@ interface Settlement {
   invoiced: boolean;
   billingo_status: string | null;
   billingo_document_id?: string | null;
+  billingo_document_number?: string | null;
+  rounding_adjust?: number | null;
   has_signature: boolean;
   receipt_sent_at: string | null;
   debt_before: number | null;
@@ -324,7 +326,8 @@ export default function ElszamolasPage() {
 
   const fmt = (dt: string) =>
     new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "short" });
-  const ft = (n: number) => `${n.toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
+  // Mindenhol egész forint (fa818b11): a régi, tizedes végösszegek is kerekítve látszanak
+  const ft = (n: number) => `${Math.round(n).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
 
   // UGYFEL (nincs kihelyezett targyi-eszkoz gepunk): elszamolas nincs -
   // csak azonnali ertekesites es kiszallitas (a mentest a backend is vedi).
@@ -361,7 +364,7 @@ export default function ElszamolasPage() {
   // Késedelmi felár kikapcsolása erre az elszámolásra (9c7f54e5)
   const [lateFeeWaived, setLateFeeWaived] = useState(false);
   // Bizonylat nyomtatása az elszámolás végén: A4 / 50 mm / 80 mm nyugta / nem (11e969d6)
-  const [printChoice, setPrintChoice] = useState<{ id: string; label: string; download?: boolean } | null>(null);
+  const [printChoice, setPrintChoice] = useState<{ id: string; label: string; download?: boolean; docId?: string | null; docNo?: string | null } | null>(null);
 
   const loadCtx = useCallback(() => {
     setDiscountAll(false);
@@ -1396,7 +1399,7 @@ export default function ElszamolasPage() {
 
   async function downloadReceipt(s: Settlement) {
     // az előzményekből is választható a formátum (A4 letöltés / 50 / 80 mm nyomtatás)
-    setPrintChoice({ id: s.id, label: `${s.partner_name ?? ""} · ${ft(s.total_gross)}`, download: true });
+    setPrintChoice({ id: s.id, label: `${s.partner_name ?? ""} · ${ft(s.total_gross)}`, download: true, docId: s.billingo_document_id ?? null, docNo: s.billingo_document_number ?? null });
   }
 
   async function printReceipt(format: "a4" | "50" | "80") {
@@ -1435,8 +1438,10 @@ export default function ElszamolasPage() {
       setSignName("");
       setSignEmail("");
       loadHistory();
-      // utolsó lépés: kinyomtatjuk-e a bizonylatot (A4 / 50 / 80 mm)?
-      setPrintChoice({ id: signedId, label: signedLabel });
+      // utolsó lépés: kinyomtatjuk-e a bizonylatot (A4 / 50 / 80 mm)? — a
+      // Billingó-bizonylat is innen tölthető le (83ef525b)
+      const fresh = history.find((h) => h.id === signedId);
+      setPrintChoice({ id: signedId, label: signedLabel, docId: fresh?.billingo_document_id ?? signing.billingo_document_id ?? null, docNo: fresh?.billingo_document_number ?? null });
     } catch (err) {
       toast(errorMessage(err), "error");
     } finally {
@@ -2001,35 +2006,37 @@ export default function ElszamolasPage() {
       {partnerId && ctx && showDebt && ctx.debt_items.length > 0 && (
         <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm shadow-sm">
           <div className="mb-1.5 font-semibold text-rose-800">{t("cons.debtDetailTitle")}</div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-left uppercase text-rose-400">
-                <th className="py-1 pr-3">{t("cons.debtDate")}</th>
-                <th className="py-1 pr-3 text-right">{t("cons.totalGross")}</th>
-                <th className="py-1 pr-3 text-right">{t("cons.paid")}</th>
-                <th className="py-1 pr-3 text-right">{t("cons.debtRemaining")}</th>
-                <th className="py-1">{t("cons.debtDue")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ctx.debt_items.map((d) => (
-                <tr key={d.settlement_id} className="border-t border-rose-100 text-rose-900">
-                  <td className="py-1 pr-3">{fmt(d.created_at)}</td>
-                  <td className="py-1 pr-3 text-right">{ft(Math.round(d.total_gross))}</td>
-                  <td className="py-1 pr-3 text-right">{ft(Math.round(d.paid_amount))}</td>
-                  <td className="py-1 pr-3 text-right font-semibold">{ft(Math.round(d.remaining))}</td>
-                  <td className="py-1">
-                    {d.due_date ?? "—"}
-                    {d.due_date && new Date(d.due_date) < new Date() && (
-                      <span className="ml-1 rounded bg-rose-200 px-1 py-0.5 text-[10px] font-semibold">
-                        {t("cons.debtOverdue")}
-                      </span>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left uppercase text-rose-400">
+                  <th className="py-1 pr-3">{t("cons.debtDate")}</th>
+                  <th className="py-1 pr-3 text-right">{t("cons.totalGross")}</th>
+                  <th className="py-1 pr-3 text-right">{t("cons.paid")}</th>
+                  <th className="py-1 pr-3 text-right">{t("cons.debtRemaining")}</th>
+                  <th className="py-1">{t("cons.debtDue")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {ctx.debt_items.map((d) => (
+                  <tr key={d.settlement_id} className="border-t border-rose-100 text-rose-900">
+                    <td className="py-1 pr-3">{fmt(d.created_at)}</td>
+                    <td className="py-1 pr-3 text-right">{ft(Math.round(d.total_gross))}</td>
+                    <td className="py-1 pr-3 text-right">{ft(Math.round(d.paid_amount))}</td>
+                    <td className="py-1 pr-3 text-right font-semibold">{ft(Math.round(d.remaining))}</td>
+                    <td className="py-1">
+                      {d.due_date ?? "—"}
+                      {d.due_date && new Date(d.due_date) < new Date() && (
+                        <span className="ml-1 rounded bg-rose-200 px-1 py-0.5 text-[10px] font-semibold">
+                          {t("cons.debtOverdue")}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -2106,170 +2113,172 @@ export default function ElszamolasPage() {
             </label>
           </div>
           <p className="px-4 pb-2 text-xs text-slate-400">{t("cons.machinesHint")}</p>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                <th className="px-4 py-2.5">{t("cons.machineBarcode")}</th>
-                <th className="px-4 py-2.5">{t("cons.machineName")}</th>
-                <th className="px-4 py-2.5">{t("cons.machinePrevAt")}</th>
-                <th className="px-4 py-2.5">{t("cons.machinePrevCounter")}</th>
-                <th className="px-4 py-2.5">{t("cons.machineNewCounter")}</th>
-                <th className="px-4 py-2.5">{t("cons.machineBrewed")}</th>
-                <th className="px-4 py-2.5">{t("cons.machineService")}</th>
-                <th className="px-4 py-2.5 text-right">{t("cons.portionPrice")}</th>
-                <th className="px-4 py-2.5 text-right">{t("cons.amountNet")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {machinePreview.rows.map((m) => (
-                <tr key={m.asset_id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-4 py-2.5 font-mono text-xs">{m.barcode}</td>
-                  <td className="px-4 py-2.5">
-                    <div className="font-medium">
-                      {m.name}
-                      {m.swapped && (
-                        <span
-                          title={t("cons.swappedHint")}
-                          className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
-                        >
-                          🔁 {t("cons.swapped")}
-                        </span>
-                      )}
-                    </div>
-                    <SearchSelect
-                      items={[
-                        // a gép csak KÁVÉT (bizományos terméket) főzhet — a
-                        // darabra menő egyéb termék (pl. tejszín) nem opció
-                        ...stock.filter((s) => s.is_consignment).map((s) => ({
-                          id: s.product_id, label: s.product_name,
-                          sublabel: contractedIds.has(s.product_id)
-                            ? `☕ ${t("cons.contractedCoffee")}`
-                            : t("cons.partnerStockGroup"),
-                          keywords: products.find((x) => x.id === s.product_id)?.code ?? null,
-                        })),
-                        ...activeProducts
-                          .filter((p) => p.is_consignment && !stock.some((s) => s.product_id === p.id))
-                          .map((p) => ({
-                            id: p.id, label: p.name,
-                            sublabel: contractedIds.has(p.id) ? `☕ ${t("cons.contractedCoffee")}` : p.category,
-                            keywords: p.code,
-                          })),
-                      ]}
-                      value={machineProducts[m.asset_id] ?? ""}
-                      onChange={(id) =>
-                        setMachineProducts({ ...machineProducts, [m.asset_id]: id })
-                      }
-                      placeholder={t("cons.machineProductChoose")}
-                      className="mt-0.5 max-w-52 text-xs"
-                    />
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-slate-500">
-                    {m.last_settled_at ? fmt(m.last_settled_at) : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 tabular-nums text-slate-600">{m.displayPrev}</td>
-                  <td className="px-4 py-2.5">
-                    {m.counter_count > 1 ? (
-                      <div className="space-y-1">
-                        {machineInputs[m.asset_id]?.newCounters.map((v, i) => {
-                          const d = m.detail?.[i];
-                          return (
-                            <div key={i} className="flex items-center gap-2">
-                              <span
-                                className="w-32 shrink-0 truncate text-right text-xs tabular-nums text-slate-500"
-                                title={m.counter_names?.[i] ?? undefined}
-                              >
-                                {(m.counter_names?.[i]?.trim() || `${i + 1}.`)} · {m.counters?.[i] ?? 0} →
-                              </span>
-                              <input
-                                type="number" min={0}
-                                data-counter-input={`${m.asset_id}-${i}`}
-                                value={v}
-                                onChange={(e) => {
-                                  const inp = machineInputs[m.asset_id];
-                                  const next = [...inp.newCounters];
-                                  next[i] = e.target.value;
-                                  setMachineInputs({ ...machineInputs, [m.asset_id]: { ...inp, newCounters: next } });
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") { e.preventDefault(); jumpToNextCounter(e.currentTarget); }
-                                }}
-                                placeholder={String(m.counters?.[i] ?? "")}
-                                className="w-20 rounded-lg border border-slate-300 px-2 py-1.5"
-                              />
-                              <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">
-                                {d && d.nv !== null
-                                  ? d.control
-                                    ? m.filled && Math.abs(d.diff - m.brewed) < 0.5
-                                      ? `${d.diff} · ${t("cons.controlCounter")} ✓`
-                                      : `${d.diff} · ${t("cons.controlCounter")} ⚠️ (${m.brewed})`
-                                    : d.price !== null
-                                      ? `${d.diff} × ${Math.round(d.price * 100) / 100} Ft = ${ft(Math.round(d.amount))}`
-                                      : `${d.diff} ${t("cons.portionsShort")}`
-                                  : ""}
-                              </span>
-                            </div>
-                          );
-                        })}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                  <th className="px-4 py-2.5">{t("cons.machineBarcode")}</th>
+                  <th className="px-4 py-2.5">{t("cons.machineName")}</th>
+                  <th className="px-4 py-2.5">{t("cons.machinePrevAt")}</th>
+                  <th className="px-4 py-2.5">{t("cons.machinePrevCounter")}</th>
+                  <th className="px-4 py-2.5">{t("cons.machineNewCounter")}</th>
+                  <th className="px-4 py-2.5">{t("cons.machineBrewed")}</th>
+                  <th className="px-4 py-2.5">{t("cons.machineService")}</th>
+                  <th className="px-4 py-2.5 text-right">{t("cons.portionPrice")}</th>
+                  <th className="px-4 py-2.5 text-right">{t("cons.amountNet")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {machinePreview.rows.map((m) => (
+                  <tr key={m.asset_id} className="border-b border-slate-100 last:border-0">
+                    <td className="px-4 py-2.5 font-mono text-xs">{m.barcode}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium">
+                        {m.name}
+                        {m.swapped && (
+                          <span
+                            title={t("cons.swappedHint")}
+                            className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
+                          >
+                            🔁 {t("cons.swapped")}
+                          </span>
+                        )}
                       </div>
-                    ) : (
+                      <SearchSelect
+                        items={[
+                          // a gép csak KÁVÉT (bizományos terméket) főzhet — a
+                          // darabra menő egyéb termék (pl. tejszín) nem opció
+                          ...stock.filter((s) => s.is_consignment).map((s) => ({
+                            id: s.product_id, label: s.product_name,
+                            sublabel: contractedIds.has(s.product_id)
+                              ? `☕ ${t("cons.contractedCoffee")}`
+                              : t("cons.partnerStockGroup"),
+                            keywords: products.find((x) => x.id === s.product_id)?.code ?? null,
+                          })),
+                          ...activeProducts
+                            .filter((p) => p.is_consignment && !stock.some((s) => s.product_id === p.id))
+                            .map((p) => ({
+                              id: p.id, label: p.name,
+                              sublabel: contractedIds.has(p.id) ? `☕ ${t("cons.contractedCoffee")}` : p.category,
+                              keywords: p.code,
+                            })),
+                        ]}
+                        value={machineProducts[m.asset_id] ?? ""}
+                        onChange={(id) =>
+                          setMachineProducts({ ...machineProducts, [m.asset_id]: id })
+                        }
+                        placeholder={t("cons.machineProductChoose")}
+                        className="mt-0.5 max-w-52 text-xs"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-slate-500">
+                      {m.last_settled_at ? fmt(m.last_settled_at) : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 tabular-nums text-slate-600">{m.displayPrev}</td>
+                    <td className="px-4 py-2.5">
+                      {m.counter_count > 1 ? (
+                        <div className="space-y-1">
+                          {machineInputs[m.asset_id]?.newCounters.map((v, i) => {
+                            const d = m.detail?.[i];
+                            return (
+                              <div key={i} className="flex items-center gap-2">
+                                <span
+                                  className="w-32 shrink-0 truncate text-right text-xs tabular-nums text-slate-500"
+                                  title={m.counter_names?.[i] ?? undefined}
+                                >
+                                  {(m.counter_names?.[i]?.trim() || `${i + 1}.`)} · {m.counters?.[i] ?? 0} →
+                                </span>
+                                <input
+                                  type="number" min={0}
+                                  data-counter-input={`${m.asset_id}-${i}`}
+                                  value={v}
+                                  onChange={(e) => {
+                                    const inp = machineInputs[m.asset_id];
+                                    const next = [...inp.newCounters];
+                                    next[i] = e.target.value;
+                                    setMachineInputs({ ...machineInputs, [m.asset_id]: { ...inp, newCounters: next } });
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") { e.preventDefault(); jumpToNextCounter(e.currentTarget); }
+                                  }}
+                                  placeholder={String(m.counters?.[i] ?? "")}
+                                  className="w-20 rounded-lg border border-slate-300 px-2 py-1.5"
+                                />
+                                <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">
+                                  {d && d.nv !== null
+                                    ? d.control
+                                      ? m.filled && Math.abs(d.diff - m.brewed) < 0.5
+                                        ? `${d.diff} · ${t("cons.controlCounter")} ✓`
+                                        : `${d.diff} · ${t("cons.controlCounter")} ⚠️ (${m.brewed})`
+                                      : d.price !== null
+                                        ? `${d.diff} × ${Math.round(d.price * 100) / 100} Ft = ${ft(Math.round(d.amount))}`
+                                        : `${d.diff} ${t("cons.portionsShort")}`
+                                    : ""}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <input
+                          type="number" min={0}
+                          data-counter-input={m.asset_id}
+                          value={machineInputs[m.asset_id]?.newCounter ?? ""}
+                          onChange={(e) =>
+                            setMachineInputs({
+                              ...machineInputs,
+                              [m.asset_id]: { ...machineInputs[m.asset_id], newCounter: e.target.value },
+                            })
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { e.preventDefault(); jumpToNextCounter(e.currentTarget); }
+                          }}
+                          placeholder={String(m.prev_counter)}
+                          className={`w-24 rounded-lg border px-2 py-1.5 ${m.belowPrev ? "border-rose-400 bg-rose-50" : "border-slate-300"}`}
+                        />
+                      )}
+                      {m.belowPrev && (
+                        <div className="mt-0.5 text-xs text-rose-600">{t("cons.machineBelowPrev")}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 tabular-nums">
+                      {m.filled ? m.brewed : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5">
                       <input
                         type="number" min={0}
-                        data-counter-input={m.asset_id}
-                        value={machineInputs[m.asset_id]?.newCounter ?? ""}
+                        value={machineInputs[m.asset_id]?.service ?? ""}
                         onChange={(e) =>
                           setMachineInputs({
                             ...machineInputs,
-                            [m.asset_id]: { ...machineInputs[m.asset_id], newCounter: e.target.value },
+                            [m.asset_id]: { ...machineInputs[m.asset_id], service: e.target.value },
                           })
                         }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") { e.preventDefault(); jumpToNextCounter(e.currentTarget); }
-                        }}
-                        placeholder={String(m.prev_counter)}
-                        className={`w-24 rounded-lg border px-2 py-1.5 ${m.belowPrev ? "border-rose-400 bg-rose-50" : "border-slate-300"}`}
+                        placeholder="0"
+                        title={t("cons.machineServiceHint")}
+                        className="w-16 rounded-lg border border-slate-300 px-2 py-1.5"
                       />
-                    )}
-                    {m.belowPrev && (
-                      <div className="mt-0.5 text-xs text-rose-600">{t("cons.machineBelowPrev")}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 tabular-nums">
-                    {m.filled ? m.brewed : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <input
-                      type="number" min={0}
-                      value={machineInputs[m.asset_id]?.service ?? ""}
-                      onChange={(e) =>
-                        setMachineInputs({
-                          ...machineInputs,
-                          [m.asset_id]: { ...machineInputs[m.asset_id], service: e.target.value },
-                        })
-                      }
-                      placeholder="0"
-                      title={t("cons.machineServiceHint")}
-                      className="w-16 rounded-lg border border-slate-300 px-2 py-1.5"
-                    />
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">
-                    {/* Az adagár NEM módosítható itt — a szerződésben (vagy a
-                        partner-áraknál) beállított ár érvényes minden
-                        számlálóra. */}
-                    <span title={t("cons.fixedPriceHint")}>
-                      {m.contractDefault != null
-                        ? String(m.contractDefault)
-                        : m.autoPrice !== null
-                          ? String(m.autoPrice)
-                          : "?"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-medium tabular-nums">
-                    {m.filled ? (m.price !== null ? ft(Math.round(m.amount)) : "?") : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">
+                      {/* Az adagár NEM módosítható itt — a szerződésben (vagy a
+                          partner-áraknál) beállított ár érvényes minden
+                          számlálóra. */}
+                      <span title={t("cons.fixedPriceHint")}>
+                        {m.contractDefault != null
+                          ? String(m.contractDefault)
+                          : m.autoPrice !== null
+                            ? String(m.autoPrice)
+                            : "?"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                      {m.filled ? (m.price !== null ? ft(Math.round(m.amount)) : "?") : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -2778,181 +2787,183 @@ export default function ElszamolasPage() {
         ]}
       />
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              {canDelete && (
-              <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={history.length > 0 && history.every((s) => selected.has(s.id))}
-                  onChange={(e) =>
-                    setSelected(e.target.checked ? new Set(history.map((s) => s.id)) : new Set())
-                  }
-                  className="h-4 w-4"
-                />
-              </th>
-              )}
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.date")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.partner")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.payment")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("cons.total")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.map((s) => (
-              <tr key={s.id} className="border-b border-slate-100 last:border-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
                 {canDelete && (
-                <td className="px-3 py-3">
+                <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                   <input
                     type="checkbox"
-                    checked={selected.has(s.id)}
-                    onChange={() => toggleSelect(s.id)}
+                    checked={history.length > 0 && history.every((s) => selected.has(s.id))}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(history.map((s) => s.id)) : new Set())
+                    }
                     className="h-4 w-4"
                   />
-                </td>
+                </th>
                 )}
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {fmt(s.created_at)}
-                  <div className="text-xs text-slate-400">
-                    {s.previous_at
-                      ? t("cons.prevSettlementAt", { date: fmt(s.previous_at) })
-                      : t("cons.prevSettlementFirst")}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => setInfoPartner(s.partner_id)}
-                    className="text-left font-medium text-indigo-700 hover:underline"
-                  >
-                    {s.partner_name}
-                  </button>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <span>{s.settled_by_name}</span>
-                    {s.invoicing_company && (
-                      <span
-                        title={COMPANIES[s.invoicing_company]}
-                        className={`rounded px-1 py-0.5 text-[10px] font-medium ${COMPANY_CHIP[s.invoicing_company]}`}
-                      >
-                        {COMPANY_SHORT[s.invoicing_company]}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
-                <td className="px-4 py-3 text-right font-medium">
-                  {ft(s.total_gross)}
-                  {s.paid_amount !== null &&
-                    s.total_gross + (s.debt_before ?? 0) - s.paid_amount > 0.5 && (
-                    <div
-                      title={t("cons.debtLeftHint")}
-                      className="mt-0.5 text-xs font-semibold text-rose-600"
-                    >
-                      {t("cons.debtLeft", {
-                        amount: Math.round(
-                          s.total_gross + (s.debt_before ?? 0) - s.paid_amount,
-                        ).toLocaleString("hu-HU"),
-                      })}
-                    </div>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.date")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.partner")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.payment")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("cons.total")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((s) => (
+                <tr key={s.id} className="border-b border-slate-100 last:border-0">
+                  {canDelete && (
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(s.id)}
+                      onChange={() => toggleSelect(s.id)}
+                      className="h-4 w-4"
+                    />
+                  </td>
                   )}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1.5">
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {fmt(s.created_at)}
+                    <div className="text-xs text-slate-400">
+                      {s.previous_at
+                        ? t("cons.prevSettlementAt", { date: fmt(s.previous_at) })
+                        : t("cons.prevSettlementFirst")}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
                     <button
-                      onClick={() => downloadReceipt(s)}
-                      title={`${t("cons.receiptPdf")} — ${t("cons.printHint")}`}
-                      className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                      onClick={() => setInfoPartner(s.partner_id)}
+                      className="text-left font-medium text-indigo-700 hover:underline"
                     >
-                      📄🖨
+                      {s.partner_name}
                     </button>
-                    {s.billingo_document_id && (
-                      <button
-                        onClick={() => void openInvoiceLink(s.id)}
-                        title={t("cons.invoiceLinkHint")}
-                        className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none text-emerald-700 hover:bg-emerald-50"
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <span>{s.settled_by_name}</span>
+                      {s.invoicing_company && (
+                        <span
+                          title={COMPANIES[s.invoicing_company]}
+                          className={`rounded px-1 py-0.5 text-[10px] font-medium ${COMPANY_CHIP[s.invoicing_company]}`}
+                        >
+                          {COMPANY_SHORT[s.invoicing_company]}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{t(`cons.payments.${s.payment_method}`)}</td>
+                  <td className="px-4 py-3 text-right font-medium">
+                    {ft(s.total_gross)}
+                    {s.paid_amount !== null &&
+                      s.total_gross + (s.debt_before ?? 0) - s.paid_amount > 0.5 && (
+                      <div
+                        title={t("cons.debtLeftHint")}
+                        className="mt-0.5 text-xs font-semibold text-rose-600"
                       >
-                        🔗
-                      </button>
+                        {t("cons.debtLeft", {
+                          amount: Math.round(
+                            s.total_gross + (s.debt_before ?? 0) - s.paid_amount,
+                          ).toLocaleString("hu-HU"),
+                        })}
+                      </div>
                     )}
-                    {s.has_signature ? (
-                      <span title={t("cons.signed")} className="rounded bg-slate-100 px-2 py-1 text-sm leading-none text-slate-600">✍✓</span>
-                    ) : (
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
-                        onClick={() => { setSigning(s); setSignature(null); }}
-                        title={t("cons.signBtn")}
+                        onClick={() => downloadReceipt(s)}
+                        title={`${t("cons.receiptPdf")} — ${t("cons.printHint")}`}
                         className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
                       >
-                        ✍
+                        📄🖨
                       </button>
-                    )}
-                    <button
-                      onClick={() => emailReceipt(s)}
-                      title={s.receipt_sent_at ? t("cons.emailSentAt", { at: fmt(s.receipt_sent_at) }) : t("cons.emailBtn")}
-                      className={`rounded border px-2 py-1 text-sm leading-none hover:bg-slate-100 ${s.receipt_sent_at ? "border-emerald-300 text-emerald-700" : "border-slate-300"}`}
-                    >
-                      ✉{s.receipt_sent_at ? "✓" : ""}
-                    </button>
-                    {cashbookOn && !s.no_vat && (
+                      {s.billingo_document_id && (
+                        <button
+                          onClick={() => void openInvoiceLink(s.id)}
+                          title={t("cons.invoiceLinkHint")}
+                          className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none text-emerald-700 hover:bg-emerald-50"
+                        >
+                          🔗
+                        </button>
+                      )}
+                      {s.has_signature ? (
+                        <span title={t("cons.signed")} className="rounded bg-slate-100 px-2 py-1 text-sm leading-none text-slate-600">✍✓</span>
+                      ) : (
+                        <button
+                          onClick={() => { setSigning(s); setSignature(null); }}
+                          title={t("cons.signBtn")}
+                          className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                        >
+                          ✍
+                        </button>
+                      )}
                       <button
-                        onClick={() => pushCashbook(s)}
-                        title={
-                          s.cashbook_sent_at
-                            ? t("cons.cashbookSentAt", { at: fmt(s.cashbook_sent_at) })
-                            : t("cons.cashbookBtn")
-                        }
-                        className={`rounded border px-2 py-1 text-sm leading-none hover:bg-slate-100 ${
-                          s.cashbook_status === "error"
-                            ? "border-rose-300 text-rose-700"
-                            : s.cashbook_sent_at
-                              ? "border-emerald-300 text-emerald-700"
-                              : "border-slate-300"
-                        }`}
+                        onClick={() => emailReceipt(s)}
+                        title={s.receipt_sent_at ? t("cons.emailSentAt", { at: fmt(s.receipt_sent_at) }) : t("cons.emailBtn")}
+                        className={`rounded border px-2 py-1 text-sm leading-none hover:bg-slate-100 ${s.receipt_sent_at ? "border-emerald-300 text-emerald-700" : "border-slate-300"}`}
                       >
-                        📚{s.cashbook_status === "error" ? "!" : s.cashbook_sent_at ? "✓" : ""}
+                        ✉{s.receipt_sent_at ? "✓" : ""}
                       </button>
-                    )}
-                    {s.no_vat ? (
-                      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                        {t("cons.noVatBadge")}
-                      </span>
-                    ) : s.invoiced ? (
-                      <>
+                      {cashbookOn && !s.no_vat && (
                         <button
-                          onClick={() => downloadInvoicePdf(s)}
-                          title={t("cons.invoicePdfBtn")}
-                          className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none text-emerald-700 hover:bg-emerald-50"
+                          onClick={() => pushCashbook(s)}
+                          title={
+                            s.cashbook_sent_at
+                              ? t("cons.cashbookSentAt", { at: fmt(s.cashbook_sent_at) })
+                              : t("cons.cashbookBtn")
+                          }
+                          className={`rounded border px-2 py-1 text-sm leading-none hover:bg-slate-100 ${
+                            s.cashbook_status === "error"
+                              ? "border-rose-300 text-rose-700"
+                              : s.cashbook_sent_at
+                                ? "border-emerald-300 text-emerald-700"
+                                : "border-slate-300"
+                          }`}
                         >
-                          🧾
+                          📚{s.cashbook_status === "error" ? "!" : s.cashbook_sent_at ? "✓" : ""}
                         </button>
-                        <button
-                          onClick={() => resendInvoiceEmail(s)}
-                          title={t("cons.invoiceResendBtn")}
-                          className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none text-emerald-700 hover:bg-emerald-50"
-                        >
-                          🧾✉
-                        </button>
-                        <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                          {t("cons.invoiced")}{s.billingo_status ? ` (${s.billingo_status})` : ""}
+                      )}
+                      {s.no_vat ? (
+                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          {t("cons.noVatBadge")}
                         </span>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => invoice(s)}
-                        className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
-                      >
-                        {t("cons.invoiceBtn")}
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {history.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
-            )}
-          </tbody>
-        </table>
+                      ) : s.invoiced ? (
+                        <>
+                          <button
+                            onClick={() => downloadInvoicePdf(s)}
+                            title={t("cons.invoicePdfBtn")}
+                            className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none text-emerald-700 hover:bg-emerald-50"
+                          >
+                            🧾
+                          </button>
+                          <button
+                            onClick={() => resendInvoiceEmail(s)}
+                            title={t("cons.invoiceResendBtn")}
+                            className="rounded border border-emerald-300 px-2 py-1 text-sm leading-none text-emerald-700 hover:bg-emerald-50"
+                          >
+                            🧾✉
+                          </button>
+                          <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800" title={s.billingo_document_number ?? undefined}>
+                            {t("cons.invoiced")}{s.billingo_document_number ? ` ${s.billingo_document_number}` : s.billingo_status ? ` (${s.billingo_status})` : ""}
+                          </span>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => invoice(s)}
+                          className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                        >
+                          {t("cons.invoiceBtn")}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {history.length === 0 && (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("cons.noSettlements")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {prices && (
@@ -2964,36 +2975,38 @@ export default function ElszamolasPage() {
             <button type="button" onClick={() => setPrices(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">{t("prices.title")}</h2>
             <p className="text-sm text-slate-500">{t("prices.hint")}</p>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase text-slate-500">
-                  <th className="py-2">{t("cons.name")}</th>
-                  <th className="py-2">{t("prices.basePrice")}</th>
-                  <th className="py-2">{t("prices.partnerPrice")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {prices.map((row) => (
-                  <tr key={row.product_id} className="border-t border-slate-100">
-                    <td className="py-2 pr-2 font-medium">{row.product_name}</td>
-                    <td className="py-2 pr-2 text-slate-500">{ft(row.base_price_per_portion)}</td>
-                    <td className="py-2">
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={priceEdits[row.product_id] ?? ""}
-                        onChange={(e) =>
-                          setPriceEdits({ ...priceEdits, [row.product_id]: e.target.value })
-                        }
-                        placeholder={t("prices.defaultPh")}
-                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
-                      />
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="py-2">{t("cons.name")}</th>
+                    <th className="py-2">{t("prices.basePrice")}</th>
+                    <th className="py-2">{t("prices.partnerPrice")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {prices.map((row) => (
+                    <tr key={row.product_id} className="border-t border-slate-100">
+                      <td className="py-2 pr-2 font-medium">{row.product_name}</td>
+                      <td className="py-2 pr-2 text-slate-500">{ft(row.base_price_per_portion)}</td>
+                      <td className="py-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={priceEdits[row.product_id] ?? ""}
+                          onChange={(e) =>
+                            setPriceEdits({ ...priceEdits, [row.product_id]: e.target.value })
+                          }
+                          placeholder={t("prices.defaultPh")}
+                          className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
@@ -3025,6 +3038,17 @@ export default function ElszamolasPage() {
               <button onClick={() => void printReceipt("50")} className="rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium hover:bg-slate-100">🧾 50 mm</button>
               <button onClick={() => void printReceipt("80")} className="rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium hover:bg-slate-100">🧾 80 mm</button>
             </div>
+            {printChoice.docId && (
+              <button
+                onClick={() => {
+                  const id = printChoice.id;
+                  void downloadFile(`/api/settlements/${id}/invoice-pdf`, `szamla-${(printChoice.docNo ?? id.slice(0, 8)).replace(/[^A-Za-z0-9_-]+/g, "_")}.pdf`).catch((err) => toast(errorMessage(err), "error"));
+                }}
+                className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-3 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+              >
+                🧾 {t("cons.billingoPdfBtn")}{printChoice.docNo ? ` — ${printChoice.docNo}` : ""}
+              </button>
+            )}
             <button onClick={() => setPrintChoice(null)} className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-500 hover:bg-slate-100">{t("cons.printNo")}</button>
           </div>
         </div>

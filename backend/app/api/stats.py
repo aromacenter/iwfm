@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_permission_matrix, is_manager, permissions_for, require_perm
 from app.db import get_db
 from app.models import (
+    Partner,
     AgentExpense,
     Product,
     Settlement,
@@ -74,6 +75,17 @@ class ContractorLedgerOut(BaseModel):
     worksheets: int
 
 
+class CashMovementOut(BaseModel):
+    """Egy kassza-mozgás az időszakban: bevétel (készpénzes elszámolás),
+    betét/kivét/költség, elfogadott pénz-átadás be/ki."""
+
+    id: str
+    date: str  # ISO dátum-idő
+    kind: str  # revenue | deposit | withdrawal | expense | transfer_in | transfer_out
+    amount: float  # mindig pozitív; az irányt a kind adja
+    label: str | None = None
+
+
 class CashRegisterOut(BaseModel):
     user_id: str
     user_name: str | None
@@ -86,6 +98,7 @@ class CashRegisterOut(BaseModel):
     balance: float
     contractor: ContractorLedgerOut | None = None  # szerelő-folyószámla (ha van)
     entries: list[CashEntryOut] = []
+    movements: list[CashMovementOut] = []  # az időszak összes mozgása, időrendben
 
 
 # A kassza 2026-10-12-én tiszta lappal újraindult (30ea42b2): az alap-nézet
@@ -217,8 +230,12 @@ async def _cash_register(
             )
             for e in entries
         ]
+    movements: list[CashMovementOut] = []
+    if with_entries:
+        movements = await _cash_movements(db, user_id, eff_from, eff_to, user_role, entries)
     return CashRegisterOut(
         user_id=str(user_id), user_name=user_name,
+        movements=movements,
         cash_revenue=_money(sums["revenue"]),
         deposits=_money(sums["deposits"]), withdrawals=_money(sums["withdrawals"]),
         expenses=_money(sums["expenses"]),
@@ -226,6 +243,55 @@ async def _cash_register(
         balance=_money(_balance_of(bal_sums)),
         entries=out_entries,
     )
+
+
+async def _cash_movements(
+    db: AsyncSession, user_id: uuid.UUID, date_from: date | None, date_to: date | None,
+    user_role: str | None, expense_entries,
+) -> list[CashMovementOut]:
+    """A kassza összes mozgása az időszakban (dbd12c93): készpénzes
+    elszámolások partnerrel, betét/kivét/költség, elfogadott átadások."""
+    from app.models import CashTransfer
+
+    out: list[CashMovementOut] = []
+    rev_q = select(Settlement, Partner.name).join(Partner, Partner.id == Settlement.partner_id).where(
+        Settlement.settled_by_user_id == user_id, Settlement.payment_method == "cash",
+    )
+    rev_q = _range_filter(rev_q, Settlement.created_at, date_from, date_to)
+    for s, pname in (await db.execute(rev_q.order_by(Settlement.created_at.desc()).limit(500))).all():
+        out.append(CashMovementOut(
+            id=str(s.id), date=s.created_at.isoformat(), kind="revenue",
+            amount=float(s.total_gross), label=pname,
+        ))
+    for e in expense_entries:
+        out.append(CashMovementOut(
+            id=str(e.id), date=datetime.combine(e.expense_date, time.min).isoformat(),
+            kind=e.entry_type or "expense", amount=float(e.amount_gross),
+            label=" · ".join(x for x in (e.note, e.supplier, f"#{e.receipt_no}" if e.receipt_no else None) if x) or None,
+        ))
+    tq = select(CashTransfer).where(
+        CashTransfer.status == "accepted",
+        (CashTransfer.to_user_id == user_id) | (CashTransfer.from_user_id == user_id),
+    )
+    tq = _range_filter(tq, CashTransfer.decided_at, date_from, date_to)
+    transfers = (await db.execute(tq.order_by(CashTransfer.decided_at.desc()).limit(500))).scalars().all()
+    other_ids = {t.from_user_id for t in transfers} | {t.to_user_id for t in transfers}
+    names: dict = {}
+    if other_ids:
+        for u in (await db.execute(select(User).where(User.id.in_(other_ids)))).scalars():
+            names[u.id] = u.display_name
+    for t in transfers:
+        incoming = t.to_user_id == user_id
+        if incoming and user_role == "admin":
+            continue  # admin-címzettnél a leadás végállomás, a kasszát nem növeli (b5a36526)
+        other = names.get(t.from_user_id if incoming else t.to_user_id)
+        out.append(CashMovementOut(
+            id=str(t.id), date=(t.decided_at or t.created_at).isoformat(),
+            kind="transfer_in" if incoming else "transfer_out", amount=float(t.amount),
+            label=" · ".join(x for x in (other, t.note) if x) or None,
+        ))
+    out.sort(key=lambda m: m.date, reverse=True)
+    return out[:800]
 
 
 @router.get(

@@ -366,66 +366,68 @@ export default function AjanlatkeresekPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("quote.request")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("quote.machine")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("quote.terms")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("service.status")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((q) => (
-              <tr
-                key={q.id}
-                onClick={() => openQuote(q)}
-                className="cursor-pointer border-b border-slate-100 align-top last:border-0 hover:bg-slate-50"
-              >
-                <td className="px-4 py-2.5">
-                  <div className="font-medium text-slate-900">{q.company_name}</div>
-                  <div className="text-xs text-slate-400">
-                    <span className="font-mono">{q.serial}</span> · {fmt(q.created_at)}
-                  </div>
-                  <div className="text-xs text-slate-500">{q.contact_name} · {q.contact_email}</div>
-                </td>
-                <td className="px-4 py-2.5 text-slate-600">
-                  {q.machine_type_name ?? "—"}
-                  {q.agent_name && (
-                    <div className="text-xs text-slate-400">💼 {q.agent_name}</div>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-xs text-slate-500">
-                  {q.price_per_portion != null ? (
-                    <>
-                      {q.price_per_portion} Ft/adag
-                      {q.min_portions != null && <> · min. {q.min_portions} adag</>}
-                      {q.valid_from && <> · {q.valid_from} →</>}
-                    </>
-                  ) : (
-                    <span className="text-amber-600">{t("quote.termsMissing")}</span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[q.status] ?? ""}`}>
-                    {t(`quote.status_${q.status}`)}
-                  </span>
-                  {q.status === "signed" && q.partner_id && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setInfoPartner(q.partner_id); }}
-                      className="ml-2 text-xs text-indigo-700 underline decoration-indigo-300 underline-offset-2"
-                    >
-                      {t("quote.openPartner")}
-                    </button>
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("quote.request")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("quote.machine")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("quote.terms")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("service.status")}</th>
               </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-400">{t("quote.empty")}</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((q) => (
+                <tr
+                  key={q.id}
+                  onClick={() => openQuote(q)}
+                  className="cursor-pointer border-b border-slate-100 align-top last:border-0 hover:bg-slate-50"
+                >
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium text-slate-900">{q.company_name}</div>
+                    <div className="text-xs text-slate-400">
+                      <span className="font-mono">{q.serial}</span> · {fmt(q.created_at)}
+                    </div>
+                    <div className="text-xs text-slate-500">{q.contact_name} · {q.contact_email}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-slate-600">
+                    {q.machine_type_name ?? "—"}
+                    {q.agent_name && (
+                      <div className="text-xs text-slate-400">💼 {q.agent_name}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500">
+                    {q.price_per_portion != null ? (
+                      <>
+                        {q.price_per_portion} Ft/adag
+                        {q.min_portions != null && <> · min. {q.min_portions} adag</>}
+                        {q.valid_from && <> · {q.valid_from} →</>}
+                      </>
+                    ) : (
+                      <span className="text-amber-600">{t("quote.termsMissing")}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[q.status] ?? ""}`}>
+                      {t(`quote.status_${q.status}`)}
+                    </span>
+                    {q.status === "signed" && q.partner_id && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setInfoPartner(q.partner_id); }}
+                        className="ml-2 text-xs text-indigo-700 underline decoration-indigo-300 underline-offset-2"
+                      >
+                        {t("quote.openPartner")}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-400">{t("quote.empty")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Részletek modal */}

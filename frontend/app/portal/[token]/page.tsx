@@ -78,24 +78,26 @@ export default function PortalPage() {
           {data.stock.length === 0 ? (
             <p className="text-sm text-slate-400">{t("portal.noStock")}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                  <th className="py-2">{t("cons.name")}</th>
-                  <th className="py-2">{t("cons.bookQty")}</th>
-                  <th className="py-2">{t("cons.portionsAvail")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.stock.map((s) => (
-                  <tr key={s.product_name} className="border-b border-slate-100 last:border-0">
-                    <td className="py-2 font-medium">{s.product_name}</td>
-                    <td className="py-2">{s.quantity} {s.unit}</td>
-                    <td className="py-2 text-slate-500">{s.portions_available}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                    <th className="py-2">{t("cons.name")}</th>
+                    <th className="py-2">{t("cons.bookQty")}</th>
+                    <th className="py-2">{t("cons.portionsAvail")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.stock.map((s) => (
+                    <tr key={s.product_name} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2 font-medium">{s.product_name}</td>
+                      <td className="py-2">{s.quantity} {s.unit}</td>
+                      <td className="py-2 text-slate-500">{s.portions_available}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 
@@ -104,36 +106,38 @@ export default function PortalPage() {
           {data.settlements.length === 0 ? (
             <p className="text-sm text-slate-400">{t("cons.noSettlements")}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                  <th className="py-2">{t("cons.date")}</th>
-                  <th className="py-2">{t("cons.payment")}</th>
-                  <th className="py-2">{t("cons.total")}</th>
-                  <th className="py-2">{t("portal.status")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.settlements.map((s, i) => (
-                  <tr key={i} className="border-b border-slate-100 last:border-0">
-                    <td className="py-2 whitespace-nowrap">{fmt(s.created_at)}</td>
-                    <td className="py-2">{t(`cons.payments.${s.payment_method}`)}</td>
-                    <td className="py-2 font-medium">{ft(s.total_gross)}</td>
-                    <td className="py-2">
-                      {!s.invoiced ? (
-                        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{t("cons.notInvoiced")}</span>
-                      ) : s.payment_status === "paid" ? (
-                        <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">{t("portal.paid")}</span>
-                      ) : (
-                        <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">
-                          {t("portal.unpaid")}{s.due_date ? ` · ${s.due_date}` : ""}
-                        </span>
-                      )}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                    <th className="py-2">{t("cons.date")}</th>
+                    <th className="py-2">{t("cons.payment")}</th>
+                    <th className="py-2">{t("cons.total")}</th>
+                    <th className="py-2">{t("portal.status")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.settlements.map((s, i) => (
+                    <tr key={i} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2 whitespace-nowrap">{fmt(s.created_at)}</td>
+                      <td className="py-2">{t(`cons.payments.${s.payment_method}`)}</td>
+                      <td className="py-2 font-medium">{ft(s.total_gross)}</td>
+                      <td className="py-2">
+                        {!s.invoiced ? (
+                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{t("cons.notInvoiced")}</span>
+                        ) : s.payment_status === "paid" ? (
+                          <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">{t("portal.paid")}</span>
+                        ) : (
+                          <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">
+                            {t("portal.unpaid")}{s.due_date ? ` · ${s.due_date}` : ""}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 

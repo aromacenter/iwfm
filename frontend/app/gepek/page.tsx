@@ -747,131 +747,133 @@ export default function GepekPage() {
       {/* Nincs vízszintes görgetés: összevont oszlopok; a fejléc ragadós, hogy
           hosszú listánál is látható maradjon. */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={assets.length > 0 && assets.every((a) => selected.has(a.id))}
-                  onChange={(e) =>
-                    setSelected(e.target.checked ? new Set(assets.map((a) => a.id)) : new Set())
-                  }
-                  className="h-4 w-4"
-                />
-              </th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colMachine")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colIds")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colPlace")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("inv.counter")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.status")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {assets.map((a) => (
-              <tr key={a.id} className="border-b border-slate-100 last:border-0">
-                <td className="px-3 py-3">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
+                <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                   <input
                     type="checkbox"
-                    checked={selected.has(a.id)}
-                    onChange={() => toggleSelect(a.id)}
+                    checked={assets.length > 0 && assets.every((a) => selected.has(a.id))}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(assets.map((a) => a.id)) : new Set())
+                    }
                     className="h-4 w-4"
                   />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="font-medium">{a.name}</div>
-                  <div className="font-mono text-xs font-semibold text-indigo-700">{a.barcode}</div>
-                  <div className="text-xs text-slate-400">
-                    {a.manufacturer ?? ""}{a.manufacturer && a.tangible ? " · " : ""}{a.tangible ? t("inv.tangible") : ""}
-                  </div>
-                </td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                  <div>
-                    <span className="font-sans text-slate-400">{t("inv.articleNo")}: </span>
-                    {a.article_number ?? "—"}
-                  </div>
-                  <div>
-                    <span className="font-sans text-slate-400">{t("inv.serial")}: </span>
-                    {a.serial_number ?? "—"}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div>
-                    {a.partner_id && a.partner_name ? (
-                      <button
-                        onClick={() => setInfoPartner(a.partner_id)}
-                        className="text-left text-indigo-700 hover:underline"
-                      >
-                        {a.partner_name}
-                      </button>
-                    ) : (
-                      a.partner_name ?? <span className="text-slate-300">—</span>
-                    )}
-                  </div>
-                  {a.location_type && <div className="text-xs text-slate-400">{t(`inv.loc_${a.location_type}`)}</div>}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="tabular-nums font-medium">{a.counter ?? "—"}</div>
-                  <div className="text-xs tabular-nums text-slate-400">
-                    {a.counters && a.counters.length > 1 ? `${a.counters.join(" + ")} · ` : ""}
-                    {a.norm != null ? `${t("inv.norm")}: ${a.norm}` : ""}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  {a.customer_owned && a.status === "deployed" ? (
-                    <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
-                      {t("inv.statuses.customer")}
-                    </span>
-                  ) : (
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status]}`}>
-                      {t(`inv.statuses.${a.status}`)}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-1.5">
-                    {a.status === "deployed" ? (
-                      <>
-                      <button onClick={() => returnAsset(a)} title={t("inv.returnBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
-                        📥
-                      </button>
-                      <button onClick={() => { setError(null); setSwapCode(""); setSwapFor(a); }} title={t("inv.swapBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
-                        🔁
-                      </button>
-                      </>
-                    ) : null}
-                    {a.status !== "retired" && (
-                      <button onClick={() => void resetCounters(a)} title={t("inv.resetCountersBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
-                        0️⃣
-                      </button>
-                    )}
-                    {a.status !== "deployed" && a.status !== "retired" ? (
-                      <button onClick={() => { setError(null); setDeploy({ ...EMPTY_DEPLOY }); setDeployFor(a); }} title={t("inv.deploy")} className="rounded bg-emerald-600 px-2 py-1 text-sm leading-none hover:bg-emerald-700">
-                        📤
-                      </button>
-                    ) : null}
-                    <button onClick={() => downloadQrLabel(a)} title={t("inv.qrLabel")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
-                      {/* mini QR-kód ikon */}
-                      <svg viewBox="0 0 24 24" className="inline h-[1em] w-[1em] align-[-0.1em] text-slate-700" fill="currentColor" aria-hidden="true">
-                        <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm1 1h2v2H6V6zM13 3h8v8h-8V3zm2 2v4h4V5h-4zm1 1h2v2h-2V6zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm1 1h2v2H6v-2zM13 13h3v3h-3v-3zm5 0h3v3h-3v-3zm-5 5h3v3h-3v-3zm5 2h3v1h-3v-1zm2-4h1v3h-1v-3zm-4 1h2v2h-2v-2z" />
-                      </svg>
-                    </button>
-                    <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
-                      🕘
-                    </button>
-                    <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", maintenance_fee: a.maintenance_fee != null ? String(a.maintenance_fee) : "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), counter_names: (a.counter_names ?? []).map((x) => x ?? ""), norm: a.norm != null ? String(a.norm) : "", norms: (a.norms ?? []).map(String), default_product_id: a.default_product_id ?? "", tangible: a.tangible, customer_owned: a.customer_owned, rented: a.rented ?? false, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
-                      ✏️
-                    </button>
-                  </div>
-                </td>
+                </th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colMachine")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colIds")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.colPlace")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("inv.counter")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("inv.status")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
               </tr>
-            ))}
-            {assets.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("inv.empty")}</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {assets.map((a) => (
+                <tr key={a.id} className="border-b border-slate-100 last:border-0">
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(a.id)}
+                      onChange={() => toggleSelect(a.id)}
+                      className="h-4 w-4"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{a.name}</div>
+                    <div className="font-mono text-xs font-semibold text-indigo-700">{a.barcode}</div>
+                    <div className="text-xs text-slate-400">
+                      {a.manufacturer ?? ""}{a.manufacturer && a.tangible ? " · " : ""}{a.tangible ? t("inv.tangible") : ""}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                    <div>
+                      <span className="font-sans text-slate-400">{t("inv.articleNo")}: </span>
+                      {a.article_number ?? "—"}
+                    </div>
+                    <div>
+                      <span className="font-sans text-slate-400">{t("inv.serial")}: </span>
+                      {a.serial_number ?? "—"}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div>
+                      {a.partner_id && a.partner_name ? (
+                        <button
+                          onClick={() => setInfoPartner(a.partner_id)}
+                          className="text-left text-indigo-700 hover:underline"
+                        >
+                          {a.partner_name}
+                        </button>
+                      ) : (
+                        a.partner_name ?? <span className="text-slate-300">—</span>
+                      )}
+                    </div>
+                    {a.location_type && <div className="text-xs text-slate-400">{t(`inv.loc_${a.location_type}`)}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="tabular-nums font-medium">{a.counter ?? "—"}</div>
+                    <div className="text-xs tabular-nums text-slate-400">
+                      {a.counters && a.counters.length > 1 ? `${a.counters.join(" + ")} · ` : ""}
+                      {a.norm != null ? `${t("inv.norm")}: ${a.norm}` : ""}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {a.customer_owned && a.status === "deployed" ? (
+                      <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
+                        {t("inv.statuses.customer")}
+                      </span>
+                    ) : (
+                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status]}`}>
+                        {t(`inv.statuses.${a.status}`)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-1.5">
+                      {a.status === "deployed" ? (
+                        <>
+                        <button onClick={() => returnAsset(a)} title={t("inv.returnBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                          📥
+                        </button>
+                        <button onClick={() => { setError(null); setSwapCode(""); setSwapFor(a); }} title={t("inv.swapBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                          🔁
+                        </button>
+                        </>
+                      ) : null}
+                      {a.status !== "retired" && (
+                        <button onClick={() => void resetCounters(a)} title={t("inv.resetCountersBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                          0️⃣
+                        </button>
+                      )}
+                      {a.status !== "deployed" && a.status !== "retired" ? (
+                        <button onClick={() => { setError(null); setDeploy({ ...EMPTY_DEPLOY }); setDeployFor(a); }} title={t("inv.deploy")} className="rounded bg-emerald-600 px-2 py-1 text-sm leading-none hover:bg-emerald-700">
+                          📤
+                        </button>
+                      ) : null}
+                      <button onClick={() => downloadQrLabel(a)} title={t("inv.qrLabel")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                        {/* mini QR-kód ikon */}
+                        <svg viewBox="0 0 24 24" className="inline h-[1em] w-[1em] align-[-0.1em] text-slate-700" fill="currentColor" aria-hidden="true">
+                          <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm1 1h2v2H6V6zM13 3h8v8h-8V3zm2 2v4h4V5h-4zm1 1h2v2h-2V6zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm1 1h2v2H6v-2zM13 13h3v3h-3v-3zm5 0h3v3h-3v-3zm-5 5h3v3h-3v-3zm5 2h3v1h-3v-1zm2-4h1v3h-1v-3zm-4 1h2v2h-2v-2z" />
+                        </svg>
+                      </button>
+                      <button onClick={() => openHistory(a)} title={t("inv.history")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                        🕘
+                      </button>
+                      <button onClick={() => { setError(null); setAssetForm({ id: a.id, barcode: a.barcode, name: a.name, manufacturer: a.manufacturer ?? "", article_number: a.article_number ?? "", serial_number: a.serial_number ?? "", maintenance_fee: a.maintenance_fee != null ? String(a.maintenance_fee) : "", counter: a.counter != null ? String(a.counter) : "", counter_count: String(a.counter_count || 1), counters: (a.counters ?? []).map(String), counter_names: (a.counter_names ?? []).map((x) => x ?? ""), norm: a.norm != null ? String(a.norm) : "", norms: (a.norms ?? []).map(String), default_product_id: a.default_product_id ?? "", tangible: a.tangible, customer_owned: a.customer_owned, rented: a.rented ?? false, notes: a.notes ?? "", status: a.status }); }} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                        ✏️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {assets.length === 0 && (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("inv.empty")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Eszköz űrlap */}

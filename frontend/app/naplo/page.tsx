@@ -249,38 +249,40 @@ export default function NaploPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.when")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.who")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.action")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.entity")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.detail")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">IP</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.items ?? []).map((item) => (
-              <tr key={item.id} className="border-b border-slate-100 last:border-0 align-top">
-                <td className="px-4 py-2.5 whitespace-nowrap text-slate-500">{fmt(item.created_at)}</td>
-                <td className="px-4 py-2.5 font-medium">{item.actor_name ?? "—"}</td>
-                <td className="px-4 py-2.5"><code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{item.action}</code></td>
-                <td className="px-4 py-2.5 text-slate-500">
-                  {item.entity_type}
-                  {item.entity_id && <span className="ml-1 text-xs text-slate-400">{item.entity_id.slice(0, 12)}</span>}
-                </td>
-                <td className="max-w-72 px-4 py-2.5 text-xs text-slate-500">
-                  {item.detail ? JSON.stringify(item.detail) : "—"}
-                </td>
-                <td className="px-4 py-2.5 text-xs text-slate-400">{item.ip_address ?? "—"}</td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.when")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.who")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.action")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.entity")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("audit.detail")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">IP</th>
               </tr>
-            ))}
-            {data && data.items.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("audit.empty")}</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(data?.items ?? []).map((item) => (
+                <tr key={item.id} className="border-b border-slate-100 last:border-0 align-top">
+                  <td className="px-4 py-2.5 whitespace-nowrap text-slate-500">{fmt(item.created_at)}</td>
+                  <td className="px-4 py-2.5 font-medium">{item.actor_name ?? "—"}</td>
+                  <td className="px-4 py-2.5"><code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{item.action}</code></td>
+                  <td className="px-4 py-2.5 text-slate-500">
+                    {item.entity_type}
+                    {item.entity_id && <span className="ml-1 text-xs text-slate-400">{item.entity_id.slice(0, 12)}</span>}
+                  </td>
+                  <td className="max-w-72 px-4 py-2.5 text-xs text-slate-500">
+                    {item.detail ? JSON.stringify(item.detail) : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-400">{item.ip_address ?? "—"}</td>
+                </tr>
+              ))}
+              {data && data.items.length === 0 && (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("audit.empty")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {data && data.total > PAGE_SIZE && (

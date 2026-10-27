@@ -32,6 +32,20 @@ def _fmt_money(value: float) -> str:
     return f"{value:,.0f} Ft".replace(",", " ")
 
 
+def _fmt_signed(value: float) -> str:
+    """Kerekítési különbözet előjellel, 2 tizedessel (pl. −0,84 Ft)."""
+    sign = "−" if value < 0 else "+"
+    return f"{sign}{abs(value):,.2f} Ft".replace(",", " ").replace(".", ",")
+
+
+def _rounding_label(data: dict) -> str:
+    return (
+        "Kerekítés (készpénz, 5 Ft-ra):"
+        if data.get("payment_method") in ("cash", "cod")
+        else "Kerekítés (egész Ft-ra):"
+    )
+
+
 def _fmt_qty(value: float) -> str:
     return f"{value:g}"
 
@@ -130,8 +144,9 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
     line("Elszámolást végezte:", data.get("settled_by_name", ""))
     line("Fizetési mód:", PAYMENT_LABELS.get(data.get("payment_method", ""), data.get("payment_method", "")))
     if data.get("invoiced"):
+        doc_no = data.get("billingo_document_number")
         doc_id = data.get("billingo_document_id")
-        line("Számla:", f"kiállítva (Billingó #{doc_id})" if doc_id else "kiállítva")
+        line("Számla:", doc_no or (f"kiállítva (Billingó #{doc_id})" if doc_id else "kiállítva"))
     if data.get("note"):
         line("Megjegyzés:", str(data["note"])[:90])
 
@@ -218,6 +233,12 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
     c.setFont(FONT_BOLD, 10)
     c.drawString(left, y, "Összesen (nettó):")
     c.drawRightString(right, y, _fmt_money(data.get("total_net", 0)))
+    if data.get("rounding_adjust"):
+        y -= 6 * mm
+        c.setFont(FONT, 9)
+        c.drawString(left, y, _rounding_label(data))
+        c.drawRightString(right, y, _fmt_signed(data["rounding_adjust"]))
+        c.setFont(FONT_BOLD, 10)
     y -= 6 * mm
     c.drawString(left, y, "Összesen (bruttó):")
     c.drawRightString(right, y, _fmt_money(data.get("total_gross", 0)))
@@ -346,8 +367,9 @@ def build_settlement_receipt_pdf(data: dict, settings: dict | None = None, *, wi
     kv("Végezte:", str(data.get("settled_by_name", "")))
     kv("Fizetés:", PAYMENT_LABELS.get(data.get("payment_method", ""), str(data.get("payment_method", ""))))
     if data.get("invoiced"):
+        doc_no = data.get("billingo_document_number")
         doc_id = data.get("billingo_document_id")
-        kv("Számla:", f"kiállítva #{doc_id}" if doc_id else "kiállítva")
+        kv("Számla:", doc_no or (f"kiállítva #{doc_id}" if doc_id else "kiállítva"))
     machines = data.get("machines") or []
     if machines:
         rule()
@@ -369,6 +391,8 @@ def build_settlement_receipt_pdf(data: dict, settings: dict | None = None, *, wi
             lines_out.append(("amt", "", _fmt_money(item.get("amount_net", 0))))
     rule()
     lines_out.append(("amt", "Összesen nettó:", _fmt_money(data.get("total_net", 0))))
+    if data.get("rounding_adjust"):
+        lines_out.append(("amt", "Kerekítés:", _fmt_signed(data["rounding_adjust"])))
     lines_out.append(("amtb", "Összesen bruttó:", _fmt_money(data.get("total_gross", 0))))
     debt_before = data.get("debt_before")
     paid_amount = data.get("paid_amount")

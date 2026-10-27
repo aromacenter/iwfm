@@ -256,19 +256,21 @@ export default function TerkepPage() {
           {showMissing && (
             <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-amber-200 bg-white">
               <p className="px-3 py-1.5 text-xs text-slate-500">{t("map.missingHint")}</p>
-              <table className="w-full text-xs text-slate-700">
-                <tbody>
-                  {filtered.filter((r) => r.lat == null).map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100">
-                      <td className="px-3 py-1.5 font-medium">{r.name}</td>
-                      <td className="px-3 py-1.5 text-slate-500">{r.address ?? ([r.zip, r.city].filter(Boolean).join(" ") || "—")}</td>
-                      <td className="px-3 py-1.5 text-right">
-                        <Link href={`/partnerek?edit=${r.id}`} className="rounded border border-slate-300 px-2 py-0.5 text-indigo-700 hover:bg-slate-100">✏️ {t("map.fixAddress")}</Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-slate-700">
+                  <tbody>
+                    {filtered.filter((r) => r.lat == null).map((r) => (
+                      <tr key={r.id} className="border-t border-slate-100">
+                        <td className="px-3 py-1.5 font-medium">{r.name}</td>
+                        <td className="px-3 py-1.5 text-slate-500">{r.address ?? ([r.zip, r.city].filter(Boolean).join(" ") || "—")}</td>
+                        <td className="px-3 py-1.5 text-right">
+                          <Link href={`/partnerek?edit=${r.id}`} className="rounded border border-slate-300 px-2 py-0.5 text-indigo-700 hover:bg-slate-100">✏️ {t("map.fixAddress")}</Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -277,30 +279,32 @@ export default function TerkepPage() {
         {/* világos háttér: csempe-betöltés közben se legyen fekete (9192f8d5) */}
         <div ref={divRef} className="h-[60vh] min-h-80 w-full rounded-2xl border border-slate-200 !bg-slate-200 shadow-sm lg:h-[70vh]" />
         <div className="max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="sticky top-0 bg-white text-left text-xs uppercase text-slate-500">
-                <th className="px-3 py-2">{t("map.city")}</th>
-                <th className="px-3 py-2 text-right">🤝</th>
-                <th className="px-3 py-2 text-right">☕</th>
-                <th className="px-3 py-2 text-right">💰</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cities.map((c) => (
-                <tr
-                  key={c.city}
-                  onClick={() => zoomCity(c.city)}
-                  className="cursor-pointer border-t border-slate-100 hover:bg-indigo-50"
-                >
-                  <td className="px-3 py-2 font-medium text-indigo-700">{c.city}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{c.partners}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{c.machines}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{ft(c.revenue)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="sticky top-0 bg-white text-left text-xs uppercase text-slate-500">
+                  <th className="px-3 py-2">{t("map.city")}</th>
+                  <th className="px-3 py-2 text-right">🤝</th>
+                  <th className="px-3 py-2 text-right">☕</th>
+                  <th className="px-3 py-2 text-right">💰</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {cities.map((c) => (
+                  <tr
+                    key={c.city}
+                    onClick={() => zoomCity(c.city)}
+                    className="cursor-pointer border-t border-slate-100 hover:bg-indigo-50"
+                  >
+                    <td className="px-3 py-2 font-medium text-indigo-700">{c.city}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{c.partners}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{c.machines}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{ft(c.revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </AppShell>

@@ -8,13 +8,23 @@ import AppShell from "@/components/AppShell";
 import PartnerInfo from "@/components/PartnerInfo";
 import SearchSelect from "@/components/SearchSelect";
 import IconLegend from "@/components/IconLegend";
-import { api, errorMessage } from "@/lib/api";
+import { api, downloadFile, errorMessage } from "@/lib/api";
 import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT, type CompanyKey } from "@/lib/companies";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
 
 type PartnerType = "customer" | "supplier" | "both";
+
+interface PartnerDoc {
+  id: string;
+  created_at: string;
+  total_gross: number;
+  payment_method: string;
+  invoiced: boolean;
+  billingo_document_id?: string | null;
+  billingo_document_number?: string | null;
+}
 
 interface Partner {
   id: string;
@@ -169,6 +179,38 @@ export default function PartnerekPage() {
     }
     return rows;
   }, [partners, search, typeFilter, companyFilter, kindFilter, agentFilter, statusFilter, sortByAgent, agentName]);
+
+  // Portál-link e-mailben a partner beállított címeire — megerősítés után (26e6a4fc)
+  async function sendPortalLink(p: Partner) {
+    const to = (p.contact_email ?? "").trim();
+    if (!to) { toast(t("portal.noEmail"), "error"); return; }
+    if (!(await confirm(t("portal.sendConfirm", { name: p.name, to })))) return;
+    try {
+      const res = await api.post<{ sent_to: string[] }>(`/api/partners/${p.id}/portal-link/send`);
+      toast(t("portal.sent", { to: res.sent_to.join(", ") }), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  // A partner bizonylatai: elszámolás-PDF (A4) + Billingó-számla letöltése (26e6a4fc)
+  const [docsFor, setDocsFor] = useState<{ id: string; name: string; rows: PartnerDoc[] } | null>(null);
+  async function openDocs(p: Partner) {
+    try {
+      const rows = await api.get<PartnerDoc[]>(`/api/settlements?partner_id=${p.id}`);
+      setDocsFor({ id: p.id, name: p.name, rows });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+  async function openInvoiceLink(settlementId: string) {
+    try {
+      const r = await api.get<{ url: string }>(`/api/settlements/${settlementId}/invoice-link`);
+      window.open(r.url, "_blank", "noopener");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   async function copyPortalLink(p: Partner) {
     try {
@@ -723,140 +765,156 @@ export default function PartnerekPage() {
         ]}
       />
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              {canDelete && (
-              <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={filtered.length > 0 && filtered.every((p) => selected.has(p.id))}
-                  onChange={(e) =>
-                    setSelected(e.target.checked ? new Set(filtered.map((p) => p.id)) : new Set())
-                  }
-                  className="h-4 w-4"
-                />
-              </th>
-              )}
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("partners.name")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("partners.taxNumber")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">
-                <button
-                  onClick={() => setSortByAgent((v) => !v)}
-                  title={t("partners.agentSortHint")}
-                  className="uppercase hover:text-indigo-700"
-                >
-                  💼 {t("partners.agentCol")}{sortByAgent ? " ↓" : ""}
-                </button>
-              </th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("partners.contact")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("partners.assets")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((p) => (
-              <tr key={p.id} className="border-b border-slate-100 last:border-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
                 {canDelete && (
-                <td className="px-3 py-3">
+                <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                   <input
                     type="checkbox"
-                    checked={selected.has(p.id)}
-                    onChange={() => toggleSelect(p.id)}
+                    checked={filtered.length > 0 && filtered.every((p) => selected.has(p.id))}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(filtered.map((p) => p.id)) : new Set())
+                    }
                     className="h-4 w-4"
                   />
-                </td>
+                </th>
                 )}
-                <td className="px-4 py-3">
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("partners.name")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("partners.taxNumber")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">
                   <button
-                    onClick={() => setInfoPartner(p.id)}
-                    className="text-left font-medium text-indigo-700 hover:underline"
+                    onClick={() => setSortByAgent((v) => !v)}
+                    title={t("partners.agentSortHint")}
+                    className="uppercase hover:text-indigo-700"
                   >
-                    {p.name}
+                    💼 {t("partners.agentCol")}{sortByAgent ? " ↓" : ""}
                   </button>
-                  {p.company_name && p.company_name !== p.name && (
-                    <div className="text-xs text-slate-400">{p.company_name}</div>
-                  )}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono text-xs font-semibold text-indigo-700">{p.partner_code ?? "—"}</span>
-                    {(p.placed_machine_count ?? 0) > 0 ? (
-                      <span
-                        title={t("partners.kindPartnerHint")}
-                        className="rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold text-indigo-800"
-                      >
-                        🤝 {t("partners.kindPartner")}
-                      </span>
-                    ) : (
-                      <span
-                        title={t("partners.kindCustomerHint")}
-                        className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"
-                      >
-                        👤 {t("partners.kindCustomer")}
-                      </span>
-                    )}
-                    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${TYPE_COLORS[p.partner_type]}`}>
-                      {t(`partners.types.${p.partner_type}`)}
-                    </span>
-                    {p.invoicing_company && (
-                      <span
-                        title={COMPANIES[p.invoicing_company]}
-                        className={`rounded px-1.5 py-0.5 text-xs font-medium ${COMPANY_CHIP[p.invoicing_company]}`}
-                      >
-                        {COMPANY_SHORT[p.invoicing_company]}
-                      </span>
-                    )}
-                    {!p.is_active && (
-                      <span className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">{t("partners.inactive")}</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{p.tax_number ?? "—"}</td>
-                <td className="px-4 py-3 text-slate-500">
-                  {p.agent_user_id && agentName[p.agent_user_id] ? (
-                    <span className="text-slate-700">💼 {agentName[p.agent_user_id]}</span>
-                  ) : (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
-                      {t("partners.noAgent")}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-slate-500">
-                  {p.contact_name ?? "—"}
-                  {p.contact_phone && <div className="text-xs text-slate-400">{p.contact_phone}</div>}
-                </td>
-                <td className="px-4 py-3 text-right text-slate-500">{p.asset_count}</td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <button
-                      onClick={() => copyPortalLink(p)}
-                      title={t("portal.linkBtn")}
-                      className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
-                    >
-                      🔗
-                    </button>
-                    <button
-                      onClick={() => openContracts({ id: p.id, name: p.name })}
-                      title={t("contracts.title")}
-                      className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
-                    >
-                      📜
-                    </button>
-                    <button
-                      onClick={() => edit(p)}
-                      title={t("common.edit")}
-                      className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
-                    >
-                      ✏️
-                    </button>
-                  </div>
-                </td>
+                </th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("partners.contact")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 text-right">{t("partners.assets")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
               </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("partners.empty")}</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((p) => (
+                <tr key={p.id} className="border-b border-slate-100 last:border-0">
+                  {canDelete && (
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(p.id)}
+                      onChange={() => toggleSelect(p.id)}
+                      className="h-4 w-4"
+                    />
+                  </td>
+                  )}
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setInfoPartner(p.id)}
+                      className="text-left font-medium text-indigo-700 hover:underline"
+                    >
+                      {p.name}
+                    </button>
+                    {p.company_name && p.company_name !== p.name && (
+                      <div className="text-xs text-slate-400">{p.company_name}</div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-xs font-semibold text-indigo-700">{p.partner_code ?? "—"}</span>
+                      {(p.placed_machine_count ?? 0) > 0 ? (
+                        <span
+                          title={t("partners.kindPartnerHint")}
+                          className="rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold text-indigo-800"
+                        >
+                          🤝 {t("partners.kindPartner")}
+                        </span>
+                      ) : (
+                        <span
+                          title={t("partners.kindCustomerHint")}
+                          className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"
+                        >
+                          👤 {t("partners.kindCustomer")}
+                        </span>
+                      )}
+                      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${TYPE_COLORS[p.partner_type]}`}>
+                        {t(`partners.types.${p.partner_type}`)}
+                      </span>
+                      {p.invoicing_company && (
+                        <span
+                          title={COMPANIES[p.invoicing_company]}
+                          className={`rounded px-1.5 py-0.5 text-xs font-medium ${COMPANY_CHIP[p.invoicing_company]}`}
+                        >
+                          {COMPANY_SHORT[p.invoicing_company]}
+                        </span>
+                      )}
+                      {!p.is_active && (
+                        <span className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">{t("partners.inactive")}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{p.tax_number ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {p.agent_user_id && agentName[p.agent_user_id] ? (
+                      <span className="text-slate-700">💼 {agentName[p.agent_user_id]}</span>
+                    ) : (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+                        {t("partners.noAgent")}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {p.contact_name ?? "—"}
+                    {p.contact_phone && <div className="text-xs text-slate-400">{p.contact_phone}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-right text-slate-500">{p.asset_count}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => copyPortalLink(p)}
+                        title={t("portal.linkBtn")}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                      >
+                        🔗
+                      </button>
+                      <button
+                        onClick={() => void sendPortalLink(p)}
+                        title={t("portal.sendBtn")}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                      >
+                        ✉️
+                      </button>
+                      <button
+                        onClick={() => void openDocs(p)}
+                        title={t("partners.docsBtn")}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                      >
+                        🧾
+                      </button>
+                      <button
+                        onClick={() => openContracts({ id: p.id, name: p.name })}
+                        title={t("contracts.title")}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                      >
+                        📜
+                      </button>
+                      <button
+                        onClick={() => edit(p)}
+                        title={t("common.edit")}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                      >
+                        ✏️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("partners.empty")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {form && (
@@ -1032,6 +1090,76 @@ export default function PartnerekPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {docsFor && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+          <div className="relative my-8 w-full max-w-2xl space-y-3 rounded-2xl bg-white p-6 shadow-xl">
+            <button type="button" onClick={() => setDocsFor(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">🧾 {t("partners.docsTitle", { name: docsFor.name })}</h2>
+            <p className="text-xs text-slate-500">{t("partners.docsHint")}</p>
+            {docsFor.rows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-400">{t("partners.docsEmpty")}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-500">
+                      <th className="py-2 pr-3">{t("partners.docDate")}</th>
+                      <th className="py-2 pr-3 text-right">{t("partners.docTotal")}</th>
+                      <th className="py-2 pr-3">{t("partners.docInvoice")}</th>
+                      <th className="py-2 text-right"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {docsFor.rows.map((d) => (
+                      <tr key={d.id} className="border-t border-slate-100">
+                        <td className="py-2 pr-3 whitespace-nowrap">{new Date(d.created_at).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" })}</td>
+                        <td className="py-2 pr-3 text-right font-medium tabular-nums">{Math.round(d.total_gross).toLocaleString("hu-HU")} Ft</td>
+                        <td className="py-2 pr-3 text-xs">
+                          {d.invoiced ? (
+                            <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">{d.billingo_document_number ?? t("partners.docInvoiced")}</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => void downloadFile(`/api/settlements/${d.id}/pdf`, `ELSZ-${d.id.slice(0, 8).toUpperCase()}.pdf`).catch((err) => toast(errorMessage(err), "error"))}
+                              title={t("partners.docA4")}
+                              className="rounded border border-slate-300 px-2 py-1 text-xs leading-none hover:bg-slate-100"
+                            >
+                              📄 A4
+                            </button>
+                            {d.billingo_document_id && (
+                              <>
+                                <button
+                                  onClick={() => void downloadFile(`/api/settlements/${d.id}/invoice-pdf`, `szamla-${(d.billingo_document_number ?? d.id.slice(0, 8)).replace(/[^A-Za-z0-9_-]+/g, "_")}.pdf`).catch((err) => toast(errorMessage(err), "error"))}
+                                  title={t("partners.docBillingo")}
+                                  className="rounded border border-emerald-300 px-2 py-1 text-xs leading-none text-emerald-700 hover:bg-emerald-50"
+                                >
+                                  🧾 PDF
+                                </button>
+                                <button
+                                  onClick={() => void openInvoiceLink(d.id)}
+                                  title={t("cons.invoiceLinkHint")}
+                                  className="rounded border border-emerald-300 px-2 py-1 text-xs leading-none text-emerald-700 hover:bg-emerald-50"
+                                >
+                                  🔗
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

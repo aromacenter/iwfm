@@ -1124,82 +1124,86 @@ export default function FeladatokPage() {
               </p>
             )}
             {(priceEdit.ws.works ?? []).length > 0 && (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-slate-400">
-                    <th className="py-1 pr-2">{t("tasks.workItemsCol")}</th>
-                    <th className="py-1 pr-2 text-right">{t("myTasks.wsCostNet")}</th>
-                    <th className="py-1 text-right">{t("myTasks.wsPriceNet")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {priceEdit.ws.works.map((w, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2">🔧 {w.name}</td>
-                      <td className="py-1.5 pr-2 text-right text-orange-700">
-                        {w.cost_net != null ? `${w.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
-                      </td>
-                      <td className="py-1.5 text-right">
-                        <input
-                          type="number" min={0}
-                          value={priceEdit.workPrices[i] ?? ""}
-                          onChange={(e) => {
-                            const next = [...priceEdit.workPrices];
-                            next[i] = e.target.value;
-                            setPriceEdit({ ...priceEdit, workPrices: next });
-                          }}
-                          className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
-                        />
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-400">
+                      <th className="py-1 pr-2">{t("tasks.workItemsCol")}</th>
+                      <th className="py-1 pr-2 text-right">{t("myTasks.wsCostNet")}</th>
+                      <th className="py-1 text-right">{t("myTasks.wsPriceNet")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {priceEdit.ws.works.map((w, i) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="py-1.5 pr-2">🔧 {w.name}</td>
+                        <td className="py-1.5 pr-2 text-right text-orange-700">
+                          {w.cost_net != null ? `${w.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          <input
+                            type="number" min={0}
+                            value={priceEdit.workPrices[i] ?? ""}
+                            onChange={(e) => {
+                              const next = [...priceEdit.workPrices];
+                              next[i] = e.target.value;
+                              setPriceEdit({ ...priceEdit, workPrices: next });
+                            }}
+                            className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             {(priceEdit.ws.repair_options ?? []).length > 0 && (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-slate-400">
-                    <th className="py-1 pr-2">{t("tasks.repairCol")}</th>
-                    <th className="py-1 pr-2 text-right">{t("myTasks.wsCostNet")}</th>
-                    <th className="py-1 text-right">{t("myTasks.wsPriceNet")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {priceEdit.ws.repair_options.map((w, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2">
-                        🛠 {w.name}
-                        {priceEdit.ws.quote_status !== "accepted" && priceEdit.ws.quote_status !== "declined" && (
-                          <button
-                            type="button"
-                            onClick={() => void acceptInternal(w.name)}
-                            title={t("tasks.acceptInternalHint")}
-                            className="ml-2 rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
-                          >
-                            ✓ {t("tasks.acceptInternal")}
-                          </button>
-                        )}
-                      </td>
-                      <td className="py-1.5 pr-2 text-right text-orange-700">
-                        {w.cost_net != null ? `${w.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
-                      </td>
-                      <td className="py-1.5 text-right">
-                        <input
-                          type="number" min={0}
-                          value={priceEdit.repairPrices[i] ?? ""}
-                          onChange={(e) => {
-                            const next = [...priceEdit.repairPrices];
-                            next[i] = e.target.value;
-                            setPriceEdit({ ...priceEdit, repairPrices: next });
-                          }}
-                          className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
-                        />
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-400">
+                      <th className="py-1 pr-2">{t("tasks.repairCol")}</th>
+                      <th className="py-1 pr-2 text-right">{t("myTasks.wsCostNet")}</th>
+                      <th className="py-1 text-right">{t("myTasks.wsPriceNet")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {priceEdit.ws.repair_options.map((w, i) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="py-1.5 pr-2">
+                          🛠 {w.name}
+                          {priceEdit.ws.quote_status !== "accepted" && priceEdit.ws.quote_status !== "declined" && (
+                            <button
+                              type="button"
+                              onClick={() => void acceptInternal(w.name)}
+                              title={t("tasks.acceptInternalHint")}
+                              className="ml-2 rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+                            >
+                              ✓ {t("tasks.acceptInternal")}
+                            </button>
+                          )}
+                        </td>
+                        <td className="py-1.5 pr-2 text-right text-orange-700">
+                          {w.cost_net != null ? `${w.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          <input
+                            type="number" min={0}
+                            value={priceEdit.repairPrices[i] ?? ""}
+                            onChange={(e) => {
+                              const next = [...priceEdit.repairPrices];
+                              next[i] = e.target.value;
+                              setPriceEdit({ ...priceEdit, repairPrices: next });
+                            }}
+                            className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             {/* a figyelmeztetés csak akkor, ha TÉNYLEG semmilyen tétel nincs */}
             {priceEdit.ws.materials.length === 0 &&
@@ -1210,54 +1214,58 @@ export default function FeladatokPage() {
               </p>
             )}
             {priceEdit.ws.materials.length > 0 && (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-slate-400">
-                    <th className="py-1 pr-2">{t("myTasks.wsItemName")}</th>
-                    <th className="py-1 pr-2">{t("myTasks.wsQty")}</th>
-                    <th className="py-1 pr-2 text-right">{t("myTasks.wsCostNet")}</th>
-                    <th className="py-1 text-right">{t("myTasks.wsPriceNet")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {priceEdit.ws.materials.map((m, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2">{m.name}</td>
-                      <td className="py-1.5 pr-2 text-slate-500">{m.qty} {m.unit}</td>
-                      <td className="py-1.5 pr-2 text-right text-orange-700">
-                        {m.cost_net != null ? `${m.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
-                      </td>
-                      <td className="py-1.5 text-right">
-                        <input
-                          type="number" min={0}
-                          value={priceEdit.prices[i] ?? ""}
-                          onChange={(e) => {
-                            const next = [...priceEdit.prices];
-                            next[i] = e.target.value;
-                            setPriceEdit({ ...priceEdit, prices: next });
-                          }}
-                          className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {(priceEdit.ws.used_parts ?? []).length > 0 && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-                <div className="mb-1 text-xs font-semibold text-slate-600">{t("tasks.usedParts")}</div>
+              <div className="overflow-x-auto">
                 <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-slate-400">
+                      <th className="py-1 pr-2">{t("myTasks.wsItemName")}</th>
+                      <th className="py-1 pr-2">{t("myTasks.wsQty")}</th>
+                      <th className="py-1 pr-2 text-right">{t("myTasks.wsCostNet")}</th>
+                      <th className="py-1 text-right">{t("myTasks.wsPriceNet")}</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {(priceEdit.ws.used_parts ?? []).map((u) => (
-                      <tr key={u.movement_id} className="border-t border-slate-100">
-                        <td className="py-1 pr-2"><span className="font-mono text-[11px] text-slate-400">{u.sku}</span> {u.name} <span className="text-[11px] text-slate-400">· {u.warehouse_name}</span></td>
-                        <td className="py-1 pr-2 text-right tabular-nums text-slate-500">{u.quantity} {u.unit}</td>
-                        <td className="py-1 text-right tabular-nums">{u.price_net != null ? `${u.price_net.toLocaleString("hu-HU")} Ft` : "—"}</td>
+                    {priceEdit.ws.materials.map((m, i) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="py-1.5 pr-2">{m.name}</td>
+                        <td className="py-1.5 pr-2 text-slate-500">{m.qty} {m.unit}</td>
+                        <td className="py-1.5 pr-2 text-right text-orange-700">
+                          {m.cost_net != null ? `${m.cost_net.toLocaleString("hu-HU")} Ft` : "—"}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          <input
+                            type="number" min={0}
+                            value={priceEdit.prices[i] ?? ""}
+                            onChange={(e) => {
+                              const next = [...priceEdit.prices];
+                              next[i] = e.target.value;
+                              setPriceEdit({ ...priceEdit, prices: next });
+                            }}
+                            className="w-28 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-right text-sm"
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {(priceEdit.ws.used_parts ?? []).length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                <div className="mb-1 text-xs font-semibold text-slate-600">{t("tasks.usedParts")}</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {(priceEdit.ws.used_parts ?? []).map((u) => (
+                        <tr key={u.movement_id} className="border-t border-slate-100">
+                          <td className="py-1 pr-2"><span className="font-mono text-[11px] text-slate-400">{u.sku}</span> {u.name} <span className="text-[11px] text-slate-400">· {u.warehouse_name}</span></td>
+                          <td className="py-1 pr-2 text-right tabular-nums text-slate-500">{u.quantity} {u.unit}</td>
+                          <td className="py-1 text-right tabular-nums">{u.price_net != null ? `${u.price_net.toLocaleString("hu-HU")} Ft` : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
             {/* Karbantartási díj: a gépből előtöltve, átírható; kedvezmény = elengedve */}

@@ -268,96 +268,98 @@ export default function TermekekPage() {
 
       <IconLegend items={[{ icon: "✏️", label: t("common.edit") }]} />
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              {canDelete && (
-              <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={shownProducts.length > 0 && shownProducts.every((p) => selected.has(p.id))}
-                  onChange={(e) =>
-                    setSelected(e.target.checked ? new Set(shownProducts.map((p) => p.id)) : new Set())
-                  }
-                  className="h-4 w-4"
-                />
-              </th>
-              )}
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.name")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.gramsPerPortion")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.pricePerPortion")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.purchasePriceShort")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.marginPerPortion")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.vat")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.lowStockThreshold")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {shownProducts.map((p) => (
-              <tr key={p.id} className="border-b border-slate-100 last:border-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
                 {canDelete && (
-                <td className="px-3 py-3">
+                <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                   <input
                     type="checkbox"
-                    checked={selected.has(p.id)}
-                    onChange={() => toggleSelect(p.id)}
+                    checked={shownProducts.length > 0 && shownProducts.every((p) => selected.has(p.id))}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(shownProducts.map((p) => p.id)) : new Set())
+                    }
                     className="h-4 w-4"
                   />
-                </td>
+                </th>
                 )}
-                <td className="px-4 py-3">
-                  <div className="font-medium">
-                    {p.name}
-                    {p.code && (
-                      <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-normal text-slate-600">{p.code}</span>
-                    )}
-                    {!p.is_active && (
-                      <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-normal">{t("partners.inactive")}</span>
-                    )}
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    {p.unit}
-                    {p.category && (
-                      <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">{p.category}</span>
-                    )}
-                    {p.is_consignment && (
-                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title={t("cons.consignmentFlagHint")}>☕ {t("cons.consignmentBadge")}</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3">{p.grams_per_portion} g</td>
-                <td className="px-4 py-3 font-medium">{p.price_per_portion.toLocaleString("hu-HU")} Ft</td>
-                <td className="px-4 py-3 text-slate-500">
-                  {p.purchase_price != null ? `${p.purchase_price.toLocaleString("hu-HU")} Ft/kg` : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {(() => {
-                    const m = marginPerPortion(p);
-                    if (m == null) return <span className="text-slate-400">—</span>;
-                    return (
-                      <span className={m < 0 ? "font-medium text-red-600" : "text-emerald-700"}>
-                        {m.toLocaleString("hu-HU", { maximumFractionDigits: 1 })} Ft
-                      </span>
-                    );
-                  })()}
-                </td>
-                <td className="px-4 py-3 text-slate-500">{p.vat_percent}%</td>
-                <td className="px-4 py-3 text-slate-500">
-                  {p.low_stock_threshold != null ? `${p.low_stock_threshold} ${p.unit}` : "—"}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => edit(p)} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
-                    ✏️
-                  </button>
-                </td>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.name")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.gramsPerPortion")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.pricePerPortion")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.purchasePriceShort")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.marginPerPortion")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.vat")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("cons.lowStockThreshold")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
               </tr>
-            ))}
-            {shownProducts.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">{t("cons.noProducts")}</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {shownProducts.map((p) => (
+                <tr key={p.id} className="border-b border-slate-100 last:border-0">
+                  {canDelete && (
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(p.id)}
+                      onChange={() => toggleSelect(p.id)}
+                      className="h-4 w-4"
+                    />
+                  </td>
+                  )}
+                  <td className="px-4 py-3">
+                    <div className="font-medium">
+                      {p.name}
+                      {p.code && (
+                        <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-normal text-slate-600">{p.code}</span>
+                      )}
+                      {!p.is_active && (
+                        <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-normal">{t("partners.inactive")}</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {p.unit}
+                      {p.category && (
+                        <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">{p.category}</span>
+                      )}
+                      {p.is_consignment && (
+                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title={t("cons.consignmentFlagHint")}>☕ {t("cons.consignmentBadge")}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{p.grams_per_portion} g</td>
+                  <td className="px-4 py-3 font-medium">{p.price_per_portion.toLocaleString("hu-HU")} Ft</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {p.purchase_price != null ? `${p.purchase_price.toLocaleString("hu-HU")} Ft/kg` : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const m = marginPerPortion(p);
+                      if (m == null) return <span className="text-slate-400">—</span>;
+                      return (
+                        <span className={m < 0 ? "font-medium text-red-600" : "text-emerald-700"}>
+                          {m.toLocaleString("hu-HU", { maximumFractionDigits: 1 })} Ft
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">{p.vat_percent}%</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {p.low_stock_threshold != null ? `${p.low_stock_threshold} ${p.unit}` : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => edit(p)} title={t("common.edit")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                      ✏️
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {shownProducts.length === 0 && (
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">{t("cons.noProducts")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {form && (

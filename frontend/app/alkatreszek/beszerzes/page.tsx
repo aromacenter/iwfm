@@ -194,18 +194,20 @@ export default function BeszerzesPage() {
                     <span className="text-xs text-slate-400">{fmt(o.created_at)}{o.expected_date && ` · ${t("proc.expected")}: ${o.expected_date}`}</span>
                     <span className="ml-auto text-sm font-semibold tabular-nums">{ft(o.total_net)}</span>
                   </div>
-                  <table className="mt-2 w-full text-sm">
-                    <tbody>
-                      {o.items.map((it) => (
-                        <tr key={it.id} className="border-t border-slate-100">
-                          <td className="py-1 pr-2"><span className="font-mono text-xs text-slate-400">{it.sku}</span> {it.name}</td>
-                          <td className="py-1 pr-2 text-right tabular-nums">{t("proc.qtyOrdered")}: {it.qty_ordered} {it.unit}</td>
-                          <td className={`py-1 pr-2 text-right tabular-nums ${it.qty_received >= it.qty_ordered ? "text-emerald-700" : "text-amber-700"}`}>{t("proc.qtyReceived")}: {it.qty_received}</td>
-                          <td className="py-1 text-right tabular-nums text-slate-500">{ft(it.unit_cost)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto">
+                    <table className="mt-2 w-full text-sm">
+                      <tbody>
+                        {o.items.map((it) => (
+                          <tr key={it.id} className="border-t border-slate-100">
+                            <td className="py-1 pr-2"><span className="font-mono text-xs text-slate-400">{it.sku}</span> {it.name}</td>
+                            <td className="py-1 pr-2 text-right tabular-nums">{t("proc.qtyOrdered")}: {it.qty_ordered} {it.unit}</td>
+                            <td className={`py-1 pr-2 text-right tabular-nums ${it.qty_received >= it.qty_ordered ? "text-emerald-700" : "text-amber-700"}`}>{t("proc.qtyReceived")}: {it.qty_received}</td>
+                            <td className="py-1 text-right tabular-nums text-slate-500">{ft(it.unit_cost)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                   {o.note && <p className="mt-1 text-xs text-slate-400">{o.note}</p>}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {o.status === "draft" && <>
@@ -238,11 +240,13 @@ export default function BeszerzesPage() {
                   </div>
                   <p className="text-xs text-slate-500">{[s.contact, s.email, s.phone].filter(Boolean).join(" · ") || "—"}</p>
                   {s.prices.length > 0 && (
-                    <table className="mt-2 w-full text-xs">
-                      <tbody>{s.prices.map((p) => (
-                        <tr key={p.part_id} className="border-t border-slate-100"><td className="py-1 pr-2"><span className="font-mono text-slate-400">{p.sku}</span> {p.name}</td><td className="py-1 pr-2 text-right tabular-nums font-medium">{ft(p.price_net)}</td><td className="py-1 text-right text-slate-500">MOQ {p.moq}{p.supplier_sku && ` · ${p.supplier_sku}`}</td></tr>
-                      ))}</tbody>
-                    </table>
+                    <div className="overflow-x-auto">
+                      <table className="mt-2 w-full text-xs">
+                        <tbody>{s.prices.map((p) => (
+                          <tr key={p.part_id} className="border-t border-slate-100"><td className="py-1 pr-2"><span className="font-mono text-slate-400">{p.sku}</span> {p.name}</td><td className="py-1 pr-2 text-right tabular-nums font-medium">{ft(p.price_net)}</td><td className="py-1 text-right text-slate-500">MOQ {p.moq}{p.supplier_sku && ` · ${p.supplier_sku}`}</td></tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               ))}
@@ -338,17 +342,19 @@ export default function BeszerzesPage() {
               <div className="text-sm"><p className="mb-1 text-xs text-slate-500">{t("proc.receiveInto")} *</p><SearchSelect items={whItems} value={receive.warehouse_id} onChange={(id) => setReceive({ ...receive, warehouse_id: id })} placeholder={t("parts.warehouse")} /></div>
               <label className="block text-sm">{t("proc.documentNo")}<input value={receive.document_no} onChange={(e) => setReceive({ ...receive, document_no: e.target.value })} className={input} /></label>
             </div>
-            <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs uppercase text-slate-400"><th className="py-1">{t("parts.part")}</th><th className="py-1 text-right">{t("proc.qtyOrdered")}</th><th className="py-1 text-right">{t("proc.receiveQty")}</th><th className="py-1">{t("parts.location")}</th></tr></thead>
-              <tbody>{receive.po.items.map((it) => (
-                <tr key={it.id} className="border-t border-slate-100">
-                  <td className="py-1 pr-2"><span className="font-mono text-xs text-slate-400">{it.sku}</span> {it.name}</td>
-                  <td className="py-1 text-right tabular-nums text-slate-500">{it.qty_received} / {it.qty_ordered}</td>
-                  <td className="py-1 text-right"><input type="number" min={0} step="any" value={receive.lines[it.id]?.qty ?? ""} onChange={(e) => setReceive({ ...receive, lines: { ...receive.lines, [it.id]: { ...receive.lines[it.id], qty: e.target.value } } })} className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-right" /></td>
-                  <td className="py-1 pl-2"><input value={receive.lines[it.id]?.location ?? ""} onChange={(e) => setReceive({ ...receive, lines: { ...receive.lines, [it.id]: { ...receive.lines[it.id], location: e.target.value.toUpperCase() } } })} placeholder={locationHint(receive.warehouse_id)} className="w-24 rounded-lg border border-slate-300 px-2 py-1" /></td>
-                </tr>
-              ))}</tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs uppercase text-slate-400"><th className="py-1">{t("parts.part")}</th><th className="py-1 text-right">{t("proc.qtyOrdered")}</th><th className="py-1 text-right">{t("proc.receiveQty")}</th><th className="py-1">{t("parts.location")}</th></tr></thead>
+                <tbody>{receive.po.items.map((it) => (
+                  <tr key={it.id} className="border-t border-slate-100">
+                    <td className="py-1 pr-2"><span className="font-mono text-xs text-slate-400">{it.sku}</span> {it.name}</td>
+                    <td className="py-1 text-right tabular-nums text-slate-500">{it.qty_received} / {it.qty_ordered}</td>
+                    <td className="py-1 text-right"><input type="number" min={0} step="any" value={receive.lines[it.id]?.qty ?? ""} onChange={(e) => setReceive({ ...receive, lines: { ...receive.lines, [it.id]: { ...receive.lines[it.id], qty: e.target.value } } })} className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-right" /></td>
+                    <td className="py-1 pl-2"><input value={receive.lines[it.id]?.location ?? ""} onChange={(e) => setReceive({ ...receive, lines: { ...receive.lines, [it.id]: { ...receive.lines[it.id], location: e.target.value.toUpperCase() } } })} placeholder={locationHint(receive.warehouse_id)} className="w-24 rounded-lg border border-slate-300 px-2 py-1" /></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
             <div className="flex justify-end gap-2 pt-1"><button type="button" onClick={() => setReceive(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button><button disabled={busy || !receive.warehouse_id} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">{t("proc.receiveBtn")}</button></div>
           </form>
         </div>

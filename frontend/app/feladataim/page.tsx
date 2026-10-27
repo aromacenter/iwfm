@@ -1402,20 +1402,22 @@ export default function FeladataimPage() {
                 {usedParts.length === 0 ? (
                   <p className="mb-2 text-xs text-slate-500">{t("myTasks.wsPartsEmpty")}</p>
                 ) : (
-                  <table className="mb-2 w-full text-sm">
-                    <tbody>
-                      {usedParts.map((u) => (
-                        <tr key={u.movement_id} className="border-b border-slate-200">
-                          <td className="py-1 pr-2"><span className="font-mono text-[11px] text-slate-400">{u.sku}</span> {u.name}{u.serial_no && <span className="ml-1 text-[11px] text-slate-400">· {u.serial_no}</span>}</td>
-                          <td className="py-1 pr-2 text-right tabular-nums">{u.quantity} {u.unit}</td>
-                          <td className="py-1 pr-2 text-right tabular-nums text-slate-500">{u.price_net != null ? `${u.price_net.toLocaleString("hu-HU")} Ft` : ""}</td>
-                          <td className="py-1 text-right">
-                            <button type="button" disabled={partsBusy} onClick={() => void uninstallPart(u)} className="px-1 text-slate-400 hover:text-red-600" title={t("myTasks.wsPartsRemove")}>🗑</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto">
+                    <table className="mb-2 w-full text-sm">
+                      <tbody>
+                        {usedParts.map((u) => (
+                          <tr key={u.movement_id} className="border-b border-slate-200">
+                            <td className="py-1 pr-2"><span className="font-mono text-[11px] text-slate-400">{u.sku}</span> {u.name}{u.serial_no && <span className="ml-1 text-[11px] text-slate-400">· {u.serial_no}</span>}</td>
+                            <td className="py-1 pr-2 text-right tabular-nums">{u.quantity} {u.unit}</td>
+                            <td className="py-1 pr-2 text-right tabular-nums text-slate-500">{u.price_net != null ? `${u.price_net.toLocaleString("hu-HU")} Ft` : ""}</td>
+                            <td className="py-1 text-right">
+                              <button type="button" disabled={partsBusy} onClick={() => void uninstallPart(u)} className="px-1 text-slate-400 hover:text-red-600" title={t("myTasks.wsPartsRemove")}>🗑</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
                 <div className="flex flex-wrap items-end gap-1.5">
                   <div className="min-w-[12rem] flex-1 text-sm">

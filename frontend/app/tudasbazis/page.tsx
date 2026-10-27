@@ -146,74 +146,76 @@ export default function TudasbazisPage() {
 
       <IconLegend items={[{ icon: "✏️", label: t("common.edit") }]} />
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-slate-500">
-              {canDelete && (
-                <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
-                  <input
-                    type="checkbox"
-                    checked={entries.length > 0 && entries.every((e) => selected.has(e.id))}
-                    onChange={(e) =>
-                      setSelected(e.target.checked ? new Set(entries.map((x) => x.id)) : new Set())
-                    }
-                    className="h-4 w-4"
-                  />
-                </th>
-              )}
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("kb.entry")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("kb.solution")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("kb.author")}</th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((e) => (
-              <tr key={e.id} className="border-b border-slate-100 align-top last:border-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500">
                 {canDelete && (
-                  <td className="px-3 py-3">
+                  <th className="sticky top-0 z-10 w-8 border-b border-slate-200 bg-white px-3 py-3">
                     <input
                       type="checkbox"
-                      checked={selected.has(e.id)}
-                      onChange={() => toggleSelect(e.id)}
+                      checked={entries.length > 0 && entries.every((e) => selected.has(e.id))}
+                      onChange={(e) =>
+                        setSelected(e.target.checked ? new Set(entries.map((x) => x.id)) : new Set())
+                      }
                       className="h-4 w-4"
                     />
-                  </td>
+                  </th>
                 )}
-                <td className="px-4 py-3">
-                  <div className="font-medium">{e.title}</div>
-                  <div className="text-xs font-semibold text-indigo-700">{e.machine_label}</div>
-                </td>
-                <td className="max-w-md px-4 py-3">
-                  <p className="line-clamp-3 whitespace-pre-wrap text-slate-600">{e.content}</p>
-                </td>
-                <td className="px-4 py-3 text-slate-500">
-                  <div>{e.created_by_name ?? "—"}</div>
-                  <div className="text-xs text-slate-400">{fmt(e.updated_at)}</div>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => {
-                      setError(null);
-                      setForm({ id: e.id, machine_label: e.machine_label, title: e.title, content: e.content });
-                    }}
-                    title={t("common.edit")}
-                    className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
-                  >
-                    ✏️
-                  </button>
-                </td>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("kb.entry")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("kb.solution")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">{t("kb.author")}</th>
+                <th className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3"></th>
               </tr>
-            ))}
-            {entries.length === 0 && (
-              <tr>
-                <td colSpan={canDelete ? 5 : 4} className="px-4 py-10 text-center text-slate-400">
-                  {t("kb.empty")}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {entries.map((e) => (
+                <tr key={e.id} className="border-b border-slate-100 align-top last:border-0">
+                  {canDelete && (
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(e.id)}
+                        onChange={() => toggleSelect(e.id)}
+                        className="h-4 w-4"
+                      />
+                    </td>
+                  )}
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{e.title}</div>
+                    <div className="text-xs font-semibold text-indigo-700">{e.machine_label}</div>
+                  </td>
+                  <td className="max-w-md px-4 py-3">
+                    <p className="line-clamp-3 whitespace-pre-wrap text-slate-600">{e.content}</p>
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">
+                    <div>{e.created_by_name ?? "—"}</div>
+                    <div className="text-xs text-slate-400">{fmt(e.updated_at)}</div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => {
+                        setError(null);
+                        setForm({ id: e.id, machine_label: e.machine_label, title: e.title, content: e.content });
+                      }}
+                      title={t("common.edit")}
+                      className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100"
+                    >
+                      ✏️
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {entries.length === 0 && (
+                <tr>
+                  <td colSpan={canDelete ? 5 : 4} className="px-4 py-10 text-center text-slate-400">
+                    {t("kb.empty")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {form && (

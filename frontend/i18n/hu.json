@@ -532,7 +532,8 @@
     "printHint": "A4-es lap, vagy 50 / 80 mm-es nyugtanyomtató. A nyomtatási ablak a böngészőben nyílik.",
     "printNo": "Most nem nyomtatok",
     "printBtn": "Nyomtatás (A4 / 50 / 80 mm)",
-    "invoiceLinkHint": "Számla megnyitása a Billingóban (nyomon követhető, ki mikor nyitotta meg)"
+    "invoiceLinkHint": "Számla megnyitása a Billingóban (nyomon követhető, ki mikor nyitotta meg)",
+    "billingoPdfBtn": "Billingó-bizonylat letöltése (PDF)"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -621,7 +622,11 @@
     "status": "Státusz",
     "paid": "Fizetve",
     "unpaid": "Fizetésre vár",
-    "footer": "Ezt az oldalt az iwfm rendszer állítja elő — csak olvasható nézet."
+    "footer": "Ezt az oldalt az iwfm rendszer állítja elő — csak olvasható nézet.",
+    "sendBtn": "Partner-portál link küldése e-mailben",
+    "sendConfirm": "Elküldöd a(z) {name} partner-portál linkjét e-mailben ide: {to}?",
+    "sent": "A portál-link elment: {to}",
+    "noEmail": "A partnernek nincs beállított e-mail címe — add meg a szerkesztőben."
   },
   "kb": {
     "title": "Tudásbázis",
@@ -919,7 +924,17 @@
     "countPartners": "partner",
     "countMachines": "kihelyezett gép",
     "countSelected": "Kijelölve",
-    "countActivePartners": "aktív partner"
+    "countActivePartners": "aktív partner",
+    "docsBtn": "Bizonylatok (elszámolás A4, Billingó-számla)",
+    "docsTitle": "Bizonylatok — {name}",
+    "docsHint": "Az ebben a programban készült elszámolási bizonylatok (A4) és a Billingóban kiállított számlák letöltése.",
+    "docsEmpty": "Ennek a partnernek még nincs elszámolása.",
+    "docDate": "Dátum",
+    "docTotal": "Bruttó",
+    "docInvoice": "Számla",
+    "docInvoiced": "kiállítva",
+    "docA4": "Elszámolási bizonylat letöltése (A4 PDF)",
+    "docBillingo": "Billingó-számla letöltése (PDF)"
   },
   "account": {
     "password": "Jelszó módosítása",
@@ -2039,7 +2054,10 @@
     "tasks.bad_quote_email": "Érvénytelen e-mail cím az ajánlat címzettjei között (több cím vesszővel).",
     "billingo.request_failed.withMessage": "A számlázó (Billingó) elutasította: {message}",
     "handover.no_invoice": "Ehhez a munkalaphoz nincs számla.",
-    "settings.demo_data_in_use": "A mintaadatokhoz már élő adat kapcsolódik (munkalap, elszámolás) — előbb azokat töröld."
+    "settings.demo_data_in_use": "A mintaadatokhoz már élő adat kapcsolódik (munkalap, elszámolás) — előbb azokat töröld.",
+    "portal.no_email": "A partnernek nincs beállított e-mail címe.",
+    "email.not_configured": "Nincs beállított e-mail küldés (SMTP) — a Beállításokban adható meg.",
+    "email.send_failed": "Az e-mail küldése nem sikerült — ellenőrizd az SMTP-beállításokat."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2896,7 +2914,16 @@
     "archiveBtn": "Archívum",
     "archiveHint": "A 2026-10-12-i kassza-újraindítás ELŐTTI tételek (csak admin)",
     "archiveBanner": "Archívum — a kassza 2026. 10. 12-i újraindítása előtti tételek. Ezek az élő egyenlegbe már nem számítanak bele.",
-    "myRegisterArchive": "Saját kasszám — archívum"
+    "myRegisterArchive": "Saját kasszám — archívum",
+    "movementsTitle": "Mozgások az időszakban",
+    "kinds": {
+      "revenue": "Készpénz-bevétel",
+      "deposit": "Betét",
+      "withdrawal": "Kivét",
+      "expense": "Költség",
+      "transfer_in": "Átvett pénz",
+      "transfer_out": "Átadott pénz"
+    }
   },
   "stats": {
     "title": "Statisztika",

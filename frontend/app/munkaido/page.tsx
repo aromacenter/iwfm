@@ -161,24 +161,26 @@ export default function MunkaidoPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="mb-2 font-semibold">{t("worktime.byEmployee")}</h2>
               {stats.by_employee.length === 0 ? <p className="py-6 text-center text-sm text-slate-400">{t("worktime.empty")}</p> : (
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-2 py-1.5">{t("worktime.col.employee")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.worksheets")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.written")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.active")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.travel")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.ratio")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.pause")}</th>
-                  </tr></thead>
-                  <tbody>
-                    {stats.by_employee.map((e) => (
-                      <tr key={e.employee_id ?? e.name} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="px-2 py-1.5 font-medium">{e.name}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{e.worksheets}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{hrs(e.written_hours)}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{dur(e.active_seconds)}{e.correction_seconds !== 0 && <span className="ml-1 text-[10px] text-slate-400">({t("worktime.corrected")} {e.correction_seconds >= 0 ? "+" : ""}{Math.round(e.correction_seconds / 60)} p)</span>}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{dur(e.travel_seconds)}{e.wait_seconds > 0 && <span className="block text-[10px]">⏳ {dur(e.wait_seconds)}</span>}</td>
-                        <td className="px-2 py-1.5 text-right"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${pill(e.ratio)}`}>{pct(e.ratio)}</span></td>
-                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{dur(e.pause_seconds)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <th className="px-2 py-1.5">{t("worktime.col.employee")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.worksheets")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.written")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.active")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.travel")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.ratio")}</th><th className="px-2 py-1.5 text-right">{t("worktime.col.pause")}</th>
+                    </tr></thead>
+                    <tbody>
+                      {stats.by_employee.map((e) => (
+                        <tr key={e.employee_id ?? e.name} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="px-2 py-1.5 font-medium">{e.name}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">{e.worksheets}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">{hrs(e.written_hours)}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">{dur(e.active_seconds)}{e.correction_seconds !== 0 && <span className="ml-1 text-[10px] text-slate-400">({t("worktime.corrected")} {e.correction_seconds >= 0 ? "+" : ""}{Math.round(e.correction_seconds / 60)} p)</span>}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{dur(e.travel_seconds)}{e.wait_seconds > 0 && <span className="block text-[10px]">⏳ {dur(e.wait_seconds)}</span>}</td>
+                          <td className="px-2 py-1.5 text-right"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${pill(e.ratio)}`}>{pct(e.ratio)}</span></td>
+                          <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{dur(e.pause_seconds)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </section>
 
