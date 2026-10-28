@@ -44,6 +44,30 @@ export default function TudasbazisPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // AI-bejegyzések újragenerálása géptípus-pontosítással (113. kör): a rossz
+  // kategóriájú (pl. karos gépnek automata-tartalom) AI-adatok cseréje.
+  const [regen, setRegen] = useState<{ label: string; hint: string } | null>(null);
+  const [regenBusy, setRegenBusy] = useState(false);
+
+  async function runRegen(e: React.FormEvent) {
+    e.preventDefault();
+    if (!regen) return;
+    setRegenBusy(true);
+    try {
+      const res = await api.post<{ deleted: number; created: number }>("/api/knowledge/regenerate", {
+        machine_label: regen.label.trim(),
+        hint: regen.hint.trim() || null,
+      });
+      toast(t("kb.regenDone", { deleted: res.deleted, created: res.created }), "success");
+      setRegen(null);
+      load();
+      api.get<string[]>("/api/knowledge/machines").then(setMachines).catch(() => {});
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setRegenBusy(false);
+    }
+  }
 
   const fmt = (dt: string) =>
     new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "short" });
@@ -132,6 +156,14 @@ export default function TudasbazisPage() {
           placeholder={t("kb.search")}
           className="min-w-52 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
+        <button
+          type="button"
+          onClick={() => setRegen({ label: machineFilter, hint: "" })}
+          title={t("kb.regenHint")}
+          className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-sm text-violet-800 hover:bg-violet-100"
+        >
+          🤖 {t("kb.regen")}
+        </button>
         {canDelete && selected.size > 0 && (
           <button
             onClick={bulkDelete}
@@ -217,6 +249,48 @@ export default function TudasbazisPage() {
           </table>
         </div>
       </div>
+
+      {regen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={runRegen} className="w-full max-w-lg space-y-3 rounded-2xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-bold">🤖 {t("kb.regenTitle")}</h2>
+            <p className="text-sm text-slate-600">{t("kb.regenHint")}</p>
+            <label className="block text-sm">
+              {t("kb.machine")} *
+              <input
+                value={regen.label}
+                onChange={(e) => setRegen({ ...regen, label: e.target.value })}
+                list="kb-machines"
+                required
+                minLength={2}
+                placeholder={t("kb.machinePh")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+              <datalist id="kb-machines">
+                {machines.map((m) => <option key={m} value={m} />)}
+              </datalist>
+            </label>
+            <label className="block text-sm">
+              {t("kb.regenClarify")}
+              <textarea
+                value={regen.hint}
+                onChange={(e) => setRegen({ ...regen, hint: e.target.value })}
+                rows={3}
+                maxLength={500}
+                placeholder={t("kb.regenClarifyPh")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">⚠️ {t("kb.regenWarn")}</p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setRegen(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={regenBusy || regen.label.trim().length < 2} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50">
+                {regenBusy ? t("kb.regenRunning") : t("kb.regenGo")}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {form && (
         <div

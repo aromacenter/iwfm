@@ -601,13 +601,12 @@ async def assignable_users(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("settlements")),
 ):
-    """Autó-raktárhoz rendelhető felhasználók (üzletkötők, vezetők)."""
+    """Autó-raktárhoz rendelhető felhasználók: MINDEN aktív felhasználó
+    (113. kör, 6968d0f3 — a szervizes is kaphat autót, a benne lévő
+    alkatrészekkel dolgozik). Korábban csak üzletkötő/vezető volt."""
     rows = (
         await db.execute(
-            select(User).where(
-                User.is_active.is_(True),
-                User.role.in_(("admin", "manager", "uzletkoto")),
-            ).order_by(User.display_name)
+            select(User).where(User.is_active.is_(True)).order_by(User.display_name)
         )
     ).scalars().all()
     return [

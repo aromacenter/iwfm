@@ -663,13 +663,34 @@ def build_intake_pdf(data: dict, settings: dict | None = None) -> bytes:
     c.setFont(FONT, 9)
     c.drawString(left, line_y, f"Átvette: {data.get('received_by_name') or '—'}")
 
-    # Aláírás-vonalak a lap alján
-    sig_y = 46 * mm
+    # Aláírás-vonalak a lap alján — helyszíni átvételnél (113. kör) a képernyőn
+    # rögzített aláírás-képek, a begépelt név és az időbélyeg is rákerül.
+    sig_y = 50 * mm
     box_w = 70 * mm
-    for x, label in ((left, "Átadó (ügyfél) aláírása"), (right - box_w, "Átvevő aláírása")):
+    for x, sig_key, label in (
+        (left, "client_signature", "Átadó (ügyfél) aláírása"),
+        (right - box_w, "employee_signature", "Átvevő aláírása"),
+    ):
+        img = _signature_image(data.get(sig_key))
+        if img is not None:
+            c.drawImage(
+                img, x + 5 * mm, sig_y + 1.5 * mm, width=box_w - 10 * mm, height=16 * mm,
+                preserveAspectRatio=True, mask="auto",
+            )
         c.line(x, sig_y, x + box_w, sig_y)
         c.setFont(FONT, 8)
         c.drawCentredString(x + box_w / 2, sig_y - 4.5 * mm, label)
+        if sig_key == "client_signature" and data.get("client_signer_name"):
+            c.setFont(FONT_BOLD, 8)
+            c.drawCentredString(x + box_w / 2, sig_y - 8.5 * mm, str(data["client_signer_name"])[:40])
+        elif sig_key == "employee_signature" and img is not None and data.get("received_by_name"):
+            c.setFont(FONT_BOLD, 8)
+            c.drawCentredString(x + box_w / 2, sig_y - 8.5 * mm, str(data["received_by_name"])[:40])
+        if data.get("signed_at") and img is not None:
+            c.setFont(FONT, 7)
+            c.setFillColorRGB(0.35, 0.35, 0.4)
+            c.drawCentredString(x + box_w / 2, sig_y - 12 * mm, f"Aláírva: {data['signed_at']} (helyszíni átvétel)")
+            c.setFillColorRGB(0, 0, 0)
 
     # A 60 napos tárolási záradék — KÖTELEZŐ elem az elismervény alján
     clause = data.get("footer_clause") or DEFAULT_INTAKE_FOOTER

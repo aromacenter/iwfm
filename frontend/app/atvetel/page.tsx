@@ -11,6 +11,7 @@ import AppShell from "@/components/AppShell";
 import ScanAssetButton from "@/components/ScanAssetButton";
 import CameraScanner, { cameraScanSupported } from "@/components/CameraScanner";
 import SearchSelect from "@/components/SearchSelect";
+import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -49,6 +50,10 @@ interface Intake {
   received_at: string;
   photo_count: number;
   task_id: string | null;
+  on_site?: boolean;
+  client_signer_name?: string | null;
+  signed_at?: string | null;
+  emailed_at?: string | null;
   worksheet_serial: string | null;
   worksheet_completed: boolean;
 }
@@ -110,6 +115,36 @@ export default function AtvetelPage() {
   // Állapot-fotók a gépről (mobilon kamerával, PC-n fájlból); feltöltés
   // előtt ~1600px-re kicsinyítjük, hogy gyors és kicsi legyen.
   const [photos, setPhotos] = useState<string[]>([]);
+  // Helyszíni átvétel (113. kör): aláírások a képernyőn + e-mail az ügyfélnek
+  const [onSite, setOnSite] = useState(false);
+  const [signerName, setSignerName] = useState("");
+  const [clientSig, setClientSig] = useState<string | null>(null);
+  const [empSig, setEmpSig] = useState<string | null>(null);
+  const [useSample, setUseSample] = useState(true);
+  const [sendEmail, setSendEmail] = useState(true);
+  const [sigSample, setSigSample] = useState<string | null>(null);
+  useEffect(() => {
+    api.get<{ signature: string | null }>("/api/auth/me/signature")
+      .then((r) => setSigSample(r.signature))
+      .catch(() => {});
+  }, []);
+  async function saveSigSample(dataUrl: string) {
+    try {
+      await api.put("/api/auth/me/signature", { signature: dataUrl });
+      setSigSample(dataUrl);
+      toast(t("myTasks.sigSampleSaved"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+  function resetOnSite() {
+    setOnSite(false);
+    setSignerName("");
+    setClientSig(null);
+    setEmpSig(null);
+    setUseSample(true);
+    setSendEmail(true);
+  }
 
   function shrinkImage(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -290,6 +325,12 @@ export default function AtvetelPage() {
         setBusy(false);
         return;
       }
+      // Helyszíni átvétel: ügyfél-aláírás + begépelt név kötelező
+      if (onSite && (!clientSig || signerName.trim().length < 2)) {
+        setError(t("intake.onSiteSigRequired"));
+        setBusy(false);
+        return;
+      }
       const created = await api.post<Intake>("/api/intakes", {
         asset_id: assetId,
         partner_id: partnerId,
@@ -299,10 +340,18 @@ export default function AtvetelPage() {
         loaner_barcode: form.loaner_barcode || null,
         note: form.note || null,
         photos,
+        on_site: onSite,
+        client_signature: onSite ? clientSig : null,
+        client_signer_name: onSite ? signerName.trim() : null,
+        employee_signature: onSite ? (useSample && sigSample ? sigSample : empSig) : null,
+        send_email: onSite ? sendEmail : false,
       });
+      const emailedTo = onSite && sendEmail && (client.client_email ?? "").trim();
       setShowForm(false);
       setForm(EMPTY_FORM);
       setPhotos([]);
+      resetOnSite();
+      if (emailedTo) toast(t("intake.onSiteEmailed", { email: emailedTo }), "success");
       setNewAssetMode(false);
       setNewAsset({ name: "", manufacturer: "", serial_number: "" });
       setNewPartnerMode(false);
@@ -406,6 +455,12 @@ export default function AtvetelPage() {
                   {row.asset_serial ? ` · ${t("myTasks.assetSerial")}: ${row.asset_serial}` : ""}
                   {row.received_by_name ? ` · ${t("intake.receivedBy")}: ${row.received_by_name}` : ""}
                 </p>
+                {row.on_site && (
+                  <p className="mt-0.5 text-xs text-emerald-700">
+                    ✍️ {t("intake.onSiteBadge", { name: row.client_signer_name ?? "", at: row.signed_at ? new Date(row.signed_at).toLocaleString("hu-HU") : "" })}
+                    {row.emailed_at ? ` · ✉️ ${t("intake.emailedAt", { at: new Date(row.emailed_at).toLocaleString("hu-HU") })}` : ""}
+                  </p>
+                )}
                 {row.faults && (
                   <p className="mt-1 text-sm text-slate-600">⚠️ {row.faults}</p>
                 )}
@@ -448,6 +503,24 @@ export default function AtvetelPage() {
                 >
                   🖨️ {t("intake.officePrint")}
                 </button>
+                {row.client_email && (
+                  <button
+                    onClick={async () => {
+                      if (!(await confirm(t("intake.emailConfirm", { email: row.client_email ?? "" })))) return;
+                      try {
+                        const r = await api.post<{ ok: boolean }>(`/api/intakes/${row.id}/email`, {});
+                        toast(r.ok ? t("intake.emailSent") : t("intake.emailFailed"), r.ok ? "success" : "error");
+                        load();
+                      } catch (err) {
+                        toast(errorMessage(err), "error");
+                      }
+                    }}
+                    title={t("intake.emailHint")}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+                  >
+                    ✉️
+                  </button>
+                )}
                 {/* Már kiadott munkalap: nem adható ki még egyszer — helyette a
                     kész munkalap / aláírt átadási papír nyitható meg. */}
                 {canTasks && !row.task_id && (
@@ -781,6 +854,55 @@ export default function AtvetelPage() {
                 )}
               </div>
               <p className="mt-1 text-[11px] text-slate-400">{t("intake.photosHint")}</p>
+            </div>
+
+            {/* Helyszíni átvétel: aláírások a képernyőn, időbélyeggel az elismervényen */}
+            <div className={`rounded-xl border p-3 ${onSite ? "border-emerald-300 bg-emerald-50/40" : "border-slate-200"}`}>
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={onSite} onChange={(e) => setOnSite(e.target.checked)} className="h-4 w-4" />
+                ✍️ {t("intake.onSite")}
+              </label>
+              <p className="mt-1 text-xs text-slate-500">{t("intake.onSiteHint")}</p>
+              {onSite && (
+                <div className="mt-3 space-y-3">
+                  <label className="block text-sm">
+                    {t("intake.onSiteSigner")} <span className="text-rose-600">*</span>
+                    <input
+                      value={signerName}
+                      onChange={(e) => setSignerName(e.target.value)}
+                      placeholder={form.client_name || t("intake.onSiteSignerPh")}
+                      maxLength={256}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                  </label>
+                  <SignatureCanvas label={t("intake.onSiteClientSig")} onChange={setClientSig} />
+                  <div>
+                    <p className="text-sm font-medium">{t("intake.onSiteEmpSig")}</p>
+                    {sigSample && (
+                      <label className="mt-1 flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={useSample} onChange={(e) => setUseSample(e.target.checked)} className="h-4 w-4" />
+                        {t("intake.onSiteUseSample")}
+                      </label>
+                    )}
+                    {sigSample && useSample ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={sigSample} alt="" className="mt-1 h-16 rounded-lg border border-slate-200 bg-white" />
+                    ) : (
+                      <SignatureCanvas
+                        label={t("intake.onSiteEmpSigDraw")}
+                        onChange={setEmpSig}
+                        preset={sigSample}
+                        onSavePreset={saveSigSample}
+                      />
+                    )}
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} className="h-4 w-4" />
+                    ✉️ {t("intake.onSiteSendEmail")}
+                    {form.client_email && <span className="text-xs text-slate-500">({form.client_email})</span>}
+                  </label>
+                </div>
+              )}
             </div>
 
             <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">

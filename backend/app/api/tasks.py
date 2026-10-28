@@ -107,6 +107,17 @@ class StatusBody(BaseModel):
     comment: str | None = Field(default=None, max_length=1000)
 
 
+class RescheduleRequestBody(BaseModel):
+    """A szerelő átütemezés-kérése (113. kör): az indok KÖTELEZŐ."""
+
+    note: str = Field(min_length=3, max_length=512)
+    proposed_date: date | None = None
+
+
+class RescheduleRejectBody(BaseModel):
+    note: str | None = Field(default=None, max_length=512)
+
+
 class CommentOut(BaseModel):
     id: str
     author_name: str | None
@@ -135,6 +146,10 @@ class TaskOut(BaseModel):
     asset: dict | None = None  # a munkalaphoz kötött gép adatai (KSZ)
     visit_window: str | None = None
     reschedule_note: str | None = None
+    # Függő átütemezés-kérés a szerelőtől (113. kör) — a vezető fogadja el / utasítja el
+    reschedule_request_note: str | None = None
+    reschedule_request_date: date | None = None
+    reschedule_requested_at: datetime | None = None
     client_name: str | None = None  # a munkalapon rögzített ügyfél
     ai_reason: str | None = None  # csak létrehozáskor, ha az AI jelölte ki
     ticket_images: list[str] = []  # szervizjegyből jött feladat csatolt képei (id-k)
@@ -899,6 +914,9 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             intake_id=str(t.intake_id) if t.intake_id else None,
         visit_window=t.visit_window,
         reschedule_note=t.reschedule_note,
+            reschedule_request_note=t.reschedule_request_note,
+            reschedule_request_date=t.reschedule_request_date,
+            reschedule_requested_at=t.reschedule_requested_at,
             intake_photos=intake_photo_ids.get(t.id, []),
             worksheet_photos=ws_photo_ids.get(t.id, []),
         )
@@ -1124,6 +1142,15 @@ async def update_task(
         if len(note) < 3:
             raise HTTPException(status_code=422, detail={"code": "tasks.reschedule_note_required"})
         data["reschedule_note"] = f"{task.due_date.isoformat()} → {data['due_date'].isoformat()}: {note}"[:512]
+        # Az új határidő a szerelő függő kérését is lezárja (elfogadás)
+        if task.reschedule_request_note:
+            db.add(TaskComment(
+                task_id=task.id, author_user_id=actor.id,
+                text=f"✅ Átütemezés elfogadva: {data['due_date'].isoformat()}",
+            ))
+            data["reschedule_request_note"] = None
+            data["reschedule_request_date"] = None
+            data["reschedule_requested_at"] = None
     if "visit_window" in data:
         data["visit_window"] = (data["visit_window"] or "").strip() or None
         if save_window:
@@ -2164,6 +2191,103 @@ async def worksheet_photo(
     task = await _get_task_or_404(db, task_id)
     photo = await _ws_photo_or_404(db, task, photo_id)
     return Response(content=photo.image, media_type=photo.mime)
+
+
+@router.post("/{task_id}/reschedule-request/reject", response_model=TaskOut)
+async def reject_reschedule_request(
+    task_id: str,
+    body: RescheduleRejectBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """A vezető elutasítja a szerelő átütemezés-kérését (113. kör): a kérés
+    törlődik, a feladat marad az eredeti napon; a szerelő kommentben látja."""
+    task = await _get_task_or_404(db, task_id)
+    if not task.reschedule_request_note:
+        raise HTTPException(status_code=404, detail={"code": "tasks.no_reschedule_request"})
+    reason = (body.note or "").strip()
+    db.add(TaskComment(
+        task_id=task.id, author_user_id=actor.id,
+        text=("❌ Átütemezés elutasítva" + (f": {reason}" if reason else "") + f" (marad: {task.due_date.isoformat()})")[:1000],
+    ))
+    task.reschedule_request_note = None
+    task.reschedule_request_date = None
+    task.reschedule_requested_at = None
+    await record_audit(
+        db, actor=actor, action="task.reschedule_rejected", entity_type="task",
+        entity_id=str(task.id), detail={"note": reason[:200]}, request=request,
+    )
+    await db.commit()
+    return (await _tasks_out(db, [task]))[0]
+
+
+@me_router.post("/{task_id}/reschedule-request", response_model=TaskOut)
+async def my_reschedule_request(
+    task_id: str,
+    body: RescheduleRequestBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """A szerelő átütemezést kér a saját feladatára (113. kör, e283f5b5):
+    kötelező indokkal, opcionális javasolt nappal. A feladat NEM mozdul — a
+    vezető a naptárban fogadja el (új határidő) vagy utasítja el. Értesítés:
+    "task.reschedule_requested" automatizálás-esemény (Telegram/e-mail)."""
+    task = await _own_task_or_404(db, emp, task_id)
+    if task.status == "done":
+        raise HTTPException(status_code=422, detail={"code": "tasks.already_done"})
+    note = body.note.strip()
+    if len(note) < 3:
+        raise HTTPException(status_code=422, detail={"code": "tasks.reschedule_note_required"})
+    task.reschedule_request_note = note[:512]
+    task.reschedule_request_date = body.proposed_date
+    task.reschedule_requested_at = datetime.now(UTC)
+    proposed = body.proposed_date.isoformat() if body.proposed_date else ""
+    db.add(TaskComment(
+        task_id=task.id, author_user_id=user.id,
+        text=("🔁 Átütemezést kérek" + (f" ({proposed})" if proposed else "") + f": {note}")[:1000],
+    ))
+    await record_audit(
+        db, actor=user, action="task.reschedule_requested", entity_type="task",
+        entity_id=str(task.id), detail={"note": note[:200], "proposed_date": proposed}, request=request,
+    )
+    await db.commit()
+    try:
+        from app.services.wfm.automation import fire_event
+
+        fire_event("task.reschedule_requested", {
+            "cim": task.title,
+            "dolgozo": f"{emp.last_name} {emp.first_name}",
+            "hatarido": task.due_date.isoformat() if task.due_date else "",
+            "javasolt_datum": proposed,
+            "indok": note,
+        })
+    except Exception:
+        logging.getLogger(__name__).warning("task.reschedule_requested event failed", exc_info=True)
+    return (await _tasks_out(db, [task]))[0]
+
+
+@me_router.delete("/{task_id}/reschedule-request", response_model=TaskOut)
+async def my_reschedule_request_withdraw(
+    task_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """A szerelő visszavonja a saját átütemezés-kérését."""
+    task = await _own_task_or_404(db, emp, task_id)
+    task.reschedule_request_note = None
+    task.reschedule_request_date = None
+    task.reschedule_requested_at = None
+    await record_audit(
+        db, actor=user, action="task.reschedule_withdrawn", entity_type="task",
+        entity_id=str(task.id), request=request,
+    )
+    await db.commit()
+    return (await _tasks_out(db, [task]))[0]
 
 
 @me_router.post("/{task_id}/status", response_model=TaskOut)

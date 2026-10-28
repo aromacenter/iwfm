@@ -56,6 +56,9 @@ TRIGGERS: dict[str, list[str]] = {
     "task.assigned": [
         "cim", "dolgozo", "hatarido", "gep_nev", "gep_vonalkod", "ugyfel", "sorszam",
     ],
+    "task.reschedule_requested": [
+        "cim", "dolgozo", "hatarido", "javasolt_datum", "indok",
+    ],
     "worksheet.signed": [
         "sorszam", "cim", "dolgozo", "ugyfel", "gep_nev",
     ],

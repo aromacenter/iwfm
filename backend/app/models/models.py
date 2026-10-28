@@ -326,6 +326,13 @@ class Task(Base):
     # Időkapu a partnernél + az átütemezés indoka (700ab5b2)
     visit_window: Mapped[str | None] = mapped_column(String(64), nullable=True)
     reschedule_note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # A szerelő átütemezés-kérése (113. kör): kötelező indok + javasolt nap.
+    # A vezető a naptárban fogadja el (határidő-módosítás törli) vagy utasítja el.
+    reschedule_request_note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    reschedule_request_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reschedule_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Szervizjegyből kiosztott feladat: a jegy adatai (képekkel) a felelős
     # Feladataim nézetében is elérhetők — szerviz-jogosultság nélkül is.
     service_ticket_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -746,6 +753,16 @@ class MachineIntake(Base):
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # Helyszíni átvétel (113. kör): a képernyőn aláírt elismervény — ügyfél-
+    # aláírás + begépelt név, átvevő aláírása, időbélyeg; e-mailben az ügyfélnek.
+    on_site: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    client_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_signer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    employee_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_intakes_user"),
         nullable=True,

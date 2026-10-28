@@ -55,6 +55,8 @@ interface TaskOut {
   } | null;
   ticket_images: string[]; // szervizjegyből jött feladat csatolt képei (id-k)
   intake_id: string | null;
+  reschedule_request_note?: string | null;
+  reschedule_request_date?: string | null;
   intake_photos: string[]; // az átvételkor készült fotók id-i
   worksheet_photos: string[]; // a munkalaphoz csatolt saját fotók id-i
   completed_at: string | null;
@@ -343,6 +345,43 @@ export default function FeladataimPage() {
       toast(errorMessage(err), "error");
     } finally {
       setBusy(null);
+    }
+  }
+
+  // Átütemezés-kérés a vezetőnek (113. kör): kötelező indok + javasolt nap.
+  const [resch, setResch] = useState<{ task: TaskOut; note: string; date: string } | null>(null);
+  const [reschBusy, setReschBusy] = useState(false);
+
+  async function sendResch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!resch) return;
+    if (resch.note.trim().length < 3) {
+      toast(t("myTasks.reschNoteRequired"), "error");
+      return;
+    }
+    setReschBusy(true);
+    try {
+      await api.post(`/api/me/tasks/${resch.task.id}/reschedule-request`, {
+        note: resch.note.trim(),
+        proposed_date: resch.date || null,
+      });
+      toast(t("myTasks.reschSent"), "success");
+      setResch(null);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setReschBusy(false);
+    }
+  }
+
+  async function withdrawResch(task: TaskOut) {
+    try {
+      await api.delete(`/api/me/tasks/${task.id}/reschedule-request`);
+      toast(t("myTasks.reschWithdrawn"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -1052,6 +1091,29 @@ export default function FeladataimPage() {
                   </button>
                 </div>
               )}
+              {/* Átütemezés kérése (113. kör): a feladat nem mozdul, a vezető dönt */}
+              {task.status !== "done" && (
+                task.reschedule_request_note ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    <span>🙋 {t("myTasks.reschPending")}{task.reschedule_request_date ? ` → ${task.reschedule_request_date}` : ""}: „{task.reschedule_request_note}”</span>
+                    <button
+                      type="button"
+                      onClick={() => void withdrawResch(task)}
+                      className="rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs hover:bg-amber-100"
+                    >
+                      {t("myTasks.reschWithdraw")}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setResch({ task, note: "", date: "" })}
+                    className="mt-2 rounded-xl border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+                  >
+                    🔁 {t("myTasks.reschAsk")}
+                  </button>
+                )
+              )}
             </div>
           </section>
         ))}
@@ -1577,6 +1639,44 @@ export default function FeladataimPage() {
         </div>
       )}
       <PhotoLightbox src={lightbox} onClose={() => setLightbox(null)} />
+      {resch && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={sendResch} className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-bold">🔁 {t("myTasks.reschTitle")}</h2>
+            <p className="text-sm text-slate-600">{resch.task.title} · {t("myTasks.due", { date: resch.task.due_date })}</p>
+            <p className="text-xs text-slate-500">{t("myTasks.reschHint")}</p>
+            <label className="block text-sm">
+              {t("myTasks.reschDate")}
+              <input
+                type="date"
+                value={resch.date}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setResch({ ...resch, date: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              {t("myTasks.reschNote")} <span className="text-rose-600">*</span>
+              <textarea
+                value={resch.note}
+                onChange={(e) => setResch({ ...resch, note: e.target.value })}
+                rows={3}
+                required
+                minLength={3}
+                maxLength={512}
+                placeholder={t("myTasks.reschNotePh")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setResch(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={reschBusy || resch.note.trim().length < 3} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50">
+                {t("myTasks.reschSend")}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </AppShell>
   );
 }

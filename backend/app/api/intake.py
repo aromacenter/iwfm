@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func
 from sqlalchemy import select
@@ -39,9 +39,28 @@ class IntakeBody(BaseModel):
     loaner_barcode: str | None = Field(default=None, max_length=64)
     # állapot-fotók a gépről (data-URL, a felület ~1600px-re kicsinyíti)
     photos: list[str] = Field(default_factory=list, max_length=8)
+    # Helyszíni átvétel (113. kör, af7ae2eb): aláírások a képernyőn. Az ügyfél
+    # aláírása + begépelt neve KÖTELEZŐ; az átvevőé a mentett mintából is jöhet.
+    on_site: bool = False
+    client_signature: str | None = None  # data:image/png;base64,...
+    client_signer_name: str | None = Field(default=None, max_length=256)
+    employee_signature: str | None = None
+    send_email: bool = True  # az aláírt elismervény e-mailben az ügyfélnek
 
 
 _PHOTO_MAX = 5 * 1024 * 1024  # 5 MB / kép
+_SIGNATURE_MAX = 300_000  # ~300 KB data-URL-enként
+
+
+def _clean_signature(value: str | None, *, required: bool) -> str | None:
+    value = (value or "").strip()
+    if not value:
+        if required:
+            raise HTTPException(status_code=422, detail={"code": "intake.signature_required"})
+        return None
+    if not value.startswith("data:image/png;base64,") or len(value) > _SIGNATURE_MAX:
+        raise HTTPException(status_code=422, detail={"code": "intake.bad_signature"})
+    return value
 
 
 def _decode_photo(data_url: str) -> tuple[bytes, str]:
@@ -81,6 +100,11 @@ class IntakeOut(BaseModel):
     received_by_name: str | None
     received_at: datetime
     photo_count: int = 0
+    # Helyszíni átvétel: aláírva a képernyőn (időbélyeggel), e-mailben kiküldve
+    on_site: bool = False
+    client_signer_name: str | None = None
+    signed_at: datetime | None = None
+    emailed_at: datetime | None = None
     # Már kiadott munkalap: az átvétel-listán a "Munkalap" gomb helyett a kész
     # munkalap (átadási papír) nyílik — nem adható ki még egyszer.
     task_id: str | None = None
@@ -171,6 +195,10 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
             loaner_barcode=r.loaner_barcode,
             received_by_name=r.received_by_name,
             received_at=r.received_at,
+            on_site=bool(r.on_site),
+            client_signer_name=r.client_signer_name,
+            signed_at=r.signed_at,
+            emailed_at=r.emailed_at,
             photo_count=photo_counts.get(r.id, 0),
             task_id=str(tasks_by_intake[r.id][0]) if r.id in tasks_by_intake else None,
             worksheet_serial=tasks_by_intake[r.id][1] if r.id in tasks_by_intake else None,
@@ -222,6 +250,7 @@ async def list_intakes(
 async def create_intake(
     body: IntakeBody,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_any_perm("service", "intake")),
 ):
@@ -244,6 +273,16 @@ async def create_intake(
     own_machine = bool(asset.tangible and not asset.customer_owned)
     if not own_machine and (not (body.client_phone or "").strip() or not (body.client_email or "").strip()):
         raise HTTPException(status_code=422, detail={"code": "intake.contact_required"})
+    # Helyszíni átvétel: ügyfél-aláírás + név kötelező, átvevő-aláírás opcionális
+    client_sig = emp_sig = signer = None
+    signed_at = None
+    if body.on_site:
+        client_sig = _clean_signature(body.client_signature, required=True)
+        signer = (body.client_signer_name or "").strip()
+        if len(signer) < 2:
+            raise HTTPException(status_code=422, detail={"code": "intake.signer_name_required"})
+        emp_sig = _clean_signature(body.employee_signature, required=False) or actor.signature_sample
+        signed_at = datetime.now(UTC)
     row = MachineIntake(
         id=uuid.uuid4(),
         serial=await _next_serial(db),
@@ -261,6 +300,11 @@ async def create_intake(
         received_by_name=actor.display_name,
         received_at=datetime.now(UTC),
         created_by=actor.id,
+        on_site=bool(body.on_site),
+        client_signature=client_sig,
+        client_signer_name=signer or None,
+        employee_signature=emp_sig,
+        signed_at=signed_at,
     )
     db.add(row)
     await db.flush()
@@ -273,6 +317,10 @@ async def create_intake(
     )
     await db.commit()
     out = (await _out_rows(db, [row]))[0]
+    # Helyszíni átvétel: az aláírt elismervény e-mailben az ügyfélnek (háttérben,
+    # saját sessionnel — a mentést nem lassítja, SMTP híján csendben kimarad).
+    if body.on_site and body.send_email and row.client_email:
+        background_tasks.add_task(_email_intake_job, row.id)
     # Automatizálás-trigger: "Gép átvéve" (tűz-és-felejt).
     try:
         from app.services.wfm.automation import fire_event
@@ -331,9 +379,103 @@ async def _build_intake_pdf(db: AsyncSession, row: MachineIntake) -> bytes:
             "received_by_name": out.received_by_name,
             "footer_clause": clause,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
+            # helyszíni átvétel: aláírás-képek + időbélyeg (113. kör)
+            "on_site": bool(row.on_site),
+            "client_signature": row.client_signature,
+            "client_signer_name": row.client_signer_name,
+            "employee_signature": row.employee_signature,
+            "signed_at": _local_stamp(row.signed_at),
         },
         settings,
     )
+
+
+def _local_stamp(value: datetime | None) -> str | None:
+    """Időbélyeg helyi (Budapest) időben az elismervényre."""
+    if value is None:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
+        return value.astimezone(ZoneInfo("Europe/Budapest")).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return value.strftime("%Y-%m-%d %H:%M")
+
+
+async def _send_intake_email(db: AsyncSession, row: MachineIntake) -> bool:
+    """Az elismervény PDF-je az ügyfélnek. False: nincs SMTP / nincs cím / hiba."""
+    from app.services.wfm.email_service import load_smtp_config, send_email
+
+    if not row.client_email:
+        return False
+    config = await load_smtp_config(db)
+    if config is None:
+        return False
+    pdf = await _build_intake_pdf(db, row)
+    from app.api.tasks import _worksheet_pdf_settings
+
+    settings = await _worksheet_pdf_settings(db) or {}
+    company = settings.get("company_name") or "Szerviz"
+    name = row.client_name or row.client_signer_name or ""
+    body_text = (
+        f"Tisztelt {name or 'Ügyfelünk'}!\n\n"
+        f"Mellékelten küldjük a(z) {row.serial} számú átvételi elismervényt, amelyet "
+        f"{_local_stamp(row.signed_at) or _local_stamp(row.received_at)}-kor írt alá a helyszínen.\n"
+        "A dokumentum tartalmazza az átvett gép adatait, a tartozékokat, a bejelentett "
+        "hibákat és a tárolási feltételeket.\n\n"
+        f"Üdvözlettel,\n{company}"
+    )
+    ok = await send_email(
+        config, row.client_email, f"Átvételi elismervény – {row.serial}", body_text,
+        attachments=[(f"{row.serial}.pdf", pdf, "application", "pdf")],
+    )
+    if ok:
+        row.emailed_at = datetime.now(UTC)
+        await db.commit()
+    return ok
+
+
+async def _email_intake_job(intake_id: uuid.UUID) -> None:
+    """Háttérfeladat saját sessionnel (a kérés már lezárult)."""
+    import logging
+
+    from app.db import get_session_factory
+
+    try:
+        async with get_session_factory()() as db:
+            row = (
+                await db.execute(select(MachineIntake).where(MachineIntake.id == intake_id))
+            ).scalar_one_or_none()
+            if row is not None:
+                await _send_intake_email(db, row)
+    except Exception:
+        logging.getLogger(__name__).warning("intake email failed (%s)", intake_id, exc_info=True)
+
+
+@router.post("/{intake_id}/email")
+async def intake_email(
+    intake_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_any_perm("service", "intake")),
+):
+    """Az elismervény (újra)küldése e-mailben az ügyfélnek — kézi gomb."""
+    row = await _get_intake_or_404(db, intake_id)
+    if not row.client_email:
+        raise HTTPException(status_code=422, detail={"code": "intake.no_email"})
+    from app.services.wfm.email_service import load_smtp_config
+
+    if await load_smtp_config(db) is None:
+        raise HTTPException(status_code=422, detail={"code": "intake.smtp_missing"})
+    sent = await _send_intake_email(db, row)
+    await record_audit(
+        db, actor=actor, action="intake.email", entity_type="intake",
+        entity_id=row.serial, detail={"to": row.client_email, "sent": sent}, request=request,
+    )
+    await db.commit()
+    return {"ok": sent, "to": row.client_email}
 
 
 @router.get("/{intake_id}/pdf")

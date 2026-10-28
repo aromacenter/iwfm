@@ -28,6 +28,10 @@ interface CalTask {
   client_name?: string | null;
   visit_window?: string | null;
   reschedule_note?: string | null;
+  // A szerelő függő átütemezés-kérése (113. kör)
+  reschedule_request_note?: string | null;
+  reschedule_request_date?: string | null;
+  reschedule_requested_at?: string | null;
   asset?: { name?: string | null; barcode?: string | null; partner_name?: string | null; partner_id?: string | null; partner_visit_window?: string | null } | null;
 }
 
@@ -71,7 +75,7 @@ function addDays(d: Date, n: number): Date {
 export default function NaptarPage() {
   const { t, lang } = useT();
   const { can } = usePerms();
-  const { toast } = useUI();
+  const { toast, prompt } = useUI();
   const [tasks, setTasks] = useState<CalTask[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   // Szabadszavas kereső: cím, partner, ügyfél, gép, dolgozó, munkalap-szám (21d6ddc1)
@@ -161,13 +165,29 @@ export default function NaptarPage() {
   const [openDay, setOpenDay] = useState<string | null>(null);
 
   function openEdit(task: CalTask) {
+    // Függő szerelői kérésnél a javasolt nap és az indok előre kitöltve —
+    // a mentés = elfogadás (a kérés lezárul a szerveren).
+    const req = !!task.reschedule_request_note;
     setEdit({
       task,
-      due: (task.due_date ?? "").slice(0, 10),
+      due: (req && task.reschedule_request_date) ? task.reschedule_request_date : (task.due_date ?? "").slice(0, 10),
       window: task.visit_window ?? task.asset?.partner_visit_window ?? "",
-      note: "",
+      note: req ? t("cal.reqAcceptNote", { note: task.reschedule_request_note ?? "" }) : "",
       saveWindow: false,
     });
+  }
+
+  async function rejectRequest(task: CalTask) {
+    const reason = await prompt(t("cal.reqRejectPrompt"), { placeholder: t("cal.reqRejectPh") });
+    if (reason === null) return;
+    try {
+      await api.post(`/api/tasks/${task.id}/reschedule-request/reject`, { note: reason.trim() || null });
+      toast(t("cal.reqRejected"), "success");
+      setEdit(null);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
   }
 
   async function saveEdit() {
@@ -260,8 +280,8 @@ export default function NaptarPage() {
                   {shown.map((task) =>
                     taskChip(
                       task,
-                      `block truncate rounded-md border px-1 py-0.5 text-[10.5px] font-medium hover:opacity-80 ${STATUS_CHIP[task.status]}`,
-                      <>{STATUS_ICON[task.status]} {task.title}{task.visit_window ? ` ⏰${task.visit_window}` : ""}</>,
+                      `block truncate rounded-md border px-1 py-0.5 text-[10.5px] font-medium hover:opacity-80 ${STATUS_CHIP[task.status]}${task.reschedule_request_note ? " ring-2 ring-amber-400" : ""}`,
+                      <>{task.reschedule_request_note ? "🙋 " : ""}{STATUS_ICON[task.status]} {task.title}{task.visit_window ? ` ⏰${task.visit_window}` : ""}</>,
                     ),
                   )}
                   {dayTasks.length > 2 && (
@@ -472,6 +492,11 @@ export default function NaptarPage() {
                         <p>⏰ {task.visit_window ?? task.asset?.partner_visit_window}</p>
                       )}
                       {task.reschedule_note && <p className="text-xs opacity-80">🔁 {task.reschedule_note}</p>}
+                      {task.reschedule_request_note && (
+                        <p className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">
+                          🙋 {t("cal.reqBadge")}{task.reschedule_request_date ? ` → ${task.reschedule_request_date}` : ""}
+                        </p>
+                      )}
                       {task.asset?.name && (
                         <p>☕ {task.asset.name}{task.asset.barcode ? ` (${task.asset.barcode})` : ""}</p>
                       )}
@@ -506,6 +531,23 @@ export default function NaptarPage() {
           >
             <h2 className="text-lg font-bold">✏️ {t("cal.editTitle")}</h2>
             <p className="text-sm font-medium text-slate-700">{edit.task.title}</p>
+            {edit.task.reschedule_request_note && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                <p className="font-medium text-amber-900">🙋 {t("cal.reqTitle", { who: edit.task.employee_name ?? "" })}</p>
+                <p className="mt-0.5 text-amber-900">„{edit.task.reschedule_request_note}”</p>
+                {edit.task.reschedule_request_date && (
+                  <p className="mt-0.5 text-xs text-amber-800">📅 {t("cal.reqProposed", { date: edit.task.reschedule_request_date })}</p>
+                )}
+                <p className="mt-1 text-xs text-amber-800">{t("cal.reqHowTo")}</p>
+                <button
+                  type="button"
+                  onClick={() => void rejectRequest(edit.task)}
+                  className="mt-2 rounded-lg border border-rose-300 bg-white px-3 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                >
+                  ❌ {t("cal.reqReject")}
+                </button>
+              </div>
+            )}
             {(edit.task.asset?.partner_name || edit.task.client_name) && (
               <p className="text-xs text-slate-500">📍 {edit.task.asset?.partner_name ?? edit.task.client_name}</p>
             )}

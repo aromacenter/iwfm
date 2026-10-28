@@ -36,25 +36,65 @@ def machine_label(manufacturer: str | None, name: str | None) -> str:
     return f"{manufacturer} {name}"
 
 
-def _build_prompt(label: str) -> str:
+def _build_prompt(label: str, hint: str | None = None) -> str:
+    """Géptípus-TUDATOS prompt (113. kör, d49cb1fd): a modell először
+    besorolja a gépet (karos presszó / szuperautomata / kapszulás / filteres /
+    vending / daráló / egyéb), és CSAK az abban a kategóriában létező
+    alkatrészekről, üzenetekről ír. Karos gépnél így nem jön szemeskávé-tartály
+    és zacctartó. A ``hint`` a felhasználó pontosítása (pl. „karos gép,
+    kétkörös kazán") — minden feltételezést felülír."""
+    hint_block = ""
+    if hint and hint.strip():
+        hint_block = (
+            "\nFONTOS pontosítás a felhasználótól — ez minden feltételezést felülír: "
+            f"{hint.strip()[:500]}\n"
+        )
     return (
-        f"A(z) {label} kávégéphez / kávézós eszközhöz készíts magyar nyelvű "
-        "ügyfél-támogatási tudásbázist.\n\n"
-        "Add vissza KIZÁRÓLAG egy JSON tömböt, minden más szöveg nélkül, "
-        "ebben a formában:\n"
-        '[{"code": "E8", "title": "rövid cím", "body": "2-5 mondat"}]\n\n'
+        f"A(z) {label} géphez készíts magyar nyelvű ügyfél-támogatási tudásbázist.\n"
+        f"{hint_block}\n"
+        "ELSŐ LÉPÉS: állapítsd meg a gép kategóriáját a gyártó és a típus alapján "
+        "(ha van pontosítás, az irányadó):\n"
+        "  A) karos / hagyományos (félautomata) presszógép — pl. La Marzocco, "
+        "Di Giorgio, Faema, Rancilio, Nuova Simonelli, La Cimbali, Gaggia Classic, "
+        "Bezzera, ECM, Rocket, Lelit, Astoria, Wega — szűrőkosaras karral, "
+        "gőzpipával, kazánnal, manométerrel;\n"
+        "  B) szuperautomata — pl. Jura, Saeco/Philips, DeLonghi, Siemens, Melitta, "
+        "Franke, Schaerer, WMF, Nivona, Krups — beépített darálóval, zacctartóval, "
+        "kijelzővel;\n"
+        "  C) kapszulás / podos gép;\n"
+        "  D) filteres / csepegtetős kávéfőző vagy teafőző;\n"
+        "  E) kávé- vagy ital-automata (vending);\n"
+        "  F) kávédaráló;\n"
+        "  G) egyéb kávézós eszköz (vízlágyító, hűtő, jégkészítő, tejhabosító stb.).\n\n"
+        "Add vissza KIZÁRÓLAG egy JSON tömböt, minden más szöveg nélkül, ebben a "
+        "formában:\n"
+        '[{"code": "E8", "title": "rövid cím", "body": "2-5 mondat"}]\n'
+        "Az ELSŐ elem a besorolás legyen: "
+        '{"code": "Géptípus", "title": "<kategória neve>", '
+        '"body": "<1-2 mondat: mi jellemzi ezt a gépet, mire figyeljen a használó>"}.\n\n'
         "Tartalmi szabályok:\n"
-        "- Vedd sorra a gyártónál/típusnál ismert hibakódokat (Error/E-kódok) "
-        "ÉS a kijelzőn megjelenő gyakori üzeneteket, jelzéseket, világító "
-        "ikonokat (víztartály, szemes kávé, zacctartó, csepptálca, öblítés, "
+        "- CSAK olyan alkatrészt, üzenetet, jelzést említs, ami EBBEN a kategóriában "
+        "létezik. Karos gépnél NINCS szemeskávé-tartály, daráló, zacctartó, automata "
+        "öblítés vagy kijelző-üzenet — ott a témák: kazánnyomás és manométer, "
+        "nyomásfokozó/vibrációs szivattyú, mágnesszelep, csoportfej-tömítés és "
+        "zuhanyszűrő, gőzpipa és gőzcsap, vízszint-szonda és automata vízfeltöltés, "
+        "fűtőszál / termosztát / presszosztát / PID, biztonsági szelep, vízkövesedés, "
+        "kar és szűrőkosár, csepegés, nem jön ki a kávé, túl gyors vagy lassú "
+        "kifolyás, nem gőzöl, hangos szivattyú, hálózati víz hiánya, "
+        "hátsó-nyomás szelep (expanziós szelep).\n"
+        "- Szuperautomatánál: a gyártó ismert hibakódjai (E-kódok) ÉS a kijelző-"
+        "üzenetek (víztartály, szemes kávé, zacctartó, csepptálca, öblítés, "
         "tisztítás, vízkőtelenítés, szűrőcsere, fűtés).\n"
-        "- body: mit jelent, milyen lépésekkel háríthatja el egy NEM "
-        "szakember ügyfél, és mikor kell szervizigényt bejelenteni.\n"
-        "- 8–20 bejegyzés. Csak olyan kódot írj le, amely ennél a gyártónál/"
-        "típusnál valóban használatos; bizonytalan kódnál a title végére "
-        "írd: '(ellenőrizendő)'.\n"
-        "- code: a hibakód vagy az üzenet rövid azonosítója (pl. 'E8', "
-        "'Víztartály üres')."
+        "- Automatánál (vending): pénzkezelő, pohár-adagoló, keverőegység, "
+        "portartály, vízbekötés, a vezérlő hibakódjai.\n"
+        "- body: mit jelent, milyen lépésekkel háríthatja el egy NEM szakember "
+        "ügyfél (biztonságosan — ahol kell, kikapcsolt, lehűlt gépen), és mikor "
+        "kell szervizigényt bejelenteni.\n"
+        "- 8–20 bejegyzés. Csak olyan kódot/jelzést írj le, amely ennél a "
+        "gyártónál/típusnál valóban használatos; bizonytalan kódnál a title "
+        "végére írd: '(ellenőrizendő)'. Ha a típusnak nincsenek hibakódjai, a "
+        "code a tünet rövid neve legyen (pl. 'Nem gőzöl', 'Alacsony kazánnyomás').\n"
+        "- code: a hibakód vagy a tünet/üzenet rövid azonosítója."
     )
 
 
@@ -83,16 +123,19 @@ def parse_articles(text: str) -> list[dict]:
     return out
 
 
-async def generate_articles(db, manufacturer: str | None, name: str | None) -> int:
+async def generate_articles(
+    db, manufacturer: str | None, name: str | None, hint: str | None = None
+) -> int:
     """Strukturált tudásbázis-bejegyzések generálása egy géptípushoz a
     knowledge_entries táblába (kereshető, gépre szűrhető). Vissza: hány
-    bejegyzés készült. ValueError, ha az AI nincs beállítva."""
+    bejegyzés készült. ValueError, ha az AI nincs beállítva. A ``hint`` a
+    felhasználó pontosítása a géptípusról (újragenerálásnál)."""
     from app.models import KnowledgeEntry
 
     label = machine_label(manufacturer, name)
     if len(label) < 3:
         return 0
-    text = await ai_service.generate(db, _build_prompt(label), max_tokens=4000)
+    text = await ai_service.generate(db, _build_prompt(label, hint), max_tokens=4000)
     articles = parse_articles(text)
     for a in articles:
         title = f"{a['code']} — {a['title']}" if a["title"] else a["code"]
@@ -110,6 +153,46 @@ async def generate_articles(db, manufacturer: str | None, name: str | None) -> i
         ))
         await db.commit()
     return len(articles)
+
+
+async def regenerate_articles(db, label: str, hint: str | None = None) -> tuple[int, int]:
+    """Újragenerálás (113. kör): a címke AI-bejegyzéseit töröljük, majd a
+    pontosítással (hint) újat kérünk. A kézi bejegyzések maradnak. Vissza:
+    (törölt, készült). ValueError, ha az AI nincs beállítva."""
+    from sqlalchemy import delete as sa_delete
+
+    from app.models import KnowledgeEntry
+
+    label = (label or "").strip()
+    if len(label) < 2:
+        return 0, 0
+    # Előbb a generálás (ha az AI nincs beállítva, a régi bejegyzések maradnak)
+    text = await ai_service.generate(db, _build_prompt(label, hint), max_tokens=4000)
+    articles = parse_articles(text)
+    deleted = (
+        await db.execute(
+            sa_delete(KnowledgeEntry).where(
+                KnowledgeEntry.machine_label == label[:256],
+                KnowledgeEntry.source == "ai",
+            )
+        )
+    ).rowcount or 0
+    for a in articles:
+        title = f"{a['code']} — {a['title']}" if a["title"] else a["code"]
+        db.add(KnowledgeEntry(
+            machine_label=label[:256],
+            title=title[:256],
+            content=a["body"][:8000],
+            source="ai",
+            created_by_name="AI generálás",
+        ))
+    db.add(AuditEvent(
+        actor_user_id=None, action="support.kb_regenerate", entity_type="knowledge_entry",
+        entity_id=label[:64],
+        detail={"machine": label, "deleted": deleted, "entries": len(articles), "hint": (hint or "")[:200]},
+    ))
+    await db.commit()
+    return deleted, len(articles)
 
 
 async def has_ai_articles(db, label: str) -> bool:

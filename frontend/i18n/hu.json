@@ -646,7 +646,16 @@
     "author": "Rögzítette",
     "empty": "Még nincs rögzített megoldás. Vedd fel az elsőt!",
     "saved": "Megoldás elmentve — a QR-oldali segítség mostantól használja.",
-    "deleteConfirm": "Biztosan törlöd a kijelölt {count} bejegyzést? Ez nem vonható vissza."
+    "deleteConfirm": "Biztosan törlöd a kijelölt {count} bejegyzést? Ez nem vonható vissza.",
+    "regen": "AI-adatok újragenerálása",
+    "regenTitle": "AI-tudásbázis újragenerálása",
+    "regenHint": "Ha az AI rossz géptípust feltételezett (pl. karos gépnél szemeskávé-tartályról ír), itt pontosíthatod, és a géphez tartozó AI-bejegyzéseket újraírja. A kézzel rögzített megoldások megmaradnak.",
+    "regenClarify": "Pontosítás a géptípusról",
+    "regenClarifyPh": "pl. karos (hagyományos) presszógép, kétkörös kazán, gőzpipával — nem automata",
+    "regenWarn": "A gép eddigi AI-bejegyzései törlődnek és újak készülnek. A kézi bejegyzések maradnak.",
+    "regenGo": "Újragenerálás",
+    "regenRunning": "Generálás… (10–30 mp)",
+    "regenDone": "Kész: {deleted} régi AI-bejegyzés törölve, {created} új készült."
   },
   "auto": {
     "title": "Automatizálások",
@@ -700,7 +709,8 @@
       "warehouse_movement": "Raktárkészlet-mozgás",
       "vending_error": "Kávégép hiba (vending)",
       "parts_low": "Alkatrész min. készlet alatt",
-      "parts_request": "Alkatrész-kérés érkezett"
+      "parts_request": "Alkatrész-kérés érkezett",
+      "task_reschedule_requested": "Szerelő átütemezést kér"
     },
     "ops": {
       "eq": "=",
@@ -1525,7 +1535,19 @@
     "wsSolution": "Megoldás / javítás",
     "wsSolutionPh": "pl. SP 90 °C termosztát csere, vízkőtelenítés, próbafőzés rendben",
     "wsPrintSolution": "A megoldás kerüljön rá az ügyfél-példányra is",
-    "wsKbHint": "Mentéskor a hiba + megoldás + munkák + cserélt alkatrészek a Tudásbázisba kerülnek a géptípushoz; az AI és a kollégák is ebből tanulnak."
+    "wsKbHint": "Mentéskor a hiba + megoldás + munkák + cserélt alkatrészek a Tudásbázisba kerülnek a géptípushoz; az AI és a kollégák is ebből tanulnak.",
+    "reschAsk": "Átütemezést kérek",
+    "reschTitle": "Átütemezés kérése",
+    "reschHint": "A feladat nem mozdul magától: a vezető kapja meg a kérésedet, és ő teszi át másik napra (vagy utasítja el). Az indoklás kötelező.",
+    "reschDate": "Javasolt új nap (opcionális)",
+    "reschNote": "Indoklás",
+    "reschNotePh": "pl. az ügyfél ma zárva, holnap 9-től tud fogadni",
+    "reschNoteRequired": "Az indoklás kötelező (legalább 3 karakter).",
+    "reschSend": "Kérés elküldése",
+    "reschSent": "Átütemezés-kérés elküldve a vezetőnek.",
+    "reschPending": "Átütemezés kérve",
+    "reschWithdraw": "Visszavonás",
+    "reschWithdrawn": "Kérés visszavonva."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -2057,7 +2079,15 @@
     "settings.demo_data_in_use": "A mintaadatokhoz már élő adat kapcsolódik (munkalap, elszámolás) — előbb azokat töröld.",
     "portal.no_email": "A partnernek nincs beállított e-mail címe.",
     "email.not_configured": "Nincs beállított e-mail küldés (SMTP) — a Beállításokban adható meg.",
-    "email.send_failed": "Az e-mail küldése nem sikerült — ellenőrizd az SMTP-beállításokat."
+    "email.send_failed": "Az e-mail küldése nem sikerült — ellenőrizd az SMTP-beállításokat.",
+    "kb.ai_not_configured": "Az AI nincs beállítva (Beállítások → AI).",
+    "tasks.no_reschedule_request": "Ehhez a feladathoz nincs függő átütemezés-kérés.",
+    "tasks.already_done": "A feladat már kész — nem ütemezhető át.",
+    "intake.signature_required": "Helyszíni átvételhez az ügyfél aláírása kötelező.",
+    "intake.signer_name_required": "Az aláíró neve kötelező.",
+    "intake.bad_signature": "Az aláírás-kép hibás vagy túl nagy.",
+    "intake.no_email": "Az átvételhez nincs ügyfél e-mail cím.",
+    "intake.smtp_missing": "Nincs beállítva e-mail küldés (Beállítások → E-mail)."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -2346,7 +2376,7 @@
     "edit": "Raktár szerkesztése",
     "kind": "Típus",
     "kindSite": "Telephely",
-    "kindVan": "Üzletkötői autó",
+    "kindVan": "Autó-raktár (üzletkötő / szervizes)",
     "cardSummary": "{products} termék · összesen {qty}",
     "empty": "Még nincs raktár — hozd létre az elsőt (pl. Telephely és egy-egy autó).",
     "stockTitle": "Készlet — {name}",
@@ -2370,7 +2400,7 @@
     "productAdded": "Termék hozzáadva a raktárhoz (0 készlettel).",
     "productRemoved": "Termék levéve a raktár választékáról.",
     "removeProduct": "Levétel a választékról (csak üres készletnél)",
-    "assignedUser": "Üzletkötő (az autó gazdája)",
+    "assignedUser": "Tulajdonos (üzletkötő / szervizes — az autó gazdája)",
     "movements": "Mozgásnapló (31 nap)",
     "movement": "Művelet",
     "movAll": "Mind",
@@ -2690,7 +2720,16 @@
     "visitWindowPh": "pl. 8–10 h, csak délelőtt",
     "partnerWindow": "A partnernél mentett időkapu: {w}",
     "saveWindowPartner": "Az időkaput a partnerhez is mentem (a következő feladatoknál is látszik)",
-    "saved": "Feladat mentve."
+    "saved": "Feladat mentve.",
+    "reqBadge": "Átütemezést kér",
+    "reqTitle": "{who} átütemezést kér",
+    "reqProposed": "Javasolt nap: {date}",
+    "reqHowTo": "Elfogadás: állítsd be az új határidőt és mentsd (az indok előre ki van töltve). Elutasítás: a gomb — a feladat marad az eredeti napon.",
+    "reqReject": "Kérés elutasítása",
+    "reqRejectPrompt": "Miért utasítod el? (opcionális, a szerelő kommentként látja)",
+    "reqRejectPh": "pl. sürgős, más kolléga viszi",
+    "reqRejected": "Kérés elutasítva — a feladat marad az eredeti napon.",
+    "reqAcceptNote": "Szerelő kérése: {note}"
   },
   "worksheet": {
     "empty": "Adj meg leírást vagy legalább egy munkatételt.",
@@ -2760,7 +2799,24 @@
     "loanerPh": "vonalkód vagy QR-beolvasás",
     "loanerHint": "A munkalap kiállításakor automatikusan rákerül a cseregép — a QR a 📷 gombbal is beolvasható.",
     "ownMachineHint": "Saját tárgyi gép — nincs ügyfél, az elérhetőség nem kötelező.",
-    "worksheetAuto": "Munkalap automatikusan kiállítva: {title}"
+    "worksheetAuto": "Munkalap automatikusan kiállítva: {title}",
+    "onSite": "Helyszíni átvétel — aláírás a képernyőn",
+    "onSiteHint": "Az ügyfél és az átvevő itt írja alá; az elismervényre időbélyeggel kerül rá, és az ügyfél e-mailben megkapja a PDF-et.",
+    "onSiteSigner": "Aláíró neve (ügyfél)",
+    "onSiteSignerPh": "nyomtatott betűkkel, ahogy aláírja",
+    "onSiteClientSig": "Ügyfél (átadó) aláírása *",
+    "onSiteEmpSig": "Átvevő aláírása",
+    "onSiteEmpSigDraw": "Rajzold meg (vagy mentsd mintaként)",
+    "onSiteUseSample": "A mentett aláírás-mintám egy kattintással",
+    "onSiteSendEmail": "Aláírt elismervény küldése e-mailben az ügyfélnek",
+    "onSiteSigRequired": "Helyszíni átvételhez az ügyfél aláírása és a neve kötelező.",
+    "onSiteEmailed": "Az aláírt elismervény megy e-mailben: {email}",
+    "onSiteBadge": "Helyszínen aláírva: {name} ({at})",
+    "emailedAt": "e-mail elküldve {at}",
+    "emailConfirm": "Elküldjük az elismervény PDF-jét ide: {email}?",
+    "emailHint": "Elismervény küldése e-mailben az ügyfélnek",
+    "emailSent": "Elismervény elküldve e-mailben.",
+    "emailFailed": "Az e-mail küldése nem sikerült — ellenőrizd az SMTP-beállításokat."
   },
   "handover": {
     "title": "Átadás",

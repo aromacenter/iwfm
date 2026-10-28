@@ -154,6 +154,39 @@ async def update_entry(
     return _out(e)
 
 
+class RegenerateBody(BaseModel):
+    machine_label: str = Field(min_length=2, max_length=256)
+    # A felhasználó pontosítása a géptípusról (pl. „karos presszógép, kétkörös
+    # kazán") — a prompt minden feltételezését felülírja.
+    hint: str | None = Field(default=None, max_length=500)
+
+
+@router.post("/regenerate")
+async def regenerate_entries(
+    body: RegenerateBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_any_perm("service", "knowledge")),
+):
+    """AI-bejegyzések újragenerálása egy géphez (113. kör, d49cb1fd): a rossz
+    kategóriájú (pl. szuperautomatának hitt karos gép) AI-tartalmat törli, és a
+    pontosítással újat kér. A kézi bejegyzések érintetlenek."""
+    from app.services.wfm.kb_auto import regenerate_articles
+
+    try:
+        deleted, created = await regenerate_articles(db, body.machine_label, body.hint)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "kb.ai_not_configured"})
+    await record_audit(
+        db, actor=actor, action="kb.regenerate", entity_type="knowledge_entry",
+        entity_id=body.machine_label.strip()[:64],
+        detail={"deleted": deleted, "created": created, "hint": (body.hint or "")[:200]},
+        request=request,
+    )
+    await db.commit()
+    return {"deleted": deleted, "created": created}
+
+
 class BulkDeleteBody(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=1000)
 

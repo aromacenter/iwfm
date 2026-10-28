@@ -646,7 +646,16 @@
     "author": "Recorded by",
     "empty": "No solutions recorded yet. Add the first one!",
     "saved": "Solution saved — the QR-page help now uses it.",
-    "deleteConfirm": "Delete the {count} selected entries? This cannot be undone."
+    "deleteConfirm": "Delete the {count} selected entries? This cannot be undone.",
+    "regen": "Regenerate AI entries",
+    "regenTitle": "Regenerate AI knowledge base",
+    "regenHint": "If the AI assumed the wrong machine type (e.g. bean hopper tips for a lever machine), clarify it here and the AI entries for that machine are rewritten. Manual entries are kept.",
+    "regenClarify": "Clarification about the machine type",
+    "regenClarifyPh": "e.g. lever (traditional) espresso machine, dual boiler, steam wand — not superautomatic",
+    "regenWarn": "The machine's current AI entries are deleted and new ones are generated. Manual entries stay.",
+    "regenGo": "Regenerate",
+    "regenRunning": "Generating… (10–30 s)",
+    "regenDone": "Done: {deleted} old AI entries removed, {created} new created."
   },
   "auto": {
     "title": "Automations",
@@ -700,7 +709,8 @@
       "warehouse_movement": "Warehouse stock movement",
       "vending_error": "Coffee machine error (vending)",
       "parts_low": "Part below min. stock",
-      "parts_request": "Parts request received"
+      "parts_request": "Parts request received",
+      "task_reschedule_requested": "Technician requests rescheduling"
     },
     "ops": {
       "eq": "=",
@@ -1525,7 +1535,19 @@
     "wsSolution": "Solution / repair",
     "wsSolutionPh": "e.g. replaced SP 90 °C thermostat, descaled, test brew OK",
     "wsPrintSolution": "Print the solution on the customer copy too",
-    "wsKbHint": "On save the problem + solution + works + replaced parts go to the Knowledge base for the machine type; the AI and colleagues learn from it."
+    "wsKbHint": "On save the problem + solution + works + replaced parts go to the Knowledge base for the machine type; the AI and colleagues learn from it.",
+    "reschAsk": "Request rescheduling",
+    "reschTitle": "Request rescheduling",
+    "reschHint": "The task does not move by itself: your manager receives the request and moves it to another day (or rejects it). A reason is required.",
+    "reschDate": "Proposed new day (optional)",
+    "reschNote": "Reason",
+    "reschNotePh": "e.g. the customer is closed today, can receive us tomorrow from 9",
+    "reschNoteRequired": "A reason is required (at least 3 characters).",
+    "reschSend": "Send request",
+    "reschSent": "Reschedule request sent to your manager.",
+    "reschPending": "Reschedule requested",
+    "reschWithdraw": "Withdraw",
+    "reschWithdrawn": "Request withdrawn."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -2057,7 +2079,15 @@
     "settings.demo_data_in_use": "Live data is linked to the sample records (worksheet, settlement) — delete those first.",
     "portal.no_email": "The partner has no e-mail address.",
     "email.not_configured": "E-mail sending (SMTP) is not configured — set it up in Settings.",
-    "email.send_failed": "Sending the e-mail failed — check the SMTP settings."
+    "email.send_failed": "Sending the e-mail failed — check the SMTP settings.",
+    "kb.ai_not_configured": "AI is not configured (Settings → AI).",
+    "tasks.no_reschedule_request": "This task has no pending reschedule request.",
+    "tasks.already_done": "The task is already done — cannot be rescheduled.",
+    "intake.signature_required": "On-site intake requires the customer's signature.",
+    "intake.signer_name_required": "The signer's name is required.",
+    "intake.bad_signature": "The signature image is invalid or too large.",
+    "intake.no_email": "The intake has no customer e-mail address.",
+    "intake.smtp_missing": "E-mail sending is not configured (Settings → E-mail)."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -2346,7 +2376,7 @@
     "edit": "Edit warehouse",
     "kind": "Type",
     "kindSite": "Site",
-    "kindVan": "Sales rep van",
+    "kindVan": "Van (sales rep / technician)",
     "cardSummary": "{products} products · {qty} total",
     "empty": "No warehouses yet — create the first one (e.g. a site and one van per rep).",
     "stockTitle": "Stock — {name}",
@@ -2370,7 +2400,7 @@
     "productAdded": "Product added to the warehouse (with 0 stock).",
     "productRemoved": "Product removed from the warehouse assortment.",
     "removeProduct": "Remove from assortment (empty stock only)",
-    "assignedUser": "Sales rep (van owner)",
+    "assignedUser": "Owner (sales rep / technician — who drives the van)",
     "movements": "Movement log (31 days)",
     "movement": "Action",
     "movAll": "All",
@@ -2690,7 +2720,16 @@
     "visitWindowPh": "e.g. 8–10 am, mornings only",
     "partnerWindow": "Window saved on the partner: {w}",
     "saveWindowPartner": "Save the window on the partner too (shown on future tasks)",
-    "saved": "Task saved."
+    "saved": "Task saved.",
+    "reqBadge": "Reschedule requested",
+    "reqTitle": "{who} requests rescheduling",
+    "reqProposed": "Proposed day: {date}",
+    "reqHowTo": "Accept: set the new due date and save (the reason is prefilled). Reject: the button — the task stays on its original day.",
+    "reqReject": "Reject request",
+    "reqRejectPrompt": "Why reject? (optional, the technician sees it as a comment)",
+    "reqRejectPh": "e.g. urgent, another colleague takes it",
+    "reqRejected": "Request rejected — the task stays on its original day.",
+    "reqAcceptNote": "Technician's request: {note}"
   },
   "worksheet": {
     "empty": "Provide a description or at least one work item.",
@@ -2760,7 +2799,24 @@
     "loanerPh": "barcode or scan QR",
     "loanerHint": "Added to the worksheet automatically when the task is created.",
     "ownMachineHint": "Own tangible machine — no customer, contact details are optional.",
-    "worksheetAuto": "Worksheet created automatically: {title}"
+    "worksheetAuto": "Worksheet created automatically: {title}",
+    "onSite": "On-site intake — sign on screen",
+    "onSiteHint": "The customer and the receiver sign here; the receipt carries the signatures with a timestamp and the customer gets the PDF by e-mail.",
+    "onSiteSigner": "Signer's name (customer)",
+    "onSiteSignerPh": "in block letters, as signed",
+    "onSiteClientSig": "Customer (handing over) signature *",
+    "onSiteEmpSig": "Receiver's signature",
+    "onSiteEmpSigDraw": "Draw it (or save as sample)",
+    "onSiteUseSample": "Use my saved signature sample in one click",
+    "onSiteSendEmail": "E-mail the signed receipt to the customer",
+    "onSiteSigRequired": "On-site intake requires the customer's signature and name.",
+    "onSiteEmailed": "The signed receipt is being e-mailed to: {email}",
+    "onSiteBadge": "Signed on site: {name} ({at})",
+    "emailedAt": "e-mailed {at}",
+    "emailConfirm": "Send the receipt PDF to {email}?",
+    "emailHint": "E-mail the receipt to the customer",
+    "emailSent": "Receipt sent by e-mail.",
+    "emailFailed": "Sending the e-mail failed — check the SMTP settings."
   },
   "handover": {
     "title": "Handover",
