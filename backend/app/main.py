@@ -48,6 +48,8 @@ from app.core.config import get_settings
 from app.db import get_engine
 
 logging.basicConfig(level=logging.INFO)
+# A httpx kérés-naplója a Telegram bot-tokent is kiírná (URL-ben) — csak figyelmeztetéstől.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
