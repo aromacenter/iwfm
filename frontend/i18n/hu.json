@@ -180,7 +180,8 @@
     "worktime": "Munkaidő-mérés",
     "partsProc": "Beszerzés",
     "partsReports": "Riportok (alkatrész)",
-    "manual": "Kézikönyv"
+    "manual": "Kézikönyv",
+    "roadmap": "Roadmap"
   },
   "roles": {
     "admin": "Admin",
@@ -3880,5 +3881,14 @@
     "empty": "Nincs találat.",
     "pick": "Válassz egy fejezetet.",
     "askAi": "Tipp: a ✨ AI-asszisztensnek is felteheted a kérdést („hogyan…?”), ő ebből a kézikönyvből válaszol a teljes folyamattal."
+  },
+  "road": {
+    "title": "Roadmap",
+    "hint": "Mire számíthatsz a rendszerben: az élő fejlesztési terv. A listát az üzemeltető frissíti — amit itt látsz, az kerül a rendszerbe.",
+    "empty": "Még nincs közzétett roadmap-elem.",
+    "none": "Jelenleg nincs ilyen elem.",
+    "in_progress": "Fejlesztés alatt",
+    "planned": "Tervben",
+    "done": "Elkészült"
   }
 }

@@ -14,6 +14,9 @@ from app.api import (
     assistant as assistant_api,
     audit,
     auth,
+    roadmap as roadmap_api,
+    roadmap as roadmap_api,
+    roadmap as roadmap_api,
     bugs as bugs_api,
     automation as automation_api,
     consignment,
@@ -305,6 +308,9 @@ def create_app() -> FastAPI:
         dependencies=[Depends(_mod("bugreport"))],
     )
     app.include_router(admin_tools.router, prefix="/api/admin", tags=["admin"])
+    app.include_router(roadmap_api.router, prefix="/api/roadmap", tags=["roadmap"])
+    app.include_router(roadmap_api.router, prefix="/api/roadmap", tags=["roadmap"])
+    app.include_router(roadmap_api.router, prefix="/api/roadmap", tags=["roadmap"])
     app.include_router(automation_api.router)
 
     @app.get("/api/health")

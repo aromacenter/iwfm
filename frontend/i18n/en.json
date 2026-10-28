@@ -180,7 +180,8 @@
     "worktime": "Work time",
     "partsProc": "Procurement",
     "partsReports": "Parts reports",
-    "manual": "Manual"
+    "manual": "Manual",
+    "roadmap": "Roadmap"
   },
   "roles": {
     "admin": "Admin",
@@ -3880,5 +3881,14 @@
     "empty": "No results.",
     "pick": "Pick a chapter.",
     "askAi": "Tip: you can also ask the ✨ AI assistant (“how do I…?”); it answers from this manual with the full process."
+  },
+  "road": {
+    "title": "Roadmap",
+    "hint": "What to expect in the system: the live development plan. The operator keeps it updated — what you see here is what gets built.",
+    "empty": "No roadmap items published yet.",
+    "none": "Nothing here right now.",
+    "in_progress": "In progress",
+    "planned": "Planned",
+    "done": "Done"
   }
 }

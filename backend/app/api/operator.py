@@ -175,6 +175,132 @@ async def operator_bug_screenshot(
     )
 
 
+ROADMAP_STATUSES = ("planned", "in_progress", "done")
+
+
+class RoadmapPushBody(BaseModel):
+    # [{title, description, status, eta, sort}] — teljes csere (a Flotta a forrás)
+    items: list[dict] = Field(max_length=200)
+
+
+@router.put("/roadmap", dependencies=[Depends(require_operator)])
+async def operator_set_roadmap(
+    body: RoadmapPushBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """A Flotta-pult roadmap-lenyomása (115. kör): a példány 🗺 Roadmap
+    menüje ebből épül. Teljes csere, tisztítva."""
+    from app.models import LicenseSettings
+    from app.services.wfm import license as license_service
+
+    row = await license_service.get_license_row(db)
+    if row is None:
+        row = LicenseSettings(id=1)
+        db.add(row)
+    cleaned = []
+    for it in body.items[:200]:
+        title = str(it.get("title") or "").strip()[:256]
+        if not title:
+            continue
+        status = str(it.get("status") or "planned")
+        cleaned.append({
+            "title": title,
+            "description": str(it.get("description") or "").strip()[:4000],
+            "status": status if status in ROADMAP_STATUSES else "planned",
+            "eta": str(it.get("eta") or "").strip()[:64],
+            "sort": int(it.get("sort") or 0),
+        })
+    cleaned.sort(key=lambda x: x["sort"])
+    row.roadmap = cleaned
+    await db.commit()
+    license_service.invalidate_cache()
+    return {"ok": True, "stored": len(cleaned)}
+
+
+ROADMAP_STATUSES = ("planned", "in_progress", "done")
+
+
+class RoadmapPushBody(BaseModel):
+    # [{title, description, status, eta, sort}] — teljes csere (a Flotta a forrás)
+    items: list[dict] = Field(max_length=200)
+
+
+@router.put("/roadmap", dependencies=[Depends(require_operator)])
+async def operator_set_roadmap(
+    body: RoadmapPushBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """A Flotta-pult roadmap-lenyomása (115. kör): a példány 🗺 Roadmap
+    menüje ebből épül. Teljes csere, tisztítva."""
+    from app.models import LicenseSettings
+    from app.services.wfm import license as license_service
+
+    row = await license_service.get_license_row(db)
+    if row is None:
+        row = LicenseSettings(id=1)
+        db.add(row)
+    cleaned = []
+    for it in body.items[:200]:
+        title = str(it.get("title") or "").strip()[:256]
+        if not title:
+            continue
+        status = str(it.get("status") or "planned")
+        cleaned.append({
+            "title": title,
+            "description": str(it.get("description") or "").strip()[:4000],
+            "status": status if status in ROADMAP_STATUSES else "planned",
+            "eta": str(it.get("eta") or "").strip()[:64],
+            "sort": int(it.get("sort") or 0),
+        })
+    cleaned.sort(key=lambda x: x["sort"])
+    row.roadmap = cleaned
+    await db.commit()
+    license_service.invalidate_cache()
+    return {"ok": True, "stored": len(cleaned)}
+
+
+ROADMAP_STATUSES = ("planned", "in_progress", "done")
+
+
+class RoadmapPushBody(BaseModel):
+    # [{title, description, status, eta, sort}] — teljes csere (a Flotta a forrás)
+    items: list[dict] = Field(max_length=200)
+
+
+@router.put("/roadmap", dependencies=[Depends(require_operator)])
+async def operator_set_roadmap(
+    body: RoadmapPushBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """A Flotta-pult roadmap-lenyomása (115. kör): a példány 🗺 Roadmap
+    menüje ebből épül. Teljes csere, tisztítva."""
+    from app.models import LicenseSettings
+    from app.services.wfm import license as license_service
+
+    row = await license_service.get_license_row(db)
+    if row is None:
+        row = LicenseSettings(id=1)
+        db.add(row)
+    cleaned = []
+    for it in body.items[:200]:
+        title = str(it.get("title") or "").strip()[:256]
+        if not title:
+            continue
+        status = str(it.get("status") or "planned")
+        cleaned.append({
+            "title": title,
+            "description": str(it.get("description") or "").strip()[:4000],
+            "status": status if status in ROADMAP_STATUSES else "planned",
+            "eta": str(it.get("eta") or "").strip()[:64],
+            "sort": int(it.get("sort") or 0),
+        })
+    cleaned.sort(key=lambda x: x["sort"])
+    row.roadmap = cleaned
+    await db.commit()
+    license_service.invalidate_cache()
+    return {"ok": True, "stored": len(cleaned)}
+
+
 class PlanCatalogBody(BaseModel):
     # [{code, name, max_users, max_employees, price_monthly, price_yearly}]
     plans: list[dict] = Field(max_length=50)

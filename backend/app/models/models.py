@@ -794,6 +794,15 @@ class LicenseSettings(Base):
     # A Flotta-pult által lenyomott csomag-katalógus (név/limit/ár lista) —
     # az ügyfél-oldali "Elérhető csomagok" kártyák ebből épülnek.
     plan_catalog: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # A Flotta-pult által lenyomott termék-roadmap (115. kör) — a 🗺 Roadmap
+    # menü ebből olvas; termék-szintű, példány-adatot nem tartalmaz.
+    roadmap: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # A Flotta-pult által lenyomott termék-roadmap (115. kör) — a 🗺 Roadmap
+    # menü ebből olvas; termék-szintű, példány-adatot nem tartalmaz.
+    roadmap: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # A Flotta-pult által lenyomott termék-roadmap (115. kör) — a 🗺 Roadmap
+    # menü ebből olvas; termék-szintű, példány-adatot nem tartalmaz.
+    roadmap: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Az ügyfél csomagváltás-kérése — a Flotta-pultban jelenik meg, a
     # jóváhagyás (operator licenc-mentés) törli.
     requested_plan: Mapped[str | None] = mapped_column(String(16), nullable=True)
