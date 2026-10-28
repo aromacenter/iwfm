@@ -6,9 +6,13 @@ import type { NextConfig } from "next";
  * (up.railway.app public suffix!) között a böngészők (főleg Safari/iPhone)
  * a cross-site sütit eldobnák.
  */
+// `||` és nem `??`: a Dockerfile ARG/ENV az API_PROXY_TARGET-et akkor is
+// beállítja, ha nem kapott értéket — üres stringként. A `??` az üres stringet
+// érvényes célnak vette, a /api önmagára proxyzódott és a Next 404-et adott
+// (program.x-presso.hu belépés, 2026-10-28).
 const API_TARGET =
-  process.env.API_PROXY_TARGET ??
-  process.env.NEXT_PUBLIC_API_URL ??
+  process.env.API_PROXY_TARGET ||
+  process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8000";
 
 // Biztonsági fejlécek a Next által kiszolgált HTML-hez (a /api a backendre
