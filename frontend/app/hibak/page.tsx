@@ -23,10 +23,12 @@ interface Bug {
   fix_group: string | null;
   resolution_note: string | null;
   created_at: string;
+  comments: { id: string; author_kind: string; author_name: string; text: string; created_at: string }[];
+  unread_for_operator: boolean;
 }
 
 const SEVERITIES = ["blocker", "major", "minor", "cosmetic"];
-const STATUSES = ["new", "confirmed", "duplicate", "rejected", "resolved", "closed", "reopened"];
+const STATUSES = ["new", "confirmed", "needs_info", "answered", "duplicate", "rejected", "resolved", "closed", "reopened"];
 
 const SEVERITY_CHIP: Record<string, string> = {
   blocker: "bg-rose-100 text-rose-800",
@@ -37,7 +39,7 @@ const SEVERITY_CHIP: Record<string, string> = {
 
 export default function HibakPage() {
   const { t } = useT();
-  const { toast, prompt } = useUI();
+  const { toast, prompt, confirm } = useUI();
   const [bugs, setBugs] = useState<Bug[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [severityFilter, setSeverityFilter] = useState("");
@@ -65,6 +67,35 @@ export default function HibakPage() {
     const value = await prompt(t("bugs.groupPrompt"), { initial: b.fix_group ?? "" });
     if (value === null) return;
     await patch(b.id, { fix_group: value || null });
+  }
+
+  // Kérdés / üzenet a bejelentőnek (114. kör): a jegy visszadobható needs_info-val,
+  // a bejelentőnél felugró ablak jelzi.
+  async function ask(b: Bug) {
+    const text = await prompt(t("bugs.askPrompt"), { type: "text" });
+    if (text === null || !text.trim()) return;
+    const bounce = ["new", "confirmed", "reopened", "answered"].includes(b.status)
+      ? await confirm(t("bugs.askBounce"))
+      : false;
+    try {
+      const upd = await api.post<Bug>(`/api/bugs/${b.id}/comments`, {
+        text: text.trim(),
+        status: bounce ? "needs_info" : (["new", "confirmed", "reopened", "answered"].includes(b.status) ? b.status : null),
+      });
+      setBugs((rows) => rows.map((x) => (x.id === b.id ? upd : x)));
+      toast(t("bugs.askSent"), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function markRead(b: Bug) {
+    try {
+      await api.post(`/api/bugs/${b.id}/seen`, {});
+      setBugs((rows) => rows.map((x) => (x.id === b.id ? { ...x, unread_for_operator: false } : x)));
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
   }
 
   async function resolve(b: Bug) {
@@ -135,6 +166,22 @@ export default function HibakPage() {
                 {b.resolution_note && (
                   <p className="mt-1 text-xs text-emerald-700">💬 {b.resolution_note}</p>
                 )}
+                {b.unread_for_operator && (
+                  <button type="button" onClick={() => void markRead(b)} className="mt-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-200">
+                    ● {t("bugs.unreadOp")} — {t("bugs.markRead")}
+                  </button>
+                )}
+                {b.comments?.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {b.comments.map((c) => (
+                      <div key={c.id} className={`rounded-lg px-2 py-1 text-xs ${c.author_kind === "reporter" ? "bg-slate-50 text-slate-700" : "bg-amber-50 text-amber-900"}`}>
+                        <span className="font-semibold">{c.author_kind === "reporter" ? b.reporter_name : c.author_name}</span>
+                        <span className="ml-1 text-[10px] opacity-60">{c.created_at.slice(0, 16).replace("T", " ")}</span>
+                        <p className="whitespace-pre-line">{c.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5">
                 <select
@@ -150,6 +197,9 @@ export default function HibakPage() {
                 </select>
                 <button onClick={() => setGroup(b)} className="text-xs font-medium text-indigo-600 hover:underline">
                   📦 {t("bugs.group")}
+                </button>
+                <button onClick={() => void ask(b)} className="text-xs font-medium text-amber-700 hover:underline">
+                  💬 {t("bugs.ask")}
                 </button>
               </div>
             </div>

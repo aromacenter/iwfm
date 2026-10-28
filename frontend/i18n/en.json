@@ -2192,7 +2192,9 @@
       "rejected": "Rejected",
       "resolved": "Fixed — please retest!",
       "closed": "Closed",
-      "reopened": "Reopened"
+      "reopened": "Reopened",
+      "needs_info": "Question to reporter",
+      "answered": "Reporter answered"
     },
     "adminTitle": "Bug reports",
     "adminEmpty": "No reports match the filter. 🎉",
@@ -2202,7 +2204,24 @@
     "group": "Batch",
     "groupPrompt": "Fix batch name (empty: remove from batch):",
     "resolveNotePrompt": "Note to the reporter (what was fixed and how):",
-    "captureBlank": "Capture came back blank — use the 📎 button to attach a screenshot instead."
+    "captureBlank": "Capture came back blank — use the 📎 button to attach a screenshot instead.",
+    "replyTitle": "A reply arrived on your bug report",
+    "replyFrom": "{name} wrote",
+    "replyPh": "Your reply… (Enter = send)",
+    "replySend": "Send reply",
+    "replyLater": "Later",
+    "replyOpen": "Open in my reports",
+    "replySent": "Reply sent — thank you!",
+    "reply": "Reply",
+    "you": "You",
+    "staff": "Operator",
+    "unreadBadge": "New reply — mark as read",
+    "ask": "Question / message to reporter",
+    "askPrompt": "What do you write to the reporter? (they get it as a popup)",
+    "askBounce": "Bounce the ticket back to the reporter (“Question to reporter” status)? If not, the status stays and only the message is sent.",
+    "askSent": "Message sent to the reporter.",
+    "unreadOp": "New reply from the reporter",
+    "markRead": "mark read"
   },
   "license": {
     "title": "Licence & subscription",

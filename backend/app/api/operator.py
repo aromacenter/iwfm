@@ -49,7 +49,7 @@ async def operator_bugs(
     severity: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.api.bugs import _out
+    from app.api.bugs import _outs
     from app.models import BugReport
 
     q = select(BugReport).order_by(BugReport.created_at.desc()).limit(300)
@@ -58,7 +58,49 @@ async def operator_bugs(
     if severity:
         q = q.where(BugReport.severity == severity)
     rows = (await db.execute(q)).scalars().all()
-    return [_out(b) for b in rows]
+    return await _outs(db, rows)
+
+
+@router.post("/bugs/{bug_id}/comments", dependencies=[Depends(require_operator)])
+async def operator_bug_comment(
+    bug_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    body: dict | None = None,
+):
+    """Az üzemeltető kérdez / válaszol a jegyen (114. kör). Státusz nélkül a
+    nyitott jegy needs_info-ra kerül (visszadobva a bejelentőnek), aki a
+    felületen felugró ablakban kapja meg a kérdést."""
+    from app.api.bugs import _bug_or_404, _outs, add_comment
+    from app.api.deps import record_audit
+
+    body = body or {}
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail={"code": "bugs.empty_comment"})
+    b = await _bug_or_404(db, bug_id)
+    await add_comment(
+        db, b, kind="operator", author_name=(body.get("author_name") or "Üzemeltető"),
+        text=text, status=body.get("status") or None,
+    )
+    await record_audit(
+        db, actor=None, action="bug.operator_comment", entity_type="bug",
+        entity_id=str(b.id), detail={"status": b.status}, request=request,
+    )
+    await db.commit()
+    return (await _outs(db, [b]))[0]
+
+
+@router.post("/bugs/{bug_id}/seen", dependencies=[Depends(require_operator)])
+async def operator_bug_seen(bug_id: str, db: AsyncSession = Depends(get_db)):
+    from datetime import UTC as _UTC, datetime as _dt
+
+    from app.api.bugs import _bug_or_404
+
+    b = await _bug_or_404(db, bug_id)
+    b.operator_seen_at = _dt.now(_UTC)
+    await db.commit()
+    return {"ok": True}
 
 
 @router.patch("/bugs/{bug_id}", dependencies=[Depends(require_operator)])

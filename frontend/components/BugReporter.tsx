@@ -10,6 +10,14 @@ import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
 
+interface BugComment {
+  id: string;
+  author_kind: "operator" | "admin" | "reporter";
+  author_name: string;
+  text: string;
+  created_at: string;
+}
+
 interface MyBug {
   id: string;
   description: string;
@@ -18,6 +26,19 @@ interface MyBug {
   page_url: string;
   created_at: string;
   resolution_note: string | null;
+  comments: BugComment[];
+  unread_for_reporter: boolean;
+}
+
+const DISMISS_KEY = "iwfm-bug-reply-dismissed";
+
+function lastStaffComment(b: MyBug): BugComment | null {
+  const staff = (b.comments ?? []).filter((c) => c.author_kind !== "reporter");
+  return staff.length ? staff[staff.length - 1] : null;
+}
+
+function readDismissed(): Record<string, string> {
+  try { return JSON.parse(sessionStorage.getItem(DISMISS_KEY) ?? "{}"); } catch { return {}; }
 }
 
 const SEVERITY_CHIP: Record<string, string> = {
@@ -30,6 +51,8 @@ const SEVERITY_CHIP: Record<string, string> = {
 const STATUS_CHIP: Record<string, string> = {
   new: "bg-slate-100 text-slate-700",
   confirmed: "bg-indigo-100 text-indigo-800",
+  needs_info: "bg-amber-100 text-amber-800",
+  answered: "bg-sky-100 text-sky-800",
   duplicate: "bg-slate-100 text-slate-500",
   rejected: "bg-slate-100 text-slate-500 line-through",
   resolved: "bg-emerald-100 text-emerald-800",
@@ -52,9 +75,74 @@ export default function BugReporter() {
     api.get<MyBug[]>("/api/bugs/mine").then(setMine).catch(() => {});
   }, []);
   useEffect(loadMine, [loadMine]);
+  // Percenként + a lapra visszatérve frissül: így az üzemeltető kérdése
+  // felugró ablakban jön, nem kell a 🐞-re kattintani (114. kör).
+  useEffect(() => {
+    const id = window.setInterval(loadMine, 60_000);
+    const onVis = () => { if (document.visibilityState === "visible") loadMine(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { window.clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, [loadMine]);
 
   // van-e újratesztelésre váró (resolved) bejelentésem? → pötty a gombon
   const needsRetest = mine.some((b) => b.status === "resolved");
+  // olvasatlan üzemeltetői válaszok → számláló a gombon + felugró ablak
+  const unread = mine.filter((b) => b.unread_for_reporter);
+  const [dismissed, setDismissed] = useState<Record<string, string>>(() => readDismissed());
+  const popupBug = open ? null : unread.find((b) => {
+    const last = lastStaffComment(b);
+    return last && dismissed[b.id] !== last.id;
+  }) ?? null;
+  const [replyText, setReplyText] = useState<Record<string, string>>({});
+  const [replyBusy, setReplyBusy] = useState<string | null>(null);
+
+  function dismissPopup(b: MyBug) {
+    const last = lastStaffComment(b);
+    const next = { ...dismissed, [b.id]: last?.id ?? "" };
+    setDismissed(next);
+    try { sessionStorage.setItem(DISMISS_KEY, JSON.stringify(next)); } catch {}
+  }
+  async function markSeen(b: MyBug) {
+    try { await api.post(`/api/bugs/${b.id}/seen`, {}); } catch {}
+    dismissPopup(b);
+    loadMine();
+  }
+  async function sendReply(b: MyBug) {
+    const text = (replyText[b.id] ?? "").trim();
+    if (!text) return;
+    setReplyBusy(b.id);
+    try {
+      await api.post(`/api/bugs/${b.id}/comments`, { text });
+      setReplyText((m) => ({ ...m, [b.id]: "" }));
+      dismissPopup(b);
+      toast(t("bugs.replySent"), "success");
+      loadMine();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setReplyBusy(null);
+    }
+  }
+  const fmtWhen = (iso: string) => new Date(iso).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" });
+  const authorLabel = (c: BugComment) => (c.author_kind === "reporter" ? t("bugs.you") : c.author_name || t("bugs.staff"));
+  function thread(b: MyBug, compact = false) {
+    if (!b.comments?.length) return null;
+    return (
+      <div className={`mt-1.5 space-y-1 ${compact ? "max-h-40 overflow-y-auto" : ""}`}>
+        {b.comments.map((c) => (
+          <div
+            key={c.id}
+            className={`rounded-lg px-2 py-1.5 text-xs ${c.author_kind === "reporter" ? "bg-slate-50 text-slate-700" : "bg-amber-50 text-amber-900"}`}
+          >
+            <span className="font-semibold">{authorLabel(c)}</span>
+            <span className="ml-1 text-[10px] opacity-60">{fmtWhen(c.created_at)}</span>
+            <p className="whitespace-pre-line">{c.text}</p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  const canReply = (b: MyBug) => !["closed", "rejected", "duplicate"].includes(b.status);
 
   // ─── újranyitás indoklással: mi nem stimmel még + friss kép ───
   const [reopeningId, setReopeningId] = useState<string | null>(null);
@@ -394,10 +482,64 @@ export default function BugReporter() {
           <path d="M22 13h-4" />
           <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4" />
         </svg>
-        {needsRetest && (
+        {unread.length > 0 ? (
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-amber-400 px-1 text-[10px] font-bold text-slate-900">
+            {unread.length}
+          </span>
+        ) : needsRetest && (
           <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-amber-400" />
         )}
       </button>
+
+      {/* Felugró értesítés: az üzemeltető kérdezett / válaszolt a jegyemre (114. kör) */}
+      {popupBug && (() => {
+        const last = lastStaffComment(popupBug);
+        return (
+          <div data-bug-ui="1" className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md space-y-3 rounded-2xl border border-amber-200 bg-white p-5 shadow-2xl">
+              <h2 className="text-lg font-bold">💬 {t("bugs.replyTitle")}</h2>
+              <p className="line-clamp-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">🐞 {popupBug.description}</p>
+              {last && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  <p className="text-xs font-semibold">{t("bugs.replyFrom", { name: last.author_name || t("bugs.staff") })} · {fmtWhen(last.created_at)}</p>
+                  <p className="mt-1 whitespace-pre-line">{last.text}</p>
+                </div>
+              )}
+              {canReply(popupBug) && (
+                <textarea
+                  value={replyText[popupBug.id] ?? ""}
+                  onChange={(e) => setReplyText((m) => ({ ...m, [popupBug.id]: e.target.value }))}
+                  placeholder={t("bugs.replyPh")}
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={() => dismissPopup(popupBug)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">
+                  {t("bugs.replyLater")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void markSeen(popupBug); setTab("mine"); setOpen(true); }}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+                >
+                  {t("bugs.replyOpen")}
+                </button>
+                {canReply(popupBug) && (
+                  <button
+                    type="button"
+                    disabled={replyBusy === popupBug.id || !(replyText[popupBug.id] ?? "").trim()}
+                    onClick={() => void sendReply(popupBug)}
+                    className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                  >
+                    {t("bugs.replySend")}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {open && (
         <div
@@ -417,7 +559,7 @@ export default function BugReporter() {
               onClick={() => setTab("mine")}
               className={`flex-1 rounded-md px-2 py-1 ${tab === "mine" ? "bg-rose-600 text-white" : "text-slate-600"}`}
             >
-              {t("bugs.tabMine")} {needsRetest && "⏳"}
+              {t("bugs.tabMine")} {unread.length > 0 ? `💬${unread.length}` : needsRetest && "⏳"}
             </button>
           </div>
 
@@ -496,6 +638,31 @@ export default function BugReporter() {
                   <p className="line-clamp-2 text-slate-700">{b.description}</p>
                   {b.resolution_note && (
                     <p className="mt-1 text-xs text-emerald-700">💬 {b.resolution_note}</p>
+                  )}
+                  {b.unread_for_reporter && (
+                    <button type="button" onClick={() => void markSeen(b)} className="mt-1 text-[11px] font-semibold text-amber-700 hover:underline">
+                      ● {t("bugs.unreadBadge")}
+                    </button>
+                  )}
+                  {thread(b, true)}
+                  {canReply(b) && (b.comments?.length > 0 || b.status === "needs_info") && (
+                    <div className="mt-1.5 flex gap-1.5">
+                      <input
+                        value={replyText[b.id] ?? ""}
+                        onChange={(e) => setReplyText((m) => ({ ...m, [b.id]: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void sendReply(b); } }}
+                        placeholder={t("bugs.replyPh")}
+                        className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1 text-xs"
+                      />
+                      <button
+                        type="button"
+                        disabled={replyBusy === b.id || !(replyText[b.id] ?? "").trim()}
+                        onClick={() => void sendReply(b)}
+                        className="rounded-lg bg-amber-500 px-2 py-1 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                      >
+                        {t("bugs.reply")}
+                      </button>
+                    </div>
                   )}
                   {(b.status === "resolved" || b.status === "closed") && reopeningId !== b.id && (
                     <div className="mt-2 flex gap-2">

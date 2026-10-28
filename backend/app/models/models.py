@@ -863,6 +863,31 @@ class BugReport(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(UTC)
     )
+    # Párbeszéd-szál (114. kör): mikor látta utoljára a szálat a bejelentő,
+    # ill. az üzemeltető — ebből számoljuk az „olvasatlan válasz” jelzést.
+    reporter_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    operator_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BugComment(Base):
+    """Hozzászólás egy hibajegyen (114. kör): az üzemeltető kérdez és
+    visszadobja a jegyet (needs_info), a bejelentő válaszol (answered) — a
+    teljes szál a jegy mellett marad, a pult és a bejelentő is látja."""
+
+    __tablename__ = "bug_comments"
+    __table_args__ = (Index("ix_bug_comments_bug", "bug_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    bug_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("bug_reports.id", ondelete="CASCADE", name="fk_bug_comment_bug"),
+        nullable=False,
+    )
+    author_kind: Mapped[str] = mapped_column(String(16), nullable=False)  # operator | admin | reporter
+    author_name: Mapped[str] = mapped_column(String(128), nullable=False, default="?")
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 class CourierSettings(Base):

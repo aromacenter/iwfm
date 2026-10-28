@@ -19,12 +19,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, record_audit, require_role
 from app.db import get_db
-from app.models import BugReport, User
+from app.models import BugComment, BugReport, User
 
 router = APIRouter()
 
 SEVERITIES = ("blocker", "major", "minor", "cosmetic")
-STATUSES = ("new", "confirmed", "duplicate", "rejected", "resolved", "closed", "reopened")
+# needs_info: az üzemeltető kérdezett, a jegy a bejelentőnél van;
+# answered: a bejelentő válaszolt, a jegy visszakerült az üzemeltetőhöz (114. kör)
+STATUSES = (
+    "new", "confirmed", "needs_info", "answered", "duplicate", "rejected",
+    "resolved", "closed", "reopened",
+)
+# ezekből a státuszokból dobja vissza a kérdés a jegyet a bejelentőnek
+_BOUNCEABLE = ("new", "confirmed", "reopened", "answered")
 MAX_SCREENSHOT = 3 * 1024 * 1024  # 3 MB
 
 
@@ -52,7 +59,27 @@ def _decode_screenshot(data_url: str | None) -> tuple[bytes | None, str | None]:
     return raw, mime[:32]
 
 
-def _out(b: BugReport) -> dict:
+def _aware(dt: datetime | None) -> datetime | None:
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
+
+
+def _comment_out(c: BugComment) -> dict:
+    return {
+        "id": str(c.id),
+        "author_kind": c.author_kind,
+        "author_name": c.author_name,
+        "text": c.text,
+        "created_at": _aware(c.created_at).isoformat(),
+    }
+
+
+def _out(b: BugReport, comments: list[BugComment] | None = None) -> dict:
+    comments = list(comments or [])
+    last_staff = max((_aware(c.created_at) for c in comments if c.author_kind != "reporter"), default=None)
+    last_rep = max((_aware(c.created_at) for c in comments if c.author_kind == "reporter"), default=None)
+    r_seen, o_seen = _aware(b.reporter_seen_at), _aware(b.operator_seen_at)
     return {
         "id": str(b.id),
         "page_url": b.page_url,
@@ -66,7 +93,56 @@ def _out(b: BugReport) -> dict:
         "resolution_note": b.resolution_note,
         "created_at": b.created_at.isoformat(),
         "updated_at": b.updated_at.isoformat() if b.updated_at else None,
+        # párbeszéd-szál + olvasatlan-jelzések (114. kör)
+        "comments": [_comment_out(c) for c in comments],
+        "unread_for_reporter": bool(last_staff and (r_seen is None or last_staff > r_seen)),
+        "unread_for_operator": bool(last_rep and (o_seen is None or last_rep > o_seen)),
     }
+
+
+async def _comments_for(db: AsyncSession, rows: list[BugReport]) -> dict[uuid.UUID, list[BugComment]]:
+    out: dict[uuid.UUID, list[BugComment]] = {r.id: [] for r in rows}
+    if not rows:
+        return out
+    cs = (
+        await db.execute(
+            select(BugComment)
+            .where(BugComment.bug_id.in_([r.id for r in rows]))
+            .order_by(BugComment.created_at)
+        )
+    ).scalars().all()
+    for c in cs:
+        out.setdefault(c.bug_id, []).append(c)
+    return out
+
+
+async def _outs(db: AsyncSession, rows: list[BugReport]) -> list[dict]:
+    cmap = await _comments_for(db, rows)
+    return [_out(b, cmap.get(b.id)) for b in rows]
+
+
+async def add_comment(
+    db: AsyncSession, b: BugReport, *, kind: str, author_name: str, text: str,
+    status: str | None,
+) -> None:
+    """Hozzászólás + a jegy státusz-logikája. Üzemeltető/admin: a megadott
+    státusz, vagy — ha a jegy nyitott — automatikusan needs_info (a jegy a
+    bejelentőnél). Bejelentő: needs_info → answered (vissza az üzemeltetőhöz)."""
+    now = datetime.now(UTC)
+    if kind != "reporter" and status and status not in STATUSES:
+        raise HTTPException(status_code=422, detail={"code": "bugs.bad_status"})
+    db.add(BugComment(bug_id=b.id, author_kind=kind, author_name=author_name[:128], text=text[:4000]))
+    if kind == "reporter":
+        if b.status == "needs_info":
+            b.status = "answered"
+        b.reporter_seen_at = now
+    else:
+        if status:
+            b.status = status
+        elif b.status in _BOUNCEABLE:
+            b.status = "needs_info"
+        b.operator_seen_at = now
+    b.updated_at = now
 
 
 async def _bug_or_404(db: AsyncSession, bug_id: str) -> BugReport:
@@ -127,7 +203,60 @@ async def my_bugs(
             .limit(50)
         )
     ).scalars().all()
-    return [_out(b) for b in rows]
+    return await _outs(db, rows)
+
+
+class BugCommentBody(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    # csak admin adhat státuszt (pl. needs_info = visszadobás kérdéssel)
+    status: str | None = None
+
+
+@router.post("/{bug_id}/comments")
+async def comment_bug(
+    bug_id: str,
+    body: BugCommentBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """Hozzászólás a jegyhez (114. kör). A bejelentő válaszol (needs_info →
+    answered); a példány adminja kérdez — a jegy needs_info-ra kerül, és a
+    bejelentőnél felugrik az értesítés."""
+    b = await _bug_or_404(db, bug_id)
+    is_reporter = b.reporter_id == actor.id
+    if not is_reporter and actor.role != "admin":
+        raise HTTPException(status_code=403, detail={"code": "bugs.not_yours"})
+    kind = "reporter" if is_reporter else "admin"
+    await add_comment(
+        db, b, kind=kind, author_name=actor.display_name, text=body.text.strip(),
+        status=body.status if kind == "admin" else None,
+    )
+    await record_audit(
+        db, actor=actor, action="bug.comment", entity_type="bug",
+        entity_id=str(b.id), detail={"kind": kind, "status": b.status}, request=request,
+    )
+    await db.commit()
+    return (await _outs(db, [b]))[0]
+
+
+@router.post("/{bug_id}/seen")
+async def bug_seen(
+    bug_id: str,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """A bejelentő (vagy admin) megnézte a szálat → az olvasatlan-jelzés törlődik."""
+    b = await _bug_or_404(db, bug_id)
+    if b.reporter_id != actor.id and actor.role != "admin":
+        raise HTTPException(status_code=403, detail={"code": "bugs.not_yours"})
+    now = datetime.now(UTC)
+    if b.reporter_id == actor.id:
+        b.reporter_seen_at = now
+    else:
+        b.operator_seen_at = now
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/{bug_id}/retest-ok")
@@ -210,7 +339,7 @@ async def list_bugs(
     if severity:
         q = q.where(BugReport.severity == severity)
     rows = (await db.execute(q)).scalars().all()
-    return [_out(b) for b in rows]
+    return await _outs(db, rows)
 
 
 @router.get("/{bug_id}/screenshot")

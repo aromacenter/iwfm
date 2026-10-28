@@ -2192,7 +2192,9 @@
       "rejected": "Elutasítva",
       "resolved": "Javítva — teszteld!",
       "closed": "Lezárva",
-      "reopened": "Újranyitva"
+      "reopened": "Újranyitva",
+      "needs_info": "Kérdés a bejelentőhöz",
+      "answered": "Bejelentő válaszolt"
     },
     "adminTitle": "Hibabejelentések",
     "adminEmpty": "Nincs a szűrőnek megfelelő bejelentés. 🎉",
@@ -2202,7 +2204,24 @@
     "group": "Kötegelés",
     "groupPrompt": "Javítási köteg neve (üresen: kivétel a kötegből):",
     "resolveNotePrompt": "Megjegyzés a bejelentőnek (mi és hogyan javult):",
-    "captureBlank": "A fotózás üres képet adott — használd a 📎 gombot: készíts képernyőképet a telefonnal és csatold azt."
+    "captureBlank": "A fotózás üres képet adott — használd a 📎 gombot: készíts képernyőképet a telefonnal és csatold azt.",
+    "replyTitle": "Válasz érkezett a hibajegyedre",
+    "replyFrom": "{name} írta",
+    "replyPh": "Válaszod… (Enter = küldés)",
+    "replySend": "Válasz küldése",
+    "replyLater": "Később",
+    "replyOpen": "Megnézem a bejelentéseimnél",
+    "replySent": "Válasz elküldve — köszönjük!",
+    "reply": "Válasz",
+    "you": "Te",
+    "staff": "Üzemeltető",
+    "unreadBadge": "Új válasz — olvasottnak jelölöm",
+    "ask": "Kérdés / üzenet a bejelentőnek",
+    "askPrompt": "Mit írsz a bejelentőnek? (felugró ablakban kapja meg)",
+    "askBounce": "Visszadobod a jegyet a bejelentőnek („Kérdés a bejelentőhöz” státusz)? Nem esetén a státusz marad, csak az üzenet megy.",
+    "askSent": "Üzenet elküldve a bejelentőnek.",
+    "unreadOp": "Új válasz a bejelentőtől",
+    "markRead": "olvastam"
   },
   "license": {
     "title": "Licenc és előfizetés",
