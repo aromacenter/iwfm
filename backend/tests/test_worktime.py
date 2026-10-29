@@ -86,6 +86,6 @@ async def test_worktime_timer_and_stats(client, admin):
     assert (await client.get(f"/api/worktime/stats/summary?from={d0}&to={d1}", headers=emp_h)).status_code == 403
 
     # modul kikapcsolva → 403 a timerre is, a munkalap-képen nincs timer
-    await _enable_modules(["parts"])
+    await _enable_modules(["parts", "tasks"])  # 116. kor: a munkalaphoz a tasks modul kell
     assert (await client.post(f"/api/worktime/{task['id']}/start", headers=emp_h)).status_code == 403
     assert (await client.get(f"/api/tasks/{task['id']}/worksheet", headers=adm)).json()["timer"] is None
