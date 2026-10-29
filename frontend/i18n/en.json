@@ -2262,7 +2262,10 @@
     "cycle": {
       "monthly": "Monthly",
       "yearly": "Yearly"
-    }
+    },
+    "moduleOffTitle": "This module is switched off",
+    "moduleOffPage": "The “{module}” module is not enabled on this instance. If you need it, the operator can enable it in the licence.",
+    "moduleOffBack": "Back to the dashboard"
   },
   "inv": {
     "title": "Machines",
@@ -3890,5 +3893,51 @@
     "in_progress": "In progress",
     "planned": "Planned",
     "done": "Done"
+  },
+  "modules": {
+    "calendar": "Calendar",
+    "tasks": "Tasks and worksheets",
+    "service": "Service",
+    "intake": "Intake",
+    "handover": "Handover to customer",
+    "pickup": "Technician handover",
+    "quotes": "Quote requests",
+    "employees": "Employees",
+    "schedule": "Schedule",
+    "attendance": "Attendance",
+    "timeoff": "Time off",
+    "payroll": "Payroll",
+    "partners": "Partners",
+    "contracts": "Contracts",
+    "machines": "Machines / assets",
+    "products": "Products",
+    "map": "Map",
+    "settlements": "Settlement",
+    "agent_report": "Sales rep report",
+    "delivery": "Delivery",
+    "orders": "Orders (QR)",
+    "import_export": "Import / export",
+    "automation": "Automations",
+    "audit": "Audit log",
+    "billing": "Billingó invoicing",
+    "szamlazz": "Számlázz.hu",
+    "gls": "GLS",
+    "mpl": "MPL",
+    "foxpost": "FoxPost",
+    "dpd": "DPD",
+    "labels": "Label printing",
+    "ai": "AI assistant",
+    "portal": "Partner portal",
+    "support": "Customer support",
+    "bugreport": "Bug reporter",
+    "cashbook": "CashBook",
+    "cashbox": "Cash register",
+    "stats": "Business statistics",
+    "tiered": "Tiered portion pricing",
+    "stocktake": "Stocktake",
+    "saferpay": "Vending QR payment",
+    "warehouse": "Warehouse",
+    "parts": "Parts warehouse",
+    "worktime": "Work time tracking"
   }
 }

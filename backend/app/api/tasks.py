@@ -45,6 +45,7 @@ from app.models import (
 from app.services.wfm.ai_assign import suggest_assignee
 from app.services.wfm.ai_service import generate_from_image
 from app.services.wfm.email_service import load_smtp_config, send_email
+from app.services.wfm.license import require_module
 from app.services.wfm.parts_service import UsedPartOut, used_parts_as_materials, used_parts_for_worksheet
 from app.services.wfm.worksheet_pdf import DEFAULT_CUSTOMER_FOOTER, build_worksheet_pdf
 from app.services.wfm.worktime_service import TimerSummary
@@ -2923,7 +2924,7 @@ async def my_company_technicians(
     return emp.company_technicians or []
 
 
-@router.get("/service-handover/list")
+@router.get("/service-handover/list", dependencies=[Depends(require_module("pickup"))])
 async def service_handover_list(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("tasks")),
@@ -2978,7 +2979,7 @@ class ServicePickupBody(BaseModel):
     payment_method: str = Field(default="cash", pattern="^(cash|transfer)$")
 
 
-@router.post("/service-handover/pickup")
+@router.post("/service-handover/pickup", dependencies=[Depends(require_module("pickup"))])
 async def service_handover_pickup(
     body: ServicePickupBody,
     request: Request,
@@ -3074,7 +3075,7 @@ async def service_handover_pickup(
     return {"picked": picked, "fee_total": round(fee_total, 2), "fees_by_employee": fees_by_emp}
 
 
-@router.get("/service-handover/fees")
+@router.get("/service-handover/fees", dependencies=[Depends(require_module("pickup"))])
 async def service_fees(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
@@ -3178,7 +3179,7 @@ class TechLedgerBody(BaseModel):
     receipt_no: str | None = Field(default=None, max_length=64)
 
 
-@router.post("/service-handover/ledger")
+@router.post("/service-handover/ledger", dependencies=[Depends(require_module("pickup"))])
 async def add_tech_ledger(
     body: TechLedgerBody,
     request: Request,
@@ -3216,7 +3217,7 @@ async def add_tech_ledger(
     return {"ok": True}
 
 
-@router.get("/handovers/list")
+@router.get("/handovers/list", dependencies=[Depends(require_module("handover"))])
 async def list_handovers(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("invoicing")),
@@ -3238,7 +3239,7 @@ async def list_handovers(
     return [await _handover_row(db, task, ws) for ws, task in rows]
 
 
-@router.get("/{task_id}/handover")
+@router.get("/{task_id}/handover", dependencies=[Depends(require_module("handover"))])
 async def handover_detail(
     task_id: str,
     db: AsyncSession = Depends(get_db),
@@ -3261,7 +3262,7 @@ class HandoverBody(BaseModel):
     due_days: int | None = Field(default=None, ge=1, le=120)
 
 
-@router.post("/{task_id}/handover")
+@router.post("/{task_id}/handover", dependencies=[Depends(require_module("handover"))])
 async def do_handover(
     task_id: str,
     body: HandoverBody,
@@ -3415,7 +3416,7 @@ async def do_handover(
             "discount": body.discount, "invoice_sent_to": invoice_sent_to}
 
 
-@router.get("/{task_id}/handover/invoice-link")
+@router.get("/{task_id}/handover/invoice-link", dependencies=[Depends(require_module("handover"))])
 async def handover_invoice_link(
     task_id: str,
     db: AsyncSession = Depends(get_db),

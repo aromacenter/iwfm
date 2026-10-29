@@ -88,6 +88,8 @@ const TAB_MODULE: Record<string, string> = {
   printer: "labels",
   ai: "ai",
   support: "support",
+  skills: "employees",
+  worksheet: "tasks|intake|service",
 };
 
 // A fülek logikai csoportjai — a menü csoport-kártyákban jelenik meg;

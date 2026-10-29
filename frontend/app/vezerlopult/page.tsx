@@ -91,6 +91,14 @@ export default function VezerlopultPage() {
     note: string | null; status: string; requester_name: string | null; created_at: string;
   }[]>([]);
   const [infoPartner, setInfoPartner] = useState<string | null>(null);
+  // Kikapcsolt modul (116. kör): a hozzá tartozó szekció nem jelenik meg
+  const [mods, setMods] = useState<string[] | null>(null);
+  useEffect(() => {
+    api.get<{ modules: string[] | null }>("/api/settings/license/status")
+      .then((l) => setMods(l.modules))
+      .catch(() => {});
+  }, []);
+  const on = (key: string) => !mods || mods.includes(key);
   const { t, lang } = useT();
   const { toast } = useUI();
 
@@ -173,6 +181,7 @@ export default function VezerlopultPage() {
           </section>
         )}
         {/* Függő kérelmek */}
+        {on("timeoff") && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
           <h2 className="mb-3 font-semibold">
             {t("dash.pendingRequests")}{" "}
@@ -217,8 +226,10 @@ export default function VezerlopultPage() {
             </ul>
           )}
         </section>
+        )}
 
         {/* Mai feladatok */}
+        {on("tasks") && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
           <h2 className="mb-3 font-semibold">
             {t("dash.todaysTasks")}{" "}
@@ -259,8 +270,10 @@ export default function VezerlopultPage() {
             </ul>
           )}
         </section>
+        )}
 
         {/* Ma távol */}
+        {on("timeoff") && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 font-semibold">{t("dash.onLeaveToday")}</h2>
           {data.on_leave_today.length === 0 ? (
@@ -278,8 +291,10 @@ export default function VezerlopultPage() {
             </ul>
           )}
         </section>
+        )}
 
         {/* Éppen bent */}
+        {on("attendance") && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 font-semibold">
             {t("dash.workingNow")}{" "}
@@ -307,8 +322,10 @@ export default function VezerlopultPage() {
             </ul>
           )}
         </section>
+        )}
 
         {/* Jövő hét */}
+        {on("schedule") && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
           <h2 className="mb-2 font-semibold">
             {t("dash.nextWeek", { date: data.next_week.week_start })}
@@ -329,9 +346,10 @@ export default function VezerlopultPage() {
             </p>
           )}
         </section>
+        )}
       </div>
 
-      {stats && (
+      {stats && on("settlements") && (
         <>
           <h2 className="mb-3 mt-8 text-lg font-bold">{t("dash.consTitle")}</h2>
 

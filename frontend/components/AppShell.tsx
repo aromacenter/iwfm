@@ -32,37 +32,37 @@ const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: "nav.groups.overview",
     items: [
-      { href: "/naptar", key: "nav.calendar", perm: "always", icon: "📆" },
+      { href: "/naptar", key: "nav.calendar", perm: "always", icon: "📆", module: "calendar" },
       { href: "/vezerlopult", key: "nav.dashboard", perm: "dashboard", icon: "📊" },
     ],
   },
   {
     labelKey: "nav.groups.operations",
     items: [
-      { href: "/feladatok", key: "nav.tasks", perm: "tasks", icon: "🗂️" },
-      { href: "/szerviz", key: "nav.service", perm: "service", icon: "🔧" },
-      { href: "/atvetel", key: "nav.intake", perm: "intake", icon: "📥" },
-      { href: "/atadas", key: "nav.handover", perm: "invoicing", icon: "🤝" },
-      { href: "/szerelo-atadas", key: "nav.serviceHandover", perm: "tasks", icon: "🔧" },
+      { href: "/feladatok", key: "nav.tasks", perm: "tasks", icon: "🗂️", module: "tasks" },
+      { href: "/szerviz", key: "nav.service", perm: "service", icon: "🔧", module: "service" },
+      { href: "/atvetel", key: "nav.intake", perm: "intake", icon: "📥", module: "intake" },
+      { href: "/atadas", key: "nav.handover", perm: "invoicing", icon: "🤝", module: "handover" },
+      { href: "/szerelo-atadas", key: "nav.serviceHandover", perm: "tasks", icon: "🔧", module: "pickup" },
       { href: "/sajat-raktar", key: "nav.myWarehouse", perm: "always", icon: "🚚", module: "warehouse" },
       { href: "/sajat-alkatreszek", key: "nav.myParts", perm: "always", icon: "🔩", module: "parts" },
       { href: "/tudasbazis", key: "nav.kb", perm: "knowledge", icon: "📚", module: "support" },
       { href: "/kezikonyv", key: "nav.manual", perm: "always", icon: "📖" },
       { href: "/roadmap", key: "nav.roadmap", perm: "always", icon: "🗺" },
-      { href: "/beosztas", key: "nav.schedule", perm: "schedule", icon: "🗓️" },
-      { href: "/jelenlet", key: "nav.attendance", perm: "attendance", icon: "⏱️" },
-      { href: "/tavollet", key: "nav.timeOff", perm: "timeoff", icon: "🏖️" },
+      { href: "/beosztas", key: "nav.schedule", perm: "schedule", icon: "🗓️", module: "schedule" },
+      { href: "/jelenlet", key: "nav.attendance", perm: "attendance", icon: "⏱️", module: "attendance" },
+      { href: "/tavollet", key: "nav.timeOff", perm: "timeoff", icon: "🏖️", module: "timeoff" },
     ],
   },
   {
     labelKey: "nav.groups.masterData",
     items: [
-      { href: "/dolgozok", key: "nav.employees", perm: "employees", icon: "👥" },
-      { href: "/partnerek", key: "nav.partners", perm: "partners", icon: "🤝" },
-      { href: "/szerzodesek", key: "nav.contracts", perm: "partners", icon: "📜" },
-      { href: "/ajanlatkeresek", key: "nav.quotes", perm: "partners", icon: "📨" },
-      { href: "/gepek", key: "nav.inventory", perm: "machines", icon: "☕" },
-      { href: "/termekek", key: "nav.products", perm: "products", icon: "📦" },
+      { href: "/dolgozok", key: "nav.employees", perm: "employees", icon: "👥", module: "employees" },
+      { href: "/partnerek", key: "nav.partners", perm: "partners", icon: "🤝", module: "partners" },
+      { href: "/szerzodesek", key: "nav.contracts", perm: "partners", icon: "📜", module: "contracts" },
+      { href: "/ajanlatkeresek", key: "nav.quotes", perm: "partners", icon: "📨", module: "quotes" },
+      { href: "/gepek", key: "nav.inventory", perm: "machines", icon: "☕", module: "machines" },
+      { href: "/termekek", key: "nav.products", perm: "products", icon: "📦", module: "products" },
       { href: "/raktar", key: "nav.warehouse", perm: "settlements", icon: "🏬", module: "warehouse" },
       { href: "/leltar", key: "nav.stocktake", perm: "settlements", icon: "📋", module: "stocktake" },
     ],
@@ -70,9 +70,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: "nav.groups.billing",
     items: [
-      { href: "/elszamolas", key: "nav.settlement", perm: "settlements", icon: "🧾" },
+      { href: "/elszamolas", key: "nav.settlement", perm: "settlements", icon: "🧾", module: "settlements" },
       { href: "/csomagok", key: "nav.gls", perm: "settlements", icon: "📦", module: "gls" },
-      { href: "/uzletkoto", key: "nav.agentReport", perm: "agent_report", icon: "💼" },
+      { href: "/uzletkoto", key: "nav.agentReport", perm: "agent_report", icon: "💼", module: "agent_report" },
       { href: "/kassza", key: "nav.cashbox", perm: "always", icon: "💰", module: "cashbox" },
       { href: "/statisztika", key: "nav.stats", perm: "agent_report", icon: "📈", module: "stats" },
       { href: "/munkaido", key: "nav.worktime", perm: "agent_report", icon: "⏱", module: "worktime" },
@@ -97,18 +97,18 @@ const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: "nav.groups.system",
     items: [
-      { href: "/import-export", key: "nav.importExport", perm: "import_export", icon: "🔄" },
-      { href: "/automatizalasok", key: "nav.automation", perm: "admin-only", icon: "⚡" },
+      { href: "/import-export", key: "nav.importExport", perm: "import_export", icon: "🔄", module: "import_export" },
+      { href: "/automatizalasok", key: "nav.automation", perm: "admin-only", icon: "⚡", module: "automation" },
       { href: "/hibak", key: "nav.bugs", perm: "admin-only", icon: "🐞", module: "bugreport" },
-      { href: "/naplo", key: "nav.audit", perm: "admin-only", icon: "📋" },
+      { href: "/naplo", key: "nav.audit", perm: "admin-only", icon: "📋", module: "audit" },
       { href: "/beallitasok", key: "nav.settings", perm: "admin-only", icon: "⚙️" },
     ],
   },
   {
     labelKey: "nav.groups.personal",
     items: [
-      { href: "/beosztasom", key: "nav.mySchedule", perm: "my_schedule", icon: "📅" },
-      { href: "/feladataim", key: "nav.myTasks", perm: "my_tasks", icon: "✅" },
+      { href: "/beosztasom", key: "nav.mySchedule", perm: "my_schedule", icon: "📅", module: "schedule" },
+      { href: "/feladataim", key: "nav.myTasks", perm: "my_tasks", icon: "✅", module: "tasks" },
     ],
   },
 ];
@@ -234,6 +234,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Oldal-szintű jogosultság (RBAC v2): ha valaki olyan oldalra téved, amihez a
   // szerepkörének nincs joga, hibapanelt kap, és a tiltás a naplóba kerül.
   const permState = usePerms();
+  // Kikapcsolt modul oldala (116. kör): a menüből eltűnik, a közvetlen linkre
+  // érthető panel jön — a backend a routert is 403-mal zárja.
+  const disabledModule = useMemo(() => {
+    if (!user || !license || license.modules === null) return null;
+    const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href !== "/" && pathname.startsWith(i.href));
+    if (!item || !item.module) return null;
+    return license.modules.includes(item.module) ? null : item.module;
+  }, [license, pathname, user]);
   const deniedFeature = useMemo(() => {
     if (!permState.loaded || !user) return null;
     const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href !== "/" && pathname.startsWith(i.href));
@@ -451,7 +459,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <div className="mx-auto max-w-6xl px-4 py-6">
-          {deniedFeature ? (
+          {disabledModule ? (
+            <div className="rounded-2xl border border-amber-200 bg-white p-8 text-center shadow-sm">
+              <p className="text-3xl">🔌</p>
+              <h2 className="mt-2 text-lg font-semibold text-amber-800">{t("license.moduleOffTitle")}</h2>
+              <p className="mt-1 text-sm text-slate-600">{t("license.moduleOffPage", { module: t(`modules.${disabledModule}`) })}</p>
+              <Link href="/vezerlopult" className="mt-4 inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("license.moduleOffBack")}</Link>
+            </div>
+          ) : deniedFeature ? (
             <div className="rounded-2xl border border-rose-200 bg-white p-8 text-center shadow-sm">
               <p className="text-3xl">🚫</p>
               <h2 className="mt-2 text-lg font-semibold text-rose-700">{t("perms.deniedTitle")}</h2>

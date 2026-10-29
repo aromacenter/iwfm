@@ -39,8 +39,15 @@ async def require_operator(
 async def operator_status(db: AsyncSession = Depends(get_db)):
     """Példány-állapot a Flotta-pultnak: licenc + kihasználtság + a futó
     verzió (Railway RAILWAY_GIT_COMMIT_SHA) a központi frissítés-ellenőrzéshez."""
+    from app.services.wfm.license import MODULE_REQUIRES, MODULES
+
     commit = (os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("WFM_GIT_COMMIT") or "")[:7] or None
-    return {"app": "iwfm", "commit": commit, **(await _license_status_payload(db))}
+    return {
+        "app": "iwfm", "commit": commit,
+        "module_catalog": list(MODULES),
+        "module_requires": {k: list(v) for k, v in MODULE_REQUIRES.items()},
+        **(await _license_status_payload(db)),
+    }
 
 
 # ─── Hibajelentések táv-kezelése a Flotta-pultból ───────────────────────────

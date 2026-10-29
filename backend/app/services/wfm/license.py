@@ -27,7 +27,60 @@ MODULES = (
     "warehouse",  # raktár: saját raktár, átadások, raktármozgások (Flotta-kapcsoló)
     "parts",  # alkatrész-raktár (ERP-szerű helykódos készlet) — alapból KI
     "worktime",  # munkaidő-mérés munkalaponként (timer + vezetői statisztika) — alapból KI
+    # 116. kör: MINDEN menüpont kapcsolható (többféle raktár-/szerviz-profil).
+    # A vezérlőpult, a beállítások, a kézikönyv és a roadmap az alap — nem kapcsolható.
+    "calendar", "tasks", "service", "intake", "handover", "pickup", "quotes",
+    "employees", "schedule", "attendance", "timeoff", "payroll",
+    "partners", "contracts", "machines", "products", "map",
+    "settlements", "agent_report", "delivery", "orders", "import_export",
+    "automation", "audit",
 )
+
+# Modul-függőségek: ha A be van kapcsolva, a felsoroltak is hatályosak
+# (különben a felület lyukas lenne — pl. feladat dolgozó nélkül). A
+# lezárást az effective_modules számolja, a pult csak jelzi.
+MODULE_REQUIRES: dict[str, tuple[str, ...]] = {
+    "tasks": ("employees",),
+    "schedule": ("employees",),
+    "attendance": ("employees",),
+    "timeoff": ("employees",),
+    "payroll": ("employees", "attendance"),
+    "worktime": ("tasks",),
+    "handover": ("tasks",),
+    "pickup": ("tasks",),
+    "service": ("machines", "partners"),
+    "intake": ("machines",),
+    "contracts": ("partners",),
+    "quotes": ("partners",),
+    "settlements": ("partners", "products"),
+    "tiered": ("settlements",),
+    "agent_report": ("settlements",),
+    "cashbox": ("employees",),
+    "map": ("partners",),
+    "delivery": ("partners", "products"),
+    "orders": ("products", "partners"),
+    "stocktake": ("warehouse",),
+    "parts": ("warehouse",),
+    "portal": ("partners",),
+    "support": ("machines",),
+    "saferpay": ("machines",),
+    "stats": ("settlements",),
+    "cashbook": ("settlements",),
+}
+
+
+def close_modules(keys: list[str]) -> list[str]:
+    """Függőségekkel lezárt modul-lista (sorrend: katalógus szerint)."""
+    wanted = {k for k in keys if k in MODULES}
+    changed = True
+    while changed:
+        changed = False
+        for k in list(wanted):
+            for req in MODULE_REQUIRES.get(k, ()):
+                if req not in wanted:
+                    wanted.add(req)
+                    changed = True
+    return [m for m in MODULES if m in wanted]
 
 
 def effective_modules(row: LicenseSettings | None) -> list[str] | None:
@@ -37,13 +90,13 @@ def effective_modules(row: LicenseSettings | None) -> list[str] | None:
     if row is not None and row.enabled_modules is not None:
         if "*" in row.enabled_modules:  # explicit "minden modul" (X-Presso mód)
             return None
-        return [m for m in row.enabled_modules if m in MODULES]
+        return close_modules(list(row.enabled_modules))
     from app.core.config import get_settings
 
     env = get_settings().default_modules
     if env is None:
         return None
-    return [m for m in (p.strip() for p in env.split(",")) if m in MODULES]
+    return close_modules([p.strip() for p in env.split(",")])
 
 
 async def module_enabled(db: AsyncSession, key: str) -> bool:

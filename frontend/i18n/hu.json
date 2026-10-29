@@ -2262,7 +2262,10 @@
     "cycle": {
       "monthly": "Havi",
       "yearly": "Éves"
-    }
+    },
+    "moduleOffTitle": "Ez a modul ki van kapcsolva",
+    "moduleOffPage": "A(z) „{module}” modul nincs bekapcsolva ezen a példányon. Ha szükséged van rá, az üzemeltető a licencben bekapcsolja.",
+    "moduleOffBack": "Vissza a vezérlőpultra"
   },
   "inv": {
     "title": "Gépek",
@@ -3890,5 +3893,51 @@
     "in_progress": "Fejlesztés alatt",
     "planned": "Tervben",
     "done": "Elkészült"
+  },
+  "modules": {
+    "calendar": "Naptár",
+    "tasks": "Feladatok és munkalapok",
+    "service": "Szerviz",
+    "intake": "Átvétel",
+    "handover": "Átadás az ügyfélnek",
+    "pickup": "Szerelő-átadás",
+    "quotes": "Ajánlatkérések",
+    "employees": "Dolgozók",
+    "schedule": "Beosztás",
+    "attendance": "Jelenlét",
+    "timeoff": "Távollét",
+    "payroll": "Bérszámfejtés",
+    "partners": "Partnerek",
+    "contracts": "Szerződések",
+    "machines": "Gépek / eszközök",
+    "products": "Termékek",
+    "map": "Térkép",
+    "settlements": "Elszámolás",
+    "agent_report": "Üzletkötői riport",
+    "delivery": "Kiszállítás",
+    "orders": "Rendelések (QR)",
+    "import_export": "Import / export",
+    "automation": "Automatizálások",
+    "audit": "Napló",
+    "billing": "Billingó-számlázás",
+    "szamlazz": "Számlázz.hu",
+    "gls": "GLS",
+    "mpl": "MPL",
+    "foxpost": "FoxPost",
+    "dpd": "DPD",
+    "labels": "Címkenyomtatás",
+    "ai": "AI-asszisztens",
+    "portal": "Partner-portál",
+    "support": "Ügyfél-támogatás",
+    "bugreport": "Hibabejelentő",
+    "cashbook": "CashBook",
+    "cashbox": "Kassza",
+    "stats": "Üzleti statisztika",
+    "tiered": "Sávos adagárazás",
+    "stocktake": "Leltár",
+    "saferpay": "Vending QR-fizetés",
+    "warehouse": "Raktár",
+    "parts": "Alkatrész-raktár",
+    "worktime": "Munkaidő-mérés"
   }
 }

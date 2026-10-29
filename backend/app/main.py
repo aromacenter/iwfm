@@ -15,8 +15,6 @@ from app.api import (
     audit,
     auth,
     roadmap as roadmap_api,
-    roadmap as roadmap_api,
-    roadmap as roadmap_api,
     bugs as bugs_api,
     automation as automation_api,
     consignment,
@@ -210,32 +208,34 @@ def create_app() -> FastAPI:
             )
         return response
 
+    from app.services.wfm.license import require_module as _mod
+
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-    app.include_router(employees.router, prefix="/api/employees", tags=["employees"])
-    app.include_router(shifts.router, prefix="/api/shifts", tags=["shifts"])
-    app.include_router(timeoff.router, prefix="/api/time-off", tags=["time-off"])
-    app.include_router(timeclock.router, prefix="/api/time-entries", tags=["time-entries"])
-    app.include_router(payroll.router, prefix="/api/payroll", tags=["payroll"])
+    app.include_router(employees.router, prefix="/api/employees", tags=["employees"], dependencies=[Depends(_mod("employees"))])
+    app.include_router(shifts.router, prefix="/api/shifts", tags=["shifts"], dependencies=[Depends(_mod("schedule"))])
+    app.include_router(timeoff.router, prefix="/api/time-off", tags=["time-off"], dependencies=[Depends(_mod("timeoff"))])
+    app.include_router(timeclock.router, prefix="/api/time-entries", tags=["time-entries"], dependencies=[Depends(_mod("attendance"))])
+    app.include_router(payroll.router, prefix="/api/payroll", tags=["payroll"], dependencies=[Depends(_mod("payroll"))])
     app.include_router(me.router, prefix="/api/me", tags=["self-service"])
-    app.include_router(kiosk.router, prefix="/api/kiosk", tags=["kiosk"])
+    app.include_router(kiosk.router, prefix="/api/kiosk", tags=["kiosk"], dependencies=[Depends(_mod("attendance"))])
     app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
     app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
     app.include_router(operator_api.router, prefix="/api/operator", tags=["operator"])
-    app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
-    app.include_router(tasks.me_router, prefix="/api/me/tasks", tags=["self-service"])
+    app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"], dependencies=[Depends(_mod("tasks"))])
+    app.include_router(tasks.me_router, prefix="/api/me/tasks", tags=["self-service"], dependencies=[Depends(_mod("tasks"))])
     app.include_router(
         tasks.quote_public_router, prefix="/api/public/worksheet-quote", tags=["public"]
     )
-    app.include_router(inventory.router, prefix="/api/partners", tags=["partners"])
-    app.include_router(contracts_api.router, prefix="/api/partners", tags=["contracts"])
-    app.include_router(contracts_api.overview_router, prefix="/api/contracts", tags=["contracts"])
-    app.include_router(inventory.assets_router, prefix="/api/assets", tags=["assets"])
-    app.include_router(consignment.products_router, prefix="/api/products", tags=["products"])
-    app.include_router(consignment.stock_router, prefix="/api/partners", tags=["partner-stock"])
-    app.include_router(consignment.settlements_router, prefix="/api/settlements", tags=["settlements"])
-    app.include_router(service.router, prefix="/api/service", tags=["service"])
-    app.include_router(intake_api.router, prefix="/api/intakes", tags=["intakes"])
-    app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
+    app.include_router(inventory.router, prefix="/api/partners", tags=["partners"], dependencies=[Depends(_mod("partners"))])
+    app.include_router(contracts_api.router, prefix="/api/partners", tags=["contracts"], dependencies=[Depends(_mod("contracts"))])
+    app.include_router(contracts_api.overview_router, prefix="/api/contracts", tags=["contracts"], dependencies=[Depends(_mod("contracts"))])
+    app.include_router(inventory.assets_router, prefix="/api/assets", tags=["assets"], dependencies=[Depends(_mod("machines"))])
+    app.include_router(consignment.products_router, prefix="/api/products", tags=["products"], dependencies=[Depends(_mod("products"))])
+    app.include_router(consignment.stock_router, prefix="/api/partners", tags=["partner-stock"], dependencies=[Depends(_mod("settlements"))])
+    app.include_router(consignment.settlements_router, prefix="/api/settlements", tags=["settlements"], dependencies=[Depends(_mod("settlements"))])
+    app.include_router(service.router, prefix="/api/service", tags=["service"], dependencies=[Depends(_mod("service"))])
+    app.include_router(intake_api.router, prefix="/api/intakes", tags=["intakes"], dependencies=[Depends(_mod("intake"))])
+    app.include_router(audit.router, prefix="/api/audit", tags=["audit"], dependencies=[Depends(_mod("audit"))])
     # Kapcsolható extra modulok: kikapcsolva a teljes router zárva (403),
     # nem csak a menü tűnik el. NULL modullista = minden megy (X-Presso).
     from app.services.wfm.license import require_module as _mod
@@ -270,9 +270,9 @@ def create_app() -> FastAPI:
     from app.api import stats as stats_api
 
     app.include_router(stats_api.router, prefix="/api/stats", tags=["stats"])
-    app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
-    app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"])
-    app.include_router(geo.router, prefix="/api/geo", tags=["geo"])
+    app.include_router(orders.router, prefix="/api/orders", tags=["orders"], dependencies=[Depends(_mod("orders"))])
+    app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"], dependencies=[Depends(_mod("import_export"))])
+    app.include_router(geo.router, prefix="/api/geo", tags=["geo"], dependencies=[Depends(_mod("map"))])
     app.include_router(warehouse.router, prefix="/api/warehouses", tags=["warehouses"])
     from app.api import stocktakes as stocktakes_api
 
@@ -295,8 +295,8 @@ def create_app() -> FastAPI:
     app.include_router(saferpay_api.router, prefix="/api/saferpay", tags=["saferpay"])
     # Publikus: a vevő telefonja (return) és a Saferpay (notify) hívja
     app.include_router(saferpay_api.public_router, prefix="/api/pay", tags=["saferpay"])
-    app.include_router(delivery_api.router, prefix="/api/deliveries", tags=["deliveries"])
-    app.include_router(quotes_api.router, prefix="/api/quotes", tags=["quotes"])
+    app.include_router(delivery_api.router, prefix="/api/deliveries", tags=["deliveries"], dependencies=[Depends(_mod("delivery"))])
+    app.include_router(quotes_api.router, prefix="/api/quotes", tags=["quotes"], dependencies=[Depends(_mod("quotes"))])
     app.include_router(quotes_api.public_router, prefix="/api/public", tags=["quotes"])
     app.include_router(warehouse.po_router, prefix="/api/purchase-orders", tags=["purchase-orders"])
     app.include_router(
@@ -309,9 +309,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(admin_tools.router, prefix="/api/admin", tags=["admin"])
     app.include_router(roadmap_api.router, prefix="/api/roadmap", tags=["roadmap"])
-    app.include_router(roadmap_api.router, prefix="/api/roadmap", tags=["roadmap"])
-    app.include_router(roadmap_api.router, prefix="/api/roadmap", tags=["roadmap"])
-    app.include_router(automation_api.router)
+    app.include_router(automation_api.router, dependencies=[Depends(_mod("automation"))])
 
     @app.get("/api/health")
     async def health():
