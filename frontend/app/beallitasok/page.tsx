@@ -1677,13 +1677,13 @@ export default function BeallitasokPage() {
                         {cycle === "monthly" && p.price_monthly != null && (
                           <div className="font-mono text-sm font-semibold">
                             {Number(p.price_monthly).toLocaleString("hu-HU")} Ft
-                            <span className="text-[10px] font-normal text-slate-400">/hó</span>
+                            <span className="text-[10px] font-normal text-slate-400">/hó bruttó</span>
                           </div>
                         )}
                         {cycle === "yearly" && (p.price_yearly != null || p.price_monthly != null) && (
                           <div className="font-mono text-sm font-semibold">
                             {Number(p.price_yearly ?? Number(p.price_monthly) * 12).toLocaleString("hu-HU")} Ft
-                            <span className="text-[10px] font-normal text-slate-400">/év</span>
+                            <span className="text-[10px] font-normal text-slate-400">/év bruttó</span>
                           </div>
                         )}
                         {current ? (
