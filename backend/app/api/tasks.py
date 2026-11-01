@@ -1180,6 +1180,8 @@ async def update_task(
     if data.get("status") == "done" and task.completed_at is None:
         task.completed_at = datetime.now(UTC)
         task.completed_by_name = actor.display_name
+        from app.api.worktime import stop_timers_for_task
+        await stop_timers_for_task(db, task.id)
     elif data.get("status") in ("open", "needs_more_work"):
         task.completed_at = None
         task.completed_by_name = None
@@ -2307,6 +2309,8 @@ async def my_status(
     if body.status == "done":
         task.completed_at = datetime.now(UTC)
         task.completed_by_name = user.display_name
+        from app.api.worktime import stop_timers_for_task
+        await stop_timers_for_task(db, task.id)
     else:
         task.completed_at = None
         task.completed_by_name = None
@@ -3363,6 +3367,8 @@ async def do_handover(
     ws.handover_total_net = 0.0 if body.discount else total
     ws.handover_document_id = document_id
     task.status = "done"
+    from app.api.worktime import stop_timers_for_task
+    await stop_timers_for_task(db, task.id)
     # Kassza (12a07799): CSAK a készpénzes átadás kerül az átadó kasszájába;
     # átutalás/kártya nem; a saját tárgyi gép átadásakor mindig 0 Ft.
     own_tangible = False

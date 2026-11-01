@@ -159,6 +159,7 @@ class WorksheetStat(BaseModel):
     correction_status: str = "none"
     correction_note: str | None = None
     timer_id: str | None = None
+    auto_closed: bool = False  # 119. kör: plafonnal vágott / automatikusan zárt
 
 
 class WorktimeStats(BaseModel):
@@ -240,6 +241,7 @@ async def worktime_stats(
             segments=s.segments, work_seconds=s.work_seconds + corr, travel_seconds=s.travel_seconds,
             wait_seconds=s.wait_seconds, correction_seconds=int(tm.correction_seconds or 0),
             correction_status=tm.correction_status or "none", correction_note=tm.correction_note, timer_id=str(tm.id),
+            auto_closed=s.auto_closed,
         ))
     by_emp = sorted(
         (
@@ -260,6 +262,53 @@ async def worktime_stats(
         active_seconds=tot_active, pause_seconds=sum(v["pause"] for v in agg.values()),
         ratio=_ratio(tot_active, tot_written), by_employee=by_emp, rows=out_rows[:500],
     )
+
+
+async def stop_timers_for_task(db: AsyncSession, task_id: uuid.UUID, now: datetime | None = None) -> int:
+    """A feladat lezárásakor (done / átadás) a nyitott timerek is zárulnak —
+    különben a szerelő által nyitva hagyott munkalap napokig „fut” (119. kör)."""
+    now = now or datetime.now(UTC)
+    ws = (await db.execute(select(Worksheet).where(Worksheet.task_id == task_id))).scalar_one_or_none()
+    if ws is None:
+        return 0
+    timers = (await db.execute(select(WorksheetTimer).where(WorksheetTimer.worksheet_id == ws.id))).scalars().all()
+    n = 0
+    for tm in timers:
+        sessions = list(tm.sessions or [])
+        if wt.state_of(sessions) in ("running", "paused"):
+            # ha a nyitott munkamenet már a plafon fölött van, a plafonnál zárul (auto)
+            closed = wt.auto_close_stale(sessions, now)
+            if wt.state_of(closed) != "stopped":
+                closed = wt.stop(sessions, now)
+            _apply(tm, closed)
+            n += 1
+    return n
+
+
+async def close_stale_timers(db: AsyncSession, now: datetime | None = None) -> int:
+    """Ütemezett őr: minden nyitott timer, amelynek munkamenete a plafonnál
+    régebbi, a plafonnál zárul „auto” jelöléssel. Visszatér a zárt darabszámmal."""
+    now = now or datetime.now(UTC)
+    threshold = now - timedelta(seconds=wt.MAX_OPEN_SESSION_SECONDS)
+    rows = (
+        await db.execute(
+            select(WorksheetTimer).where(
+                WorksheetTimer.last_ended_at.is_(None) | (WorksheetTimer.last_ended_at < WorksheetTimer.first_started_at),
+                WorksheetTimer.first_started_at.is_not(None),
+                WorksheetTimer.first_started_at < threshold,
+            )
+        )
+    ).scalars().all()
+    n = 0
+    for tm in rows:
+        sessions = list(tm.sessions or [])
+        closed = wt.auto_close_stale(sessions, now)
+        if closed is not sessions and wt.state_of(closed) == "stopped":
+            _apply(tm, closed)
+            n += 1
+    if n:
+        await db.commit()
+    return n
 
 
 async def timer_summary_for_worksheet(db: AsyncSession, ws_id: uuid.UUID) -> TimerSummary | None:

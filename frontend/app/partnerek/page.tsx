@@ -16,6 +16,20 @@ import { useUI } from "@/lib/ui";
 
 type PartnerType = "customer" | "supplier" | "both";
 
+// 121. kör: kihelyezési / visszavételi / csere jegyzőkönyvek a partnerhez
+interface ProtocolRow {
+  id: string;
+  serial: string;
+  kind: "deploy" | "return" | "swap";
+  asset_barcode: string | null;
+  asset_name: string | null;
+  on_site: boolean;
+  signed_at: string | null;
+  created_at: string;
+  emailed_at: string | null;
+  emailed_to: string | null;
+}
+
 interface PartnerDoc {
   id: string;
   created_at: string;
@@ -24,6 +38,7 @@ interface PartnerDoc {
   invoiced: boolean;
   billingo_document_id?: string | null;
   billingo_document_number?: string | null;
+  legacy?: boolean;
 }
 
 interface Partner {
@@ -194,11 +209,17 @@ export default function PartnerekPage() {
   }
 
   // A partner bizonylatai: elszámolás-PDF (A4) + Billingó-számla letöltése (26e6a4fc)
-  const [docsFor, setDocsFor] = useState<{ id: string; name: string; rows: PartnerDoc[] } | null>(null);
-  async function openDocs(p: Partner) {
+  const [docsFor, setDocsFor] = useState<{ id: string; name: string; rows: PartnerDoc[]; protocols: ProtocolRow[] } | null>(null);
+  // 120. kör: alapból CSAK az ebben a rendszerben készült elszámolások; a régi
+  // (migrált) sorok kérésre, és azokról A4-et nem gyártunk — Billingóban új
+  // bizonylat innen sosem jön létre, csak a meglévő számlakép tölthető le.
+  const [docsLegacy, setDocsLegacy] = useState(false);
+  async function openDocs(p: Partner, includeLegacy = false) {
     try {
-      const rows = await api.get<PartnerDoc[]>(`/api/settlements?partner_id=${p.id}`);
-      setDocsFor({ id: p.id, name: p.name, rows });
+      const rows = await api.get<PartnerDoc[]>(`/api/settlements?partner_id=${p.id}&scope=${includeLegacy ? "all" : "system"}`);
+      const protocols = await api.get<ProtocolRow[]>(`/api/asset-protocols?partner_id=${p.id}`).catch(() => [] as ProtocolRow[]);
+      setDocsLegacy(includeLegacy);
+      setDocsFor({ id: p.id, name: p.name, rows, protocols });
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -1099,6 +1120,11 @@ export default function PartnerekPage() {
             <button type="button" onClick={() => setDocsFor(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <h2 className="text-lg font-semibold">🧾 {t("partners.docsTitle", { name: docsFor.name })}</h2>
             <p className="text-xs text-slate-500">{t("partners.docsHint")}</p>
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input type="checkbox" checked={docsLegacy} onChange={(e) => void openDocs({ id: docsFor.id, name: docsFor.name } as Partner, e.target.checked)} className="h-4 w-4" />
+              {t("partners.docsLegacyToggle")}
+            </label>
+            {docsLegacy && <p className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800">{t("partners.docsLegacyHint")}</p>}
             {docsFor.rows.length === 0 ? (
               <p className="py-6 text-center text-sm text-slate-400">{t("partners.docsEmpty")}</p>
             ) : (
@@ -1126,6 +1152,9 @@ export default function PartnerekPage() {
                         </td>
                         <td className="py-2 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {d.legacy ? (
+                              <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">{t("partners.docLegacy")}</span>
+                            ) : (
                             <button
                               onClick={() => void downloadFile(`/api/settlements/${d.id}/pdf`, `ELSZ-${d.id.slice(0, 8).toUpperCase()}.pdf`).catch((err) => toast(errorMessage(err), "error"))}
                               title={t("partners.docA4")}
@@ -1133,6 +1162,7 @@ export default function PartnerekPage() {
                             >
                               📄 A4
                             </button>
+                            )}
                             {d.billingo_document_id && (
                               <>
                                 <button
@@ -1159,6 +1189,38 @@ export default function PartnerekPage() {
                 </table>
               </div>
             )}
+            <div className="border-t border-slate-200 pt-3">
+              <p className="mb-1 text-sm font-semibold">📋 {t("partners.protoTitle")}</p>
+              <p className="mb-2 text-xs text-slate-500">{t("partners.protoHint")}</p>
+              {docsFor.protocols.length === 0 ? (
+                <p className="text-sm text-slate-400">{t("partners.protoEmpty")}</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {docsFor.protocols.map((p) => (
+                    <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1">
+                      <span>
+                        <span className="font-mono text-xs">{p.serial}</span> · {t(`partners.protoKind.${p.kind}`)} · {p.asset_name}{p.asset_barcode && ` (${p.asset_barcode})`}
+                        <span className="ml-1 text-xs text-slate-400">{new Date(p.created_at).toLocaleDateString("hu-HU")}{p.signed_at && " · ✍️"}{p.emailed_to && ` · 📧 ${p.emailed_to}`}</span>
+                      </span>
+                      <span className="flex gap-1.5">
+                        <button type="button" onClick={() => void downloadFile(`/api/asset-protocols/${p.id}/pdf`, `${p.serial}.pdf`).catch((err) => toast(errorMessage(err), "error"))} className="rounded border border-slate-300 px-2 py-1 text-xs leading-none hover:bg-slate-100">📄 A4</button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!(await confirm(t("partners.protoSendConfirm", { serial: p.serial })))) return;
+                            try { await api.post(`/api/asset-protocols/${p.id}/send`, {}); toast(t("partners.protoSent"), "success"); void openDocs({ id: docsFor.id, name: docsFor.name } as Partner, docsLegacy); }
+                            catch (err) { toast(errorMessage(err), "error"); }
+                          }}
+                          className="rounded border border-violet-300 px-2 py-1 text-xs leading-none text-violet-700 hover:bg-violet-50"
+                        >
+                          📧 {t("partners.protoSendBtn")}
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       )}

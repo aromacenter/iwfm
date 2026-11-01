@@ -11,7 +11,8 @@ import IconLegend from "@/components/IconLegend";
 import PartnerInfo from "@/components/PartnerInfo";
 import PartnerPicker from "@/components/PartnerPicker";
 import SearchSelect from "@/components/SearchSelect";
-import { api, ApiError, downloadFilePost, errorMessage, printFile } from "@/lib/api";
+import SignatureCanvas from "@/components/SignatureCanvas";
+import { api, ApiError, downloadFile, downloadFilePost, errorMessage, printFile } from "@/lib/api";
 import { setAssistantContext } from "@/lib/assistantContext";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -27,6 +28,20 @@ interface Partner {
   notes: string | null;
   is_active: boolean;
   asset_count: number;
+}
+
+// 121. kör: kihelyezési / visszavételi / csere jegyzőkönyv (A4 PDF, a szerződés melléklete)
+interface ProtocolRow {
+  id: string;
+  serial: string;
+  kind: "deploy" | "return" | "swap";
+  partner_name: string | null;
+  on_site: boolean;
+  signer_name: string | null;
+  signed_at: string | null;
+  created_at: string;
+  emailed_at: string | null;
+  emailed_to: string | null;
 }
 
 interface Movement {
@@ -128,6 +143,60 @@ export default function GepekPage() {
   const [deployFor, setDeployFor] = useState<Asset | null>(null);
   const EMPTY_DEPLOY = { partner_id: "", note: "", site_zip: "", site_city: "", site_street: "", site_number: "" };
   const [deploy, setDeploy] = useState({ ...EMPTY_DEPLOY });
+  // 121. kör: jegyzőkönyv-adatok (helyszíni aláírás, számlálók, helyszín) a mozgás mellé
+  const EMPTY_PROTO = { on_site: false, signer_name: "", signature: null as string | null, location: "", counters: "", note: "" };
+  const [proto, setProto] = useState({ ...EMPTY_PROTO });
+  const [returnFor, setReturnFor] = useState<Asset | null>(null);
+  const [protocols, setProtocols] = useState<{ asset_id: string; rows: ProtocolRow[] } | null>(null);
+  // a párbeszéd megnyitásakor a jegyzőkönyv-mezők a gép aktuális állásaival indulnak
+  const resetProto = (a: Asset | null) =>
+    setProto({ ...EMPTY_PROTO, counters: (a?.counters ?? (a?.counter != null ? [a.counter] : [])).join(", ") });
+  function protoPayload() {
+    const nums = proto.counters.trim() ? proto.counters.split(/[,;\s]+/).filter(Boolean).map(Number).filter((n) => !Number.isNaN(n)) : null;
+    return {
+      on_site: proto.on_site,
+      signer_name: proto.signer_name.trim() || null,
+      signature: proto.on_site ? proto.signature : null,
+      location: proto.location.trim() || null,
+      counters: nums && nums.length ? nums : null,
+      note: proto.note.trim() || null,
+      send_email: false,
+    };
+  }
+  // A mozgás után felugró kérdés: menjen-e a jegyzőkönyv a partner beállított címére
+  async function offerProtocolSend(res: { protocol_id?: string | null; protocol_serial?: string | null }, partnerId: string | null) {
+    if (!res?.protocol_id) return;
+    const p = partners.find((x) => x.id === partnerId);
+    const to = (p?.contact_email ?? "").trim();
+    if (!to) { toast(t("inv.protoCreatedNoEmail", { serial: res.protocol_serial ?? "" }), "info"); return; }
+    if (!(await confirm(t("inv.protoSendConfirm", { serial: res.protocol_serial ?? "", to })))) return;
+    try {
+      await api.post(`/api/asset-protocols/${res.protocol_id}/send`, {});
+      toast(t("inv.protoSent", { to }), "success");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+  const protocolBlock = (showCounters: boolean) => (
+    <fieldset className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+      <legend className="px-1 text-xs font-semibold uppercase text-violet-700">📋 {t("inv.protoTitle")}</legend>
+      <p className="mb-2 text-xs text-violet-700">{t("inv.protoHint")}</p>
+      <input value={proto.location} onChange={(e) => setProto({ ...proto, location: e.target.value })} placeholder={t("inv.protoLocation")} className="mb-2 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" />
+      {showCounters && (
+        <input value={proto.counters} onChange={(e) => setProto({ ...proto, counters: e.target.value })} placeholder={t("inv.protoCounters")} className="mb-2 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" />
+      )}
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={proto.on_site} onChange={(e) => setProto({ ...proto, on_site: e.target.checked })} className="h-4 w-4" />
+        {t("inv.protoOnSite")}
+      </label>
+      {proto.on_site && (
+        <div className="mt-2 space-y-2">
+          <input value={proto.signer_name} onChange={(e) => setProto({ ...proto, signer_name: e.target.value })} placeholder={t("inv.protoSigner")} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" />
+          <SignatureCanvas label={t("inv.protoSignature")} onChange={(d) => setProto((p) => ({ ...p, signature: d }))} />
+        </div>
+      )}
+    </fieldset>
+  );
   const [historyFor, setHistoryFor] = useState<Asset | null>(null);
   // Beépített alkatrészek (parts modul) — modul nélkül / jog nélkül üres marad
   interface InstalledPart { movement_id: string; created_at: string; sku: string; name: string; quantity: number; unit: string; serial_no: string | null; warranty_until: string | null; warranty_active: boolean; worksheet_serial: string | null; actor_name: string | null }
@@ -141,6 +210,14 @@ export default function GepekPage() {
     return () => { active = false; };
   }, [historyFor]);
   const installedParts = historyFor && installed?.asset_id === historyFor.id ? installed.rows : null;
+  useEffect(() => {
+    if (!historyFor) return;
+    const id = historyFor.id;
+    api.get<ProtocolRow[]>(`/api/asset-protocols?asset_id=${id}`)
+      .then((rows) => setProtocols({ asset_id: id, rows }))
+      .catch(() => setProtocols({ asset_id: id, rows: [] }));
+  }, [historyFor]);
+  const protocolRows = historyFor && protocols?.asset_id === historyFor.id ? protocols.rows : null;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
@@ -422,7 +499,7 @@ export default function GepekPage() {
     setBusy(true);
     setError(null);
     try {
-      await api.post(`/api/assets/${deployFor.id}/deploy`, {
+      const r = await api.post<Asset & { protocol_id?: string | null; protocol_serial?: string | null }>(`/api/assets/${deployFor.id}/deploy`, {
         partner_id: deploy.partner_id,
         note: deploy.note || null,
         // Telepítési cím: ha meg van adva, felülírja a partner címét
@@ -431,11 +508,14 @@ export default function GepekPage() {
         site_city: deploy.site_city || null,
         site_street: deploy.site_street || null,
         site_number: deploy.site_number || null,
+        protocol: protoPayload(),
       });
+      const partnerId = deploy.partner_id;
       setDeployFor(null);
       setDeploy({ ...EMPTY_DEPLOY });
       loadAssets();
       loadPartners();
+      void offerProtocolSend(r, partnerId);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -510,7 +590,7 @@ export default function GepekPage() {
     try {
       const oldNums = swapOldCounters.map((c) => Number(c || 0));
       const newNums = swapNewCounters.map((c) => Number(c || 0));
-      await api.post(`/api/assets/${swapFor.id}/swap`, {
+      const r = await api.post<Asset & { protocol_id?: string | null; protocol_serial?: string | null }>(`/api/assets/${swapFor.id}/swap`, {
         replacement_asset_id: replacement.id,
         counter_prices: swapPrices.some((p) => p.trim())
           ? swapPrices.map((p) => (p.trim() ? Number(p) : null))
@@ -519,10 +599,13 @@ export default function GepekPage() {
         old_counter: oldNums.length === 1 ? oldNums[0] : null,
         new_counters: newNums.length > 1 ? newNums : null,
         new_counter: newNums.length === 1 ? newNums[0] : null,
+        protocol: protoPayload(),
       });
       toast(t("inv.swapDone", { old: swapFor.barcode, new: replacement.barcode }), "success");
+      const partnerId = swapFor.partner_id;
       setSwapFor(null);
       loadAssets();
+      void offerProtocolSend(r, partnerId);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -543,13 +626,31 @@ export default function GepekPage() {
     }
   }
 
+  // 121. kör: a visszavétel is jegyzőkönyvvel megy (záró számlálók, helyszín, aláírás)
   async function returnAsset(asset: Asset) {
+    setError(null);
+    resetProto(asset);
+    setReturnFor(asset);
+  }
+  async function doReturn(e: React.FormEvent) {
+    e.preventDefault();
+    if (!returnFor) return;
+    setBusy(true);
+    setError(null);
     try {
-      await api.post(`/api/assets/${asset.id}/return`, {});
+      const r = await api.post<Asset & { protocol_id?: string | null; protocol_serial?: string | null }>(`/api/assets/${returnFor.id}/return`, {
+        note: proto.note.trim() || null,
+        protocol: protoPayload(),
+      });
+      const partnerId = returnFor.partner_id;
+      setReturnFor(null);
       loadAssets();
       loadPartners();
+      void offerProtocolSend(r, partnerId);
     } catch (err) {
-      toast(errorMessage(err), "error");
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -837,7 +938,7 @@ export default function GepekPage() {
                         <button onClick={() => returnAsset(a)} title={t("inv.returnBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                           📥
                         </button>
-                        <button onClick={() => { setError(null); setSwapCode(""); setSwapFor(a); }} title={t("inv.swapBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
+                        <button onClick={() => { setError(null); setSwapCode(""); resetProto(null); setSwapFor(a); }} title={t("inv.swapBtn")} className="rounded border border-slate-300 px-2 py-1 text-sm leading-none hover:bg-slate-100">
                           🔁
                         </button>
                         </>
@@ -848,7 +949,7 @@ export default function GepekPage() {
                         </button>
                       )}
                       {a.status !== "deployed" && a.status !== "retired" ? (
-                        <button onClick={() => { setError(null); setDeploy({ ...EMPTY_DEPLOY }); setDeployFor(a); }} title={t("inv.deploy")} className="rounded bg-emerald-600 px-2 py-1 text-sm leading-none hover:bg-emerald-700">
+                        <button onClick={() => { setError(null); setDeploy({ ...EMPTY_DEPLOY }); resetProto(a); setDeployFor(a); }} title={t("inv.deploy")} className="rounded bg-emerald-600 px-2 py-1 text-sm leading-none hover:bg-emerald-700">
                           📤
                         </button>
                       ) : null}
@@ -1112,6 +1213,7 @@ export default function GepekPage() {
                 <input value={deploy.site_number} onChange={(e) => setDeploy({ ...deploy, site_number: e.target.value })} placeholder={t("partners.houseNo")} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm sm:col-span-1" />
               </div>
             </fieldset>
+            {protocolBlock(true)}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setDeployFor(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
@@ -1122,6 +1224,26 @@ export default function GepekPage() {
       )}
 
       {/* Mozgástörténet */}
+      {returnFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={doReturn} className="relative max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <button type="button" onClick={() => setReturnFor(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">{t("inv.returnTitle")}</h2>
+            <p className="text-sm text-slate-500">{returnFor.name} · <span className="font-mono">{returnFor.barcode}</span>{returnFor.partner_name && ` ← ${returnFor.partner_name}`}</p>
+            <label className="block text-sm">
+              {t("inv.deployNote")}
+              <input value={proto.note} onChange={(e) => setProto({ ...proto, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            {protocolBlock(true)}
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setReturnFor(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={busy} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">📥 {t("inv.returnBtn")}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {historyFor && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
           <div className="relative my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
@@ -1145,6 +1267,19 @@ export default function GepekPage() {
                   </li>
                 ))}
               </ul>
+            )}
+            {protocolRows && protocolRows.length > 0 && (
+              <div className="border-t border-slate-200 pt-3">
+                <p className="mb-1 text-sm font-semibold">📋 {t("inv.protoListTitle")}</p>
+                <ul className="space-y-1 text-sm">
+                  {protocolRows.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-2">
+                      <span><span className="font-mono text-xs">{p.serial}</span> · {t(`inv.protoKind.${p.kind}`)}{p.partner_name && ` · ${p.partner_name}`}{p.signed_at && " · ✍️"}{p.emailed_at && " · 📧"}</span>
+                      <button type="button" onClick={() => void downloadFile(`/api/asset-protocols/${p.id}/pdf`, `${p.serial}.pdf`).catch((err) => toast(errorMessage(err), "error"))} className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">📄 PDF</button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {installedParts !== null && (
               <div className="border-t border-slate-200 pt-3">
@@ -1318,6 +1453,7 @@ export default function GepekPage() {
                 </div>
               </div>
             )}
+            {protocolBlock(false)}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setSwapFor(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>

@@ -1869,6 +1869,11 @@ class Partner(Base):
     # használja; cím-mentéskor a háttérben frissül.
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 120. kör (x-presso jegy): az utolsó geokódolási kísérlet ideje és hibája
+    # (not_found | error) — a térkép „nincs a térképen” listája ebből mondja meg,
+    # hogy még nem futott, vagy nem találta a címet.
+    geocode_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    geocode_error: Mapped[str | None] = mapped_column(String(32), nullable=True)
     bank_account: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fizetési határidő (nap)
     # Partner-portál: kitalálhatatlan token a csak-olvasható nyilvános nézethez.
@@ -1998,6 +2003,56 @@ class AssetMovement(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class AssetProtocol(Base):
+    """Gép-kihelyezési / visszavételi / csere JEGYZŐKÖNYV (121. kör, x-presso
+    jegy f8e12fda): a mozgás pillanatképe (felek, gép, számlálók, helyszín),
+    helyszíni készítésnél a partner mobilos aláírása névvel és időbélyeggel.
+    A szerződés mellékleteként kezelendő; A4 PDF-ként letölthető, a partnernek
+    e-mailben küldhető."""
+
+    __tablename__ = "asset_protocols"
+    __table_args__ = (
+        UniqueConstraint("serial", name="uq_asset_protocols_serial"),
+        Index("ix_asset_protocols_partner", "partner_id", "created_at"),
+        Index("ix_asset_protocols_asset", "asset_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    serial: Mapped[str] = mapped_column(String(24), nullable=False)  # KH-2026-0001 | VV- | CS-
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)  # deploy | return | swap
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("assets.id", ondelete="CASCADE"), nullable=False)
+    replacement_asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
+    )
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True
+    )
+    partner_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    partner_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    partner_tax_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    partner_contact: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    counters: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    counter_names: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    replacement_counters: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    replacement_counter_names: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    asset_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    replacement_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    on_site: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    signer_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    signature: Mapped[str | None] = mapped_column(Text, nullable=True)  # PNG data URL
+    employee_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    emailed_to: Mapped[str | None] = mapped_column(String(320), nullable=True)
 
 
 class PermissionSettings(Base):

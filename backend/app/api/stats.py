@@ -374,6 +374,9 @@ class MapPartnerOut(BaseModel):
     revenue: float  # összes elszámolás-bevétel (bruttó)
     agent_user_id: str | None = None  # felelős képviselő (szűréshez)
     contracted: bool = True  # ma érvényes szerződése van (d650f1d5: a gép nélküliek is látszanak)
+    # 120. kör: miért nincs a térképen — None = még nem futott, not_found | error
+    geocode_error: str | None = None
+    geocode_attempted_at: datetime | None = None
 
 
 @router.get(
@@ -435,6 +438,8 @@ async def stats_map(
             counters=int(counter_rows.get(p.id, 0)), revenue=_money(revenue),
             agent_user_id=str(p.agent_user_id) if p.agent_user_id else None,
             contracted=p.id in contracted_ids,
+            geocode_error=p.geocode_error,
+            geocode_attempted_at=p.geocode_attempted_at,
         ))
     return out
 

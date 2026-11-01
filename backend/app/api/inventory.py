@@ -33,6 +33,8 @@ from app.models import (
 router = APIRouter()  # /api/partners
 assets_router = APIRouter()  # /api/assets
 
+from app.api.asset_protocols import ProtocolFields, create_protocol, send_protocol_email  # noqa: E402
+
 ASSET_STATUSES = ("in_stock", "deployed", "maintenance", "retired")
 
 
@@ -760,10 +762,13 @@ class DeployBody(BaseModel):
     site_city: str | None = Field(default=None, max_length=128)
     site_street: str | None = Field(default=None, max_length=256)
     site_number: str | None = Field(default=None, max_length=32)
+    # 121. kör: jegyzőkönyv-adatok (helyszíni aláírás, számlálók, küldés)
+    protocol: ProtocolFields | None = None
 
 
 class ReturnBody(BaseModel):
     note: str | None = Field(default=None, max_length=512)
+    protocol: ProtocolFields | None = None
 
 
 class MovementOut(BaseModel):
@@ -805,6 +810,10 @@ class AssetOut(BaseModel):
     partner_id: str | None
     partner_name: str | None
     deployed_at: datetime | None
+    # 121. kör: a mozgáshoz készült jegyzőkönyv (deploy / return / swap válaszban)
+    protocol_id: str | None = None
+    protocol_serial: str | None = None
+    protocol_emailed_to: str | None = None
     notes: str | None
     created_at: datetime
     movements: list[MovementOut] | None = None
@@ -820,6 +829,26 @@ def _derived_location(a: Asset) -> str:
     if a.status == "retired":
         return "retired"
     return "warehouse"
+
+
+async def _maybe_send_protocol(db, proto, fields) -> list[str]:
+    """Jegyzőkönyv küldése a partnernek, ha a kérés kérte — best-effort."""
+    if not (fields and fields.send_email):
+        return []
+    try:
+        return await send_protocol_email(db, proto)
+    except Exception:  # pragma: no cover — a küldés hibája nem akasztja a mozgást
+        import logging
+
+        logging.getLogger(__name__).warning("protocol e-mail failed", exc_info=True)
+        return []
+
+
+def _with_protocol(out: AssetOut, proto, sent: list[str]) -> AssetOut:
+    out.protocol_id = str(proto.id)
+    out.protocol_serial = proto.serial
+    out.protocol_emailed_to = ", ".join(sent) if sent else None
+    return out
 
 
 def _asset_out(a: Asset, partner_name: str | None = None) -> AssetOut:
@@ -1436,12 +1465,16 @@ async def deploy_asset(
                 **({"site_address": partner.address} if site_updated else {})},
         request=request,
     )
+    proto = await create_protocol(
+        db, kind="deploy", asset=a, partner=partner, actor=actor, fields=body.protocol, note=body.note,
+    )
+    sent = await _maybe_send_protocol(db, proto, body.protocol)
     await db.commit()
     if site_updated:
         from app.services.wfm.geocode import schedule_geocode
 
         schedule_geocode(partner.id)
-    return _asset_out(a, partner.name)
+    return _with_protocol(_asset_out(a, partner.name), proto, sent)
 
 
 class SwapBody(BaseModel):
@@ -1457,6 +1490,7 @@ class SwapBody(BaseModel):
     # A CSEREGÉP induló állásai — a következő elszámolás ehhez képest számol.
     new_counters: list[int] | None = Field(default=None, max_length=99)
     new_counter: int | None = Field(default=None, ge=0)
+    protocol: ProtocolFields | None = None
 
 
 @assets_router.post("/{asset_id}/swap", response_model=AssetOut)
@@ -1551,6 +1585,13 @@ async def swap_asset(
         detail={"replacement": new.barcode, "partner": partner.name if partner else None},
         request=request,
     )
+    swap_proto = await create_protocol(
+        db, kind="swap", asset=old, partner=partner, actor=actor, fields=body.protocol, replacement=new,
+        counters=list(final_counters) if final_counters else ([int(final_counter)] if final_counter is not None else None),
+        replacement_counters=list(body.new_counters) if body.new_counters else ([body.new_counter] if body.new_counter is not None else None),
+        note=note or None,
+    )
+    swap_sent = await _maybe_send_protocol(db, swap_proto, body.protocol)
 
     # Gépcsere után AZONNAL nyílik egy tárgyi-eszköz munkalap a hibás gépre
     # (b3149cb7): a cserélő képviselő feladata a hiba rögzítése. Tulajdonos
@@ -1596,7 +1637,7 @@ async def swap_asset(
         logging.getLogger(__name__).warning("swap worksheet creation failed", exc_info=True)
 
     await db.commit()
-    return _asset_out(new, partner.name if partner else None)
+    return _with_protocol(_asset_out(new, partner.name if partner else None), swap_proto, swap_sent)
 
 
 @assets_router.post("/{asset_id}/reset-counters", response_model=AssetOut)
@@ -1680,6 +1721,9 @@ async def return_asset(
     if a.status != "deployed":
         raise HTTPException(status_code=422, detail={"code": "asset.not_deployed"})
     prev_partner = a.partner_id
+    prev_partner_row = (
+        await db.execute(select(Partner).where(Partner.id == prev_partner))
+    ).scalar_one_or_none() if prev_partner else None
     a.status = "in_stock"
     a.partner_id = None
     a.deployed_at = None
@@ -1693,8 +1737,12 @@ async def return_asset(
         db, actor=actor, action="asset.return", entity_type="asset",
         entity_id=a.barcode, request=request,
     )
+    proto = await create_protocol(
+        db, kind="return", asset=a, partner=prev_partner_row, actor=actor, fields=body.protocol, note=body.note,
+    )
+    sent = await _maybe_send_protocol(db, proto, body.protocol)
     await db.commit()
-    return _asset_out(a)
+    return _with_protocol(_asset_out(a), proto, sent)
 
 
 @assets_router.post("/bulk-delete")

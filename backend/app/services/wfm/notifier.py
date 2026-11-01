@@ -200,9 +200,21 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
         logging.getLogger(__name__).warning("mt watch failed", exc_info=True)
         mt_ran = False
 
+    # Ottfelejtett munkalap-timerek zárása a 12 órás plafonnál (119. kör).
+    try:
+        from app.api.worktime import close_stale_timers
+
+        stale_closed = await close_stale_timers(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("stale timer close failed", exc_info=True)
+        stale_closed = 0
+
     row = await get_or_create_settings(db)
     result = {"daily": False, "backup": False, "auto_clockout": closed,
-              "telegram_link": tg_linked, "calendar": cal_added, "mt_check": mt_ran}
+              "telegram_link": tg_linked, "calendar": cal_added, "mt_check": mt_ran,
+              "stale_timers": stale_closed}
     recipients = _recipients(row)
     if not recipients:
         return result

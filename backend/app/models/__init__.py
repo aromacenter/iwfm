@@ -3,6 +3,7 @@ from app.models.models import (  # noqa: F401
     AISettings,
     Asset,
     AssetMovement,
+    AssetProtocol,
     AssetPhoto,
     AuditEvent,
     AutomationRule,

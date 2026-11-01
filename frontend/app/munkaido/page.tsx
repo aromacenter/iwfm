@@ -16,7 +16,7 @@ interface EmployeeStat { employee_id: string | null; name: string; worksheets: n
 interface Correction { timer_id: string; task_id: string; serial: string; title: string; name: string; seconds: number; note: string | null; status: string; requested_at: string | null; active_seconds: number; written_hours: number | null }
 interface Row {
   worksheet_id: string; task_id: string; serial: string; title: string; employee_id: string | null; name: string; state: string;
-  started_at: string | null; ended_at: string | null; written_hours: number | null; active_seconds: number; pause_seconds: number; pause_count: number; segments: Segment[];
+  started_at: string | null; ended_at: string | null; written_hours: number | null; active_seconds: number; pause_seconds: number; pause_count: number; segments: Segment[]; auto_closed?: boolean;
 }
 interface Stats { date_from: string; date_to: string; worksheets: number; written_hours: number; active_seconds: number; pause_seconds: number; ratio: number | null; by_employee: EmployeeStat[]; rows: Row[] }
 
@@ -198,7 +198,7 @@ export default function MunkaidoPage() {
                           <td className="px-2 py-1.5"><span className="font-mono text-xs">{r.serial}</span><span className="block text-[11px] text-slate-500">{r.title}{!employee && ` · ${r.name}`}</span></td>
                           <td className="px-2 py-1.5 whitespace-nowrap font-mono text-xs text-slate-600">{ts(r.started_at)} → {r.ended_at ? tm(r.ended_at) : <span className="text-emerald-700">{t("worktime.legend.running")}</span>}{r.pause_count > 0 && <span className="ml-1 text-slate-400">· {r.pause_count}× ☕</span>}</td>
                           <td className="px-2 py-1.5 text-right tabular-nums">{r.written_hours != null ? hrs(r.written_hours) : t("worktime.noWritten")}</td>
-                          <td className="px-2 py-1.5 text-right tabular-nums">{dur(r.active_seconds)}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">{dur(r.active_seconds)}{r.auto_closed && <span title={t("worktime.autoClosedHint")} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800">⚠ {t("worktime.autoClosed")}</span>}</td>
                           <td className="px-2 py-1.5">{timeline(r)}</td>
                         </tr>
                       ))}

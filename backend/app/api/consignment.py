@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import math
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field
@@ -1367,6 +1367,9 @@ class SettlementOut(BaseModel):
     previous_at: datetime | None = None  # a partner ELŐZŐ elszámolása (időszak-kezdet)
     note: str | None
     created_at: datetime
+    # 120. kör: a rendszer újraindítása (CASH_EPOCH) ELŐTTI, migrált elszámolás —
+    # a partner bizonylat-listája alapból nem mutatja, és A4-et nem generál róla
+    legacy: bool = False
     cashbook_status: str | None = None  # sent | paid_sent | error
     cashbook_sent_at: datetime | None = None
     lines: list[SettlementLineOut] | None = None
@@ -1404,6 +1407,12 @@ def _line_out(line: SettlementLine) -> SettlementLineOut:
     )
 
 
+def _is_legacy(s: Settlement) -> bool:
+    from app.api.stats import CASH_EPOCH
+
+    return bool(s.created_at and s.created_at.date() < CASH_EPOCH)
+
+
 def _settlement_out(s: Settlement, partner_name: str | None = None) -> SettlementOut:
     return SettlementOut(
         id=str(s.id),
@@ -1431,6 +1440,7 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         paid_amount=s.paid_amount,
         note=s.note,
         created_at=s.created_at,
+        legacy=_is_legacy(s),
         cashbook_status=s.cashbook_status,
         cashbook_sent_at=s.cashbook_sent_at,
     )
@@ -2610,6 +2620,7 @@ async def list_settlements(
     company: str | None = Query(default=None),  # xp | pc — cégenkénti bontás
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
+    scope: str = Query(default="all", pattern="^(all|system)$"),  # system = csak a rendszerben készültek
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("settlements")),
 ):
@@ -2642,6 +2653,10 @@ async def list_settlements(
             query = query.where(Settlement.partner_id == uuid.UUID(partner_id))
         except ValueError:
             raise HTTPException(status_code=422, detail={"code": "settlement.bad_partner"})
+    if scope == "system":
+        from app.api.stats import CASH_EPOCH
+
+        query = query.where(Settlement.created_at >= datetime.combine(CASH_EPOCH, time.min, tzinfo=UTC))
     if settled_by:
         try:
             query = query.where(Settlement.settled_by_user_id == uuid.UUID(settled_by))

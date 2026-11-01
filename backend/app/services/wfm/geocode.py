@@ -102,13 +102,22 @@ async def geocode_partner_background(partner_id) -> None:
             ).scalar_one_or_none()
             if p is None:
                 return
-            coords = await geocode_address(
-                p.address_zip, p.address_city, p.address_street, p.address_number,
-                fallback_text=p.address,
-            )
+            from datetime import UTC, datetime
+
+            p.geocode_attempted_at = datetime.now(UTC)
+            try:
+                coords = await geocode_address(
+                    p.address_zip, p.address_city, p.address_street, p.address_number,
+                    fallback_text=p.address,
+                )
+            except Exception:  # pragma: no cover - hálózati hiba
+                coords = None
+                p.geocode_error = "error"
+            else:
+                p.geocode_error = None if coords is not None else "not_found"
             if coords is not None:
                 p.lat, p.lng = coords
-                await db.commit()
+            await db.commit()
     except Exception:  # pragma: no cover - best-effort háttérfeladat
         logger.info("Partner-geokódolás háttérben sikertelen", exc_info=True)
 

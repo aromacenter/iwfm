@@ -29,6 +29,8 @@ interface MapPartner {
   counters: number;
   revenue: number;
   agent_user_id: string | null;
+  geocode_error?: string | null;
+  geocode_attempted_at?: string | null;
   contracted?: boolean;
 }
 // Budai kerületek (I., II., III., XI., XII., XXII.) — az irányítószám 2-3.
@@ -249,9 +251,11 @@ export default function TerkepPage() {
         </div>
       </div>
       {filtered.length > 0 && geocoded < filtered.length && (
-        <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <button type="button" onClick={() => setShowMissing((v) => !v)} className="w-full text-left">
-            ⚠️ {t("map.missingGeo", { n: filtered.length - geocoded })} <span className="underline">{showMissing ? t("map.hideList") : t("map.showList")}</span>
+        <div className="mb-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <button type="button" onClick={() => setShowMissing((v) => !v)} className="flex w-full items-center gap-2 text-left font-medium hover:underline">
+            <span>{showMissing ? "▾" : "▸"}</span>
+            ⚠️ {t("map.missingGeo", { n: filtered.length - geocoded })}
+            <span className="ml-auto rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold">{showMissing ? t("map.hideList") : t("map.showList")}</span>
           </button>
           {showMissing && (
             <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-amber-200 bg-white">
@@ -261,8 +265,17 @@ export default function TerkepPage() {
                   <tbody>
                     {filtered.filter((r) => r.lat == null).map((r) => (
                       <tr key={r.id} className="border-t border-slate-100">
-                        <td className="px-3 py-1.5 font-medium">{r.name}</td>
+                        <td className="px-3 py-1.5 font-medium"><Link href={`/partnerek?edit=${r.id}`} className="text-indigo-700 hover:underline">{r.name}</Link></td>
                         <td className="px-3 py-1.5 text-slate-500">{r.address ?? ([r.zip, r.city].filter(Boolean).join(" ") || "—")}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          {r.geocode_error === "not_found" ? (
+                            <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800">✗ {t("map.geoNotFound")}</span>
+                          ) : r.geocode_error === "error" ? (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">⚠ {t("map.geoError")}</span>
+                          ) : (
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">⏳ {t("map.geoPending")}</span>
+                          )}
+                        </td>
                         <td className="px-3 py-1.5 text-right">
                           <Link href={`/partnerek?edit=${r.id}`} className="rounded border border-slate-300 px-2 py-0.5 text-indigo-700 hover:bg-slate-100">✏️ {t("map.fixAddress")}</Link>
                         </td>

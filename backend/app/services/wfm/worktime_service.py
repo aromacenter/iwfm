@@ -19,6 +19,11 @@ from datetime import UTC, datetime
 from pydantic import BaseModel
 
 MODES = ("work", "travel", "wait")
+# Ottfelejtett timer (x-presso jegy, 119. kör): egy nyitott munkamenet legfeljebb
+# ennyit számít — a szerelő megnyitotta a munkalapot (auto-start), de sosem zárta,
+# és napokkal később 100+ óra jött ki a statisztikában. A plafon fölött a
+# munkamenet „auto” jelölést kap, a vezetői képen ⚠ látszik, korrekció kérhető.
+MAX_OPEN_SESSION_SECONDS = 12 * 3600
 
 
 def _iso(dt: datetime) -> str:
@@ -53,6 +58,8 @@ class TimerSummary(BaseModel):
     pause_count: int
     session_count: int
     segments: list[TimerSegment] = []
+    # 119. kör: volt-e plafonnal vágott vagy automatikusan zárt munkamenet
+    auto_closed: bool = False
 
 
 def state_of(sessions: list[dict]) -> str:
@@ -122,6 +129,35 @@ def stop(sessions: list[dict], now: datetime) -> list[dict]:
     return out
 
 
+def _cap_end(start_dt: datetime, max_seconds: int = MAX_OPEN_SESSION_SECONDS) -> datetime:
+    from datetime import timedelta
+
+    return start_dt + timedelta(seconds=max_seconds)
+
+
+def auto_close_stale(sessions: list[dict], now: datetime, max_seconds: int = MAX_OPEN_SESSION_SECONDS) -> list[dict]:
+    """Ha a nyitott munkamenet régebbi a plafonnál, lezárja a plafonnál
+    (start + max) és „auto” jelölést tesz rá; különben változatlan."""
+    st = state_of(sessions)
+    if st in ("none", "stopped"):
+        return sessions
+    start_dt = _parse(sessions[-1].get("start"))
+    if start_dt is None:
+        return sessions
+    cap = _cap_end(start_dt, max_seconds)
+    if now < cap:
+        return sessions
+    out = [dict(s) for s in sessions]
+    last = out[-1]
+    pauses = [dict(p) for p in (last.get("pauses") or [])]
+    if pauses and not pauses[-1].get("r"):
+        pauses[-1]["r"] = _iso(cap) if _parse(pauses[-1]["p"]) <= cap else pauses[-1]["p"]
+    last["pauses"] = pauses
+    last["end"] = _iso(cap)
+    last["auto"] = True
+    return out
+
+
 def summarize(sessions: list[dict], now: datetime | None = None) -> TimerSummary:
     """Aktív idő = munkamenet hossza − szünetek, időtípusonként bontva; a
     nyitott munkamenet / szünet `now`-ig számít."""
@@ -132,6 +168,7 @@ def summarize(sessions: list[dict], now: datetime | None = None) -> TimerSummary
     segments: list[TimerSegment] = []
     first: datetime | None = None
     last_end: datetime | None = None
+    auto_closed = False
     for s in sessions:
         start_dt = _parse(s.get("start"))
         if start_dt is None:
@@ -140,7 +177,13 @@ def summarize(sessions: list[dict], now: datetime | None = None) -> TimerSummary
         first = start_dt if first is None or start_dt < first else first
         if end_dt is not None:
             last_end = end_dt if last_end is None or end_dt > last_end else last_end
+        if s.get("auto"):
+            auto_closed = True
         eff_end = end_dt or now
+        # nyitott munkamenet: legfeljebb a plafonig számít (ottfelejtett timer)
+        if end_dt is None and eff_end > _cap_end(start_dt):
+            eff_end = _cap_end(start_dt)
+            auto_closed = True
         # események időrendben: szünet-kezdés/-vég és módváltás
         events: list[tuple[datetime, str, str]] = []
         for p in s.get("pauses") or []:
@@ -184,5 +227,5 @@ def summarize(sessions: list[dict], now: datetime | None = None) -> TimerSummary
         state=state_of(sessions), mode=current_mode(sessions), first_started_at=first, last_ended_at=last_end,
         active_seconds=round(active, 1), work_seconds=round(by_mode["work"], 1), travel_seconds=round(by_mode["travel"], 1),
         wait_seconds=round(by_mode["wait"], 1), pause_seconds=round(paused, 1), pause_count=pause_count,
-        session_count=len(sessions), segments=segments,
+        session_count=len(sessions), segments=segments, auto_closed=auto_closed,
     )

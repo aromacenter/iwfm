@@ -27,6 +27,7 @@ from app.api import (
     import_export,
     intake as intake_api,
     inventory,
+    asset_protocols as asset_protocols_api,
     kiosk,
     knowledge,
     me,
@@ -230,6 +231,7 @@ def create_app() -> FastAPI:
     app.include_router(contracts_api.router, prefix="/api/partners", tags=["contracts"], dependencies=[Depends(_mod("contracts"))])
     app.include_router(contracts_api.overview_router, prefix="/api/contracts", tags=["contracts"], dependencies=[Depends(_mod("contracts"))])
     app.include_router(inventory.assets_router, prefix="/api/assets", tags=["assets"], dependencies=[Depends(_mod("machines"))])
+    app.include_router(asset_protocols_api.router, prefix="/api/asset-protocols", tags=["asset-protocols"], dependencies=[Depends(_mod("machines"))])
     app.include_router(consignment.products_router, prefix="/api/products", tags=["products"], dependencies=[Depends(_mod("products"))])
     app.include_router(consignment.stock_router, prefix="/api/partners", tags=["partner-stock"], dependencies=[Depends(_mod("settlements"))])
     app.include_router(consignment.settlements_router, prefix="/api/settlements", tags=["settlements"], dependencies=[Depends(_mod("settlements"))])
