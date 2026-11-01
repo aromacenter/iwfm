@@ -860,7 +860,10 @@ class BugReport(Base):
     súlyosság; a triázs és a javítás-visszajelzés státusz-mezőn fut."""
 
     __tablename__ = "bug_reports"
-    __table_args__ = (Index("ix_bugs_status", "status", "created_at"),)
+    __table_args__ = (
+        Index("ix_bugs_status", "status", "created_at"),
+        Index("ix_bugs_kind", "kind", "created_at"),  # 118. kör: hiba / ötlet szűrés
+    )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     page_url: Mapped[str] = mapped_column(String(512), nullable=False)
