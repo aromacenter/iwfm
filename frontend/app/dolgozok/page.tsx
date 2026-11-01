@@ -47,6 +47,13 @@ const EMPTY_FORM = {
   wage_type: "monthly",
   annual_leave_days: 20,
   payroll_source: "attendance" as "attendance" | "schedule",
+  site: "",
+  sunday_bonus: "" as "" | "yes" | "no",
+  shift_bonus: false,
+  bonus_in_base_salary: false,
+  br_minutes: "",
+  br_per_hours: "",
+  br_paid: false,
   tax_id: "",
   taj: "",
   bank_account: "",
@@ -186,6 +193,13 @@ export default function DolgozokPage() {
       wage_type: emp.wage_type,
       annual_leave_days: emp.annual_leave_days,
       payroll_source: emp.payroll_source ?? "attendance",
+      site: emp.site ?? "",
+      sunday_bonus: emp.sunday_bonus == null ? "" : emp.sunday_bonus ? "yes" : "no",
+      shift_bonus: emp.shift_bonus ?? false,
+      bonus_in_base_salary: emp.bonus_in_base_salary ?? false,
+      br_minutes: emp.break_rule ? String(emp.break_rule.minutes) : "",
+      br_per_hours: emp.break_rule?.per_hours ? String(emp.break_rule.per_hours) : "",
+      br_paid: emp.break_rule?.paid ?? false,
     });
     setSkillIds((emp.skills ?? []).map((s) => s.id));
     setArchive(emp.status === "inactive");
@@ -234,6 +248,14 @@ export default function DolgozokPage() {
           wage_type: form.wage_type,
           annual_leave_days: form.annual_leave_days,
           payroll_source: form.payroll_source,
+          site: clean(form.site) ?? null,
+          sunday_bonus: form.sunday_bonus === "" ? null : form.sunday_bonus === "yes",
+          shift_bonus: form.shift_bonus,
+          bonus_in_base_salary: form.bonus_in_base_salary,
+          break_rule:
+            form.br_minutes || form.br_per_hours || form.br_paid
+              ? { minutes: Number(form.br_minutes) || 0, per_hours: Number(form.br_per_hours) || null, paid: form.br_paid }
+              : null,
           skill_ids: skillIds,
           role: form.role,
           availability: availToApi(avail),
@@ -764,6 +786,43 @@ export default function DolgozokPage() {
                 </select>
                 <span className="mt-1 block text-xs text-slate-400">{t("emp.payrollSourceHint")}</span>
               </Field>
+              <Field label={t("emp.site")}>
+                <input value={form.site} onChange={(e) => set("site", e.target.value)} placeholder={t("emp.sitePlaceholder")} className={inputCls} />
+                <span className="mt-1 block text-xs text-slate-400">{t("emp.siteHint")}</span>
+              </Field>
+              <Field label={t("emp.sundayBonus")}>
+                <select value={form.sunday_bonus} onChange={(e) => set("sunday_bonus", e.target.value as "" | "yes" | "no")} className={inputCls}>
+                  <option value="">{t("emp.sundayBonusDefault")}</option>
+                  <option value="yes">{t("emp.sundayBonusYes")}</option>
+                  <option value="no">{t("emp.sundayBonusNo")}</option>
+                </select>
+                <span className="mt-1 block text-xs text-slate-400">{t("emp.sundayBonusHint")}</span>
+              </Field>
+              <div className="space-y-2 sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.shift_bonus} onChange={(e) => set("shift_bonus", e.target.checked)} className="h-4 w-4" />
+                  {t("emp.shiftBonus")}
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.bonus_in_base_salary} onChange={(e) => set("bonus_in_base_salary", e.target.checked)} className="h-4 w-4" />
+                  {t("emp.bonusInBase")}
+                </label>
+                <span className="block text-xs text-slate-400">{t("emp.bonusInBaseHint")}</span>
+              </div>
+              <div className="sm:col-span-2">
+                <span className="text-sm font-medium text-slate-700">{t("emp.breakRule")}</span>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                  <input type="number" min={0} max={240} value={form.br_minutes} onChange={(e) => set("br_minutes", e.target.value)} placeholder="30" className="w-20 rounded-lg border border-slate-300 px-2 py-1.5" />
+                  <span>{t("emp.breakRuleMinutes")}</span>
+                  <input type="number" min={1} max={12} value={form.br_per_hours} onChange={(e) => set("br_per_hours", e.target.value)} placeholder="4" className="w-16 rounded-lg border border-slate-300 px-2 py-1.5" />
+                  <span>{t("emp.breakRulePerHours")}</span>
+                  <label className="flex items-center gap-1">
+                    <input type="checkbox" checked={form.br_paid} onChange={(e) => set("br_paid", e.target.checked)} className="h-4 w-4" />
+                    {t("emp.breakRulePaid")}
+                  </label>
+                </div>
+                <span className="mt-1 block text-xs text-slate-400">{t("emp.breakRuleHint")}</span>
+              </div>
             </fieldset>
 
             <fieldset>

@@ -227,85 +227,42 @@ async def operator_set_roadmap(
     return {"ok": True, "stored": len(cleaned)}
 
 
-ROADMAP_STATUSES = ("planned", "in_progress", "done")
+class LaborRulesPushBody(BaseModel):
+    # [{valid_from: "ÉÉÉÉ-HH-NN", sunday_pct, holiday_pct, …}] — teljes csere
+    items: list[dict] = Field(max_length=50)
 
 
-class RoadmapPushBody(BaseModel):
-    # [{title, description, status, eta, sort}] — teljes csere (a Flotta a forrás)
-    items: list[dict] = Field(max_length=200)
-
-
-@router.put("/roadmap", dependencies=[Depends(require_operator)])
-async def operator_set_roadmap(
-    body: RoadmapPushBody,
+@router.put("/labor-rules", dependencies=[Depends(require_operator)])
+async def operator_set_labor_rules(
+    body: LaborRulesPushBody,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """A Flotta-pult roadmap-lenyomása (115. kör): a példány 🗺 Roadmap
-    menüje ebből épül. Teljes csere, tisztítva."""
+    """A Flotta-pult munkajogi szabály-felülírásának lenyomása (117. kör):
+    a példány labor_rules.rules_for() ezt egyesíti a kódban élő készletekkel.
+    Csak érvényes elemeket tárolunk; a példány-admin ezt nem szerkesztheti."""
+    from app.api.deps import record_audit
     from app.models import LicenseSettings
     from app.services.wfm import license as license_service
+    from app.services.wfm.labor_rules import ruleset_from_dict
 
     row = await license_service.get_license_row(db)
     if row is None:
         row = LicenseSettings(id=1)
         db.add(row)
     cleaned = []
-    for it in body.items[:200]:
-        title = str(it.get("title") or "").strip()[:256]
-        if not title:
-            continue
-        status = str(it.get("status") or "planned")
-        cleaned.append({
-            "title": title,
-            "description": str(it.get("description") or "").strip()[:4000],
-            "status": status if status in ROADMAP_STATUSES else "planned",
-            "eta": str(it.get("eta") or "").strip()[:64],
-            "sort": int(it.get("sort") or 0),
-        })
-    cleaned.sort(key=lambda x: x["sort"])
-    row.roadmap = cleaned
-    await db.commit()
-    license_service.invalidate_cache()
-    return {"ok": True, "stored": len(cleaned)}
-
-
-ROADMAP_STATUSES = ("planned", "in_progress", "done")
-
-
-class RoadmapPushBody(BaseModel):
-    # [{title, description, status, eta, sort}] — teljes csere (a Flotta a forrás)
-    items: list[dict] = Field(max_length=200)
-
-
-@router.put("/roadmap", dependencies=[Depends(require_operator)])
-async def operator_set_roadmap(
-    body: RoadmapPushBody,
-    db: AsyncSession = Depends(get_db),
-):
-    """A Flotta-pult roadmap-lenyomása (115. kör): a példány 🗺 Roadmap
-    menüje ebből épül. Teljes csere, tisztítva."""
-    from app.models import LicenseSettings
-    from app.services.wfm import license as license_service
-
-    row = await license_service.get_license_row(db)
-    if row is None:
-        row = LicenseSettings(id=1)
-        db.add(row)
-    cleaned = []
-    for it in body.items[:200]:
-        title = str(it.get("title") or "").strip()[:256]
-        if not title:
-            continue
-        status = str(it.get("status") or "planned")
-        cleaned.append({
-            "title": title,
-            "description": str(it.get("description") or "").strip()[:4000],
-            "status": status if status in ROADMAP_STATUSES else "planned",
-            "eta": str(it.get("eta") or "").strip()[:64],
-            "sort": int(it.get("sort") or 0),
-        })
-    cleaned.sort(key=lambda x: x["sort"])
-    row.roadmap = cleaned
+    for it in body.items[:50]:
+        rs = ruleset_from_dict(it)
+        if rs is not None:
+            cleaned.append(rs.as_dict())
+    cleaned.sort(key=lambda x: x["valid_from"])
+    row.labor_rules_override = cleaned or None
+    await record_audit(
+        db, actor=None, action="labor_rules.pushed", entity_type="license",
+        entity_id="1", detail={"count": len(cleaned),
+                               "valid_from": [c["valid_from"] for c in cleaned]},
+        request=request,
+    )
     await db.commit()
     license_service.invalidate_cache()
     return {"ok": True, "stored": len(cleaned)}

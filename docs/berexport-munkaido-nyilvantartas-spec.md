@@ -377,3 +377,36 @@ Jogszabály-értelmezést a rendszer nem végez.
 - Pult-felülírás `sunday_pct=60, valid_from=2027-01-01` → 2026-ban 50, 2027-ben 60.
 - Céges szünet 4 ó / 30 perc, nem fizetett: 8:20-as nap → 1:00 levonás; céges 10 perc / 6 óra → 422.
 - `bonus_in_base_salary=True` → az RM/VP oszlopokban az órák látszanak, a CSV „pótlék az alapbérben” oszlopa igen.
+
+## 12. Megvalósítás állapota (117. kör, 2026-11-01)
+
+**Kész (a könyvelő válaszától független részek):**
+
+- `app/services/wfm/labor_rules.py` — verziózott `LaborRules`, `RULESETS`, `rules_for(day, overrides)`,
+  `ruleset_from_dict`, `merged_rulesets`; a törvényi minimum-szünet `law_break_minutes()`.
+- `app/services/wfm/timesheet_calc.py` — `build_month_sheet()` (napi sorok + havi összesítő), `BreakRule`,
+  `CompanyWorkRules`, `DEFAULT_ABSENCE_CODES` (annual→SZ, sick→BSZ, other→TVL, unpaid→KN; a TVL/KN
+  leképezés a Beállításokban átírható, amíg a könyvelő nem válaszol), `fmt_hm`.
+- `app/services/wfm/timesheet_pdf.py` — reportlab sablon a 3. pont szerint (A4 álló, dolgozónként 1 oldal,
+  folyamatos oldalszám, aláírás-sor, forrás-sor a példány domainjével, „Mt. szabálykészlet: <hatály>”).
+- `GET /api/payroll/timesheet.pdf?year&month[&employee_id][&site][&split=none|per_site]` —
+  `require_perm("payroll")`, `payroll` modul-kapu, audit `payroll.timesheet`; `per_site` → ZIP.
+- Modell + migráció `d0e1f2a3b4c5`: Employee `site`, `sunday_bonus`, `shift_bonus`, `bonus_in_base_salary`,
+  `break_rule`; LicenseSettings `labor_rules_override`; új `work_rules_settings` tábla.
+- `GET/PUT /api/settings/work-rules` (admin): céges szünet-szabály (csak szigorítás, különben 422
+  `work_rules.below_law`), vasárnapi pótlék alapértelmezés, telephely-csoportosítás, távollét-kódok; a válaszban
+  csak olvasható `law` (hatályos készlet), `law_versions`, `law_override_count`.
+- `PUT /api/operator/labor-rules` — a Flotta felülírás-listájának fogadása, audit `labor_rules.pushed`.
+- Frontend: Jelenlét-oldal „📄 Nyilvántartás PDF” (hónap + egy fájl / telephelyenként ZIP); dolgozó-karton:
+  telephely, vasárnapi pótlék (céges alap / jár / nem jár), műszakpótlék, pótlék az alapbérben, egyedi
+  szünet-szabály; Beállítások → Csapat → ⚖️ Munkaidő-szabályok fül (modul: attendance|payroll).
+- Flotta-pult: Beállítások → „⚖️ Jogszabályi paraméterek (Mt.)” — verziók hatály-dátummal, mentés,
+  „Kiküldés minden példányra”; új X-admin példány létrehozásakor automatikus kiküldés.
+- Tesztek: `tests/test_round117_timesheet.py` (17), Flotta `test_labor_rules_store_and_push`.
+
+**Várja a könyvelő válaszát (nyitott kérdések 1–5):** TVL/KN végleges jelentése (most: other→TVL óra-oszloppal,
+unpaid→KN óra nélkül), vasárnapi pótlék alapértelmezése (most: nem jár, dolgozónként kapcsolható),
+éjszakai/műszak oszlop (most: nincs a lapon, a jogosultság-jelző már tárolódik), táppénz-kód a 15. nap után
+(most: nincs átmenet), ünnepnap (most: pihenőnapnak számít, a rajta végzett munka RM 100%).
+
+**Később:** a CSV/XLSX bérexport átállítása ugyanerre a kalkulációs rétegre (most még a régi összesítő logika).

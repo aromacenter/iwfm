@@ -35,6 +35,7 @@ from app.models import (
     Skill,
     User,
     WorksheetSettings,
+    WorkRulesSettings,
 )
 from app.services.wfm import license as license_service
 from app.services.wfm.ai_assign import DEFAULT_ASSIGN_PROMPT
@@ -1878,3 +1879,118 @@ async def test_billingo(
         raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
     except Exception:
         raise HTTPException(status_code=502, detail={"code": "settings.billingo_test_failed"})
+
+
+# ── Munkaidő-szabályok (117. kör, spec 11.3: céges réteg) ────────────────────
+# A törvényi értékek a labor_rules.py-ban (és a Flotta felülírásában) élnek,
+# itt csak a cég saját szigorításai; a törvényi minimum alá nem mehet.
+
+class WorkRulesBody(BaseModel):
+    break_minutes: int | None = Field(default=None, ge=0, le=240)
+    break_per_hours: int | None = Field(default=None, ge=1, le=12)
+    break_paid: bool = False
+    sunday_bonus_default: bool = False
+    group_by_site: bool = True
+    # {"annual": {"code": "SZ", "paid": true, "hours": true}, …}
+    absence_codes: dict[str, dict] | None = None
+
+    @field_validator("absence_codes")
+    @classmethod
+    def _codes(cls, v: dict[str, dict] | None) -> dict[str, dict] | None:
+        if not v:
+            return None
+        out: dict[str, dict] = {}
+        for key, cfg in v.items():
+            if key not in ("annual", "sick", "unpaid", "other") or not isinstance(cfg, dict):
+                continue
+            code = str(cfg.get("code") or "").strip().upper()[:8]
+            if not code:
+                continue
+            out[key] = {
+                "code": code,
+                "paid": bool(cfg.get("paid", key in ("annual", "sick"))),
+                "hours": bool(cfg.get("hours", key != "unpaid")),
+            }
+        return out or None
+
+
+async def _get_or_create_work_rules(db: AsyncSession) -> WorkRulesSettings:
+    row = (
+        await db.execute(select(WorkRulesSettings).where(WorkRulesSettings.id == 1))
+    ).scalar_one_or_none()
+    if row is None:
+        row = WorkRulesSettings(id=1)
+        db.add(row)
+        await db.flush()
+    return row
+
+
+async def _work_rules_out(db: AsyncSession, row: WorkRulesSettings) -> dict:
+    from datetime import date as _date
+
+    from app.services.wfm.labor_rules import merged_rulesets, rules_for
+    from app.services.wfm.timesheet_calc import DEFAULT_ABSENCE_CODES, company_rules_from_row
+
+    lic = await license_service.get_license_row(db)
+    overrides = (lic.labor_rules_override if lic is not None else None) or []
+    current = rules_for(_date.today(), overrides)
+    return {
+        "break_minutes": row.break_minutes,
+        "break_per_hours": row.break_per_hours,
+        "break_paid": bool(row.break_paid),
+        "sunday_bonus_default": bool(row.sunday_bonus_default),
+        "group_by_site": bool(row.group_by_site),
+        "absence_codes": company_rules_from_row(row).absence_codes,
+        "absence_codes_default": DEFAULT_ABSENCE_CODES,
+        # csak olvasható: a hatályos törvényi készlet és a verziók
+        "law": current.as_dict(),
+        "law_versions": [r.valid_from.isoformat() for r in merged_rulesets(overrides)],
+        "law_override_count": len(overrides),
+    }
+
+
+@router.get("/work-rules")
+async def get_work_rules(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    row = await _get_or_create_work_rules(db)
+    out = await _work_rules_out(db, row)
+    await db.commit()
+    return out
+
+
+@router.put("/work-rules")
+async def put_work_rules(
+    body: WorkRulesBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    from datetime import date as _date
+
+    from app.services.wfm.labor_rules import rules_for
+
+    row = await _get_or_create_work_rules(db)
+    if body.break_per_hours and not body.break_paid:
+        # a céges szabály csak SZIGORÍTHAT: 8 és 10 órás napra sem adhat
+        # kevesebb szünetet a törvényi lépcsőnél (Mt. 103. §)
+        lic = await license_service.get_license_row(db)
+        law = rules_for(_date.today(), (lic.labor_rules_override if lic else None) or [])
+        for worked in (8 * 60, 10 * 60):
+            own = (worked // (body.break_per_hours * 60)) * (body.break_minutes or 0)
+            if own < law.law_break_minutes(worked):
+                raise HTTPException(status_code=422, detail={"code": "work_rules.below_law"})
+    row.break_minutes = body.break_minutes
+    row.break_per_hours = body.break_per_hours
+    row.break_paid = body.break_paid
+    row.sunday_bonus_default = body.sunday_bonus_default
+    row.group_by_site = body.group_by_site
+    row.absence_codes = body.absence_codes
+    await record_audit(
+        db, actor=actor, action="settings.work_rules", entity_type="settings",
+        entity_id="work_rules", detail=body.model_dump(), request=request,
+    )
+    out = await _work_rules_out(db, row)
+    await db.commit()
+    return out

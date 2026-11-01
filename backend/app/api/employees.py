@@ -41,6 +41,22 @@ router = APIRouter()
 # ─── Schemas ─────────────────────────────────────────────────────────────────
 
 
+def _clean_break_rule(v: dict | None) -> dict | None:
+    """{minutes, per_hours, paid} — üres/hibás → None (céges szabály marad)."""
+    if not v:
+        return None
+    try:
+        minutes = int(v.get("minutes") or 0)
+        per_hours = int(v.get("per_hours") or 0) or None
+    except (TypeError, ValueError, AttributeError):
+        raise ValueError("break_rule must be {minutes, per_hours, paid}")
+    if minutes < 0 or minutes > 240 or (per_hours is not None and not 1 <= per_hours <= 12):
+        raise ValueError("break_rule out of range")
+    if per_hours is None and minutes == 0 and not v.get("paid"):
+        return None
+    return {"minutes": minutes, "per_hours": per_hours, "paid": bool(v.get("paid", False))}
+
+
 class EmployeeBase(BaseModel):
     last_name: str = Field(min_length=1, max_length=128)
     first_name: str = Field(min_length=1, max_length=128)
@@ -90,6 +106,18 @@ class EmployeeBase(BaseModel):
         if v not in ("attendance", "schedule"):
             raise ValueError("payroll_source must be attendance|schedule")
         return v
+    # Munkaidő-nyilvántartás (117. kör): telephely + pótlék-jogosultságok +
+    # egyedi szünet-szabály ({minutes, per_hours, paid}; None = céges).
+    site: str | None = Field(default=None, max_length=128)
+    sunday_bonus: bool | None = None
+    shift_bonus: bool = False
+    bonus_in_base_salary: bool = False
+    break_rule: dict | None = None
+
+    @field_validator("break_rule")
+    @classmethod
+    def _break_rule(cls, v: dict | None) -> dict | None:
+        return _clean_break_rule(v)
     # Heti elérhetőség a beosztás-generáláshoz: {"0": ["08:00","16:00"], …}
     # (0=hétfő … 6=vasárnap). None/üres = a generálás kihagyja a dolgozót.
     availability: dict[str, list[str]] | None = None
@@ -247,6 +275,16 @@ class EmployeeUpdate(BaseModel):
         if v is not None and v not in ("attendance", "schedule"):
             raise ValueError("payroll_source must be attendance|schedule")
         return v
+    site: str | None = Field(default=None, max_length=128)
+    sunday_bonus: bool | None = None
+    shift_bonus: bool | None = None
+    bonus_in_base_salary: bool | None = None
+    break_rule: dict | None = None
+
+    @field_validator("break_rule")
+    @classmethod
+    def _break_rule(cls, v: dict | None) -> dict | None:
+        return _clean_break_rule(v)
     notes: str | None = None
     status: str | None = None
     tax_id: str | None = None
@@ -397,6 +435,11 @@ def _employee_out(
         company_technicians=emp.company_technicians,
         company_tax_number=emp.company_tax_number,
         payroll_source=emp.payroll_source or "attendance",
+        site=emp.site,
+        sunday_bonus=emp.sunday_bonus,
+        shift_bonus=bool(emp.shift_bonus),
+        bonus_in_base_salary=bool(emp.bonus_in_base_salary),
+        break_rule=emp.break_rule,
         availability=emp.availability,
         notes=emp.notes,
         tax_id_masked=emp.tax_id_masked,

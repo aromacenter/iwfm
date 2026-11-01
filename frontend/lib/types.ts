@@ -44,6 +44,12 @@ export interface EmployeeOut {
   company_tax_number: string | null;
   // Bérszámfejtés alapja: blokkolás (attendance) vagy beosztás (schedule)
   payroll_source: "attendance" | "schedule";
+  // Munkaidő-nyilvántartás (117. kör): telephely, pótlék-jogosultságok, egyedi szünet-szabály
+  site?: string | null;
+  sunday_bonus?: boolean | null;
+  shift_bonus?: boolean;
+  bonus_in_base_salary?: boolean;
+  break_rule?: { minutes: number; per_hours: number | null; paid: boolean } | null;
   // Heti elérhetőség: {"0": ["08:00","16:00"], …} (0=hétfő … 6=vasárnap)
   availability: Record<string, [string, string]> | null;
   notes: string | null;

@@ -70,6 +70,7 @@ const SETTINGS_TABS = [
   ["ai", "✨"],
   ["support", "💬"],
   ["skills", "🎓"],
+  ["workrules", "⚖️"],
   ["permissions", "🔐"],
   ["license", "🎫"],
   ["data", "🗄️"],
@@ -89,6 +90,7 @@ const TAB_MODULE: Record<string, string> = {
   ai: "ai",
   support: "support",
   skills: "employees",
+  workrules: "attendance|payroll",
   worksheet: "tasks|intake|service",
 };
 
@@ -100,7 +102,7 @@ const TAB_GROUPS: { labelKey: string; tabs: string[] }[] = [
   { labelKey: "finance", tabs: ["billing", "cashbook", "saferpay"] },
   { labelKey: "comms", tabs: ["email", "notifications"] },
   { labelKey: "customer", tabs: ["support", "ai"] },
-  { labelKey: "team", tabs: ["skills", "permissions"] },
+  { labelKey: "team", tabs: ["skills", "workrules", "permissions"] },
   { labelKey: "system", tabs: ["license", "data"] },
 ];
 
@@ -187,6 +189,62 @@ export default function BeallitasokPage() {
   };
   const cardCls = (own: string, base: string) =>
     `${tab === own ? "" : "hidden "}${base}`;
+
+  // --- Munkaidő-szabályok (117. kör): céges réteg a törvény fölött ---
+  type AbsenceCfg = { code: string; paid: boolean; hours: boolean };
+  const [wr, setWr] = useState({
+    break_minutes: "" as string,
+    break_per_hours: "" as string,
+    break_paid: false,
+    sunday_bonus_default: false,
+    group_by_site: true,
+    absence_codes: {} as Record<string, AbsenceCfg>,
+  });
+  const [wrLaw, setWrLaw] = useState<{ law: Record<string, unknown>; law_versions: string[]; law_override_count: number } | null>(null);
+  const [wrBusy, setWrBusy] = useState(false);
+  const loadWorkRules = useCallback(() => {
+    api
+      .get<{
+        break_minutes: number | null; break_per_hours: number | null; break_paid: boolean;
+        sunday_bonus_default: boolean; group_by_site: boolean; absence_codes: Record<string, AbsenceCfg>;
+        law: Record<string, unknown>; law_versions: string[]; law_override_count: number;
+      }>("/api/settings/work-rules")
+      .then((r) => {
+        setWr({
+          break_minutes: r.break_minutes == null ? "" : String(r.break_minutes),
+          break_per_hours: r.break_per_hours == null ? "" : String(r.break_per_hours),
+          break_paid: r.break_paid,
+          sunday_bonus_default: r.sunday_bonus_default,
+          group_by_site: r.group_by_site,
+          absence_codes: r.absence_codes,
+        });
+        setWrLaw({ law: r.law, law_versions: r.law_versions, law_override_count: r.law_override_count });
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { loadWorkRules(); }, [loadWorkRules]);
+  async function saveWorkRules(e: React.FormEvent) {
+    e.preventDefault();
+    setWrBusy(true);
+    try {
+      await api.put("/api/settings/work-rules", {
+        break_minutes: wr.break_minutes === "" ? null : Number(wr.break_minutes),
+        break_per_hours: wr.break_per_hours === "" ? null : Number(wr.break_per_hours),
+        break_paid: wr.break_paid,
+        sunday_bonus_default: wr.sunday_bonus_default,
+        group_by_site: wr.group_by_site,
+        absence_codes: wr.absence_codes,
+      });
+      toast(t("common.saved"), "success");
+      loadWorkRules();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setWrBusy(false);
+    }
+  }
+  const setAbs = (key: string, patch: Partial<AbsenceCfg>) =>
+    setWr((w) => ({ ...w, absence_codes: { ...w.absence_codes, [key]: { ...w.absence_codes[key], ...patch } } }));
 
   // --- Címkenyomtató (Godex) — a helyi nyomtató-ügynök állapota és kulcsa ---
   interface PrintQueue {
@@ -2043,6 +2101,90 @@ export default function BeallitasokPage() {
           />
           <button disabled={kbBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
             {kbBusy ? t("common.saving") : t("common.save")}
+          </button>
+        </form>
+
+        {/* Munkaidő-szabályok (117. kör) */}
+        <form
+          onSubmit={saveWorkRules}
+          className={cardCls("workrules", "space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}
+        >
+          <h2 className="font-semibold">{t("settings.wrTitle")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.wrHint")}</p>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            <div className="mb-1 font-semibold text-slate-700">{t("settings.wrLawTitle")}</div>
+            {wrLaw ? (
+              <>
+                <div>
+                  {t("settings.wrLawValid", { date: String(wrLaw.law.valid_from ?? "") })}
+                  {wrLaw.law_override_count > 0 && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">{t("settings.wrLawOverride", { n: wrLaw.law_override_count })}</span>}
+                </div>
+                <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 sm:grid-cols-3">
+                  <span>{t("settings.wrLawBreak")}: 6 ó → 20 p, 9 ó → +25 p</span>
+                  <span>{t("settings.wrLawSunday")}: {String(wrLaw.law.sunday_pct)}%</span>
+                  <span>{t("settings.wrLawHoliday")}: {String(wrLaw.law.holiday_pct)}%</span>
+                  <span>{t("settings.wrLawOvertime")}: {String(wrLaw.law.overtime_pct)}% / {String(wrLaw.law.overtime_restday_pct)}%</span>
+                  <span>{t("settings.wrLawShift")}: {String(wrLaw.law.shift_pct)}% · {t("settings.wrLawNight")}: {String(wrLaw.law.night_pct)}%</span>
+                  <span>{t("settings.wrLawSick")}: {String(wrLaw.law.sick_leave_days)} {t("settings.wrLawDays")} · {String(wrLaw.law.sick_leave_pct)}%</span>
+                </div>
+                <div className="mt-1 text-slate-500">{String(wrLaw.law.source ?? "")}</div>
+              </>
+            ) : (
+              <span>…</span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <span className="text-sm font-medium text-slate-700">{t("settings.wrBreak")}</span>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                <input type="number" min={0} max={240} value={wr.break_minutes} onChange={(e) => setWr({ ...wr, break_minutes: e.target.value })} placeholder="30" className="w-20 rounded-lg border border-slate-300 px-2 py-1.5" />
+                <span>{t("emp.breakRuleMinutes")}</span>
+                <input type="number" min={1} max={12} value={wr.break_per_hours} onChange={(e) => setWr({ ...wr, break_per_hours: e.target.value })} placeholder="4" className="w-16 rounded-lg border border-slate-300 px-2 py-1.5" />
+                <span>{t("emp.breakRulePerHours")}</span>
+              </div>
+              <label className="mt-2 flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={wr.break_paid} onChange={(e) => setWr({ ...wr, break_paid: e.target.checked })} className="h-4 w-4" />
+                {t("settings.wrBreakPaid")}
+              </label>
+              <span className="mt-1 block text-xs text-slate-500">{t("settings.wrBreakHint")}</span>
+            </div>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={wr.sunday_bonus_default} onChange={(e) => setWr({ ...wr, sunday_bonus_default: e.target.checked })} className="h-4 w-4" />
+                {t("settings.wrSundayDefault")}
+              </label>
+              <span className="block text-xs text-slate-500">{t("settings.wrSundayHint")}</span>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={wr.group_by_site} onChange={(e) => setWr({ ...wr, group_by_site: e.target.checked })} className="h-4 w-4" />
+                {t("settings.wrGroupBySite")}
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-sm font-medium text-slate-700">{t("settings.wrCodes")}</span>
+            <span className="ml-2 text-xs text-slate-500">{t("settings.wrCodesHint")}</span>
+            <table className="mt-2 w-full text-sm">
+              <thead className="text-left text-xs text-slate-500">
+                <tr><th className="py-1">{t("settings.wrCodeType")}</th><th>{t("settings.wrCodeCode")}</th><th>{t("settings.wrCodePaid")}</th><th>{t("settings.wrCodeHours")}</th></tr>
+              </thead>
+              <tbody>
+                {(["annual", "sick", "other", "unpaid"] as const).map((k) => (
+                  <tr key={k} className="border-t border-slate-100">
+                    <td className="py-1.5">{t(`settings.wrCode_${k}`)}</td>
+                    <td><input value={wr.absence_codes[k]?.code ?? ""} onChange={(e) => setAbs(k, { code: e.target.value.toUpperCase().slice(0, 8) })} className="w-20 rounded-lg border border-slate-300 px-2 py-1" /></td>
+                    <td><input type="checkbox" checked={wr.absence_codes[k]?.paid ?? false} onChange={(e) => setAbs(k, { paid: e.target.checked })} className="h-4 w-4" /></td>
+                    <td><input type="checkbox" checked={wr.absence_codes[k]?.hours ?? false} onChange={(e) => setAbs(k, { hours: e.target.checked })} className="h-4 w-4" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button disabled={wrBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            {wrBusy ? t("common.saving") : t("common.save")}
           </button>
         </form>
 

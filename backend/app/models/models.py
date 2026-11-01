@@ -155,6 +155,22 @@ class Employee(Base):
     payroll_source: Mapped[str] = mapped_column(
         String(16), nullable=False, default="attendance"
     )
+    # --- munkaidő-nyilvántartás (117. kör, spec 11.3: dolgozói réteg) ---
+    # Telephely neve — a havi nyilvántartás PDF ez alapján csoportosít.
+    site: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Vasárnapi pótlék (Mt. 140. §) jár-e: None = a céges alapértelmezés.
+    sunday_bonus: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Műszakpótlékra jogosult (Mt. 141. §) — a lapon külön oszlop csak kérésre.
+    shift_bonus: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # A pótlékok az alapbérbe építve (Mt. 145. §): az órák látszanak, a
+    # bérprogram nem fizeti külön.
+    bonus_in_base_salary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Egyedi szünet-szabály: {minutes, per_hours, paid} — None = a céges.
+    break_rule: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     # Alvállalkozó (számlás) — nem munkaviszonyos: csak név/cím/elérhetőség/
@@ -797,12 +813,10 @@ class LicenseSettings(Base):
     # A Flotta-pult által lenyomott termék-roadmap (115. kör) — a 🗺 Roadmap
     # menü ebből olvas; termék-szintű, példány-adatot nem tartalmaz.
     roadmap: Mapped[list | None] = mapped_column(JSON, nullable=True)
-    # A Flotta-pult által lenyomott termék-roadmap (115. kör) — a 🗺 Roadmap
-    # menü ebből olvas; termék-szintű, példány-adatot nem tartalmaz.
-    roadmap: Mapped[list | None] = mapped_column(JSON, nullable=True)
-    # A Flotta-pult által lenyomott termék-roadmap (115. kör) — a 🗺 Roadmap
-    # menü ebből olvas; termék-szintű, példány-adatot nem tartalmaz.
-    roadmap: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # A Flotta-pultból lenyomott munkajogi szabály-felülírások (117. kör):
+    # [{valid_from, sunday_pct, …}] — a labor_rules.rules_for() egyesíti a
+    # kódban élő készletekkel; azonos hatály-dátumnál ez nyer.
+    labor_rules_override: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Az ügyfél csomagváltás-kérése — a Flotta-pultban jelenik meg, a
     # jóváhagyás (operator licenc-mentés) törli.
     requested_plan: Mapped[str | None] = mapped_column(String(16), nullable=True)
@@ -3210,6 +3224,37 @@ class CalendarOverride(Base):
     worked_saturdays: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")  # ai | manual
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class WorkRulesSettings(Base):
+    """Céges munkaidő-szabályok (egyetlen sor, id=1) — a törvényi minimum
+    fölé SZIGORÍTHAT (spec 11.3). A törvényi értékek a labor_rules.py-ban
+    élnek, itt csak a cég saját döntései vannak."""
+
+    __tablename__ = "work_rules_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    # Szünet: `break_per_hours` None → a törvényi lépcsők (6 ó: 20 p, 9 ó: +25 p);
+    # különben minden teljes `break_per_hours` órára `break_minutes` perc.
+    break_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    break_per_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Fizetett szünet: nem vonódik le a nyilvántartott időből.
+    break_paid: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Vasárnapi pótlék alapértelmezése (a dolgozó felülírhatja).
+    sunday_bonus_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # A havi PDF telephelyenként csoportosítva készüljön-e.
+    group_by_site: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
+    # Távollét-kódok: {"annual": {"code": "SZ", "paid": true, "hours": true}, …}
+    absence_codes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

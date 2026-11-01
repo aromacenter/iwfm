@@ -49,6 +49,9 @@ export default function JelenletPage() {
   const [form, setForm] = useState({ employee_id: "", date: "", in_time: "08:00", out_time: "16:30", break_minutes: 30, note: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // havi munkaidő-nyilvántartás PDF (117. kör): hónap + telephelyenkénti bontás
+  const [tsMonth, setTsMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [tsSplit, setTsSplit] = useState<"none" | "per_site">("none");
   const { t, lang } = useT();
   const { toast } = useUI();
 
@@ -148,6 +151,19 @@ export default function JelenletPage() {
     }
   }
 
+  async function exportTimesheet() {
+    const [y, m] = tsMonth.split("-");
+    if (!y || !m) return;
+    try {
+      await downloadFile(
+        `/api/payroll/timesheet.pdf?year=${y}&month=${Number(m)}&split=${tsSplit}`,
+        `munkaido_nyilvantartas_${tsMonth}.${tsSplit === "per_site" ? "zip" : "pdf"}`
+      );
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   const totalHours = entries.reduce((sum, e) => sum + (e.worked_minutes ?? 0), 0) / 60;
 
   return (
@@ -202,6 +218,19 @@ export default function JelenletPage() {
             {t("att.exportXlsx")}
           </button>
         </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+        <span className="font-medium">{t("att.timesheetTitle")}</span>
+        <input type="month" value={tsMonth} onChange={(e) => setTsMonth(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" />
+        <select value={tsSplit} onChange={(e) => setTsSplit(e.target.value as "none" | "per_site")} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm">
+          <option value="none">{t("att.timesheetOneFile")}</option>
+          <option value="per_site">{t("att.timesheetPerSite")}</option>
+        </select>
+        <button onClick={exportTimesheet} className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-800 hover:bg-indigo-100">
+          {t("att.timesheetPdf")}
+        </button>
+        <span className="text-xs text-slate-500">{t("att.timesheetHint")}</span>
       </div>
 
       <p className="mb-3 text-sm text-slate-500">

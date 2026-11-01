@@ -3,7 +3,7 @@ employee for a period and streams CSV/XLSX with decrypted identifiers."""
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import record_audit, require_perm
 from app.core.crypto import decrypt_pii
 from app.db import get_db
-from app.models import Employee, Shift, TimeEntry, TimeOffRequest, User
+from app.models import Employee, Shift, TimeEntry, TimeOffRequest, User, WorkRulesSettings
 from app.services.wfm.compliance import ShiftSpan
 from app.services.wfm.payroll_export import (
     PayrollRow,
@@ -150,4 +150,125 @@ async def export_payroll(
         content=content,
         media_type=media,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Havi munkaidő-nyilvántartás (117. kör) ───────────────────────────────────
+# Dolgozónként egy oldal a mintapéldány szerkezetében — spec:
+# docs/berexport-munkaido-nyilvantartas-spec.md
+
+
+@router.get("/timesheet.pdf")
+async def timesheet_pdf(
+    year: int = Query(..., ge=2012, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    employee_id: str | None = Query(default=None),
+    site: str | None = Query(default=None, max_length=128),
+    split: str = Query(default="none", pattern="^(none|per_site)$"),
+    request: Request = None,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("payroll")),
+):
+    import calendar as _cal
+    import io as _io
+    import zipfile
+
+    from app.models import WorksheetSettings
+    from app.services.wfm import license as license_service
+    from app.services.wfm.holidays import load_overrides
+    from app.services.wfm.timesheet_calc import build_month_sheet, company_rules_from_row
+    from app.services.wfm.timesheet_pdf import build_timesheet_pdf
+
+    first = date(year, month, 1)
+    last = date(year, month, _cal.monthrange(year, month)[1])
+    await load_overrides(db)
+
+    rules_row = (
+        await db.execute(select(WorkRulesSettings).where(WorkRulesSettings.id == 1))
+    ).scalar_one_or_none()
+    company_rules = company_rules_from_row(rules_row)
+    lic = await license_service.get_license_row(db)
+    overrides = (lic.labor_rules_override if lic is not None else None) or []
+    ws = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    company = (ws.company_name if ws and ws.company_name else None) or (
+        lic.customer_name if lic and lic.customer_name else None
+    ) or "X-admin"
+
+    q = select(Employee).where(
+        Employee.is_contractor.is_(False),
+        Employee.hire_date <= last,
+    ).order_by(Employee.last_name, Employee.first_name)
+    employees = [
+        e for e in (await db.execute(q)).scalars().all()
+        if (e.termination_date is None or e.termination_date >= first)
+        and (employee_id is None or str(e.id) == employee_id)
+        and (site is None or (e.site or "") == site)
+    ]
+    # külsősök (TAJ nélkül) kimaradnak — ugyanaz a szűrő, mint a CSV-nél (spec 6.9)
+    employees = [e for e in employees if (decrypt_pii(e.taj_encrypted) or "").strip()]
+    emp_ids = {e.id for e in employees}
+
+    shifts = (await db.execute(select(Shift).where(
+        Shift.status == "published", Shift.work_date >= first, Shift.work_date <= last,
+    ))).scalars().all()
+    lo = datetime.combine(first, time.min, tzinfo=UTC) - timedelta(days=1)
+    hi = datetime.combine(last, time.max, tzinfo=UTC) + timedelta(days=1)
+    entries = (await db.execute(select(TimeEntry).where(
+        TimeEntry.clock_in >= lo, TimeEntry.clock_in <= hi, TimeEntry.clock_out.is_not(None),
+    ))).scalars().all()
+    leaves = (await db.execute(select(TimeOffRequest).where(
+        TimeOffRequest.status == "approved",
+        TimeOffRequest.start_date <= last, TimeOffRequest.end_date >= first,
+    ))).scalars().all()
+
+    sheets = []
+    for emp in employees:
+        sheets.append(build_month_sheet(
+            emp, year=year, month=month,
+            shifts=[x for x in shifts if x.employee_id == emp.id],
+            entries=[x for x in entries if x.employee_id == emp.id],
+            leaves=[x for x in leaves if x.employee_id == emp.id],
+            company=company_rules, overrides=overrides,
+            tax_id=decrypt_pii(emp.tax_id_encrypted),
+        ))
+    if company_rules.group_by_site:
+        sheets.sort(key=lambda sh: ((sh.site or "").lower(), sh.name.lower()))
+    else:
+        sheets.sort(key=lambda sh: sh.name.lower())
+
+    host = (request.headers.get("x-forwarded-host") or request.url.hostname or "") if request else ""
+    source_line = f"https://{host} - X-admin" if host else "X-admin"
+    period = f"{year}-{month:02d}"
+
+    await record_audit(
+        db, actor=actor, action="payroll.timesheet", entity_type="payroll",
+        entity_id=period,
+        detail={"employees": len(sheets), "split": split, "site": site,
+                "rules_valid_from": sheets[0].rules.valid_from.isoformat() if sheets else None},
+        request=request,
+    )
+    await db.commit()
+
+    if split == "per_site":
+        buf = _io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            groups: dict[str, list] = {}
+            for sh in sheets:
+                groups.setdefault(sh.site or "kozpont", []).append(sh)
+            for site_name, group in groups.items():
+                safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in site_name)[:40] or "telephely"
+                zf.writestr(
+                    f"munkaido_nyilvantartas_{period}_{safe}.pdf",
+                    build_timesheet_pdf(group, company=company, source_line=source_line),
+                )
+        return Response(
+            content=buf.getvalue(), media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="munkaido_nyilvantartas_{period}.zip"'},
+        )
+    content = build_timesheet_pdf(sheets, company=company, source_line=source_line)
+    return Response(
+        content=content, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="munkaido_nyilvantartas_{period}.pdf"'},
     )
