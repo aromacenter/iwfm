@@ -269,3 +269,26 @@ https://rendszer.olmunkaido.hu - Minden jog fenntartva. ©
 - A mintapéldány (valódi adatokkal) nem kerül a repóba és nem kerül chatbe; a tesztek generált
   mintaadatot használnak (Demó-adat szabály).
 - A PDF letöltése auditált (`payroll.timesheet`, ki, mikor, melyik hónap, hány dolgozó).
+
+## 10. Jogszabályi alap (ellenőrizve: 2026-11-01, Jogtár, Mt. hatály 2026. X. 1-től)
+
+| Szabály | Mt. § | Hatályos érték | Hol alkalmazzuk |
+|---|---|---|---|
+| Teljes napi munkaidő | 92. § | 8 óra (megállapodással max. 12, készenléti jellegű munkakör) | napi keretóra = weekly_hours / 5 |
+| Vasárnapi rendes munkaidő esetei | 101. § | rendeltetése folytán vasárnap is működő munkáltató/munkakör, idényjellegű, megszakítás nélküli, több műszakos, készenléti jellegű | `sunday_bonus` jogosultság dolgozónként |
+| Munkaközi szünet | 103. § | 6 óra felett 20 perc, 9 óra felett további 25 perc; 3–6 óra munkavégzés után kiadva | `break_rule` alapértéke; a cég 4 ó / 30 perc szabálya ennél szigorúbb, megengedett |
+| Betegszabadság | 126. § | évi 15 munkanap, távolléti díj 70%-a | BSZ számláló évente; 15 felett → táppénz (TP/TVL, nyitott kérdés) |
+| Munkaidő-nyilvántartás | 134. § | rendes + rendkívüli munkaidő, készenlét, szabadság; kezdő és befejező időpont naprakészen; beosztás hó végi igazolásával is vezethető | ez maga a PDF: Kezdet/Vég minden napra, aláírás a hó végén |
+| Pótlék-alap | 139. § | egy órára jutó alapbér; havi bér / 174 | nem a lap dolga (bérprogram), de a CSV-ben óra-alap mehet |
+| Vasárnapi pótlék | 140. § (1) | 50% | VP 50% oszlop, csak jogosultnak |
+| Munkaszüneti napi pótlék | 140. § (2) | 100% (húsvét- és pünkösdvasárnap is) | RM 100% oszlop (a mintában nincs külön „ünnepnapi” oszlop, oda megy) |
+| Műszakpótlék | 141. § | 30%, 18–06 óra között, ha a kezdés rendszeresen változik (munkanapok ⅓-ában, ≥4 óra eltérés) | nincs a mintán; nyitott kérdés 3 |
+| Éjszakai pótlék | 142. § | 15%, ha az éjszakai munka > 1 óra; műszakpótlékos nem kapja | nincs a mintán; nyitott kérdés 3 |
+| Rendkívüli munkaidő | 143. § | napi beosztáson felül 50% (vagy szabadidő); heti pihenőnapon 100% (50%, ha másik pihenőnap jár); munkaszüneti napon 100% | RM 50% / RM 100% oszlopok |
+| Készenlét / ügyelet | 144. § | 20% / 40% (50%, ha nem mérhető) | nincs a mintán; csak ha a cég használ készenlétet |
+| Pótlék az alapbérben | 145. § | a 140–142. § pótlékai alapbérbe építhetők, átalány is köthető | dolgozónként „pótlék az alapbérben” jelző → a lapon az órák látszanak, a bérprogram nem fizeti külön |
+
+**Ellenőrzési rend:** a táblát minden év januárjában (és az Mt.-módosítások kihirdetésekor) újra kell
+nézni a Jogtár/NJT hatályos szövegén; az ellenőrzés dátuma ide kerül. A munkarend-rendelet (áthelyezett
+pihenőnapok, ledolgozó szombatok) évente a `holidays.py`-ba. A kódban a számok nem lehetnek beégetve:
+egy `labor_rules.py` konstans-tábla + hatály-dátum, hogy egy módosítás egy helyen legyen átvezethető.
