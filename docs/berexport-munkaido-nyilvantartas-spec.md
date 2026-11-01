@@ -292,3 +292,88 @@ https://rendszer.olmunkaido.hu - Minden jog fenntartva. ©
 nézni a Jogtár/NJT hatályos szövegén; az ellenőrzés dátuma ide kerül. A munkarend-rendelet (áthelyezett
 pihenőnapok, ledolgozó szombatok) évente a `holidays.py`-ba. A kódban a számok nem lehetnek beégetve:
 egy `labor_rules.py` konstans-tábla + hatály-dátum, hogy egy módosítás egy helyen legyen átvezethető.
+
+## 11. Szabálymotor: a jogszabályi értékek frissítése és alkalmazása (jóváhagyva 2026-11-01)
+
+**Meglévő építőkövek:** `calendar_watch.ensure_next_year_calendar` (AI-tól kért munkarend, admin-jóváhagyással),
+`calendar_watch.monthly_mt_check` (havi Mt.-változás jelzés), Flotta központi újraépítés (egy commit → minden
+példány), Flotta → példány push-minta (`push_roadmap`).
+
+### 11.1 Verziózott szabálykészlet: `app/services/wfm/labor_rules.py`
+
+```python
+@dataclass(frozen=True)
+class LaborRules:
+    valid_from: date                 # hatály kezdete
+    source: str                      # pl. "Mt. 2012. évi I. tv., Jogtár, ellenőrizve 2026-11-01"
+    daily_full_hours: int = 8        # 92. §
+    break_steps: tuple = ((6*60, 20), (9*60, 25))   # 103. §: (napi perc felett, +perc)
+    break_paid_default: bool = False
+    sick_leave_days: int = 15        # 126. §
+    sick_leave_pct: int = 70
+    sunday_pct: int = 50             # 140. § (1)
+    holiday_pct: int = 100           # 140. § (2)
+    shift_pct: int = 30              # 141. §
+    night_pct: int = 15              # 142. §
+    night_min_minutes: int = 60
+    overtime_pct: int = 50           # 143. § (1)
+    overtime_restday_pct: int = 100  # 143. § (2)
+    overtime_restday_alt_pct: int = 50
+    standby_pct: int = 20            # 144. §
+    oncall_pct: int = 40
+    monthly_divisor: int = 174       # 139. §
+
+RULESETS: list[LaborRules] = [LaborRules(valid_from=date(2026, 10, 1), source="…")]
+
+def rules_for(day: date, overrides: dict | None = None) -> LaborRules:
+    """A napra érvényes készlet (a legkésőbbi valid_from ≤ day), a DB-felülírással egyesítve."""
+```
+
+- Új Mt.-módosításnál **új elem** kerül a listába új `valid_from`-mal; a régi sosem módosul.
+- A kalkuláció minden naphoz `rules_for(day)`-t hív, így egy hónap közbeni hatályba lépés is helyes.
+- Teszt: két készlet, hatály-határon átnyúló hónap → a két fél külön értékkel számol.
+
+### 11.2 Felülírás a Flotta-pultból (újraépítés nélkül)
+
+- Flotta `FlottaSettings.labor_rules_json` + pult fül „⚖️ Jogszabályi paraméterek”: űrlap a fenti mezőkkel,
+  `valid_from` + forrás-megjegyzés, „Kiküldés minden példányra” gomb (a `push_roadmap` mintájára:
+  `POST /api/operator/labor-rules` a példányon, operator-token).
+- Példány: `LicenseSettings.labor_rules_override` (JSON, lista hatály-dátummal). `rules_for()` a DB-listát
+  a kód-listával egyesíti, azonos `valid_from`-nál a DB nyer.
+- Példány-admin **nem** szerkesztheti a törvényi értékeket (csak a céges szigorításokat, 11.3); a
+  Beállításokban csak olvasható „Hatályos szabálykészlet: 2026-10-01 (forrás: …)” doboz látszik.
+- Audit a példányon: `labor_rules.pushed` (ki, mikor, melyik hatály).
+
+### 11.3 Rétegezés az alkalmazáskor: törvény → cég → dolgozó
+
+| Réteg | Hol | Mit állíthat |
+|---|---|---|
+| Törvény | `labor_rules.py` + pult-felülírás | minden százalék, szünet-lépcső, BSZ-napok |
+| Cég | `LicenseSettings.work_rules` (Beállítások → Munkaügy) | szünet-szabály **csak szigorítva** (pl. 4 ó / 30 perc), szünet fizetett-e, vasárnapi pótlék alapból jár-e, telephely-csoportosítás alapértéke |
+| Dolgozó | `Employee` mezők | `sunday_bonus` (bool/null = céges alap), `shift_bonus` (bool), `bonus_in_base_salary` (bool, 145. §), `break_rule_json` (null = céges), `payroll_source` (van) |
+
+Validáció: a céges szünet-szabály nem lehet enyhébb a törvényinél (a mentés 422-t ad `work_rules.below_law`
+kóddal); a dolgozói felülírás nem lehet enyhébb a cégesnél.
+
+### 11.4 Egy változás útja
+
+1. Jelzés: `monthly_mt_check` értesítés, vagy a januári kötelező kör (10. pont).
+2. Ellenőrzés: a hatályos szöveg a Jogtáron/NJT-n, paragrafus-listával; az eredmény a 10. pont táblájába.
+3. Átvezetés: új `LaborRules` elem commitolva (központi újraépítés), sürgős esetben a pultból kiküldve.
+4. Alkalmazás: az érintett hónaptól `rules_for()` az új értéket adja; a korábbi hónapok újragenerálva is
+   a régi értékkel készülnek.
+5. Bizonyíték: a PDF lábléce tartalmazza a használt szabálykészlet hatály-dátumát
+   („Mt. szabálykészlet: 2026-10-01”), az audit-bejegyzés (`payroll.timesheet`) ugyanezt.
+
+### 11.5 Ami szándékosan nem automatikus
+
+Az AI és a figyelők csak **jeleznek**; a szabály-táblába ember ír, a munkarend-naptárat admin hagyja jóvá.
+Jogszabály-értelmezést a rendszer nem végez.
+
+### 11.6 Tesztek a szabálymotorhoz
+
+- `rules_for(2026-06-15)` → a 2026-10-01-es készlet **nem** érvényes, az azt megelőző igen (vagy a kód
+  alapkészlete `valid_from=2012-07-01`-gyel, a mostani értékekkel, ha nem volt közbeni változás).
+- Pult-felülírás `sunday_pct=60, valid_from=2027-01-01` → 2026-ban 50, 2027-ben 60.
+- Céges szünet 4 ó / 30 perc, nem fizetett: 8:20-as nap → 1:00 levonás; céges 10 perc / 6 óra → 422.
+- `bonus_in_base_salary=True` → az RM/VP oszlopokban az órák látszanak, a CSV „pótlék az alapbérben” oszlopa igen.
