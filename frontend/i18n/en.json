@@ -2208,6 +2208,21 @@
     "tipDone": "All set! You can start working in the calendar. If you get stuck, I'm behind the ✨ button bottom right."
   },
   "bugs": {
+    "kindBug": "Bug",
+    "kindIdea": "Idea",
+    "kindBugs": "Bugs",
+    "kindIdeas": "Ideas",
+    "ideaDescriptionPh": "What would you like, and why would it help? (min. 5 characters)",
+    "sendIdea": "💡 Send idea",
+    "ideaSent": "Thanks for the idea! Follow what happens to it on the My reports tab.",
+    "ideasTitle": "Feature ideas",
+    "ideaDonePrompt": "Message to the submitter (what was built):",
+    "ideaDeclinePrompt": "Reason for the submitter (why not now / not this way):",
+    "prio": {
+      "1": "nice to have",
+      "2": "would be useful",
+      "3": "really needed"
+    },
     "buttonTitle": "Report a bug",
     "tabReport": "Report",
     "tabMine": "My reports",
@@ -2246,7 +2261,11 @@
       "closed": "Closed",
       "reopened": "Reopened",
       "needs_info": "Question to reporter",
-      "answered": "Reporter answered"
+      "answered": "Reporter answered",
+      "considering": "Under review",
+      "planned": "Planned",
+      "done": "Done",
+      "declined": "Declined"
     },
     "adminTitle": "Bug reports",
     "adminEmpty": "No reports match the filter. 🎉",

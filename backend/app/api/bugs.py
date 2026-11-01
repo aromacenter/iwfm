@@ -32,12 +32,27 @@ STATUSES = (
 )
 # ezekből a státuszokból dobja vissza a kérdés a jegyet a bejelentőnek
 _BOUNCEABLE = ("new", "confirmed", "reopened", "answered")
+# 118. kör: fejlesztési ötlet — ugyanaz a jegy, más életút
+KINDS = ("bug", "idea")
+IDEA_STATUSES = ("new", "considering", "needs_info", "answered", "planned", "done", "declined")
+_IDEA_BOUNCEABLE = ("new", "considering", "answered")
+IDEA_PRIORITIES = (1, 2, 3)
+
+
+def statuses_for(kind: str) -> tuple[str, ...]:
+    return IDEA_STATUSES if kind == "idea" else STATUSES
+
+
+def bounceable_for(kind: str) -> tuple[str, ...]:
+    return _IDEA_BOUNCEABLE if kind == "idea" else _BOUNCEABLE
 MAX_SCREENSHOT = 3 * 1024 * 1024  # 3 MB
 
 
 class BugCreateBody(BaseModel):
     description: str = Field(min_length=5, max_length=4000)
     severity: str = Field(default="minor")
+    kind: str = Field(default="bug")
+    priority: int | None = Field(default=None, ge=1, le=3)
     page_url: str = Field(min_length=1, max_length=512)
     user_agent: str | None = Field(default=None, max_length=256)
     screenshot: str | None = None  # data-URL (png/jpeg)
@@ -85,6 +100,8 @@ def _out(b: BugReport, comments: list[BugComment] | None = None) -> dict:
         "page_url": b.page_url,
         "description": b.description,
         "severity": b.severity,
+        "kind": b.kind or "bug",
+        "priority": b.priority,
         "status": b.status,
         "reporter_name": b.reporter_name,
         "user_agent": b.user_agent,
@@ -129,7 +146,7 @@ async def add_comment(
     státusz, vagy — ha a jegy nyitott — automatikusan needs_info (a jegy a
     bejelentőnél). Bejelentő: needs_info → answered (vissza az üzemeltetőhöz)."""
     now = datetime.now(UTC)
-    if kind != "reporter" and status and status not in STATUSES:
+    if kind != "reporter" and status and status not in statuses_for(b.kind or "bug"):
         raise HTTPException(status_code=422, detail={"code": "bugs.bad_status"})
     db.add(BugComment(bug_id=b.id, author_kind=kind, author_name=author_name[:128], text=text[:4000]))
     if kind == "reporter":
@@ -139,7 +156,7 @@ async def add_comment(
     else:
         if status:
             b.status = status
-        elif b.status in _BOUNCEABLE:
+        elif b.status in bounceable_for(b.kind or "bug"):
             b.status = "needs_info"
         b.operator_seen_at = now
     b.updated_at = now
@@ -170,11 +187,15 @@ async def create_bug(
 ):
     if body.severity not in SEVERITIES:
         raise HTTPException(status_code=422, detail={"code": "bugs.bad_severity"})
+    if body.kind not in KINDS:
+        raise HTTPException(status_code=422, detail={"code": "bugs.bad_kind"})
     raw, mime = _decode_screenshot(body.screenshot)
     b = BugReport(
         page_url=body.page_url.strip()[:512],
         description=body.description.strip(),
         severity=body.severity,
+        kind=body.kind,
+        priority=(body.priority or 2) if body.kind == "idea" else None,
         user_agent=(body.user_agent or "").strip()[:256] or None,
         screenshot=raw,
         screenshot_mime=mime,
@@ -184,7 +205,7 @@ async def create_bug(
     db.add(b)
     await record_audit(
         db, actor=actor, action="bug.create", entity_type="bug",
-        entity_id=str(b.id), detail={"severity": body.severity}, request=request,
+        entity_id=str(b.id), detail={"severity": body.severity, "kind": body.kind}, request=request,
     )
     await db.commit()
     return _out(b)
@@ -330,6 +351,7 @@ async def reopen(
 async def list_bugs(
     status: str | None = Query(default=None),
     severity: str | None = Query(default=None),
+    kind: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role("admin")),
 ):
@@ -338,6 +360,8 @@ async def list_bugs(
         q = q.where(BugReport.status == status)
     if severity:
         q = q.where(BugReport.severity == severity)
+    if kind in KINDS:
+        q = q.where(BugReport.kind == kind)
     rows = (await db.execute(q)).scalars().all()
     return await _outs(db, rows)
 
@@ -359,6 +383,7 @@ async def bug_screenshot(
 class BugPatchBody(BaseModel):
     status: str | None = None
     severity: str | None = None
+    priority: int | None = Field(default=None, ge=1, le=3)
     fix_group: str | None = Field(default=None, max_length=64)
     resolution_note: str | None = Field(default=None, max_length=512)
 
@@ -373,13 +398,15 @@ async def update_bug(
 ):
     b = await _bug_or_404(db, bug_id)
     if body.status is not None:
-        if body.status not in STATUSES:
+        if body.status not in statuses_for(b.kind or "bug"):
             raise HTTPException(status_code=422, detail={"code": "bugs.bad_status"})
         b.status = body.status
     if body.severity is not None:
         if body.severity not in SEVERITIES:
             raise HTTPException(status_code=422, detail={"code": "bugs.bad_severity"})
         b.severity = body.severity
+    if body.priority is not None and (b.kind or "bug") == "idea":
+        b.priority = body.priority
     if "fix_group" in body.model_fields_set:
         b.fix_group = (body.fix_group or "").strip() or None
     if "resolution_note" in body.model_fields_set:

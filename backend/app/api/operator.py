@@ -57,9 +57,10 @@ async def operator_status(db: AsyncSession = Depends(get_db)):
 async def operator_bugs(
     status: str | None = Query(default=None),
     severity: str | None = Query(default=None),
+    kind: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.api.bugs import _outs
+    from app.api.bugs import KINDS, _outs
     from app.models import BugReport
 
     q = select(BugReport).order_by(BugReport.created_at.desc()).limit(300)
@@ -67,6 +68,8 @@ async def operator_bugs(
         q = q.where(BugReport.status == status)
     if severity:
         q = q.where(BugReport.severity == severity)
+    if kind in KINDS:
+        q = q.where(BugReport.kind == kind)
     rows = (await db.execute(q)).scalars().all()
     return await _outs(db, rows)
 
@@ -122,15 +125,23 @@ async def operator_bug_update(
 ):
     from datetime import UTC as _UTC, datetime as _dt
 
-    from app.api.bugs import SEVERITIES, STATUSES, _bug_or_404, _out
+    from app.api.bugs import SEVERITIES, _bug_or_404, _out, statuses_for
     from app.api.deps import record_audit
 
     b = await _bug_or_404(db, bug_id)
     body = body or {}
     if body.get("status") is not None:
-        if body["status"] not in STATUSES:
+        if body["status"] not in statuses_for(b.kind or "bug"):
             raise HTTPException(status_code=422, detail={"code": "bugs.bad_status"})
         b.status = body["status"]
+    if body.get("priority") is not None and (b.kind or "bug") == "idea":
+        try:
+            pr = int(body["priority"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail={"code": "bugs.bad_priority"})
+        if pr not in (1, 2, 3):
+            raise HTTPException(status_code=422, detail={"code": "bugs.bad_priority"})
+        b.priority = pr
     if body.get("severity") is not None:
         if body["severity"] not in SEVERITIES:
             raise HTTPException(status_code=422, detail={"code": "bugs.bad_severity"})

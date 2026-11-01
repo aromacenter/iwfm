@@ -22,6 +22,8 @@ interface MyBug {
   id: string;
   description: string;
   severity: string;
+  kind: "bug" | "idea";
+  priority: number | null;
   status: string;
   page_url: string;
   created_at: string;
@@ -48,7 +50,17 @@ const SEVERITY_CHIP: Record<string, string> = {
   cosmetic: "bg-slate-100 text-slate-600",
 };
 
+const PRIORITY_CHIP: Record<number, string> = {
+  1: "bg-slate-100 text-slate-600",
+  2: "bg-sky-100 text-sky-800",
+  3: "bg-violet-100 text-violet-800",
+};
+
 const STATUS_CHIP: Record<string, string> = {
+  considering: "bg-indigo-100 text-indigo-800",
+  planned: "bg-violet-100 text-violet-800",
+  done: "bg-emerald-100 text-emerald-800",
+  declined: "bg-slate-100 text-slate-500 line-through",
   new: "bg-slate-100 text-slate-700",
   confirmed: "bg-indigo-100 text-indigo-800",
   needs_info: "bg-amber-100 text-amber-800",
@@ -67,6 +79,9 @@ export default function BugReporter() {
   const [tab, setTab] = useState<"report" | "mine">("report");
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState("minor");
+  // 118. kör: hiba vagy fejlesztési ötlet — ugyanaz a csatorna, más a kimenet
+  const [kind, setKind] = useState<"bug" | "idea">("bug");
+  const [priority, setPriority] = useState(2);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [mine, setMine] = useState<MyBug[]>([]);
@@ -417,14 +432,17 @@ export default function BugReporter() {
     try {
       await api.post("/api/bugs", {
         description,
-        severity,
+        severity: kind === "idea" ? "minor" : severity,
+        kind,
+        priority: kind === "idea" ? priority : null,
         page_url: window.location.href,
         user_agent: navigator.userAgent.slice(0, 250),
         screenshot,
       });
-      toast(t("bugs.sent"), "success");
+      toast(kind === "idea" ? t("bugs.ideaSent") : t("bugs.sent"), "success");
       setDescription("");
       setSeverity("minor");
+      setPriority(2);
       setScreenshot(null);
       loadMine();
       setTab("mine");
@@ -498,7 +516,7 @@ export default function BugReporter() {
           <div data-bug-ui="1" className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-md space-y-3 rounded-2xl border border-amber-200 bg-white p-5 shadow-2xl">
               <h2 className="text-lg font-bold">💬 {t("bugs.replyTitle")}</h2>
-              <p className="line-clamp-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">🐞 {popupBug.description}</p>
+              <p className="line-clamp-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">{popupBug.kind === "idea" ? "💡" : "🐞"} {popupBug.description}</p>
               {last && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   <p className="text-xs font-semibold">{t("bugs.replyFrom", { name: last.author_name || t("bugs.staff") })} · {fmtWhen(last.created_at)}</p>
@@ -565,15 +583,34 @@ export default function BugReporter() {
 
           {tab === "report" ? (
             <form onSubmit={submit} className="space-y-2.5">
+              <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+                <button type="button" onClick={() => setKind("bug")} className={`flex-1 rounded-md px-2 py-1 ${kind === "bug" ? "bg-white text-rose-700 shadow-sm" : "text-slate-500"}`}>
+                  🐞 {t("bugs.kindBug")}
+                </button>
+                <button type="button" onClick={() => setKind("idea")} className={`flex-1 rounded-md px-2 py-1 ${kind === "idea" ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`}>
+                  💡 {t("bugs.kindIdea")}
+                </button>
+              </div>
               <textarea
                 required
                 minLength={5}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder={t("bugs.descriptionPh")}
+                placeholder={kind === "idea" ? t("bugs.ideaDescriptionPh") : t("bugs.descriptionPh")}
                 rows={4}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
+              {kind === "idea" ? (
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(Number(e.target.value))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value={1}>🙂 {t("bugs.prio.1")}</option>
+                  <option value={2}>👍 {t("bugs.prio.2")}</option>
+                  <option value={3}>🔥 {t("bugs.prio.3")}</option>
+                </select>
+              ) : (
               <select
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value)}
@@ -584,6 +621,7 @@ export default function BugReporter() {
                 <option value="minor">🔵 {t("bugs.sev.minor")}</option>
                 <option value="cosmetic">⚪ {t("bugs.sev.cosmetic")}</option>
               </select>
+              )}
               <button
                 type="button"
                 onClick={() => capturePage("report")}
@@ -615,9 +653,9 @@ export default function BugReporter() {
               <p className="text-[11px] text-slate-400">{t("bugs.autoNote")}</p>
               <button
                 disabled={busy}
-                className="w-full rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                className={`w-full rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 ${kind === "idea" ? "bg-violet-600 hover:bg-violet-700" : "bg-rose-600 hover:bg-rose-700"}`}
               >
-                {busy ? t("common.saving") : t("bugs.send")}
+                {busy ? t("common.saving") : kind === "idea" ? t("bugs.sendIdea") : t("bugs.send")}
               </button>
             </form>
           ) : (
@@ -628,9 +666,15 @@ export default function BugReporter() {
               {mine.map((b) => (
                 <div key={b.id} className="rounded-xl border border-slate-200 p-2.5 text-sm">
                   <div className="mb-1 flex flex-wrap gap-1">
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${SEVERITY_CHIP[b.severity]}`}>
-                      {t(`bugs.sev.${b.severity}`)}
-                    </span>
+                    {b.kind === "idea" ? (
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${PRIORITY_CHIP[b.priority ?? 2]}`}>
+                        💡 {t(`bugs.prio.${b.priority ?? 2}`)}
+                      </span>
+                    ) : (
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${SEVERITY_CHIP[b.severity]}`}>
+                        {t(`bugs.sev.${b.severity}`)}
+                      </span>
+                    )}
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_CHIP[b.status]}`}>
                       {t(`bugs.status.${b.status}`)}
                     </span>

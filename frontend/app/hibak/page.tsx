@@ -16,6 +16,8 @@ interface Bug {
   page_url: string;
   description: string;
   severity: string;
+  kind: "bug" | "idea";
+  priority: number | null;
   status: string;
   reporter_name: string;
   user_agent: string | null;
@@ -29,6 +31,13 @@ interface Bug {
 
 const SEVERITIES = ["blocker", "major", "minor", "cosmetic"];
 const STATUSES = ["new", "confirmed", "needs_info", "answered", "duplicate", "rejected", "resolved", "closed", "reopened"];
+// 118. kör: az ötletek saját életútja
+const IDEA_STATUSES = ["new", "considering", "needs_info", "answered", "planned", "done", "declined"];
+const PRIORITY_CHIP: Record<number, string> = {
+  1: "bg-slate-100 text-slate-600",
+  2: "bg-sky-100 text-sky-800",
+  3: "bg-violet-100 text-violet-800",
+};
 
 const SEVERITY_CHIP: Record<string, string> = {
   blocker: "bg-rose-100 text-rose-800",
@@ -43,14 +52,16 @@ export default function HibakPage() {
   const [bugs, setBugs] = useState<Bug[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [severityFilter, setSeverityFilter] = useState("");
+  const [kindFilter, setKindFilter] = useState<"bug" | "idea">("bug");
   const [shot, setShot] = useState<Bug | null>(null);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
     if (statusFilter) params.set("status", statusFilter);
-    if (severityFilter) params.set("severity", severityFilter);
+    if (severityFilter && kindFilter === "bug") params.set("severity", severityFilter);
+    params.set("kind", kindFilter);
     api.get<Bug[]>(`/api/bugs?${params.toString()}`).then(setBugs).catch(() => {});
-  }, [statusFilter, severityFilter]);
+  }, [statusFilter, severityFilter, kindFilter]);
   useEffect(load, [load]);
 
   async function patch(id: string, body: Record<string, unknown>) {
@@ -103,24 +114,41 @@ export default function HibakPage() {
     if (note === null) return;
     await patch(b.id, { status: "resolved", resolution_note: note || null });
   }
+  // ötlet lezárása (kész / elvetve) rövid üzenettel a beküldőnek
+  async function closeIdea(b: Bug, status: "done" | "declined") {
+    const note = await prompt(t(status === "done" ? "bugs.ideaDonePrompt" : "bugs.ideaDeclinePrompt"), { initial: b.resolution_note ?? "" });
+    if (note === null) return;
+    await patch(b.id, { status, resolution_note: note || null });
+  }
+  const statusList = kindFilter === "idea" ? IDEA_STATUSES : STATUSES;
 
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold">🐞 {t("bugs.adminTitle")}</h1>
+        <h1 className="text-xl font-bold">{kindFilter === "idea" ? "💡 " + t("bugs.ideasTitle") : "🐞 " + t("bugs.adminTitle")}</h1>
+        <div className="flex overflow-hidden rounded-lg border border-slate-300 text-sm">
+          <button onClick={() => { setKindFilter("bug"); setStatusFilter(""); }} className={`px-3 py-1.5 ${kindFilter === "bug" ? "bg-rose-600 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
+            🐞 {t("bugs.kindBugs")}
+          </button>
+          <button onClick={() => { setKindFilter("idea"); setStatusFilter(""); }} className={`px-3 py-1.5 ${kindFilter === "idea" ? "bg-violet-600 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
+            💡 {t("bugs.kindIdeas")}
+          </button>
+        </div>
         <div className="ml-auto flex gap-2">
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">{t("bugs.allStatuses")}</option>
-            {STATUSES.map((s) => (
+            {statusList.map((s) => (
               <option key={s} value={s}>{t(`bugs.status.${s}`)}</option>
             ))}
           </select>
+          {kindFilter === "bug" && (
           <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">{t("bugs.allSeverities")}</option>
             {SEVERITIES.map((s) => (
               <option key={s} value={s}>{t(`bugs.sev.${s}`)}</option>
             ))}
           </select>
+          )}
         </div>
       </div>
 
@@ -146,9 +174,15 @@ export default function HibakPage() {
               )}
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                  {b.kind === "idea" ? (
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${PRIORITY_CHIP[b.priority ?? 2]}`}>
+                      💡 {t(`bugs.prio.${b.priority ?? 2}`)}
+                    </span>
+                  ) : (
                   <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${SEVERITY_CHIP[b.severity]}`}>
                     {t(`bugs.sev.${b.severity}`)}
                   </span>
+                  )}
                   <span className="text-xs text-slate-500">
                     {b.reporter_name} · {b.created_at.slice(0, 16).replace("T", " ")}
                   </span>
@@ -187,14 +221,29 @@ export default function HibakPage() {
                 <select
                   value={b.status}
                   onChange={(e) =>
-                    e.target.value === "resolved" ? resolve(b) : patch(b.id, { status: e.target.value })
+                    e.target.value === "resolved"
+                      ? resolve(b)
+                      : e.target.value === "done" || e.target.value === "declined"
+                        ? closeIdea(b, e.target.value)
+                        : patch(b.id, { status: e.target.value })
                   }
                   className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium"
                 >
-                  {STATUSES.map((s) => (
+                  {(b.kind === "idea" ? IDEA_STATUSES : STATUSES).map((s) => (
                     <option key={s} value={s}>{t(`bugs.status.${s}`)}</option>
                   ))}
                 </select>
+                {b.kind === "idea" && (
+                  <select
+                    value={b.priority ?? 2}
+                    onChange={(e) => patch(b.id, { priority: Number(e.target.value) })}
+                    className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
+                  >
+                    {[1, 2, 3].map((p) => (
+                      <option key={p} value={p}>{t(`bugs.prio.${p}`)}</option>
+                    ))}
+                  </select>
+                )}
                 <button onClick={() => setGroup(b)} className="text-xs font-medium text-indigo-600 hover:underline">
                   📦 {t("bugs.group")}
                 </button>

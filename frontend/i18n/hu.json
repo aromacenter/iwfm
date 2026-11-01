@@ -2208,6 +2208,21 @@
     "tipDone": "Kész is vagy! A naptárban már dolgozhattok. Ha elakadsz, a jobb alsó ✨ gomb mögött én is ott leszek."
   },
   "bugs": {
+    "kindBug": "Hiba",
+    "kindIdea": "Ötlet",
+    "kindBugs": "Hibák",
+    "kindIdeas": "Ötletek",
+    "ideaDescriptionPh": "Mit szeretnél, és miért segítene? (min. 5 karakter)",
+    "sendIdea": "💡 Ötlet beküldése",
+    "ideaSent": "Köszönjük az ötletet! A Bejelentéseim fülön látod, mi lesz vele.",
+    "ideasTitle": "Fejlesztési ötletek",
+    "ideaDonePrompt": "Üzenet a beküldőnek (mi készült el):",
+    "ideaDeclinePrompt": "Indoklás a beküldőnek (miért nem most / nem így):",
+    "prio": {
+      "1": "jó lenne",
+      "2": "hasznos lenne",
+      "3": "nagyon kellene"
+    },
     "buttonTitle": "Hibabejelentés",
     "tabReport": "Bejelentés",
     "tabMine": "Bejelentéseim",
@@ -2246,7 +2261,11 @@
       "closed": "Lezárva",
       "reopened": "Újranyitva",
       "needs_info": "Kérdés a bejelentőhöz",
-      "answered": "Bejelentő válaszolt"
+      "answered": "Bejelentő válaszolt",
+      "considering": "Vizsgáljuk",
+      "planned": "Tervezve",
+      "done": "Elkészült",
+      "declined": "Elvetve"
     },
     "adminTitle": "Hibabejelentések",
     "adminEmpty": "Nincs a szűrőnek megfelelő bejelentés. 🎉",

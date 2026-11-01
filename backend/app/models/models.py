@@ -867,6 +867,12 @@ class BugReport(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     # blocker | major | minor | cosmetic
     severity: Mapped[str] = mapped_column(String(16), nullable=False, default="minor")
+    # 118. kör: a jegy fajtája — bug (hiba) | idea (fejlesztési ötlet). Az ötlet
+    # ugyanazon a szálon fut (kérdés / válasz / felugró ablak), de más a
+    # státusz-készlete: new → considering → planned → done | declined.
+    kind: Mapped[str] = mapped_column(String(8), nullable=False, default="bug", server_default="bug")
+    # Ötletnél: a bejelentő szerinti fontosság 1 (jó lenne) … 3 (nagyon kell).
+    priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # new | confirmed | duplicate | rejected | resolved | closed | reopened
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="new")
     user_agent: Mapped[str | None] = mapped_column(String(256), nullable=True)
