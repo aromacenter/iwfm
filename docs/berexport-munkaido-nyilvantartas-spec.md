@@ -127,8 +127,9 @@ https://rendszer.olmunkaido.hu - Minden jog fenntartva. ©
 - Közép: `N. oldal` (dolgozónként újraindul? a mintában a 2. dolgozó „2. oldal”, tehát **folyamatos**
   oldalszámozás az egész PDF-en belül).
 - Jobb: a generálás dátuma ISO formában.
-- Második sor: a forrás-rendszer. Nálunk: `https://<példány-domain> - X-admin` (új telepítésnél csak
-  X-admin márka).
+- Második sor: a forrás-rendszer. Nálunk: a példány saját X-admin-es domainje, pl.
+  `https://ceg.x-admin.hu - X-admin` (user döntése, 6.8).
+- A fejlécben a cégnév mellett a telephely is szerepel: „X-Presso Coffee Kft. · <telephely>” (6.8).
 
 ## 4. Számítási szabályok (levezetve a mintából)
 
@@ -142,7 +143,8 @@ https://rendszer.olmunkaido.hu - Minden jog fenntartva. ©
 5. **BI** (beosztott idő) naponta = beosztás hossza − `break_minutes`.
 6. **NYI** (nyilvántartott idő) naponta:
    - `payroll_source = schedule`: = BI (a minta is pontosan a beosztást írja munkaidőnek);
-   - `payroll_source = attendance`: = blokkolt (ki − be) − szünet, a meglévő `TimeEntry` logikával;
+   - `payroll_source = attendance`: = blokkolt (ki − be) − szünet, ahol a szünet = max(kézi `break_minutes`,
+     a dolgozó/cég `break_rule` szerinti levonás, ha a szünet nem fizetett); a Kezdet/Vég a nyers blokkolás;
    - fizetett távollét napján (SZ, BSZ): = napi keretóra, a kód kiírva;
    - nem fizetett távollét (KN): 0, a kód kiírva, a Nap számláló nő.
 7. **Nyilvántartott idő (havi)** = Σ NYI (tehát a fizetett távollét benne van: 160 + 16 = 176).
@@ -175,21 +177,41 @@ https://rendszer.olmunkaido.hu - Minden jog fenntartva. ©
 | TVL, KN | `other`, `unpaid` | ⚠ leképezés tisztázandó |
 | RM 100 / RM 50 / VP 50 | nincs | ✗ számítási réteg kell |
 | Vasárnapi pótlék jár-e | nincs | ✗ Employee-mező (bool) vagy beállítás |
+| Pihenőidő-szabály (perc / óránként / fizetett-e) | nincs (csak kézi `break_minutes`) | ✗ cégszintű alapérték + dolgozói felülírás |
+| Telephely a fejlécben, csoportosítás | `Shift.location` / dolgozó telephelye | ⚠ dolgozó–telephely kapcsolat ellenőrizendő |
+| Lábléc domain | példány `PUBLIC_URL` / beállítás | ✓ van |
 | Oldalszám, generálás dátuma, aláírás | reportlab canvas | ✗ sablon kell |
 | PDF dolgozónként egy oldal | nincs | ✗ új service: `timesheet_pdf.py` |
 
-## 6. Nyitott kérdések (a user / könyvelő válaszol)
+## 6. Kérdések és válaszok
+
+**Megválaszolva (2026-11-01, a user továbbította):**
+
+6. **Blokkolás-alapú dolgozók**: a Munkaidő Kezdet/Vég és az NYI **a nyers blokkolásból** megy, nem a
+   beosztásra kerekítve. Emellett **pihenőidő-szabály** állítható be: a user ismerete szerint 4 óránként
+   30 perc, ami **nem számít bele a munkaidőbe, ha a munkaszerződés így rögzíti**. Tervezés:
+   - dolgozónként (vagy cégszinten alapértelmezés + dolgozói felülírás): `break_rule` = {`minutes`: 30,
+     `per_hours`: 4, `paid`: false}; a napi NYI = blokkolt idő − (floor(blokkolt óra / per_hours) × minutes),
+     ha `paid = false`; ha `paid = true`, nincs levonás, de a szünet a lapon látszik;
+   - a kézzel blokkolt szünet (`TimeEntry.break_minutes`) és a szabály közül a nagyobb érvényes, nem adódik össze;
+   - jogi megjegyzés: az Mt. 103. § minimuma 6 óra felett 20 perc, 9 óra felett további 25 perc; a 4 óránként
+     30 perc ennél szigorúbb, tehát megengedett, de a sablonban a törvényi minimum legyen az alapérték,
+     és a 4/30 a cég beállítása.
+7. **Több telephely**: **egy fájl**, de telephelyenként **jól elkülönítve** (telephelyenként csoportosított
+   dolgozók, a telephely neve a fejlécben a cégnév mellett, telephely-váltásnál új oldal). Legyen
+   **választható opció**: „egy fájl, telephelyenként csoportosítva” / „telephelyenként külön fájl” /
+   „egy adott telephely”.
+8. **Lábléc**: a példány **saját X-admin-es domainje** (pl. `https://ceg.x-admin.hu - X-admin`); a
+   **cégnév mindenképpen** szerepel, **a telephellyel együtt** (fejlécben: „X-Presso Coffee Kft. · Budapest, Pláza”).
+9. **TAJ nélküli külsősök**: **úgy, mint eddig**, kimaradnak a nyilvántartásból (ugyanaz a szűrő, mint a CSV-nél).
+
+**Még nyitott (a könyvelő válaszára vár):**
 
 1. **TVL** pontos jelentése (igazolt távollét? táppénz?) és **KN** (igazolatlan? fizetés nélküli?).
 2. Jár-e **vasárnapi pótlék** (VP 50%) a dolgozóknak; kinek (üzlet vs. szerviz vs. iroda).
 3. Kell-e **éjszakai / műszakpótlék** oszlop (a minta nem mutat ilyet; alapból nem tesszük ki).
 4. **Betegszabadság → táppénz** átmenet (15. munkanap után): külön kódot kapjon (TP) vagy TVL-be menjen?
 5. **Ünnepnap**: a Pihenőnapok közé számít, vagy külön sor „Munkaszüneti nap”?
-6. **Blokkolás-alapú dolgozóknál** a Munkaidő Kezdet/Vég a nyers blokkolás legyen, vagy a beosztásra
-   kerekítve (a mintában a két dolgozó beosztás-alapú, így nem látszik)?
-7. Több **telephely** esetén egy PDF az egész cégre, vagy telephelyenként?
-8. A **cégnév és a forrás-sor** a láblécben: a példány saját domainje vagy fix „X-admin”?
-9. TAJ nélküli (külsős) dolgozók: kapjanak-e lapot (javaslat: **nem**, ugyanaz a szűrő, mint a CSV-nél).
 
 ## 7. Megvalósítási terv
 
@@ -204,7 +226,10 @@ https://rendszer.olmunkaido.hu - Minden jog fenntartva. ©
   `Content-Disposition: munkaido_nyilvantartas_2026-06.pdf`.
 - Beállítások (LicenseSettings / settings JSON): `sunday_bonus` (bool), `overtime_rules` (bool),
   `timesheet_codes` {TVL, KN} leképezése a 4 távollét-típusra.
-- Alembic: Employee `sunday_bonus` bool, ha dolgozónként kell (6.2 válaszától függ).
+- Alembic: Employee `sunday_bonus` bool, ha dolgozónként kell (6.2 válaszától függ); Employee
+  `break_rule_json` (nullable, felülírás) + LicenseSettings `break_rule` alapérték.
+- Végpont paraméterek: `year`, `month`, `employee_id?`, `site_id?`, `group=site|flat` (alap: `site`),
+  `split=none|per_site` (alap: `none`; `per_site` esetén ZIP-ben telephelyenként egy PDF).
 
 **Frontend**
 - Jelenlét oldal (`app/jelenlet/page.tsx`) export menüje: „Munkaidő-nyilvántartás (PDF)” a CSV/XLSX mellé,
@@ -218,6 +243,9 @@ https://rendszer.olmunkaido.hu - Minden jog fenntartva. ©
 - Pihenőnapon dolgozott 4:00 → RM 100% 04:00; munkanapon beosztáson túli 1:30 → RM 50% 01:30.
 - Vasárnapi műszak `sunday_bonus=True` → VP 50% = NYI; `False` → 00:00.
 - Hónap közbeni belépés (jún. 15.) → Munkanapok 12, keret 96:00, korábbi napok üresek.
+- Blokkolás-alapú: 07:52–16:31 blokkolva, szabály 30 perc / 4 óra, nem fizetett → Kezdet 07:52, Vég 16:31,
+  NYI 08:39 − 1:00 = 07:39; kézi 20 perc szünet mellett is 1:00 a levonás (max, nem összeg).
+- Két telephely → egy PDF, telephelyenként új oldal, fejlécben „Cég · Telephely”; `split=per_site` → ZIP 2 PDF-fel.
 - TAJ nélküli dolgozó nem kap oldalt; `payroll` modul kikapcsolva → 403 `license.module_off`.
 - PDF: oldalszám = dolgozók száma, minden oldalon „Munkavállaló aláírása”, dátumformátum `01.jún`.
 
