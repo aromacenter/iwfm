@@ -8,6 +8,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import TelemetryHistory from "@/components/TelemetryHistory";
 import SearchSelect from "@/components/SearchSelect";
+import PartnerPicker, { type PickerPartner } from "@/components/PartnerPicker";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -31,6 +32,8 @@ interface Machine {
   ip: string | null;
   geo: { city?: string; region?: string; country?: string; lat?: number; lon?: number; isp?: string } | null;
   location: { lat: number; lon: number; src: string | null; acc_m: number | null } | null;
+  partner_id: string | null;
+  partner_name: string | null;
 }
 interface SalesData {
   days: { day: string; orders: number; drinks_ok: number; pay: Record<string, number>; counter_total: number | null }[];
@@ -136,8 +139,12 @@ export default function VendingTelemetriaPage() {
     return t("vtel.nextPingLate", { n: late });
   };
   const [form, setForm] = useState<{
-    id: string | null; code: string; name: string; note: string; active: boolean;
+    id: string | null; code: string; name: string; note: string; active: boolean; partner_id: string;
   } | null>(null);
+  const [partners, setPartners] = useState<PickerPartner[]>([]);
+  useEffect(() => {
+    api.get<PickerPartner[]>("/api/partners").then(setPartners).catch(() => {});
+  }, []);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<{ machine: Machine; rows: TelemetryRow[] } | null>(null);
   const [sales, setSales] = useState<{ machine: Machine; days: number; data: SalesData } | null>(null);
@@ -231,6 +238,7 @@ export default function VendingTelemetriaPage() {
     const body = {
       machine_code: form.code.trim(), name: form.name.trim(),
       note: form.note.trim() || null, is_active: form.active,
+      partner_id: form.partner_id || null,
     };
     try {
       if (form.id) await api.put(`/api/saferpay/machines/${form.id}`, body);
@@ -468,7 +476,7 @@ export default function VendingTelemetriaPage() {
           <p className="text-sm text-slate-500">{t("vtel.subtitle")}</p>
         </div>
         <button
-          onClick={() => setForm({ id: null, code: "", name: "", note: "", active: true })}
+          onClick={() => setForm({ id: null, code: "", name: "", note: "", active: true, partner_id: "" })}
           className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
         >
           + {t("vtel.addMachine")}
@@ -543,7 +551,7 @@ export default function VendingTelemetriaPage() {
                     ♻️ {t("vtel.regenKey")}
                   </button>
                   <button
-                    onClick={() => setForm({ id: m.id, code: m.machine_code, name: m.name, note: m.note ?? "", active: m.is_active })}
+                    onClick={() => setForm({ id: m.id, code: m.machine_code, name: m.name, note: m.note ?? "", active: m.is_active, partner_id: m.partner_id ?? "" })}
                     className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100"
                   >
                     ✏️ {t("common.edit")}
@@ -675,6 +683,12 @@ export default function VendingTelemetriaPage() {
               {t("vtel.note")}
               <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
+            {/* 133. kör: a gép partnere → esedékességi lista / útvonal a telemetriából */}
+            <div className="text-sm">
+              <span className="block">{t("vtel.partner")}</span>
+              <PartnerPicker partners={partners} value={form.partner_id} onChange={(id) => setForm({ ...form, partner_id: id })} placeholder={t("vtel.partnerPh")} className="mt-1 w-full" />
+              <span className="mt-0.5 block text-xs text-slate-500">{t("vtel.partnerHint")}</span>
+            </div>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} className="h-4 w-4" />
               {t("vtel.activeLabel")}

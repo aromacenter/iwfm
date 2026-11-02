@@ -3096,6 +3096,14 @@ class DuePartnerOut(BaseModel):
     avg_daily_kg: float | None = None  # átlagos napi fogyás (kg)
     days_left: int | None = None  # várhatóan ennyi nap múlva fogy ki
     suggested_kg: float | None = None  # javasolt vinnivaló (30 napra)
+    # 133. kör — telemetria a partner kávégépeiről (ha van hozzákötve):
+    tel_machines: int = 0  # hány gép van a partnerhez kötve
+    tel_drinks_since: int | None = None  # italok az utolsó elszámolás óta (vagy 30 nap)
+    tel_daily_drinks: float | None = None  # átlagos napi ital (utolsó 14 nap)
+    tel_days_left: int | None = None  # adag-készlet / napi ital
+    tel_open_errors: int = 0  # nyitott gép-hibák (szervizlátogatás)
+    tel_offline: bool = False  # minden gép >24 órája nem jelentkezett
+    due_reasons: list[str] = []  # schedule | runs_out | tel_runs_out | tel_error | tel_offline
 
 
 @settlements_router.get("/due", response_model=list[DuePartnerOut])
@@ -3163,7 +3171,10 @@ async def due_settlements(
             return dt.replace(tzinfo=UTC)  # SQLite naiv datetime-ot ad vissza
         return dt
 
-    relevant = set(last_at) | set(stock_counts)
+    # 133. kör: telemetria a partnerhez kötött kávégépekről
+    tel = await _telemetry_by_partner(db, last_at, now)
+
+    relevant = set(last_at) | set(stock_counts) | set(tel)
     if not relevant:
         return []
     partners = (
@@ -3210,10 +3221,29 @@ async def due_settlements(
 
         runs_out_soon = days_left is not None and days_left <= 7
         due_by_schedule = next_due is None or next_due <= now.date()
-        if not due_by_schedule and not runs_out_soon:
+        t = tel.get(p.id)
+        tel_runs_out = bool(t and t["days_left"] is not None and t["days_left"] <= 7)
+        tel_error = bool(t and t["open_errors"] > 0)
+        tel_offline = bool(t and t["offline"])
+        reasons = [
+            r for r, ok in (
+                ("schedule", due_by_schedule), ("runs_out", runs_out_soon),
+                ("tel_runs_out", tel_runs_out), ("tel_error", tel_error), ("tel_offline", tel_offline),
+            ) if ok
+        ]
+        if not reasons:
             continue
+        if t and t["days_left"] is not None and (days_left is None or t["days_left"] < days_left):
+            days_left = t["days_left"]  # a telemetria pontosabb, mint az elszámolás-előzmény
         out.append(
             DuePartnerOut(
+                tel_machines=t["machines"] if t else 0,
+                tel_drinks_since=t["drinks_since"] if t else None,
+                tel_daily_drinks=t["daily"] if t else None,
+                tel_days_left=t["days_left"] if t else None,
+                tel_open_errors=t["open_errors"] if t else 0,
+                tel_offline=tel_offline,
+                due_reasons=reasons,
                 partner_id=str(p.id),
                 partner_code=p.partner_code,
                 name=p.name,
@@ -3231,15 +3261,86 @@ async def due_settlements(
                 phone_visit=phone,
             )
         )
-    # hamarosan kifogyók legelöl, aztán a sosem elszámoltak, majd a legrégebbiek
+    # gép-hibások legelöl, aztán a hamarosan kifogyók, a sosem elszámoltak, majd a legrégebbiek
     out.sort(
         key=lambda d: (
+            0 if d.tel_open_errors > 0 else 1,
             d.days_left if d.days_left is not None and d.days_left <= 7 else 999,
             d.days_since is not None,
             -(d.days_since or 0),
         )
     )
     return out
+
+
+async def _telemetry_by_partner(db: AsyncSession, last_at: dict, now: datetime) -> dict:
+    """Partnerenként a hozzákötött kávégépek telemetriája (133. kör):
+    gépek száma, italok az utolsó elszámolás óta (vagy 30 nap), napi átlag az
+    utolsó 14 napból, kifogyás-becslés az adag-készletből, nyitott hibák, offline."""
+    from app.models import VendingError, VendingMachine, VendingSalesDay
+
+    machines = (
+        await db.execute(
+            select(VendingMachine.id, VendingMachine.partner_id, VendingMachine.last_seen_at)
+            .where(VendingMachine.partner_id.is_not(None), VendingMachine.is_active.is_(True))
+        )
+    ).all()
+    if not machines:
+        return {}
+    by_partner: dict = {}
+    machine_partner: dict = {}
+    for mid, pid, seen in machines:
+        machine_partner[mid] = pid
+        entry = by_partner.setdefault(pid, {"machines": 0, "seen": [], "drinks_since": 0, "daily": None, "days_left": None, "open_errors": 0, "offline": False})
+        entry["machines"] += 1
+        entry["seen"].append(seen)
+
+    today = now.date()
+    window14 = today - timedelta(days=14)
+    window30 = today - timedelta(days=30)
+    sales = (
+        await db.execute(
+            select(VendingSalesDay.machine_id, VendingSalesDay.day, VendingSalesDay.drinks_ok)
+            .where(VendingSalesDay.machine_id.in_(list(machine_partner)), VendingSalesDay.day >= window30)
+        )
+    ).all()
+    daily_sum: dict = {}
+    for mid, day, ok in sales:
+        pid = machine_partner[mid]
+        last = last_at.get(pid)
+        since_day = (last.date() if last is not None else window30)
+        if day >= since_day:
+            by_partner[pid]["drinks_since"] += int(ok or 0)
+        if day >= window14:
+            daily_sum[pid] = daily_sum.get(pid, 0) + int(ok or 0)
+    # adag-készlet partnerenként (külső raktár: kg / adag-grammsúly)
+    stock_rows = (
+        await db.execute(
+            select(PartnerStock.partner_id, PartnerStock.quantity, Product.grams_per_portion)
+            .join(Product, Product.id == PartnerStock.product_id)
+            .where(PartnerStock.partner_id.in_(list(by_partner)))
+        )
+    ).all()
+    portions: dict = {}
+    for pid, qty, gpp in stock_rows:
+        portions[pid] = portions.get(pid, 0.0) + float(portions_from(qty, gpp))
+    for pid, entry in by_partner.items():
+        if pid in daily_sum and daily_sum[pid] > 0:
+            entry["daily"] = round(daily_sum[pid] / 14, 2)
+            if pid in portions:
+                entry["days_left"] = max(int(portions[pid] / entry["daily"]), 0)
+        seen = [s for s in entry.pop("seen") if s is not None]
+        entry["offline"] = not seen or all((now - (s if s.tzinfo else s.replace(tzinfo=UTC))).total_seconds() > 86400 for s in seen)
+    errors = (
+        await db.execute(
+            select(VendingError.machine_id, sa_func.count())
+            .where(VendingError.machine_id.in_(list(machine_partner)), VendingError.resolved_at.is_(None))
+            .group_by(VendingError.machine_id)
+        )
+    ).all()
+    for mid, cnt in errors:
+        by_partner[machine_partner[mid]]["open_errors"] += int(cnt)
+    return by_partner
 
 
 @settlements_router.get("/monthly-report")

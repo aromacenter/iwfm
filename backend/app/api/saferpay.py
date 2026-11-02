@@ -359,6 +359,22 @@ class MachineBody(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     note: str | None = Field(default=None, max_length=512)
     is_active: bool = True
+    partner_id: str | None = None  # 133. kör: a gép partnere (esedékesség / útvonal)
+
+
+async def _partner_uuid_or_422(db: AsyncSession, partner_id: str | None):
+    """Partner-azonosító ellenőrzése a gép-űrlapról (None = nincs partner)."""
+    if not partner_id:
+        return None
+    from app.models import Partner
+
+    try:
+        pid = uuid.UUID(partner_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_partner"})
+    if (await db.execute(select(Partner.id).where(Partner.id == pid))).first() is None:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_partner"})
+    return pid
 
 
 class MachineOut(BaseModel):
@@ -380,12 +396,16 @@ class MachineOut(BaseModel):
     ip: str | None = None
     geo: dict | None = None  # IP-alapú becslés
     location: dict | None = None  # az ügynök helymeghatározása (lat, lon, src, acc_m)
+    partner_id: str | None = None  # 133. kör
+    partner_name: str | None = None
 
 
 def _machine_out(
-    m: VendingMachine, paid_today: int = 0, revenue_today: float = 0.0, open_errors: int = 0
+    m: VendingMachine, paid_today: int = 0, revenue_today: float = 0.0, open_errors: int = 0,
+    partner_name: str | None = None,
 ) -> MachineOut:
     return MachineOut(
+        partner_id=str(m.partner_id) if m.partner_id else None, partner_name=partner_name,
         id=str(m.id), machine_code=m.machine_code, name=m.name, note=m.note,
         api_key=m.api_key, is_active=m.is_active, last_seen_at=m.last_seen_at,
         telemetry=m.telemetry, paid_today=paid_today, revenue_today=revenue_today,
@@ -533,8 +553,20 @@ async def list_machines(
             )
         ).all()
     }
+    from app.models import Partner
+
+    partner_ids = {m.partner_id for m in rows if m.partner_id}
+    partner_names = {
+        pid: name
+        for pid, name in (
+            await db.execute(select(Partner.id, Partner.name).where(Partner.id.in_(partner_ids)))
+        ).all()
+    } if partner_ids else {}
     return [
-        _machine_out(m, *(stats.get(m.machine_code, (0, 0.0))), open_errors.get(m.id, 0))
+        _machine_out(
+            m, *(stats.get(m.machine_code, (0, 0.0))), open_errors.get(m.id, 0),
+            partner_name=partner_names.get(m.partner_id) if m.partner_id else None,
+        )
         for m in rows
     ]
 
@@ -557,6 +589,7 @@ async def create_machine(
     if dupe is not None:
         raise HTTPException(status_code=409, detail={"code": "vending.code_taken"})
     m = VendingMachine(
+        partner_id=await _partner_uuid_or_422(db, body.partner_id),
         machine_code=body.machine_code.strip(), name=body.name.strip(),
         note=(body.note or "").strip() or None, is_active=body.is_active,
         api_key=uuid.uuid4().hex,  # ezt kell a gépre felvinni
@@ -594,6 +627,7 @@ async def update_machine(
     m.name = body.name.strip()
     m.note = (body.note or "").strip() or None
     m.is_active = body.is_active
+    m.partner_id = await _partner_uuid_or_422(db, body.partner_id)
     await record_audit(
         db, actor=actor, action="vending.machine_updated", entity_type="vending_machine",
         entity_id=m.machine_code, detail={"name": m.name, "active": m.is_active},

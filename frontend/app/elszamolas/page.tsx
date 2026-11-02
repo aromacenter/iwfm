@@ -130,6 +130,14 @@ interface DuePartner {
   suggested_kg: number | null;
   interval_weeks: number;
   next_due: string | null;
+  // 133. kör: telemetria a partner kávégépeiről
+  tel_machines?: number;
+  tel_drinks_since?: number | null;
+  tel_daily_drinks?: number | null;
+  tel_days_left?: number | null;
+  tel_open_errors?: number;
+  tel_offline?: boolean;
+  due_reasons?: string[];
 }
 
 const PAYMENTS = ["cash", "card", "transfer", "cod"] as const;
@@ -1928,6 +1936,24 @@ export default function ElszamolasPage() {
                         )}
                         {d.partner_code && <span className="ml-2 text-xs text-amber-600">{d.partner_code}</span>}
                         {d.city && <div className="text-xs font-normal text-amber-700">{d.city}</div>}
+                        {(d.tel_machines ?? 0) > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1 text-[11px] font-normal">
+                            {(d.tel_open_errors ?? 0) > 0 && (
+                              <span className="rounded bg-rose-100 px-1.5 py-0.5 font-semibold text-rose-800" title={t("route.telErrorHint")}>
+                                ⚠️ {t("route.telError", { count: d.tel_open_errors ?? 0 })}
+                              </span>
+                            )}
+                            {d.tel_offline && (
+                              <span className="rounded bg-slate-200 px-1.5 py-0.5 text-slate-700" title={t("route.telOfflineHint")}>📡 {t("route.telOffline")}</span>
+                            )}
+                            {d.tel_drinks_since != null && (
+                              <span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-800" title={t("route.telDrinksHint")}>
+                                ☕ {t("route.telDrinks", { count: d.tel_drinks_since })}
+                                {d.tel_daily_drinks != null && d.tel_daily_drinks > 0 && <> · {t("route.telDaily", { count: d.tel_daily_drinks })}</>}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-2 text-amber-800">
                         {d.last_settlement_at ? fmt(d.last_settlement_at) : t("cons.dueNever")}

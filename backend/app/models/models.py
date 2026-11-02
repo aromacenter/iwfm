@@ -987,6 +987,7 @@ class VendingMachine(Base):
     __tablename__ = "vending_machines"
     __table_args__ = (
         UniqueConstraint("machine_code", name="uq_vending_machine_code"),
+        Index("ix_vending_machines_partner", "partner_id"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -997,6 +998,10 @@ class VendingMachine(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     telemetry: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # utolsó pillanatkép
+    # 133. kör: melyik partnernél áll a gép → esedékességi lista / útvonal a telemetriából
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("partners.id", ondelete="SET NULL"), nullable=True
+    )
     # adminból sorba tett parancsok az ügynöknek (a következő pingnél elviszi)
     pending_commands: Mapped[list | None] = mapped_column(JSON, nullable=True)
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)  # a gép publikus IP-je (utolsó kérés)
