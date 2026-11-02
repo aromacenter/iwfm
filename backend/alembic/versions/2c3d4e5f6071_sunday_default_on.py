@@ -19,7 +19,9 @@ def upgrade() -> None:
     with op.batch_alter_table("work_rules_settings") as batch:
         batch.alter_column("sunday_bonus_default", server_default="1")
     # a néhány napja létrejött sorokon még a régi (kikapcsolt) alap volt
-    op.execute(sa.text("UPDATE work_rules_settings SET sunday_bonus_default = 1"))
+    # Postgres: boolean oszlopot csak boolean literállal (TRUE) lehet beállítani — a `= 1`
+    # ott "operator does not exist: boolean = integer" hibát ad; SQLite a TRUE-t is érti.
+    op.execute(sa.text("UPDATE work_rules_settings SET sunday_bonus_default = TRUE"))
 
 
 def downgrade() -> None:
