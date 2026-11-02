@@ -47,6 +47,39 @@ async def operator_status(db: AsyncSession = Depends(get_db)):
         "module_catalog": list(MODULES),
         "module_requires": {k: list(v) for k, v in MODULE_REQUIRES.items()},
         **(await _license_status_payload(db)),
+        **(await _health_signals(db)),
+    }
+
+
+async def _health_signals(db: AsyncSession) -> dict:
+    """141. kör: a pult egészség-pontszámához — aktivitás az utolsó 7 napból
+    (belépések, elszámolások, feladatok), utolsó aktivitás, nyitott hibajegyek."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func as sa_func
+
+    from app.models import AuditEvent, BugReport, Settlement, Task
+
+    since = datetime.now(UTC) - timedelta(days=7)
+
+    async def _count(stmt) -> int:
+        return int((await db.execute(stmt)).scalar_one() or 0)
+
+    logins = await _count(select(sa_func.count()).select_from(AuditEvent).where(AuditEvent.action == "auth.login", AuditEvent.created_at >= since))
+    settlements = await _count(select(sa_func.count()).select_from(Settlement).where(Settlement.created_at >= since))
+    tasks = await _count(select(sa_func.count()).select_from(Task).where(Task.created_at >= since))
+    last = (await db.execute(select(sa_func.max(AuditEvent.created_at)))).scalar_one()
+    open_bugs = await _count(
+        select(sa_func.count()).select_from(BugReport).where(
+            BugReport.kind == "bug", BugReport.status.in_(("new", "confirmed", "reopened", "needs_info", "answered"))
+        )
+    )
+    return {
+        "activity": {
+            "logins_7d": logins, "settlements_7d": settlements, "tasks_7d": tasks,
+            "last_activity_at": last.isoformat() if last else None,
+        },
+        "open_bugs": open_bugs,
     }
 
 
