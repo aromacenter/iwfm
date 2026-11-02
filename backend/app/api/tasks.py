@@ -604,41 +604,62 @@ async def _upsert_worksheet(
 
             logging.getLogger(__name__).warning("worksheet.signed event failed", exc_info=True)
 
-    # SAJÁT (tárgyi eszköz) gép konstrukciói elkészültek (ab1c33d7): minden
-    # képviselő/manager/admin Telegram-értesítést kap kattintható linkkel,
-    # hogy BELSŐ döntéssel elfogadhassa valamelyiket (ár-részletek nélkül).
+    # A szervizes kitöltötte a javítási konstrukciókat — ajánlat-fázis (ab1c33d7,
+    # 123. kör: MINDEN gépnél, nem csak a saját tárgyi gépnél — x-presso jegy
+    # b4838bbd). Három csatorna: személyes Telegram az admin/manager/képviselő
+    # dolgozóknak, a csoport-esemény (ha be van pipálva a Beállításokban), és az
+    # automatizálás-trigger. Saját gépnél belső döntés, ügyfél gépénél kiküldés.
     if (
         not had_repair_options
         and bool(ws.repair_options)
         and (ws.quote_status or "none") == "none"
-        and ws.asset_id is not None
     ):
         try:
+            from app.core.config import get_settings as _gsq
+            from app.services.wfm.automation import fire_event as _fire_q
+            from app.services.wfm.telegram import notify_event, send_personal
+
             _a = (
                 await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+            ).scalar_one_or_none() if ws.asset_id is not None else None
+            own = bool(_a is not None and _a.tangible and not _a.customer_owned)
+            link = f"{_gsq().frontend_origin.rstrip('/')}/feladatok"
+            _emp = (
+                await db.execute(select(Employee).where(Employee.id == task.employee_id))
             ).scalar_one_or_none()
-            if _a is not None and _a.tangible and not _a.customer_owned:
-                from app.core.config import get_settings as _gsq
-                from app.services.wfm.telegram import send_personal
-
-                link = f"{_gsq().frontend_origin.rstrip('/')}/feladatok"
-                deciders = (
-                    await db.execute(
-                        select(Employee)
-                        .join(User, User.id == Employee.user_id)
-                        .where(
-                            User.is_active.is_(True),
-                            User.role.in_(("admin", "manager", "uzletkoto")),
-                        )
+            ctx = {
+                "sorszam": ws.serial, "cim": task.title,
+                "dolgozo": f"{_emp.last_name} {_emp.first_name}" if _emp else "",
+                "ugyfel": ws.client_name or "",
+                "gep_nev": _a.name if _a else "", "gep_vonalkod": _a.barcode if _a else "",
+                "opciok": str(len(ws.repair_options or [])), "sajat_gep": "igen" if own else "nem",
+                "link": link,
+            }
+            deciders = (
+                await db.execute(
+                    select(Employee)
+                    .join(User, User.id == Employee.user_id)
+                    .where(
+                        User.is_active.is_(True),
+                        User.role.in_(("admin", "manager", "uzletkoto")),
                     )
-                ).scalars().all()
-                msg = (
-                    f"🔧 SAJÁT gép javítási konstrukciói elkészültek: {ws.serial} "
-                    f"— {_a.name} ({_a.barcode}). Válassz és fogadd el belső "
-                    f"döntéssel a Feladatok oldalon!\n🔗 {link}"
                 )
-                for d_emp in deciders:
-                    await send_personal(db, d_emp, msg)
+            ).scalars().all()
+            gep = f" — {_a.name} ({_a.barcode})" if _a else ""
+            if own:
+                msg = (
+                    f"🔧 SAJÁT gép javítási konstrukciói elkészültek: {ws.serial}{gep}. "
+                    f"Válassz és fogadd el belső döntéssel a Feladatok oldalon!\n🔗 {link}"
+                )
+            else:
+                msg = (
+                    f"🧾 Ajánlat elkészült: {ws.serial}{gep} · {len(ws.repair_options or [])} konstrukció "
+                    f"({ctx['dolgozo']}). Nézd át az árakat és küldd ki az ügyfélnek a Feladatok oldalon!\n🔗 {link}"
+                )
+            for d_emp in deciders:
+                await send_personal(db, d_emp, msg)
+            await notify_event(db, "worksheet.quote_ready", ctx)
+            _fire_q("worksheet.quote_ready", ctx)
         except Exception:
             import logging
 

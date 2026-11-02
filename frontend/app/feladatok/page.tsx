@@ -11,6 +11,7 @@ import PartnerInfo from "@/components/PartnerInfo";
 import ScanAssetButton from "@/components/ScanAssetButton";
 import SearchSelect from "@/components/SearchSelect";
 import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
+import { offerQrLabel } from "@/lib/qrLabel";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
 import type { EmployeeOut } from "@/lib/types";
@@ -340,13 +341,7 @@ export default function FeladatokPage() {
       if (createdAsset) {
         // frissítjük a gép-választót, és felkínáljuk a kávérendelős QR-címkét
         api.get<typeof assetOptions>("/api/assets").then(setAssetOptions).catch(() => {});
-        if (await confirm(t("tasks.newAssetQrConfirm", { barcode: createdAsset.barcode }))) {
-          try {
-            await downloadFile(`/api/assets/${createdAsset.id}/qr-label`, `QR-${createdAsset.barcode}.pdf`);
-          } catch (err) {
-            toast(errorMessage(err), "error");
-          }
-        }
+        await offerQrLabel(createdAsset, { t, confirm, toast }, errorMessage);
       }
     } catch (err) {
       setError(errorMessage(err));

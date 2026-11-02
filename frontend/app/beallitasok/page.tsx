@@ -2621,7 +2621,7 @@ export default function BeallitasokPage() {
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {["settlement.created", "settlement.signed", "ticket.created", "ticket.done",
                   "order.created", "partner.created", "counter.reported", "stock.low", "vending.error",
-                  "parts.low", "parts.request"].map((ev) => (
+                  "parts.low", "parts.request", "worksheet.quote_ready"].map((ev) => (
                   <label key={ev} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"

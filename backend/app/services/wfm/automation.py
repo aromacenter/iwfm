@@ -62,6 +62,10 @@ TRIGGERS: dict[str, list[str]] = {
     "worksheet.signed": [
         "sorszam", "cim", "dolgozo", "ugyfel", "gep_nev",
     ],
+    # 123. kör: a szervizes kitöltötte a javítási konstrukciókat (ajánlat-fázis)
+    "worksheet.quote_ready": [
+        "sorszam", "cim", "dolgozo", "ugyfel", "gep_nev", "gep_vonalkod", "opciok", "sajat_gep", "link",
+    ],
     "worksheet.quote_accepted": [
         "sorszam", "cim", "ugyfel", "opcio", "elfogado",
     ],

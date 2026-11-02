@@ -13,6 +13,7 @@ import CameraScanner, { cameraScanSupported } from "@/components/CameraScanner";
 import SearchSelect from "@/components/SearchSelect";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
+import { offerQrLabel } from "@/lib/qrLabel";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
@@ -374,14 +375,8 @@ export default function AtvetelPage() {
           toast(errorMessage(err), "error");
         }
       }
-      // új gépnél kávérendelős QR-címke felkínálása
-      if (createdAsset && (await confirm(t("tasks.newAssetQrConfirm", { barcode: createdAsset.barcode })))) {
-        try {
-          await downloadFile(`/api/assets/${createdAsset.id}/qr-label`, `QR-${createdAsset.barcode}.pdf`);
-        } catch (err) {
-          toast(errorMessage(err), "error");
-        }
-      }
+      // új gépnél a QR-matrica: Godex nyomtatási sor, ügynök nélkül letöltés (123. kör)
+      if (createdAsset) await offerQrLabel(createdAsset, { t, confirm, toast }, errorMessage);
       // minden adat megvan → a munkalap-űrlap kérdés NÉLKÜL nyílik (az átvevő
       // választja a szervizest), és ott nincs Mégse (653a4e59, újranyitva)
       if (canTasks) {

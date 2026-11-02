@@ -52,6 +52,7 @@ EVENT_TEMPLATES: dict[str, str] = {
     "stock.low": "⚠️ Alacsony készlet: {{partner_nev}} — {{termek_nev}}: {{keszlet_kg}} kg (küszöb: {{kuszob_kg}} kg)",
     "task.assigned": "📋 Feladat kiosztva: {{cim}} → {{dolgozo}} (határidő: {{hatarido}})",
     "worksheet.signed": "✍️ Munkalap aláírva: {{sorszam}} — {{cim}} ({{dolgozo}})",
+    "worksheet.quote_ready": "🧾 Ajánlat elkészült: {{sorszam}} — {{gep_nev}} · {{opciok}} konstrukció ({{dolgozo}}) · {{ugyfel}} · 🔗 {{link}}",
     "worksheet.quote_accepted": "🟢 Árajánlat elfogadva: {{sorszam}} — {{opcio}} ({{ugyfel}})",
     "worksheet.picked_up": "📦 Gép elhozva a szerelőtől: {{sorszam}} — {{gep_nev}} · az ügyfél értesítve, a gép átvehető",
     "worksheet.handed_over": "🤝 Gép átadva: {{sorszam}} — {{ugyfel}} · {{osszeg_netto}} Ft nettó ({{fizetes_mod}})",
