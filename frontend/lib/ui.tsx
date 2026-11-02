@@ -26,6 +26,7 @@ interface ConfirmState {
 }
 
 interface PromptOptions {
+  /** HTML input típus — "textarea" esetén többsoros szövegdoboz (Ctrl+Enter = küldés). */
   type?: string;
   placeholder?: string;
   initial?: string;
@@ -136,11 +137,25 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4">
           <form
             onSubmit={(e) => { e.preventDefault(); closePrompt(promptState.value.trim() || null); }}
-            className="relative w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl"
+            className={`relative w-full space-y-4 rounded-2xl bg-white p-6 shadow-xl ${promptState.type === "textarea" ? "max-w-lg" : "max-w-sm"}`}
           >
             <button type="button" onClick={() => closePrompt(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
             <label className="block text-sm text-slate-700">
               {promptState.text}
+              {promptState.type === "textarea" ? (
+                <>
+                  <textarea
+                    autoFocus
+                    rows={6}
+                    placeholder={promptState.placeholder}
+                    value={promptState.value}
+                    onChange={(e) => setPromptState((s) => (s ? { ...s, value: e.target.value } : s))}
+                    onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); closePrompt(promptState.value.trim() || null); } }}
+                    className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm leading-relaxed"
+                  />
+                  <span className="mt-1 block text-[11px] text-slate-400">Ctrl+Enter = küldés</span>
+                </>
+              ) : (
               <input
                 autoFocus
                 type={promptState.type ?? "text"}
@@ -149,6 +164,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
                 onChange={(e) => setPromptState((s) => (s ? { ...s, value: e.target.value } : s))}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               />
+              )}
             </label>
             <div className="flex justify-end gap-2">
               <button

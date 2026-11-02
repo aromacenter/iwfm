@@ -83,7 +83,7 @@ export default function HibakPage() {
   // Kérdés / üzenet a bejelentőnek (114. kör): a jegy visszadobható needs_info-val,
   // a bejelentőnél felugró ablak jelzi.
   async function ask(b: Bug) {
-    const text = await prompt(t("bugs.askPrompt"), { type: "text" });
+    const text = await prompt(t("bugs.askPrompt"), { type: "textarea" });
     if (text === null || !text.trim()) return;
     const bounce = ["new", "confirmed", "reopened", "answered"].includes(b.status)
       ? await confirm(t("bugs.askBounce"))
@@ -110,13 +110,13 @@ export default function HibakPage() {
   }
 
   async function resolve(b: Bug) {
-    const note = await prompt(t("bugs.resolveNotePrompt"), { initial: b.resolution_note ?? "" });
+    const note = await prompt(t("bugs.resolveNotePrompt"), { initial: b.resolution_note ?? "", type: "textarea" });
     if (note === null) return;
     await patch(b.id, { status: "resolved", resolution_note: note || null });
   }
   // ötlet lezárása (kész / elvetve) rövid üzenettel a beküldőnek
   async function closeIdea(b: Bug, status: "done" | "declined") {
-    const note = await prompt(t(status === "done" ? "bugs.ideaDonePrompt" : "bugs.ideaDeclinePrompt"), { initial: b.resolution_note ?? "" });
+    const note = await prompt(t(status === "done" ? "bugs.ideaDonePrompt" : "bugs.ideaDeclinePrompt"), { initial: b.resolution_note ?? "", type: "textarea" });
     if (note === null) return;
     await patch(b.id, { status, resolution_note: note || null });
   }
