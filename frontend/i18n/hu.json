@@ -1352,11 +1352,17 @@
     "choose": "Válassz…",
     "from": "Kezdete",
     "to": "Vége",
+    "atTime": "Időpont",
+    "atTimeArrive": "Ekkor érkezem (a műszak kezdete helyett).",
+    "atTimeLeave": "Ekkor megyek el (a műszak vége előtt).",
+    "minutes": "Ennyi perc (opcionális)",
     "types": {
       "annual": "Szabadság",
       "sick": "Betegszabadság",
       "unpaid": "Fizetés nélküli",
-      "other": "Egyéb távollét"
+      "other": "Egyéb távollét",
+      "late_arrival": "Később jövök",
+      "early_leave": "Korábban megyek"
     },
     "statuses": {
       "pending": "Függőben",
@@ -2193,6 +2199,9 @@
     "intake.contact_required": "A telefonszám és az e-mail cím megadása kötelező az átvételhez.",
     "worksheet.too_many_photos": "Legfeljebb 16 fotó csatolható egy munkalaphoz.",
     "worksheet.photo_required": "A feladat nem zárható le: a munkalaphoz még fotót kell csatolni (fotó-kötelezettség).",
+    "timeoff.partial_one_day": "A „később jövök / korábban megyek” kérelem egy napra szól.",
+    "timeoff.time_required": "Add meg az időpontot.",
+    "timeoff.bad_time": "Hibás időpont (ÓÓ:PP).",
     "tools.serial_exists": "Ezzel a gyári számmal már van szerszám.",
     "tools.not_found": "A szerszám nem található.",
     "tools.bad_employee": "Ismeretlen dolgozó.",

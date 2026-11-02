@@ -21,7 +21,33 @@ from app.services.wfm.email_service import load_smtp_config, send_many
 
 router = APIRouter()
 
-VALID_TYPES = ("annual", "sick", "unpaid", "other")
+VALID_TYPES = ("annual", "sick", "unpaid", "other", "late_arrival", "early_leave")
+# 138. kör: részleges napi kérelmek — NEM távollét (bér, nyilvántartás, beosztás nem kezeli annak)
+PARTIAL_TYPES = ("late_arrival", "early_leave")
+
+
+def _check_time(value: str | None) -> str | None:
+    if value is None:
+        return None
+    v = value.strip()
+    try:
+        hh, mm = v.split(":")
+        if not (0 <= int(hh) <= 23 and 0 <= int(mm) <= 59):
+            raise ValueError
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "timeoff.bad_time"})
+    return f"{int(hh):02d}:{int(mm):02d}"
+
+
+def validate_partial(type_: str, start: date, end: date, at_time: str | None) -> str | None:
+    """Részleges kérelemnél: egy nap + kötelező időpont; teljes napnál nincs időpont."""
+    if type_ in PARTIAL_TYPES:
+        if start != end:
+            raise HTTPException(status_code=422, detail={"code": "timeoff.partial_one_day"})
+        if not at_time:
+            raise HTTPException(status_code=422, detail={"code": "timeoff.time_required"})
+        return _check_time(at_time)
+    return None
 
 
 class TimeOffCreate(BaseModel):
@@ -33,6 +59,9 @@ class TimeOffCreate(BaseModel):
     # 2e9c7b96: a vezető közvetlenül rögzít (szabadnap / betegszabadság, előre
     # vagy utólag) — azonnal jóváhagyott, nem vár döntésre.
     auto_approve: bool = False
+    # 138. kör: részleges napi kérelem időpontja + perc
+    at_time: str | None = Field(default=None, max_length=5)
+    minutes: int | None = Field(default=None, ge=1, le=720)
 
 
 class DecideBody(BaseModel):
@@ -52,6 +81,8 @@ class TimeOffOut(BaseModel):
     decided_at: datetime | None
     decision_note: str | None
     created_at: datetime
+    at_time: str | None = None
+    minutes: int | None = None
 
 
 def to_out(t: TimeOffRequest, employee_name: str | None = None) -> TimeOffOut:
@@ -62,6 +93,8 @@ def to_out(t: TimeOffRequest, employee_name: str | None = None) -> TimeOffOut:
         type=t.type,
         start_date=t.start_date,
         end_date=t.end_date,
+        at_time=t.at_time,
+        minutes=t.minutes,
         reason=t.reason,
         status=t.status,
         decided_at=t.decided_at,
@@ -78,15 +111,20 @@ def validate_range(type_: str, start: date, end: date) -> None:
 
 
 async def ensure_no_overlap(
-    db: AsyncSession, employee_id: uuid.UUID, start: date, end: date, *, exclude_id: uuid.UUID | None = None
+    db: AsyncSession, employee_id: uuid.UUID, start: date, end: date, *, exclude_id: uuid.UUID | None = None,
+    type_: str | None = None,
 ) -> None:
-    """P2: ugyanarra az időszakra ne legyen másik függő/jóváhagyott kérelem."""
+    """P2: ugyanarra az időszakra ne legyen másik függő/jóváhagyott kérelem.
+    138. kör: részleges kérelem (később jövök / korábban megyek) csak teljes napos
+    távolléttel ütközik — egy napon lehet később jövök ÉS korábban megyek is."""
     query = select(TimeOffRequest.id).where(
         TimeOffRequest.employee_id == employee_id,
         TimeOffRequest.status.in_(("pending", "approved")),
         TimeOffRequest.start_date <= end,
         TimeOffRequest.end_date >= start,
     )
+    if type_ in PARTIAL_TYPES:
+        query = query.where(TimeOffRequest.type.notin_(PARTIAL_TYPES))
     if exclude_id is not None:
         query = query.where(TimeOffRequest.id != exclude_id)
     if (await db.execute(query)).first() is not None:
@@ -147,6 +185,7 @@ async def create_time_off(
     actor: User = Depends(require_perm("timeoff")),
 ):
     validate_range(body.type, body.start_date, body.end_date)
+    at_time = validate_partial(body.type, body.start_date, body.end_date, body.at_time)
     try:
         emp_id = uuid.UUID(body.employee_id)
     except ValueError:
@@ -156,7 +195,7 @@ async def create_time_off(
     ).scalar_one_or_none()
     if emp is None:
         raise HTTPException(status_code=422, detail={"code": "timeoff.bad_employee"})
-    await ensure_no_overlap(db, emp_id, body.start_date, body.end_date)
+    await ensure_no_overlap(db, emp_id, body.start_date, body.end_date, type_=body.type)
 
     req = TimeOffRequest(
         employee_id=emp_id,
@@ -164,6 +203,8 @@ async def create_time_off(
         start_date=body.start_date,
         end_date=body.end_date,
         reason=body.reason,
+        at_time=at_time,
+        minutes=body.minutes if body.type in PARTIAL_TYPES else None,
     )
     db.add(req)
     await db.flush()

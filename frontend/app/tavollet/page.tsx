@@ -16,7 +16,8 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-slate-100 text-slate-500",
 };
 
-const TYPES = ["annual", "sick", "unpaid", "other"] as const;
+const TYPES = ["annual", "sick", "unpaid", "other", "late_arrival", "early_leave"] as const;
+const PARTIAL = ["late_arrival", "early_leave"];
 const STATUSES = ["pending", "approved", "rejected", "cancelled"] as const;
 
 export default function TavolletPage() {
@@ -24,7 +25,7 @@ export default function TavolletPage() {
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
   const [filter, setFilter] = useState<string>("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ employee_id: "", type: "annual", start_date: "", end_date: "", reason: "" });
+  const [form, setForm] = useState({ employee_id: "", type: "annual", start_date: "", end_date: "", reason: "", at_time: "", minutes: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { t } = useT();
@@ -56,9 +57,9 @@ export default function TavolletPage() {
     setBusy(true);
     setError(null);
     try {
-      await api.post("/api/time-off", { ...form, reason: form.reason || null });
+      await api.post("/api/time-off", { ...form, reason: form.reason || null, end_date: PARTIAL.includes(form.type) ? form.start_date : form.end_date, at_time: PARTIAL.includes(form.type) ? form.at_time : null, minutes: PARTIAL.includes(form.type) && form.minutes ? Number(form.minutes) : null });
       setShowForm(false);
-      setForm({ employee_id: "", type: "annual", start_date: "", end_date: "", reason: "" });
+      setForm({ employee_id: "", type: "annual", start_date: "", end_date: "", reason: "", at_time: "", minutes: "" });
       load();
     } catch (err) {
       setError(errorMessage(err));
@@ -101,7 +102,7 @@ export default function TavolletPage() {
               <tr key={item.id} className="border-b border-slate-100 last:border-0">
                 <td className="px-4 py-3 font-medium">{item.employee_name ?? "—"}</td>
                 <td className="px-4 py-3">{t(`leave.types.${item.type}`)}</td>
-                <td className="px-4 py-3">{item.start_date} → {item.end_date}</td>
+                <td className="px-4 py-3">{item.at_time ? <>{item.start_date} · 🕒 {item.at_time}{item.minutes ? ` (${item.minutes} p)` : ""}</> : <>{item.start_date} → {item.end_date}</>}</td>
                 <td className="px-4 py-3 text-slate-500">{item.reason ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[item.status]}`}>
@@ -159,11 +160,26 @@ export default function TavolletPage() {
                 {t("leave.from")}
                 <input required type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
+              {!PARTIAL.includes(form.type) && (
               <label className="block text-sm">
                 {t("leave.to")}
                 <input required type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
+              )}
             </div>
+            {(form.type === "late_arrival" || form.type === "early_leave") && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block text-sm">
+                  {t("leave.atTime")}
+                  <input required type="time" value={form.at_time} onChange={(e) => setForm({ ...form, at_time: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                  <span className="mt-0.5 block text-xs text-slate-500">{form.type === "late_arrival" ? t("leave.atTimeArrive") : t("leave.atTimeLeave")}</span>
+                </label>
+                <label className="block text-sm">
+                  {t("leave.minutes")}
+                  <input type="number" min={1} max={720} value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                </label>
+              </div>
+            )}
             <label className="block text-sm">
               {t("leave.reason")}
               <input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

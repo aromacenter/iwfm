@@ -247,7 +247,7 @@ class TimeOffRequest(Base):
     __tablename__ = "time_off_requests"
     __table_args__ = (
         CheckConstraint(
-            "type IN ('annual','sick','unpaid','other')", name="ck_timeoff_type"
+            "type IN ('annual','sick','unpaid','other','late_arrival','early_leave')", name="ck_timeoff_type"
         ),
         CheckConstraint(
             "status IN ('pending','approved','rejected','cancelled')", name="ck_timeoff_status"
@@ -264,6 +264,9 @@ class TimeOffRequest(Base):
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # 138. kör — részleges napi kérelem (később jövök / korábban megyek):
+    at_time: Mapped[str | None] = mapped_column(String(5), nullable=True)  # "HH:MM"
+    minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)  # mennyi időről van szó
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     decided_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True

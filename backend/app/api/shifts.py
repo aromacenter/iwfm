@@ -183,6 +183,7 @@ async def _approved_time_off(
         await db.execute(
             select(TimeOffRequest).where(
                 TimeOffRequest.status == "approved",
+                TimeOffRequest.type.notin_(("late_arrival", "early_leave")),  # 138. kör: nem távollét
                 TimeOffRequest.start_date <= sunday,
                 TimeOffRequest.end_date >= monday,
             )

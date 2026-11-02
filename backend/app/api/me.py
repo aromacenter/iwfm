@@ -41,6 +41,8 @@ class MyTimeOffCreate(BaseModel):
     start_date: date
     end_date: date
     reason: str | None = Field(default=None, max_length=512)
+    at_time: str | None = Field(default=None, max_length=5)  # 138. kör
+    minutes: int | None = Field(default=None, ge=1, le=720)
 
 
 @router.get("/profile")
@@ -137,14 +139,19 @@ async def request_time_off(
     emp: Employee = Depends(get_own_employee),
     user: User = Depends(get_current_user),
 ):
+    from app.api.timeoff import PARTIAL_TYPES, validate_partial
+
     validate_range(body.type, body.start_date, body.end_date)
-    await ensure_no_overlap(db, emp.id, body.start_date, body.end_date)
+    at_time = validate_partial(body.type, body.start_date, body.end_date, body.at_time)
+    await ensure_no_overlap(db, emp.id, body.start_date, body.end_date, type_=body.type)
     req = TimeOffRequest(
         employee_id=emp.id,
         type=body.type,
         start_date=body.start_date,
         end_date=body.end_date,
         reason=body.reason,
+        at_time=at_time,
+        minutes=body.minutes if body.type in PARTIAL_TYPES else None,
     )
     db.add(req)
     await db.flush()

@@ -96,7 +96,7 @@ export interface TimeOffOut {
   id: string;
   employee_id: string;
   employee_name: string | null;
-  type: "annual" | "sick" | "unpaid" | "other";
+  type: "annual" | "sick" | "unpaid" | "other" | "late_arrival" | "early_leave";
   start_date: string;
   end_date: string;
   reason: string | null;
@@ -104,6 +104,8 @@ export interface TimeOffOut {
   decided_at: string | null;
   decision_note: string | null;
   created_at: string;
+  at_time?: string | null; // 138. kör: részleges napi kérelem időpontja
+  minutes?: number | null;
 }
 
 export interface EntryOut {

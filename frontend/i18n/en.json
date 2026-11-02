@@ -1352,11 +1352,17 @@
     "choose": "Choose…",
     "from": "From",
     "to": "To",
+    "atTime": "Time",
+    "atTimeArrive": "I arrive at this time (instead of the shift start).",
+    "atTimeLeave": "I leave at this time (before the shift end).",
+    "minutes": "Minutes (optional)",
     "types": {
       "annual": "Annual leave",
       "sick": "Sick leave",
       "unpaid": "Unpaid leave",
-      "other": "Other absence"
+      "other": "Other absence",
+      "late_arrival": "Arriving late",
+      "early_leave": "Leaving early"
     },
     "statuses": {
       "pending": "Pending",
@@ -2193,6 +2199,9 @@
     "intake.contact_required": "Phone number and email are required for intake.",
     "worksheet.too_many_photos": "At most 16 photos can be attached to a worksheet.",
     "worksheet.photo_required": "The task cannot be closed: photos must be attached to the worksheet first (photo requirement).",
+    "timeoff.partial_one_day": "An arriving-late / leaving-early request is for a single day.",
+    "timeoff.time_required": "Please give the time.",
+    "timeoff.bad_time": "Invalid time (HH:MM).",
     "tools.serial_exists": "A tool with this serial already exists.",
     "tools.not_found": "Tool not found.",
     "tools.bad_employee": "Unknown employee.",

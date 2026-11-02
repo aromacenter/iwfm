@@ -74,6 +74,7 @@ async def export_payroll(
             await db.execute(
                 select(TimeOffRequest).where(
                     TimeOffRequest.status == "approved",
+                    TimeOffRequest.type.notin_(("late_arrival", "early_leave")),  # 138. kör: nem távollét
                     TimeOffRequest.start_date <= period_end,
                     TimeOffRequest.end_date >= period_start,
                 )
@@ -220,6 +221,7 @@ async def timesheet_pdf(
     ))).scalars().all()
     leaves = (await db.execute(select(TimeOffRequest).where(
         TimeOffRequest.status == "approved",
+        TimeOffRequest.type.notin_(("late_arrival", "early_leave")),  # 138. kör: nem távollét
         TimeOffRequest.start_date <= last, TimeOffRequest.end_date >= first,
     ))).scalars().all()
 
