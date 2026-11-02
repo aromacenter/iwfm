@@ -39,13 +39,17 @@ MONTH_ABBR = ("jan", "feb", "márc", "ápr", "máj", "jún", "júl", "aug", "sze
 
 # Távollét-típus → lapon megjelenő kód. paid: NYI = napi keret és beleszámít a
 # nyilvántartott időbe; hours: az összesítőben van óra-oszlopa (KN-nek nincs).
+# Könyvelői egyeztetés (2026-11-02): SZ szabadság, BSZ betegszabadság (a táppénzt
+# nem kell külön jelölni, azt a bérprogram számolja), TVL igazolt távollét,
+# FN fizetés nélküli. A KN (kiküldetési nap) nem távollét — kódként a cég
+# felveheti a Beállításokban, ha használja.
 DEFAULT_ABSENCE_CODES: dict[str, dict] = {
     "annual": {"code": "SZ", "paid": True, "hours": True},
     "sick": {"code": "BSZ", "paid": True, "hours": True},
     "other": {"code": "TVL", "paid": False, "hours": True},
-    "unpaid": {"code": "KN", "paid": False, "hours": False},
+    "unpaid": {"code": "FN", "paid": False, "hours": False},
 }
-ABSENCE_ORDER = ("SZ", "BSZ", "TVL", "KN")
+ABSENCE_ORDER = ("SZ", "BSZ", "TVL", "FN")
 
 
 @dataclass(frozen=True)
@@ -70,7 +74,10 @@ class BreakRule:
 @dataclass(frozen=True)
 class CompanyWorkRules:
     break_rule: BreakRule = BreakRule()
-    sunday_bonus_default: bool = False
+    # Könyvelő: a vasárnapi 50% minden normál munkarendű dolgozónak jár, munkakörtől
+    # függetlenül — kivétel a munkaidőkeretes, pihenőnapra is beosztható dolgozó
+    # (nála az Employee.sunday_bonus = False kapcsolja ki).
+    sunday_bonus_default: bool = True
     group_by_site: bool = True
     absence_codes: dict[str, dict] = field(default_factory=lambda: dict(DEFAULT_ABSENCE_CODES))
 
@@ -88,10 +95,13 @@ class DayRow:
     work_start: time | None = None
     work_end: time | None = None
     work_minutes: int = 0         # NYI
-    code: str | None = None       # SZ / BSZ / TVL / KN
-    rm100: int = 0
-    rm50: int = 0
-    vp50: int = 0
+    code: str | None = None       # SZ / BSZ / TVL / FN
+    rm100: int = 0                # rendkívüli munka heti pihenőnapon / munkaszüneti napon (143. §)
+    rm50: int = 0                 # rendkívüli munka munkanapon (143. §)
+    vp50: int = 0                 # vasárnapi pótlék (140. § (1))
+    up100: int = 0                # munkaszüneti napi pótlék (140. § (2)) — ünnepnapi munka
+    ep15: int = 0                 # éjszakai pótlék (142. §): 22–06 óra, ha > 1 óra és nem műszakpótlékos
+    mp30: int = 0                 # műszakpótlék (141. §): 18–06 óra, műszakpótlékra jogosultnál
 
     @property
     def label(self) -> str:
@@ -116,11 +126,15 @@ class MonthSheet:
     rows: list[DayRow]
     workdays: int
     rest_days: int
+    holidays: int                # munkaszüneti napok a hónapban (külön sor, nem pihenőnap)
     frame_minutes: int           # Munkaidő = Havi órák
     recorded_minutes: int        # Nyilvántartott idő
     rm100: int
     rm50: int
     vp50: int
+    up100: int
+    ep15: int
+    mp30: int
     absences: dict[str, tuple[int, int | None]]   # kód → (nap, perc vagy None)
     rules: LaborRules
 
@@ -151,6 +165,24 @@ def _span_minutes(start: time, end: time) -> int:
     if e <= s:
         e += 24 * 60  # éjfélen átnyúló műszak
     return e - s
+
+
+def _overlap_minutes(start: datetime, end: datetime, from_h: int, to_h: int) -> int:
+    """Hány perc esik a [start, end) munkaidőből a from_h–to_h (éjfélen átnyúló)
+    sávba — pl. 22–06 (éjszakai) vagy 18–06 (műszak)."""
+    if end <= start:
+        return 0
+    total = 0
+    # az ablakot naponként vizsgáljuk a kezdőnap előtti naptól a befejezés napjáig
+    day = (start - timedelta(days=1)).date()
+    while day <= end.date():
+        w_start = datetime.combine(day, time(from_h, 0), tzinfo=start.tzinfo)
+        w_end = datetime.combine(day + timedelta(days=1), time(to_h, 0), tzinfo=start.tzinfo)
+        lo, hi = max(start, w_start), min(end, w_end)
+        if hi > lo:
+            total += int((hi - lo).total_seconds() // 60)
+        day += timedelta(days=1)
+    return total
 
 
 def _is_workday(d: date) -> bool:
@@ -223,8 +255,9 @@ def build_month_sheet(
         return None
 
     rows: list[DayRow] = []
-    workdays = rest_days = 0
-    rm100 = rm50 = vp50 = recorded = 0
+    workdays = rest_days = holidays = 0
+    rm100 = rm50 = vp50 = up100 = ep15 = mp30 = recorded = 0
+    shift_bonus = bool(getattr(employee, "shift_bonus", False))
     abs_days: dict[str, int] = {}
     abs_hours_flag: dict[str, bool] = {}
     for code_cfg in company.absence_codes.values():
@@ -244,6 +277,8 @@ def build_month_sheet(
         row.rest_day = not row.workday
         if row.workday:
             workdays += 1
+        elif row.holiday:
+            holidays += 1   # munkaszüneti nap: külön számláló (könyvelő: nem sima pihenőnap)
         else:
             rest_days += 1
 
@@ -272,14 +307,22 @@ def build_month_sheet(
             continue
 
         # --- tényleges munkaidő ---
+        spans: list[tuple[datetime, datetime]] = []  # az éjszakai / műszak sávhoz
         if schedule_based:
             row.work_start, row.work_end = row.sched_start, row.sched_end
             row.work_minutes = row.sched_minutes
+            for sh in day_shifts:
+                st = datetime.combine(d, sh.start_time, tzinfo=TZ)
+                en = datetime.combine(d, sh.end_time, tzinfo=TZ)
+                if en <= st:
+                    en += timedelta(days=1)
+                spans.append((st, en))
         else:
             day_entries = sorted(entries_by_day.get(d, []), key=lambda e: e.clock_in)
             if day_entries:
                 row.work_start = day_entries[0].clock_in.astimezone(TZ).time().replace(second=0, microsecond=0)
                 row.work_end = day_entries[-1].clock_out.astimezone(TZ).time().replace(second=0, microsecond=0)
+                spans = [(e.clock_in.astimezone(TZ), e.clock_out.astimezone(TZ)) for e in day_entries]
                 raw = sum(
                     int((e.clock_out - e.clock_in).total_seconds() // 60) for e in day_entries
                 )
@@ -294,17 +337,31 @@ def build_month_sheet(
         # --- pótlékok (csak tényleges munkára) ---
         if row.work_minutes > 0:
             if row.holiday:
-                row.rm100 = row.work_minutes
+                # munkaszüneti nap: 100% ünnepnapi pótlék minden dolgozott órára (140. § (2)),
+                # a beosztáson felüli / beosztás nélküli rész rendkívüli is (143. § (3))
+                row.up100 = row.work_minutes
+                row.rm100 = max(row.work_minutes - row.sched_minutes, 0) if day_shifts else row.work_minutes
             elif row.workday:
                 base = row.sched_minutes if day_shifts else daily_minutes
                 row.rm50 = max(row.work_minutes - base, 0)
             else:  # heti pihenőnap
                 row.rm100 = max(row.work_minutes - row.sched_minutes, 0) if day_shifts else row.work_minutes
+            # vasárnapi pótlék a munkaszüneti napra eső vasárnapon is jár (könyvelő: mindkettő)
             if d.weekday() == 6 and sunday_bonus:
                 row.vp50 = row.work_minutes
+            # éjszakai / műszakpótlék a tényleges sávok alapján
+            if spans:
+                night = sum(_overlap_minutes(st, en, rules.night_from_hour, rules.night_to_hour) for st, en in spans)
+                if shift_bonus:
+                    row.mp30 = sum(_overlap_minutes(st, en, 18, 6) for st, en in spans)
+                elif night > rules.night_min_minutes:
+                    row.ep15 = night
         rm100 += row.rm100
         rm50 += row.rm50
         vp50 += row.vp50
+        up100 += row.up100
+        ep15 += row.ep15
+        mp30 += row.mp30
         rows.append(row)
         d += timedelta(days=1)
 
@@ -330,11 +387,15 @@ def build_month_sheet(
         rows=rows,
         workdays=workdays,
         rest_days=rest_days,
+        holidays=holidays,
         frame_minutes=workdays * daily_minutes,
         recorded_minutes=recorded,
         rm100=rm100,
         rm50=rm50,
         vp50=vp50,
+        up100=up100,
+        ep15=ep15,
+        mp30=mp30,
         absences=absences,
         rules=rules_for(last, overrides),
     )
@@ -358,7 +419,7 @@ def company_rules_from_row(row) -> CompanyWorkRules:
             per_hours=int(row.break_per_hours) if row.break_per_hours else None,
             paid=bool(row.break_paid),
         ),
-        sunday_bonus_default=bool(row.sunday_bonus_default),
+        sunday_bonus_default=bool(row.sunday_bonus_default) if row.sunday_bonus_default is not None else True,
         group_by_site=bool(row.group_by_site if row.group_by_site is not None else True),
         absence_codes=codes,
     )

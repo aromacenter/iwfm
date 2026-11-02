@@ -1531,6 +1531,12 @@ async def apply_contract_lines(
         )
     ).scalars().all()
     rent_total = sum(a.rent_fee or 0 for a in assets)
+    # 124. kör: ha a szerződésen van fix bérleti díj, az számít (gépcsere nem változtatja)
+    from app.services.wfm.contracts import active_contract as _active_c
+
+    _c = await _active_c(db, partner.id)
+    if _c is not None and (_c.rent_fee or 0) > 0:
+        rent_total = float(_c.rent_fee)
 
     # Adag-alapú minimum: gépek összege, partner-felülírással
     min_portions = sum(a.contract_min_portions or 0 for a in assets)

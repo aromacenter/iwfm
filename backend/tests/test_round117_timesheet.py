@@ -98,7 +98,8 @@ def test_sample_month_frame_and_hours():
     sat = sheet.rows[5]
     assert sat.weekday_abbr == "szo" and sat.rest_day and sat.work_minutes == 0 and sat.sched_start is None
     assert sheet.rm100 == sheet.rm50 == sheet.vp50 == 0
-    assert sheet.absences["SZ"] == (0, 0) and sheet.absences["KN"] == (0, None)
+    assert sheet.absences["SZ"] == (0, 0) and sheet.absences["FN"] == (0, None)
+    assert sheet.holidays == 0 and sheet.up100 == sheet.ep15 == sheet.mp30 == 0
 
 
 def test_two_leave_days_sample():
@@ -115,9 +116,9 @@ def test_two_leave_days_sample():
 def test_unpaid_leave_has_days_but_no_hours():
     leaves = [Lv("unpaid", date(2026, 6, 10), date(2026, 6, 10))]
     sheet = build_month_sheet(Emp(), year=2026, month=6, shifts=_june_shifts(), entries=[], leaves=leaves)
-    assert sheet.absences["KN"] == (1, None)
+    assert sheet.absences["FN"] == (1, None)
     assert fmt_hm(sheet.recorded_minutes) == "168:00"
-    assert sheet.rows[9].code == "KN" and sheet.rows[9].work_minutes == 0
+    assert sheet.rows[9].code == "FN" and sheet.rows[9].work_minutes == 0
 
 
 def test_attendance_based_break_rule_company_and_manual_max():
@@ -163,9 +164,12 @@ def test_supplements_rm50_rm100_vp50():
     assert fmt_hm(sheet.rows[5].rm100) == "04:00"
     assert fmt_hm(sheet.rows[6].rm100) == "03:00" and fmt_hm(sheet.rows[6].vp50) == "03:00"
     assert fmt_hm(sheet.rm100) == "07:00" and fmt_hm(sheet.vp50) == "03:00"
-    # vasárnapi pótlék nélkül (céges alap: nem jár)
+    # céges alap (könyvelő): a vasárnapi pótlék mindenkinek jár → None is jár
     sheet2 = build_month_sheet(Emp(payroll_source="attendance"), year=2026, month=6, shifts=shifts, entries=entries, leaves=[])
-    assert sheet2.vp50 == 0
+    assert fmt_hm(sheet2.vp50) == "03:00"
+    # munkaidőkeretes, pihenőnapra beosztható dolgozó: kikapcsolva
+    sheet3 = build_month_sheet(Emp(payroll_source="attendance", sunday_bonus=False), year=2026, month=6, shifts=shifts, entries=entries, leaves=[])
+    assert sheet3.vp50 == 0
 
 
 def test_holiday_work_is_rm100_and_rest_day():
@@ -177,8 +181,12 @@ def test_holiday_work_is_rm100_and_rest_day():
         entries=[En(_local(hol, 8, 0), _local(hol, 12, 0))], leaves=[],
     )
     row = sheet.rows[19]
-    assert row.holiday and row.rest_day and fmt_hm(row.rm100) == "04:00"
-    assert sheet.workdays == 20 and sheet.rest_days == 11  # 21 hétköznap − ünnep − áthelyezett; +hétvégék
+    # beosztott munka munkaszüneti napon: ÜP 100% minden órára, rendkívüli (RM 100%) nincs
+    assert row.holiday and row.rest_day and fmt_hm(row.up100) == "04:00" and row.rm100 == 0
+    assert sheet.workdays == 20 and sheet.holidays == 1 and sheet.rest_days == 10  # hétvégék + áthelyezett pihenőnap
+    # beosztás nélküli ünnepnapi munka: ÜP 100% ÉS rendkívüli 100% is
+    sheet2 = build_month_sheet(emp, year=2026, month=8, shifts=[], entries=[En(_local(hol, 8, 0), _local(hol, 12, 0))], leaves=[])
+    assert fmt_hm(sheet2.rows[19].up100) == "04:00" and fmt_hm(sheet2.rows[19].rm100) == "04:00"
 
 
 def test_mid_month_hire_and_termination():
@@ -326,7 +334,8 @@ async def test_work_rules_settings_and_below_law(client, admin):
     assert res.status_code == 200
     body = res.json()
     assert body["law"]["sunday_pct"] == 50 and body["law"]["break_steps"] == [[360, 20], [540, 25]]
-    assert body["law_override_count"] == 0 and body["absence_codes"]["unpaid"]["code"] == "KN"
+    assert body["law_override_count"] == 0 and body["absence_codes"]["unpaid"]["code"] == "FN"
+    assert body["sunday_bonus_default"] is True  # könyvelő: alapból jár
 
     # 4 óránként 30 perc: szigorúbb a törvénynél → OK
     res = await client.put("/api/settings/work-rules", json={
@@ -389,3 +398,35 @@ async def test_employee_new_fields_roundtrip(client, admin):
     assert res.json()["sunday_bonus"] is None and res.json()["break_rule"] is None and res.json()["shift_bonus"] is True
     res = await client.patch(f"/api/employees/{emp_id}", json={"break_rule": {"minutes": 999, "per_hours": 4}}, headers=adm)
     assert res.status_code == 422
+
+
+def test_easter_sunday_gets_both_bonuses():
+    # 2026-04-05 húsvétvasárnap: munkaszüneti nap vasárnapon → ÜP 100% ÉS VP 50% is jár (könyvelő)
+    emp = Emp(payroll_source="attendance")
+    d = date(2026, 4, 5)
+    sheet = build_month_sheet(emp, year=2026, month=4, shifts=[], entries=[En(_local(d, 9, 0), _local(d, 13, 0))], leaves=[])
+    row = sheet.rows[4]
+    assert row.holiday and fmt_hm(row.up100) == "04:00" and fmt_hm(row.vp50) == "04:00" and fmt_hm(row.rm100) == "04:00"
+    assert sheet.holidays >= 2  # húsvétvasárnap + húsvéthétfő (+ nagypéntek)
+
+
+def test_night_and_shift_bonus_columns():
+    # 20:00–02:00 blokkolás: 4 óra esik 22–06 közé → ÉP 15% (>1 óra); műszakpótlékosnál MP 30% a 18–06 sáv
+    emp = Emp(payroll_source="attendance")
+    d = date(2026, 6, 2)
+    entries = [En(_local(d, 20, 0), _local(d + timedelta(days=1), 2, 0))]
+    sheet = build_month_sheet(emp, year=2026, month=6, shifts=[], entries=entries, leaves=[])
+    row = sheet.rows[1]
+    assert fmt_hm(row.ep15) == "04:00" and row.mp30 == 0 and fmt_hm(sheet.ep15) == "04:00"
+    # rövid éjszakai rész (< 1 óra): nincs ÉP
+    short = build_month_sheet(emp, year=2026, month=6, shifts=[], entries=[En(_local(d, 16, 0), _local(d, 22, 50))], leaves=[])
+    assert short.rows[1].ep15 == 0
+    # műszakpótlékos: MP a 18–06 sávra, ÉP nem
+    emp_shift = Emp(payroll_source="attendance")
+    emp_shift.shift_bonus = True  # type: ignore[attr-defined]
+    sh = build_month_sheet(emp_shift, year=2026, month=6, shifts=[], entries=entries, leaves=[])
+    assert fmt_hm(sh.rows[1].mp30) == "06:00" and sh.rows[1].ep15 == 0
+    # beosztás-alapú dolgozónál a beosztás sávja számít
+    sched = Emp(payroll_source="schedule")
+    sh2 = build_month_sheet(sched, year=2026, month=6, shifts=[Sh(d, time(22, 0), time(6, 0))], entries=[], leaves=[])
+    assert fmt_hm(sh2.rows[1].ep15) == "08:00" and fmt_hm(sh2.rows[1].work_minutes) == "08:00"

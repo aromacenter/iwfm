@@ -27,17 +27,20 @@ MUTED = colors.HexColor("#475569")
 
 # napi tábla oszlopai: (fejléc 1. sor, fejléc 2. sor, szélesség pt, igazítás)
 COLUMNS = (
-    ("Dátum", "", 36, "L"),
-    ("Nap", "", 22, "L"),
-    ("Beosztás", "Kezdet", 34, "C"),
-    ("", "Vég", 34, "C"),
-    ("", "BI", 36, "C"),
-    ("Munkaidő", "Kezdet", 34, "C"),
-    ("", "Vég", 34, "C"),
-    ("", "NYI", 36, "C"),
-    ("RM", "100%", 36, "C"),
-    ("RM", "50%", 36, "C"),
-    ("VP", "50%", 36, "C"),
+    ("Dátum", "", 34, "L"),
+    ("Nap", "", 20, "L"),
+    ("Beosztás", "Kezdet", 31, "C"),
+    ("", "Vég", 31, "C"),
+    ("", "BI", 33, "C"),
+    ("Munkaidő", "Kezdet", 31, "C"),
+    ("", "Vég", 31, "C"),
+    ("", "NYI", 33, "C"),
+    ("RM", "100%", 32, "C"),
+    ("RM", "50%", 32, "C"),
+    ("VP", "50%", 32, "C"),
+    ("ÜP", "100%", 32, "C"),   # munkaszüneti napi pótlék (könyvelő: külön jelölendő)
+    ("ÉP", "15%", 32, "C"),    # éjszakai pótlék
+    ("MP", "30%", 32, "C"),    # műszakpótlék
 )
 ROW_H = 11.25
 
@@ -75,7 +78,7 @@ def _draw_sheet(c, sheet: MonthSheet, *, company: str, page_no: int, generated: 
 
     # ── összesítő blokkok ──
     box_top = y
-    box_h = 96
+    box_h = 104
     col_w = (RIGHT - LEFT) / 3
     c.setStrokeColor(LINE)
     c.setLineWidth(0.5)
@@ -90,6 +93,7 @@ def _draw_sheet(c, sheet: MonthSheet, *, company: str, page_no: int, generated: 
         ("Nyilvántartott idő", fmt_hm(sheet.recorded_minutes)),
         ("Munkaidő", fmt_hm(sheet.frame_minutes)),
         ("Pihenőnapok", str(sheet.rest_days)),
+        ("Munkaszüneti napok", str(sheet.holidays)),
         ("Havi órák", fmt_hm(sheet.frame_minutes)),
         ("Munkanapok", str(sheet.workdays)),
     )
@@ -102,7 +106,10 @@ def _draw_sheet(c, sheet: MonthSheet, *, company: str, page_no: int, generated: 
     bx = LEFT + col_w + 6
     _draw_text(c, bx, by, "Bérpótlékok", 7, bold=True)
     ly = by - 13
-    for label, value in (("RM 100%", fmt_hm(sheet.rm100)), ("RM 50%", fmt_hm(sheet.rm50)), ("VP 50%", fmt_hm(sheet.vp50))):
+    for label, value in (
+        ("RM 100%", fmt_hm(sheet.rm100)), ("RM 50%", fmt_hm(sheet.rm50)), ("VP 50%", fmt_hm(sheet.vp50)),
+        ("ÜP 100%", fmt_hm(sheet.up100)), ("ÉP 15%", fmt_hm(sheet.ep15)), ("MP 30%", fmt_hm(sheet.mp30)),
+    ):
         _draw_text(c, bx + 24, ly, label, 7)
         _draw_text(c, LEFT + 2 * col_w - 8, ly, value, 7, align="R")
         ly -= 12
@@ -134,7 +141,7 @@ def _draw_sheet(c, sheet: MonthSheet, *, company: str, page_no: int, generated: 
     _draw_text(c, xs[1], y, "Nap", 7, bold=True)
     _draw_text(c, (xs[2] + xs[5]) / 2, y, "Beosztás", 7, bold=True, align="C")
     _draw_text(c, (xs[5] + xs[8]) / 2, y, "Munkaidő", 7, bold=True, align="C")
-    for idx in (8, 9, 10):
+    for idx in (8, 9, 10, 11, 12, 13):
         _draw_text(c, xs[idx] + COLUMNS[idx][2] / 2, y, COLUMNS[idx][0], 7, bold=True, align="C")
     y -= 9
     for idx, (_h1, h2, w, _a) in enumerate(COLUMNS):
@@ -150,7 +157,7 @@ def _draw_sheet(c, sheet: MonthSheet, *, company: str, page_no: int, generated: 
             _draw_text(c, xs[0], y, row.label, 7, color=MUTED)
             _draw_text(c, xs[1], y, row.weekday_abbr, 7, color=MUTED)
         else:
-            muted = row.rest_day
+            muted = row.rest_day and not row.holiday
             color = MUTED if muted else INK
             _draw_text(c, xs[0], y, row.label, 7, color=color)
             _draw_text(c, xs[1], y, row.weekday_abbr, 7, color=color)
@@ -169,6 +176,9 @@ def _draw_sheet(c, sheet: MonthSheet, *, company: str, page_no: int, generated: 
                 fmt_hm(row.rm100) if row.rm100 else "",
                 fmt_hm(row.rm50) if row.rm50 else "",
                 fmt_hm(row.vp50) if row.vp50 else "",
+                fmt_hm(row.up100) if row.up100 else "",
+                fmt_hm(row.ep15) if row.ep15 else "",
+                fmt_hm(row.mp30) if row.mp30 else "",
             ]
             for i, val in enumerate(vals, start=2):
                 if val:

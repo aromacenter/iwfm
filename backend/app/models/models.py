@@ -2813,6 +2813,19 @@ class PartnerContract(Base):
         Boolean, nullable=False, default=False, server_default="0"
     )
     billing_day: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1–28
+    # 124. kör (x-presso jegy 72cfa180): a fix bérleti díj a SZERZŐDÉSÉ, nem a
+    # gépé — gépcserénél nem változik. Nettó Ft/hó, ez kerül a számlára. Ha
+    # nincs megadva, a régi gépenkénti Asset.rent_fee összege él tovább.
+    rent_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 126. kör: az automata elszámolás ciklusa és időpontja — monthly (billing_day) |
+    # weekly | biweekly | four_weekly (billing_weekday: 0=hétfő … 6=vasárnap);
+    # billing_time "ÓÓ:PP" helyi (Budapest) idő, amikor a számla elkészül.
+    billing_cycle: Mapped[str] = mapped_column(String(16), nullable=False, default="monthly", server_default="monthly")
+    billing_weekday: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    billing_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    # Automata elszámolás a ciklus szerint (True) — vagy kézi: ekkor az esedékes
+    # kézi elszámolásra kerül rá a szerződés fix díja (126. kör, user-kérés).
+    auto_settlement: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
     # Azonos adószámú partnerek (üzemelési címek) gépei EGY számlára — a
     # tétel-megjegyzésben a címmel; False = címenként (partnerenként) külön.
     rental_merge_company: Mapped[bool] = mapped_column(
@@ -3309,9 +3322,10 @@ class WorkRulesSettings(Base):
     break_paid: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
-    # Vasárnapi pótlék alapértelmezése (a dolgozó felülírhatja).
+    # Vasárnapi pótlék alapértelmezése (a dolgozó felülírhatja). Könyvelő
+    # (2026-11-02): minden normál munkarendű dolgozónak jár → alapból BE.
     sunday_bonus_default: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="0"
+        Boolean, nullable=False, default=True, server_default="1"
     )
     # A havi PDF telephelyenként csoportosítva készüljön-e.
     group_by_site: Mapped[bool] = mapped_column(

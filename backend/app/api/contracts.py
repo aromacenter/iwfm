@@ -82,6 +82,14 @@ class ContractBody(BaseModel):
     fixed_rental: bool = False
     billing_day: int | None = Field(default=None, ge=1, le=28)
     rental_merge_company: bool = False
+    # A szerződés fix bérleti díja (nettó Ft/hó) — 124. kör: ez kerül a számlára,
+    # a gépek rent_fee mezője csak a régi, gépenkénti konstrukció tartaléka.
+    rent_fee: float | None = Field(default=None, ge=0)
+    # 126. kör: automata elszámolás ciklusa + hét napja + pontos időpont (helyi idő)
+    billing_cycle: str = Field(default="monthly", pattern="^(monthly|weekly|biweekly|four_weekly)$")
+    billing_weekday: int | None = Field(default=None, ge=0, le=6)
+    billing_time: str | None = Field(default=None, pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$")
+    auto_settlement: bool = True
     # Telefonos elszámolás: az útvonal-tervezés kihagyja a partnert;
     # visit_weeks megadásával ritkább (karbantartó) látogatás mégis ütemeződik.
     phone_settlement: bool = False
@@ -154,6 +162,11 @@ class ContractOut(BaseModel):
     fixed_rental: bool = False
     billing_day: int | None = None
     rental_merge_company: bool = False
+    rent_fee: float | None = None
+    billing_cycle: str = "monthly"
+    billing_weekday: int | None = None
+    billing_time: str | None = None
+    auto_settlement: bool = True
     rental_last_billed: str | None = None
     phone_settlement: bool = False
     visit_weeks: int | None = None
@@ -207,6 +220,11 @@ def _out(c: PartnerContract, product_name: str | None = None) -> ContractOut:
         fixed_rental=c.fixed_rental,
         billing_day=c.billing_day,
         rental_merge_company=c.rental_merge_company,
+        rent_fee=c.rent_fee,
+        billing_cycle=c.billing_cycle or "monthly",
+        billing_weekday=c.billing_weekday,
+        billing_time=c.billing_time,
+        auto_settlement=bool(c.auto_settlement) if c.auto_settlement is not None else True,
         rental_last_billed=c.rental_last_billed.isoformat() if c.rental_last_billed else None,
         phone_settlement=c.phone_settlement,
         visit_weeks=c.visit_weeks,
@@ -337,6 +355,11 @@ class ContractRowOut(BaseModel):
     fixed_rental: bool = False
     billing_day: int | None = None
     rental_merge_company: bool = False
+    rent_fee: float | None = None
+    billing_cycle: str = "monthly"
+    billing_weekday: int | None = None
+    billing_time: str | None = None
+    auto_settlement: bool = True
     note: str | None
     machines: list[dict]
 
@@ -443,6 +466,11 @@ async def contracts_overview(
             no_minimum=c.no_minimum,
             fixed_rental=c.fixed_rental, billing_day=c.billing_day,
             rental_merge_company=c.rental_merge_company,
+            rent_fee=c.rent_fee,
+            billing_cycle=c.billing_cycle or "monthly",
+            billing_weekday=c.billing_weekday,
+            billing_time=c.billing_time,
+            auto_settlement=bool(c.auto_settlement) if c.auto_settlement is not None else True,
             note=c.note,
             machines=machines_by_partner.get(p.id, []),
         )

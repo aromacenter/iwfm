@@ -69,15 +69,53 @@ async def _overdue_ref(db: AsyncSession, partner_id: uuid.UUID):
     return None
 
 
-async def run_fixed_rental_billing(db: AsyncSession) -> int:
+CYCLE_DAYS = {"weekly": 7, "biweekly": 14, "four_weekly": 28}
+CYCLE_LABEL = {"monthly": "hó", "weekly": "hét", "biweekly": "2 hét", "four_weekly": "4 hét"}
+
+
+def _local_now(now: datetime | None) -> datetime:
+    from zoneinfo import ZoneInfo
+
+    now = now or datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    return now.astimezone(ZoneInfo("Europe/Budapest"))
+
+
+def _is_due(c: PartnerContract, today: date, now_local: datetime) -> bool:
+    """Esedékes-e MA a szerződés automata elszámolása (126. kör): ciklus szerint
+    (havonta a billing_day napján / hetente, 2 vagy 4 hetente a billing_weekday
+    napján), és csak a billing_time (helyi) időpont után."""
+    if c.billing_time:
+        try:
+            hh, mm = (int(x) for x in c.billing_time.split(":"))
+            if (now_local.hour, now_local.minute) < (hh, mm):
+                return False
+        except ValueError:
+            pass
+    cycle = c.billing_cycle or "monthly"
+    last = c.rental_last_billed
+    if cycle == "monthly":
+        eff_day = _effective_billing_day(int(c.billing_day or 1), today)
+        if today.day < eff_day:
+            return False
+        return not (last and last.year == today.year and last.month == today.month)
+    period = CYCLE_DAYS.get(cycle, 7)
+    if last is None:
+        return today.weekday() == int(c.billing_weekday if c.billing_weekday is not None else 0)
+    return (today - last).days >= period
+
+
+async def run_fixed_rental_billing(db: AsyncSession, now: datetime | None = None) -> int:
     """Esedékes fix bérleti szerződések számlázása. Visszaadja, hány
     elszámolás készült (a háttérhurok hívja, best-effort)."""
-    today = date.today()
+    now_local = _local_now(now)
+    today = now_local.date()
     contracts = (
         await db.execute(
             select(PartnerContract).where(
                 PartnerContract.fixed_rental.is_(True),
-                PartnerContract.billing_day.is_not(None),
+                PartnerContract.auto_settlement.is_(True),
                 PartnerContract.valid_from <= today,
                 (PartnerContract.valid_to.is_(None))
                 | (PartnerContract.valid_to >= today),
@@ -87,7 +125,7 @@ async def run_fixed_rental_billing(db: AsyncSession) -> int:
     created = 0
     for c in contracts:
         try:
-            if await _bill_contract(db, c, today):
+            if await _bill_contract(db, c, today, now_local):
                 created += 1
         except Exception:
             logger.exception("fixed rental billing failed for contract %s", c.id)
@@ -95,15 +133,13 @@ async def run_fixed_rental_billing(db: AsyncSession) -> int:
     return created
 
 
-async def _bill_contract(db: AsyncSession, c: PartnerContract, today: date) -> bool:
-    eff_day = _effective_billing_day(int(c.billing_day or 1), today)
-    if today.day < eff_day:
-        return False  # még nem esedékes ebben a hónapban
-    if c.rental_last_billed and (
-        c.rental_last_billed.year == today.year
-        and c.rental_last_billed.month == today.month
-    ):
-        return False  # ebben a hónapban már lefutott
+async def _bill_contract(
+    db: AsyncSession, c: PartnerContract, today: date, now_local: datetime | None = None
+) -> bool:
+    if (c.billing_cycle or "monthly") == "monthly" and c.billing_day is None:
+        return False
+    if not _is_due(c, today, now_local or _local_now(None)):
+        return False
 
     partner = (
         await db.execute(select(Partner).where(Partner.id == c.partner_id))
@@ -152,14 +188,20 @@ async def _bill_contract(db: AsyncSession, c: PartnerContract, today: date) -> b
                 .order_by(Asset.barcode)
             )
         ).scalars().all()
-        assets.extend((a, p) for a in rows if (a.rent_fee or 0) > 0)
-    if not assets:
+        assets.extend((a, p) for a in rows if (a.rent_fee or 0) > 0 or (c.rent_fee or 0) > 0)
+    contract_fee = float(c.rent_fee or 0)
+    if not assets and contract_fee <= 0:
         logger.info("fixed rental: nincs díjas gép (%s) — kihagyva", partner.name)
         c.rental_last_billed = today  # ne próbálkozzon percenként egész hónapban
         await db.commit()
         return False
 
-    month_label = f"{today.year}. {today.month:02d}. hó"
+    cycle = c.billing_cycle or "monthly"
+    if cycle == "monthly":
+        month_label = f"{today.year}. {today.month:02d}. hó"
+    else:
+        period_start = today - timedelta(days=CYCLE_DAYS.get(cycle, 7) - 1)
+        month_label = f"{period_start.isoformat()} – {today.isoformat()} ({CYCLE_LABEL.get(cycle, cycle)})"
     settlement = Settlement(
         partner_id=partner.id,
         settled_by_user_id=None,
@@ -173,6 +215,27 @@ async def _bill_contract(db: AsyncSession, c: PartnerContract, today: date) -> b
     await db.flush()
 
     total_net = 0.0
+    if contract_fee > 0:
+        # 124. kör: a díj a SZERZŐDÉSÉ — egy tétel, a gépek felsorolva a megnevezésben,
+        # gépcsere nem változtatja az összeget
+        machines = ", ".join(
+            " ".join(x for x in (a.manufacturer, a.name) if x) + f" ({a.barcode})"
+            for a, p in assets if p.id == partner.id
+        )
+        line_name = f"{RENTAL_LINE_NAME} — {month_label}" + (f" — {machines}" if machines else "")
+        db.add(SettlementLine(
+            settlement_id=settlement.id,
+            product_id=None,
+            product_name=line_name[:256],
+            previous_qty=0.0, physical_qty=0.0, consumed_qty=0.0,
+            portions=1.0,  # 1 hónap
+            price_per_portion=contract_fee,
+            vat_percent=27,
+            amount_net=_money(contract_fee),
+        ))
+        total_net += contract_fee
+        # összevont társ-címek: azoknak nincs saját fix szerződése — a gépenkénti díjuk marad
+        assets = [(a, p) for a, p in assets if p.id != partner.id and (a.rent_fee or 0) > 0]
     for a, p in assets:
         site = f" ({p.name})" if (c.rental_merge_company and len(partners) > 1) else ""
         brand = " ".join(x for x in (a.manufacturer, a.name) if x)

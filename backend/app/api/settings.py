@@ -1889,7 +1889,7 @@ class WorkRulesBody(BaseModel):
     break_minutes: int | None = Field(default=None, ge=0, le=240)
     break_per_hours: int | None = Field(default=None, ge=1, le=12)
     break_paid: bool = False
-    sunday_bonus_default: bool = False
+    sunday_bonus_default: bool = True
     group_by_site: bool = True
     # {"annual": {"code": "SZ", "paid": true, "hours": true}, …}
     absence_codes: dict[str, dict] | None = None

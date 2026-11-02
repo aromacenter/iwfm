@@ -41,6 +41,7 @@ interface ContractRow {
   no_minimum: boolean;
   fixed_rental?: boolean;
   billing_day?: number | null;
+  rent_fee?: number | null;
   rental_merge_company?: boolean;
   note: string | null;
   machines: MachineRow[];
@@ -127,6 +128,7 @@ export default function SzerzodesekPage() {
     // Fix bérleti díjas konstrukció (8e843400): a listán is látszik a mód
     if (c.fixed_rental) {
       parts.push(t("contracts.sumFixedRental", { day: c.billing_day ?? "?" }));
+      if (c.rent_fee != null) parts.push(t("contracts.sumContractRent", { fee: nf.format(c.rent_fee) }));
       parts.push(
         c.rental_merge_company
           ? t("contracts.sumRentalMerged")

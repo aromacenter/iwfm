@@ -48,8 +48,10 @@ def public_holidays(year: int) -> set[date]:
         date(year, 1, 1),    # újév
         date(year, 3, 15),   # nemzeti ünnep
         easter - timedelta(days=2),   # nagypéntek
+        easter,                       # húsvétvasárnap (Mt. 102. §: munkaszüneti nap — vasárnapon is ünnepnapi pótlék jár)
         easter + timedelta(days=1),   # húsvéthétfő
         date(year, 5, 1),    # munka ünnepe
+        easter + timedelta(days=49),  # pünkösdvasárnap (Mt. 102. §)
         easter + timedelta(days=50),  # pünkösdhétfő
         date(year, 8, 20),   # államalapítás
         date(year, 10, 23),  # nemzeti ünnep

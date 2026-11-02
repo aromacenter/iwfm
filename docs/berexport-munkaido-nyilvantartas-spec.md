@@ -109,6 +109,7 @@ Dátum  Nap | Beosztás            | Munkaidő            | RM    RM    VP
 | Munkaidő Kezdet / Vég | `08:00` `16:20` | a tényleges munkaidő; beosztás-alapú bérszámfejtésnél = beosztás, blokkolás-alapúnál a blokkolt be/ki |
 | NYI | `08:00` | **nyilvántartott idő** = (vég − kezdet) − szünet; távollétnél a napi keretóra (8:00) |
 | RM 100% / RM 50% / VP 50% | üres | csak ha van érték; `Ó:PP` |
+| ÜP 100% / ÉP 15% / MP 30% | nincs a mintában (125. kör, könyvelői egyeztetés) | munkaszüneti napi, éjszakai, műszakpótlék órái; csak ha van érték |
 | Távollét-nap | Munkaidő Kezdet helyén **`SZ`**, Vég üres, NYI `08:00` | a kód a Munkaidő-oszlopcsoport első cellájába kerül, a Beosztás-oszlopok a beosztott műszakot mutatják |
 | Pihenőnap (szo, v) | csak dátum és nap, minden más üres | ha nincs beosztás és nincs blokkolás |
 | Ünnepnap | nincs a mintában (2026. június ünnepmentes) | ugyanúgy üres, mint a pihenőnap; a Munkanapok számából kimarad |
@@ -205,13 +206,27 @@ https://rendszer.olmunkaido.hu - Minden jog fenntartva. ©
    **cégnév mindenképpen** szerepel, **a telephellyel együtt** (fejlécben: „X-Presso Coffee Kft. · Budapest, Pláza”).
 9. **TAJ nélküli külsősök**: **úgy, mint eddig**, kimaradnak a nyilvántartásból (ugyanaz a szűrő, mint a CSV-nél).
 
-**Még nyitott (a könyvelő válaszára vár):**
+**A könyvelő válaszai (2026-11-02) — a user kérésére ÁLTALÁNOSÍTVA beépítve (minden elem használható, kapcsolható):**
 
-1. **TVL** pontos jelentése (igazolt távollét? táppénz?) és **KN** (igazolatlan? fizetés nélküli?).
-2. Jár-e **vasárnapi pótlék** (VP 50%) a dolgozóknak; kinek (üzlet vs. szerviz vs. iroda).
-3. Kell-e **éjszakai / műszakpótlék** oszlop (a minta nem mutat ilyet; alapból nem tesszük ki).
-4. **Betegszabadság → táppénz** átmenet (15. munkanap után): külön kódot kapjon (TP) vagy TVL-be menjen?
-5. **Ünnepnap**: a Pihenőnapok közé számít, vagy külön sor „Munkaszüneti nap”?
+1. **TVL** = igazolt távollét, **KN** = kiküldetési nap (egyik sem távollét-kód a cégnél). Alap-leképezés mostantól:
+   annual → SZ, sick → BSZ, other → TVL (igazolt távollét, óra-oszloppal), unpaid → **FN** (fizetés nélküli, óra nélkül).
+   A KN-t (kiküldetés) a cég a Beállításokban saját kódként felveheti; a kódok szabadon átírhatók.
+2. **Vasárnapi pótlék (50%)**: minden normál munkarendű dolgozónak jár, munkakörtől függetlenül; kivétel a
+   munkaidőkeretben dolgozó, pihenőnapra is beosztható dolgozó. → céges alapértelmezés **BE**, a dolgozó-kartonon
+   dolgozónként kikapcsolható (`Employee.sunday_bonus = False`). Migráció a meglévő sorokat is bekapcsolja.
+3. **Éjszakai / műszakpótlék**: ha jár, külön jelölendő. → két új oszlop a lapon: **ÉP 15%** (22–06 óra közötti
+   munka, ha > 1 óra, Mt. 142. §) és **MP 30%** (18–06 óra, a műszakpótlékra jogosult dolgozónál, Mt. 141. §;
+   nála ÉP nem jár). Az éjszakai sáv a blokkolásból vagy a beosztásból számolódik.
+4. **Betegszabadság → táppénz**: nem kell külön jelölni, a bérprogram és a könyvelő számolja. → csak BSZ, nincs TP kód.
+5. **Ünnepnap**: nem sima pihenőnap, 100% pótlék jár, külön jelölendő; vasárnapra eső ünnepnél (pl. húsvétvasárnap)
+   a vasárnapi 50% ÉS az ünnepi 100% is jár. → új **ÜP 100%** oszlop (munkaszüneti napi pótlék) minden ünnepnapi
+   dolgozott órára, a beosztás nélküli / beosztáson felüli rész emellett RM 100% (rendkívüli); vasárnapon a VP 50%
+   is. Az összesítőben külön sor: **Munkaszüneti napok** (nem a Pihenőnapok között). A húsvétvasárnap és a
+   pünkösdvasárnap felkerült a munkaszüneti napok közé (Mt. 102. §).
+6. **Blokkolás**: a valós be- és kilépés mutatása, túlmunka elszámolása → a blokkolás-alapú NYI a nyers
+   blokkolásból megy, az RM 50% a beosztáson (vagy a napi kereten) felüli időre.
+7. **Egy PDF a cégre, telephelyenként elkülönítve** → ez az alapértelmezés (`group_by_site`), a telephelyenkénti
+   ZIP opció megmarad.
 
 ## 7. Megvalósítási terv
 
@@ -410,3 +425,6 @@ unpaid→KN óra nélkül), vasárnapi pótlék alapértelmezése (most: nem já
 (most: nincs átmenet), ünnepnap (most: pihenőnapnak számít, a rajta végzett munka RM 100%).
 
 **Később:** a CSV/XLSX bérexport átállítása ugyanerre a kalkulációs rétegre (most még a régi összesítő logika).
+
+**125. kör (2026-11-02):** a könyvelő válaszai általánosítva beépítve (6. pont): FN kód, vasárnapi pótlék alapból,
+ÜP/ÉP/MP oszlopok, Munkaszüneti napok sor, húsvét- és pünkösdvasárnap ünnepként. Nyitott kérdés nem maradt.
