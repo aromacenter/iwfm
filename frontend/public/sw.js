@@ -9,12 +9,29 @@
  *  - minden más GET (oldalak): network-first, offline tartalék-cache-sel.
  */
 
-const CACHE = "iwfm-v3";
+const CACHE = "iwfm-v4";
 const API_CACHE = "iwfm-api-v1";
+
+// Offline tartalék-oldal + a szerelői/üzletkötői alaplapok előgyorsítótára
+// (130. kör): az oldalak best-effort kerülnek be (bejelentkezett sütivel), hogy
+// hálózat nélkül akkor is megnyíljanak, ha ezen az eszközön még nem jártak ott.
+const OFFLINE_PAGE = "/offline.html";
+const PRECACHE_PAGES = ["/", "/feladataim", "/elszamolas", "/jelenlet"];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
-  event.waitUntil(caches.open(CACHE));
+  event.waitUntil(
+    caches.open(CACHE).then(async (cache) => {
+      await cache.add(OFFLINE_PAGE).catch(() => {});
+      await Promise.all(
+        PRECACHE_PAGES.map((p) =>
+          fetch(p, { credentials: "include" })
+            .then((res) => (res.ok ? cache.put(p, res) : null))
+            .catch(() => null)
+        )
+      );
+    })
+  );
 });
 
 self.addEventListener("activate", (event) => {
@@ -97,6 +114,15 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE).then((c) => c.put(event.request, copy));
         return res;
       })
-      .catch(() => caches.match(event.request))
+      .catch(async () => {
+        const hit = await caches.match(event.request);
+        if (hit) return hit;
+        // Navigáció hálózat és mentett példány nélkül: offline tartalék-oldal
+        if (event.request.mode === "navigate") {
+          const page = await caches.match(OFFLINE_PAGE);
+          if (page) return page;
+        }
+        return Response.error();
+      })
   );
 });

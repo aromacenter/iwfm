@@ -550,7 +550,15 @@
     "dropped": "An offline settlement could not be submitted ({name}): {reason}",
     "wsPending": "{count} worksheet(s) queued offline — tap to retry",
     "wsDropped": "Worksheet {title} was rejected by the server: {reason}",
-    "wsFlushed": "{count} offline worksheet(s) submitted."
+    "wsFlushed": "{count} offline worksheet(s) submitted.",
+    "banner": "You are offline — pages show the last seen data, saves are queued and sent when you are back online.",
+    "pendingTotal": "{count} pending offline action(s) waiting to be sent.",
+    "pendingTotalShort": "({count} pending)",
+    "syncNow": "Sync now",
+    "taskQueued": "Offline — the action is saved locally and will be sent when you are back online.",
+    "taskPending": "{count} task action(s) waiting to be sent (saved offline) — tap to retry",
+    "taskFlushed": "{count} offline task action(s) sent.",
+    "taskDropped": "The server rejected an offline action for task {title}: {reason}"
   },
   "support": {
     "notFound": "This support link is invalid. Please scan the QR code on the machine again.",

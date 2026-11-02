@@ -12,6 +12,7 @@ import IconLegend from "@/components/IconLegend";
 import PartnerInfo from "@/components/PartnerInfo";
 import PartnerPicker from "@/components/PartnerPicker";
 import SearchSelect from "@/components/SearchSelect";
+import { FLUSH_EVENT, notifyQueueChanged } from "@/lib/offline";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, printFile, ApiError, downloadFile, errorMessage } from "@/lib/api";
 import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT } from "@/lib/companies";
@@ -237,6 +238,7 @@ function readQueue(): QueuedSettlement[] {
 
 function writeQueue(items: QueuedSettlement[]) {
   localStorage.setItem(QUEUE_KEY, JSON.stringify(items));
+  notifyQueueChanged();
 }
 
 export default function ElszamolasPage() {
@@ -649,7 +651,11 @@ export default function ElszamolasPage() {
     flushQueue();
     const onOnline = () => flushQueue();
     window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
+    window.addEventListener(FLUSH_EVENT, onOnline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener(FLUSH_EVENT, onOnline);
+    };
   }, [flushQueue]);
 
   // OFFLINE-előszinkron (841171f6): az esedékes partnerek elszámolási

@@ -11,6 +11,7 @@ import BrandLogo from "@/components/BrandLogo";
 import BugReporter from "@/components/BugReporter";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
+import { requestFlush, useOffline } from "@/lib/offline";
 import { usePerms } from "@/lib/perms";
 import type { AuthUser } from "@/lib/types";
 
@@ -126,6 +127,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useT();
+  const { online, pending } = useOffline();
 
   useEffect(() => {
     const stored = localStorage.getItem("iwfm-theme");
@@ -438,6 +440,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <main className="min-w-0 flex-1">
+        {/* Hálózat + offline-várólista sáv (130. kör): minden lapon látszik */}
+        {(!online || pending > 0) && (
+          <div
+            className={`flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b px-4 py-2 text-center text-sm font-medium ${
+              online ? "border-amber-200 bg-amber-50 text-amber-900" : "border-slate-300 bg-slate-100 text-slate-800"
+            }`}
+          >
+            <span>{online ? "⏳" : "📴"} {online ? t("offline.pendingTotal", { count: pending }) : t("offline.banner")}</span>
+            {pending > 0 && (
+              <span className="text-xs opacity-80">
+                {online ? "" : t("offline.pendingTotalShort", { count: pending })}
+              </span>
+            )}
+            {pending > 0 && online && (
+              <button onClick={requestFlush} className="rounded-lg border border-amber-300 bg-white px-2 py-0.5 text-xs hover:bg-amber-100">
+                {t("offline.syncNow")}
+              </button>
+            )}
+          </div>
+        )}
         {license?.is_trial && license.state === "ok" && (
           <div className="border-b border-indigo-200 bg-indigo-50 px-4 py-2 text-center text-sm font-medium text-indigo-800">
             🧪 {t("license.trialBanner", { days: license.days_left ?? 0 })}{" "}

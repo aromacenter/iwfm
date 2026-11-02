@@ -550,7 +550,15 @@
     "dropped": "Egy offline elszámolás nem küldhető be ({name}): {reason}",
     "wsPending": "{count} munkalap vár beküldésre (offline mentve) — koppints az újrapróbáláshoz",
     "wsDropped": "A(z) {title} munkalapot a szerver elutasította: {reason}",
-    "wsFlushed": "{count} offline munkalap beküldve."
+    "wsFlushed": "{count} offline munkalap beküldve.",
+    "banner": "Nincs hálózat — a lapok a legutóbb látott adatokkal mennek, a mentések sorban állnak és online-ra érve beküldődnek.",
+    "pendingTotal": "{count} függő offline művelet vár beküldésre.",
+    "pendingTotalShort": "({count} függő művelet)",
+    "syncNow": "Szinkron most",
+    "taskQueued": "Nincs hálózat — a művelet offline mentve, online-ra érve beküldjük.",
+    "taskPending": "{count} feladat-művelet vár beküldésre (offline mentve) — koppints az újrapróbáláshoz",
+    "taskFlushed": "{count} offline feladat-művelet beküldve.",
+    "taskDropped": "A(z) {title} feladat offline műveletét a szerver elutasította: {reason}"
   },
   "support": {
     "notFound": "Ez a támogatási link érvénytelen. Kérjük, olvassa be újra a gépen lévő QR-kódot.",

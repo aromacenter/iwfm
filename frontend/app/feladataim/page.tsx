@@ -14,6 +14,7 @@ import { api, ApiError, errorMessage, shareOrDownloadFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
 import { useUI } from "@/lib/ui";
+import { FLUSH_EVENT, isNetworkError, notifyQueueChanged, readQueue as readQ, writeQueue as writeQ } from "@/lib/offline";
 
 interface MyTicket {
   id: string;
@@ -224,6 +225,7 @@ export default function FeladataimPage() {
   }
   function writeWsQueue(q: WsQueueItem[]) {
     try { localStorage.setItem(WS_QUEUE_KEY, JSON.stringify(q)); } catch { /* tárhely-hiba */ }
+    notifyQueueChanged();
   }
   const [pendingWs, setPendingWs] = useState(0);
   const flushWsQueue = useCallback(async () => {
@@ -260,8 +262,64 @@ export default function FeladataimPage() {
     flushWsQueue();
     const onOnline = () => flushWsQueue();
     window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
+    window.addEventListener(FLUSH_EVENT, onOnline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener(FLUSH_EVENT, onOnline);
+    };
   }, [flushWsQueue]);
+
+  // Offline feladat-műveletek (130. kör): státusz-váltás és megjegyzés hálózat
+  // nélkül is rögzíthető — sorban áll, online-ra érve sorrendben beküldődik.
+  interface TaskActionItem { task_id: string; title: string; kind: "status" | "comment"; body: unknown; queued_at: string }
+  const TASK_QUEUE_KEY = "iwfm-task-actions";
+  const [pendingActions, setPendingActions] = useState(0);
+  const flushTaskActions = useCallback(async () => {
+    let q = readQ<TaskActionItem>(TASK_QUEUE_KEY);
+    setPendingActions(q.length);
+    if (q.length === 0) return;
+    let sent = 0;
+    while (q.length > 0) {
+      const item = q[0];
+      try {
+        await api.post(`/api/me/tasks/${item.task_id}/${item.kind}`, item.body);
+        sent += 1;
+        q = q.slice(1);
+        writeQ(TASK_QUEUE_KEY, q);
+      } catch (err) {
+        if (err instanceof ApiError) {
+          toast(t("offline.taskDropped", { title: item.title, reason: errorMessage(err) }), "error");
+          q = q.slice(1);
+          writeQ(TASK_QUEUE_KEY, q);
+        } else {
+          break;
+        }
+      }
+    }
+    setPendingActions(q.length);
+    if (sent > 0) {
+      toast(t("offline.taskFlushed", { count: sent }), "success");
+      load();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast, t]);
+  useEffect(() => {
+    void Promise.resolve().then(() => flushTaskActions());
+    const onOnline = () => flushTaskActions();
+    window.addEventListener("online", onOnline);
+    window.addEventListener(FLUSH_EVENT, onOnline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener(FLUSH_EVENT, onOnline);
+    };
+  }, [flushTaskActions]);
+  function queueTaskAction(task: TaskOut, kind: "status" | "comment", body: unknown) {
+    const q = readQ<TaskActionItem>(TASK_QUEUE_KEY);
+    q.push({ task_id: task.id, title: task.title, kind, body, queued_at: new Date().toISOString() });
+    writeQ(TASK_QUEUE_KEY, q);
+    setPendingActions(q.length);
+    toast(t("offline.taskQueued"), "info");
+  }
 
 
   // Elmentett aláírás-minta: egy kattintással beszúrható a dolgozói aláíráshoz
@@ -325,7 +383,12 @@ export default function FeladataimPage() {
       setComments((c) => ({ ...c, [task.id]: "" }));
       load();
     } catch (err) {
-      toast(errorMessage(err), "error");
+      if (isNetworkError(err)) {
+        queueTaskAction(task, "comment", { text });
+        setComments((c) => ({ ...c, [task.id]: "" }));
+      } else {
+        toast(errorMessage(err), "error");
+      }
     } finally {
       setBusy(null);
     }
@@ -342,7 +405,13 @@ export default function FeladataimPage() {
       setComments((c) => ({ ...c, [task.id]: "" }));
       load();
     } catch (err) {
-      toast(errorMessage(err), "error");
+      if (isNetworkError(err)) {
+        const offlineComment = (comments[task.id] ?? "").trim();
+        queueTaskAction(task, "status", { status, comment: offlineComment || null });
+        setComments((c) => ({ ...c, [task.id]: "" }));
+      } else {
+        toast(errorMessage(err), "error");
+      }
     } finally {
       setBusy(null);
     }
@@ -674,6 +743,7 @@ export default function FeladataimPage() {
   }
   function writePartsQueue(q: PartsQueueItem[]) {
     try { localStorage.setItem(PARTS_QUEUE_KEY, JSON.stringify(q)); } catch { /* tárhely-hiba */ }
+    notifyQueueChanged();
   }
   const flushPartsQueue = useCallback(async () => {
     let q = readPartsQueue();
@@ -702,7 +772,11 @@ export default function FeladataimPage() {
     void Promise.resolve().then(() => flushPartsQueue());
     const onOnline = () => flushPartsQueue();
     window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
+    window.addEventListener(FLUSH_EVENT, onOnline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener(FLUSH_EVENT, onOnline);
+    };
   }, [flushPartsQueue]);
 
   async function installPart() {
@@ -803,6 +877,15 @@ export default function FeladataimPage() {
             className="w-full rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900"
           >
             📴 {t("offline.wsPending", { count: pendingWs })}
+          </button>
+        )}
+        {pendingActions > 0 && (
+          <button
+            onClick={() => void flushTaskActions()}
+            title={t("offline.retryHint")}
+            className="w-full rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900"
+          >
+            📴 {t("offline.taskPending", { count: pendingActions })}
           </button>
         )}
         <h1 className="text-xl font-bold">{t("myTasks.title")}</h1>
