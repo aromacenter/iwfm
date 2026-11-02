@@ -159,6 +159,7 @@
     "automation": "Automations",
     "service": "Service",
     "kb": "Knowledge base",
+    "tools": "Tools",
     "audit": "Audit log",
     "bugs": "Bug reports",
     "groups": {
@@ -692,6 +693,53 @@
       "done": "Done",
       "closed": "Closed"
     }
+  },
+  "tools": {
+    "title": "Tool registry",
+    "hint": "Tools and measuring instruments: who has them, condition, when the next inspection/calibration is due. Handovers and checks are logged.",
+    "myTitle": "Tools I hold",
+    "myEmpty": "No registered tools are with you right now.",
+    "new": "+ New tool",
+    "editTitle": "Edit tool",
+    "newTitle": "New tool",
+    "name": "Name",
+    "serial": "Serial / ID",
+    "category": "Category",
+    "categoryPh": "e.g. instrument, hand tool, ladder",
+    "holder": "Holder",
+    "unassigned": "in storage (nobody)",
+    "status": "Status",
+    "statuses": {
+      "ok": "OK",
+      "repair": "In repair",
+      "lost": "Lost",
+      "retired": "Retired"
+    },
+    "nextCheck": "Next check",
+    "lastCheck": "Last check",
+    "interval": "Check interval (months)",
+    "note": "Note",
+    "handover": "Hand over",
+    "handoverTo": "Hand over to",
+    "handoverNote": "Handover note (optional)",
+    "handoverDone": "Handed over.",
+    "check": "Record check",
+    "checkNextPh": "Next date (empty = from interval)",
+    "checkDone": "Check recorded.",
+    "events": "Log",
+    "eventKinds": {
+      "handover": "Handover",
+      "check": "Check",
+      "status": "Status"
+    },
+    "checkOverdue": "check overdue",
+    "checkSoon": "due within 30 days",
+    "filterDue": "Due / overdue only",
+    "filterAll": "All",
+    "search": "Search (name, serial, category)…",
+    "empty": "No tools match the filter.",
+    "serialExists": "A tool with this serial already exists.",
+    "deleteConfirm": "Delete tool {name} together with its log?"
   },
   "kb": {
     "title": "Knowledge base",
@@ -2145,6 +2193,9 @@
     "intake.contact_required": "Phone number and email are required for intake.",
     "worksheet.too_many_photos": "At most 16 photos can be attached to a worksheet.",
     "worksheet.photo_required": "The task cannot be closed: photos must be attached to the worksheet first (photo requirement).",
+    "tools.serial_exists": "A tool with this serial already exists.",
+    "tools.not_found": "Tool not found.",
+    "tools.bad_employee": "Unknown employee.",
     "worksheet.photo_not_found": "Photo not found.",
     "settlement.customer_only": "This partner is a customer (no placed machine) — only instant sale/delivery is available.",
     "cash.transfer_not_found": "Transfer not found.",
@@ -4170,6 +4221,7 @@
     "saferpay": "Vending QR payment",
     "warehouse": "Warehouse",
     "parts": "Parts warehouse",
-    "worktime": "Work time tracking"
+    "worktime": "Work time tracking",
+    "tools": "Tool registry"
   }
 }

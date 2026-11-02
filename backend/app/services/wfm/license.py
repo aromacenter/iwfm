@@ -27,6 +27,7 @@ MODULES = (
     "warehouse",  # raktár: saját raktár, átadások, raktármozgások (Flotta-kapcsoló)
     "parts",  # alkatrész-raktár (ERP-szerű helykódos készlet) — alapból KI
     "worktime",  # munkaidő-mérés munkalaponként (timer + vezetői statisztika) — alapból KI
+    "tools",  # szerszám-nyilvántartás: kinél mi van, ellenőrzés/kalibrálás esedékesség (137. kör)
     # 116. kör: MINDEN menüpont kapcsolható (többféle raktár-/szerviz-profil).
     # A vezérlőpult, a beállítások, a kézikönyv és a roadmap az alap — nem kapcsolható.
     "calendar", "tasks", "service", "intake", "handover", "pickup", "quotes",
@@ -46,6 +47,7 @@ MODULE_REQUIRES: dict[str, tuple[str, ...]] = {
     "timeoff": ("employees",),
     "payroll": ("employees", "attendance"),
     "worktime": ("tasks",),
+    "tools": ("employees",),
     "handover": ("tasks",),
     "pickup": ("tasks",),
     "service": ("machines", "partners"),

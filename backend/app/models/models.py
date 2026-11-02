@@ -375,6 +375,51 @@ class Task(Base):
     )
 
 
+class Tool(Base):
+    """Szerszám / mérőeszköz (137. kör): kinél van, állapot, következő
+    ellenőrzés (kalibrálás, érintésvédelem…); a mozgások a ToolEvent-ben."""
+
+    __tablename__ = "tools"
+    __table_args__ = (
+        Index("ix_tools_holder", "holder_employee_id"),
+        Index("ix_tools_next_check", "next_check"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    serial_no: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    holder_employee_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
+    next_check: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_check: Mapped[date | None] = mapped_column(Date, nullable=True)
+    check_interval_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ToolEvent(Base):
+    """Szerszám-napló: átadás (kitől kinek), ellenőrzés, állapotváltás."""
+
+    __tablename__ = "tool_events"
+    __table_args__ = (Index("ix_tool_events_tool", "tool_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    tool_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tools.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # handover | check | status
+    from_employee_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    to_employee_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    actor_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class TaskHelper(Base):
     """Csapatos munkavégzés (136. kör): a feladat fő felelőse mellett további
     szerelők — ők is látják a feladatot a Feladataim nézetben, kommentelhetnek,

@@ -159,6 +159,7 @@
     "automation": "Automatizálások",
     "service": "Szerviz",
     "kb": "Tudásbázis",
+    "tools": "Szerszámok",
     "audit": "Napló",
     "bugs": "Hibabejelentések",
     "groups": {
@@ -692,6 +693,53 @@
       "done": "Kész",
       "closed": "Lezárva"
     }
+  },
+  "tools": {
+    "title": "Szerszám-nyilvántartás",
+    "hint": "Szerszámok és mérőeszközök: kinél van, milyen állapotban, mikor esedékes az ellenőrzés/kalibrálás. Átadás és ellenőrzés naplózva.",
+    "myTitle": "Nálam lévő szerszámok",
+    "myEmpty": "Jelenleg nincs nálad nyilvántartott szerszám.",
+    "new": "+ Új szerszám",
+    "editTitle": "Szerszám szerkesztése",
+    "newTitle": "Új szerszám",
+    "name": "Megnevezés",
+    "serial": "Gyári szám / azonosító",
+    "category": "Kategória",
+    "categoryPh": "pl. mérőműszer, kéziszerszám, létra",
+    "holder": "Kinél van",
+    "unassigned": "raktárban (senkinél)",
+    "status": "Állapot",
+    "statuses": {
+      "ok": "Rendben",
+      "repair": "Javításon",
+      "lost": "Elveszett",
+      "retired": "Selejtezve"
+    },
+    "nextCheck": "Következő ellenőrzés",
+    "lastCheck": "Utolsó ellenőrzés",
+    "interval": "Ellenőrzési ciklus (hónap)",
+    "note": "Megjegyzés",
+    "handover": "Átadás",
+    "handoverTo": "Átadás neki",
+    "handoverNote": "Megjegyzés az átadáshoz (opcionális)",
+    "handoverDone": "Átadva.",
+    "check": "Ellenőrzés rögzítése",
+    "checkNextPh": "Következő dátum (üres = ciklusból)",
+    "checkDone": "Ellenőrzés rögzítve.",
+    "events": "Napló",
+    "eventKinds": {
+      "handover": "Átadás",
+      "check": "Ellenőrzés",
+      "status": "Állapot"
+    },
+    "checkOverdue": "lejárt ellenőrzés",
+    "checkSoon": "30 napon belül esedékes",
+    "filterDue": "Csak esedékes / lejárt",
+    "filterAll": "Mind",
+    "search": "Keresés (név, gyári szám, kategória)…",
+    "empty": "Nincs a szűrésnek megfelelő szerszám.",
+    "serialExists": "Ezzel a gyári számmal már van szerszám.",
+    "deleteConfirm": "Törlöd a(z) {name} szerszámot a naplójával együtt?"
   },
   "kb": {
     "title": "Tudásbázis",
@@ -2145,6 +2193,9 @@
     "intake.contact_required": "A telefonszám és az e-mail cím megadása kötelező az átvételhez.",
     "worksheet.too_many_photos": "Legfeljebb 16 fotó csatolható egy munkalaphoz.",
     "worksheet.photo_required": "A feladat nem zárható le: a munkalaphoz még fotót kell csatolni (fotó-kötelezettség).",
+    "tools.serial_exists": "Ezzel a gyári számmal már van szerszám.",
+    "tools.not_found": "A szerszám nem található.",
+    "tools.bad_employee": "Ismeretlen dolgozó.",
     "worksheet.photo_not_found": "A fotó nem található.",
     "settlement.customer_only": "Ez a partner ügyfél (nincs kihelyezett gépünk nála) — elszámolás nem készíthető, csak azonnali értékesítés/kiszállítás.",
     "cash.transfer_not_found": "A pénz-átadás nem található.",
@@ -4170,6 +4221,7 @@
     "saferpay": "Vending QR-fizetés",
     "warehouse": "Raktár",
     "parts": "Alkatrész-raktár",
-    "worktime": "Munkaidő-mérés"
+    "worktime": "Munkaidő-mérés",
+    "tools": "Szerszám-nyilvántartás"
   }
 }

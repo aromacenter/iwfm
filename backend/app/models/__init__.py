@@ -85,6 +85,8 @@ from app.models.models import (  # noqa: F401
     TechLedger,
     TaskComment,
     TaskHelper,
+    Tool,
+    ToolEvent,
     TicketAttachment,
     TimeEntry,
     Stocktake,

@@ -35,6 +35,7 @@ from app.api import (
     orders,
     payroll,
     portal,
+    tools,
     print_jobs as print_jobs_api,
     quotes as quotes_api,
     service,
@@ -268,6 +269,10 @@ def create_app() -> FastAPI:
     app.include_router(
         knowledge.router, prefix="/api/knowledge", tags=["knowledge"],
         dependencies=[Depends(_mod("support"))],
+    )
+    app.include_router(
+        tools.router, prefix="/api/tools", tags=["tools"],
+        dependencies=[Depends(_mod("tools"))],
     )
     from app.api import stats as stats_api
 
