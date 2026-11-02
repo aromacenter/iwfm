@@ -151,6 +151,21 @@ export default function JelenletPage() {
     }
   }
 
+  // Bérprogram CSV jogcímkódokkal (139. kör)
+  const [pcEncoding, setPcEncoding] = useState<"utf8" | "cp1250">("utf8");
+  async function exportPaycodes() {
+    const [y, m] = tsMonth.split("-");
+    if (!y || !m) return;
+    try {
+      await downloadFile(
+        `/api/payroll/paycodes.csv?year=${y}&month=${Number(m)}&encoding=${pcEncoding}`,
+        `jogcim_export_${tsMonth}.csv`
+      );
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function exportTimesheet() {
     const [y, m] = tsMonth.split("-");
     if (!y || !m) return;
@@ -229,6 +244,13 @@ export default function JelenletPage() {
         </select>
         <button onClick={exportTimesheet} className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-800 hover:bg-indigo-100">
           {t("att.timesheetPdf")}
+        </button>
+        <select value={pcEncoding} onChange={(e) => setPcEncoding(e.target.value as "utf8" | "cp1250")} className="ml-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" title={t("att.paycodesEncoding")}>
+          <option value="utf8">UTF-8</option>
+          <option value="cp1250">CP1250 (Windows)</option>
+        </select>
+        <button onClick={() => void exportPaycodes()} className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm text-indigo-800 hover:bg-indigo-100" title={t("att.paycodesHint")}>
+          🧾 {t("att.exportPaycodes")}
         </button>
         <span className="text-xs text-slate-500">{t("att.timesheetHint")}</span>
       </div>

@@ -201,14 +201,17 @@ export default function BeallitasokPage() {
     sunday_bonus_default: false,
     group_by_site: true,
     absence_codes: {} as Record<string, AbsenceCfg>,
+    paycodes: {} as Record<string, string>,
   });
   const [wrLaw, setWrLaw] = useState<{ law: Record<string, unknown>; law_versions: string[]; law_override_count: number } | null>(null);
   const [wrBusy, setWrBusy] = useState(false);
+  const [paycodeDefs, setPaycodeDefs] = useState<{ key: string; code: string; name: string; unit: string }[]>([]);
   const loadWorkRules = useCallback(() => {
     api
       .get<{
         break_minutes: number | null; break_per_hours: number | null; break_paid: boolean;
         sunday_bonus_default: boolean; group_by_site: boolean; absence_codes: Record<string, AbsenceCfg>;
+        paycodes: Record<string, string>; paycodes_defs: { key: string; code: string; name: string; unit: string }[];
         law: Record<string, unknown>; law_versions: string[]; law_override_count: number;
       }>("/api/settings/work-rules")
       .then((r) => {
@@ -219,7 +222,9 @@ export default function BeallitasokPage() {
           sunday_bonus_default: r.sunday_bonus_default,
           group_by_site: r.group_by_site,
           absence_codes: r.absence_codes,
+          paycodes: r.paycodes ?? {},
         });
+        setPaycodeDefs(r.paycodes_defs ?? []);
         setWrLaw({ law: r.law, law_versions: r.law_versions, law_override_count: r.law_override_count });
       })
       .catch(() => {});
@@ -236,6 +241,7 @@ export default function BeallitasokPage() {
         sunday_bonus_default: wr.sunday_bonus_default,
         group_by_site: wr.group_by_site,
         absence_codes: wr.absence_codes,
+        paycodes: wr.paycodes,
       });
       toast(t("common.saved"), "success");
       loadWorkRules();
@@ -2228,6 +2234,43 @@ export default function BeallitasokPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Bérprogram jogcím-kódok (139. kör) */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-sm font-medium">🧾 {t("settings.wrPaycodes")}</p>
+            <p className="mb-2 text-xs text-slate-500">{t("settings.wrPaycodesHint")}</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="py-1 pr-2">{t("settings.wrPaycodeName")}</th>
+                    <th className="py-1 pr-2">{t("settings.wrPaycodeDefault")}</th>
+                    <th className="py-1">{t("settings.wrPaycodeCode")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paycodeDefs.map((d) => (
+                    <tr key={d.key} className="border-t border-slate-200">
+                      <td className="py-1 pr-2">{d.name} <span className="text-xs text-slate-400">({d.unit})</span></td>
+                      <td className="py-1 pr-2 font-mono text-xs text-slate-500">{d.code}</td>
+                      <td className="py-1">
+                        <input value={wr.paycodes[d.key] ?? ""} placeholder={d.code} onChange={(e) => setWr((w) => ({ ...w, paycodes: { ...w.paycodes, [d.key]: e.target.value.slice(0, 16) } }))} className="w-32 rounded-lg border border-slate-300 px-2 py-1 font-mono" />
+                      </td>
+                    </tr>
+                  ))}
+                  {Object.entries(wr.absence_codes).map(([k, cfg]) => (
+                    <tr key={`abs_${k}`} className="border-t border-slate-200">
+                      <td className="py-1 pr-2">{t("settings.wrPaycodeAbsence", { code: cfg.code })} <span className="text-xs text-slate-400">(nap)</span></td>
+                      <td className="py-1 pr-2 font-mono text-xs text-slate-500">{cfg.code}</td>
+                      <td className="py-1">
+                        <input value={wr.paycodes[`abs_${cfg.code}`] ?? ""} placeholder={cfg.code} onChange={(e) => setWr((w) => ({ ...w, paycodes: { ...w.paycodes, [`abs_${cfg.code}`]: e.target.value.slice(0, 16) } }))} className="w-32 rounded-lg border border-slate-300 px-2 py-1 font-mono" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <button disabled={wrBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">

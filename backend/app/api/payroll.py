@@ -159,6 +159,86 @@ async def export_payroll(
 # docs/berexport-munkaido-nyilvantartas-spec.md
 
 
+@router.get("/paycodes.csv")
+async def paycodes_csv(
+    year: int = Query(..., ge=2012, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    delimiter: str = Query(default=";", pattern="^[;,]$"),
+    encoding: str = Query(default="utf8", pattern="^(utf8|cp1250)$"),
+    request: Request = None,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("payroll")),
+):
+    """Bérprogram-formátumú jogcím-CSV (139. kör): dolgozó × jogcím sorok a havi
+    munkaidő-nyilvántartás számaiból, a beállított jogcím-kódokkal. UTF-8 (BOM)
+    vagy CP1250 (régi Windows-os bérprogramok), pontosvessző vagy vessző."""
+    import calendar as _cal
+
+    from app.services.wfm import license as license_service
+    from app.services.wfm.holidays import load_overrides
+    from app.services.wfm.paycodes import build_paycodes_csv
+    from app.services.wfm.timesheet_calc import build_month_sheet, company_rules_from_row
+
+    first = date(year, month, 1)
+    last = date(year, month, _cal.monthrange(year, month)[1])
+    await load_overrides(db)
+    rules_row = (
+        await db.execute(select(WorkRulesSettings).where(WorkRulesSettings.id == 1))
+    ).scalar_one_or_none()
+    company_rules = company_rules_from_row(rules_row)
+    lic = await license_service.get_license_row(db)
+    overrides = (lic.labor_rules_override if lic is not None else None) or []
+    employees = [
+        e for e in (await db.execute(
+            select(Employee).where(Employee.is_contractor.is_(False), Employee.hire_date <= last)
+            .order_by(Employee.last_name, Employee.first_name)
+        )).scalars().all()
+        if (e.termination_date is None or e.termination_date >= first)
+        and (decrypt_pii(e.taj_encrypted) or "").strip()
+    ]
+    shifts = (await db.execute(select(Shift).where(
+        Shift.status == "published", Shift.work_date >= first, Shift.work_date <= last,
+    ))).scalars().all()
+    lo = datetime.combine(first, time.min, tzinfo=UTC) - timedelta(days=1)
+    hi = datetime.combine(last, time.max, tzinfo=UTC) + timedelta(days=1)
+    entries = (await db.execute(select(TimeEntry).where(
+        TimeEntry.clock_in >= lo, TimeEntry.clock_in <= hi, TimeEntry.clock_out.is_not(None),
+    ))).scalars().all()
+    leaves = (await db.execute(select(TimeOffRequest).where(
+        TimeOffRequest.status == "approved",
+        TimeOffRequest.type.notin_(("late_arrival", "early_leave")),
+        TimeOffRequest.start_date <= last, TimeOffRequest.end_date >= first,
+    ))).scalars().all()
+    sheets = [
+        build_month_sheet(
+            emp, year=year, month=month,
+            shifts=[x for x in shifts if x.employee_id == emp.id],
+            entries=[x for x in entries if x.employee_id == emp.id],
+            leaves=[x for x in leaves if x.employee_id == emp.id],
+            company=company_rules, overrides=overrides,
+            tax_id=decrypt_pii(emp.tax_id_encrypted),
+        )
+        for emp in employees
+    ]
+    text = build_paycodes_csv(sheets, rules_row.paycodes if rules_row else None, delimiter=delimiter)
+    if encoding == "cp1250":
+        content = text.encode("cp1250", errors="replace")
+        media = "text/csv; charset=windows-1250"
+    else:
+        content = ("\ufeff" + text).encode("utf-8")
+        media = "text/csv; charset=utf-8"
+    await record_audit(
+        db, actor=actor, action="payroll.paycodes_export", entity_type="payroll",
+        entity_id=f"{year}-{month:02d}", detail={"employees": len(sheets), "encoding": encoding},
+        request=request,
+    )
+    await db.commit()
+    return Response(
+        content=content, media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="jogcim_export_{year}-{month:02d}.csv"'},
+    )
+
+
 @router.get("/timesheet.pdf")
 async def timesheet_pdf(
     year: int = Query(..., ge=2012, le=2100),

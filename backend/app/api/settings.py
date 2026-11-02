@@ -1916,6 +1916,8 @@ class WorkRulesBody(BaseModel):
     group_by_site: bool = True
     # {"annual": {"code": "SZ", "paid": true, "hours": true}, …}
     absence_codes: dict[str, dict] | None = None
+    # 139. kör: bérprogram jogcím-kódok {"worked_hours": "MUNKAORA", "abs_SZ": "SZAB", …}
+    paycodes: dict[str, str] | None = None
 
     @field_validator("absence_codes")
     @classmethod
@@ -1965,6 +1967,10 @@ async def _work_rules_out(db: AsyncSession, row: WorkRulesSettings) -> dict:
         "group_by_site": bool(row.group_by_site),
         "absence_codes": company_rules_from_row(row).absence_codes,
         "absence_codes_default": DEFAULT_ABSENCE_CODES,
+        "paycodes": row.paycodes or {},
+        "paycodes_defs": [
+            {"key": k, "code": c, "name": n, "unit": u} for k, c, n, u in __import__("app.services.wfm.paycodes", fromlist=["PAYCODE_DEFS"]).PAYCODE_DEFS
+        ],
         # csak olvasható: a hatályos törvényi készlet és a verziók
         "law": current.as_dict(),
         "law_versions": [r.valid_from.isoformat() for r in merged_rulesets(overrides)],
@@ -2010,6 +2016,9 @@ async def put_work_rules(
     row.sunday_bonus_default = body.sunday_bonus_default
     row.group_by_site = body.group_by_site
     row.absence_codes = body.absence_codes
+    row.paycodes = {
+        str(k)[:32]: str(v).strip()[:16] for k, v in (body.paycodes or {}).items() if str(v).strip()
+    } or None
     await record_audit(
         db, actor=actor, action="settings.work_rules", entity_type="settings",
         entity_id="work_rules", detail=body.model_dump(), request=request,
