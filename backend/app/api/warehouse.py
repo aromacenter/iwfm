@@ -9,11 +9,11 @@ Minden mozgás append-only a warehouse_movements táblában.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import is_manager, record_audit, require_perm
@@ -1053,39 +1053,110 @@ class ReorderSuggestionOut(BaseModel):
     product_name: str
     unit: str
     quantity: float
-    min_quantity: float
+    min_quantity: float | None = None
     suggested_qty: float
+    # 134. kör — fogyás-alapú előrejelzés
+    daily_consumption: float | None = None  # átlagos napi kiadás (utolsó 90 nap)
+    days_of_cover: int | None = None  # a mostani készlet ennyi napra elég
+    on_order_qty: float = 0.0  # megrendelt, még be nem érkezett
+    horizon_days: int = 30
+    reasons: list[str] = []  # below_min | runs_out
 
 
-@router.get("/reorder-suggestions", response_model=list[ReorderSuggestionOut])
-async def reorder_suggestions(
-    db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("settlements")),
-):
-    """Küszöb alá csökkent raktárkészletek + javasolt rendelési mennyiség
-    (a küszöb kétszereséig való feltöltés)."""
-    rows = (
+FORECAST_WINDOW_DAYS = 90
+RUNS_OUT_DAYS = 14  # ennyi napon belüli kifogyás már javaslat
+
+
+async def _reorder_rows(db: AsyncSession, horizon: int) -> list[ReorderSuggestionOut]:
+    """Küszöb alatti ÉS fogyás szerint hamarosan kifogyó készletek, raktár ×
+    termék. Javasolt mennyiség = napi fogyás × horizont + küszöb − készlet −
+    úton lévő (legalább a küszöb kétszereséig, ha van küszöb)."""
+    now = datetime.now(UTC)
+    window_start = now - timedelta(days=FORECAST_WINDOW_DAYS)
+    stock_rows = (
         await db.execute(
             select(WarehouseStock, Warehouse, Product)
             .join(Warehouse, Warehouse.id == WarehouseStock.warehouse_id)
             .join(Product, Product.id == WarehouseStock.product_id)
-            .where(
-                WarehouseStock.min_quantity.is_not(None),
-                WarehouseStock.quantity <= WarehouseStock.min_quantity,
-                Warehouse.is_active.is_(True),
-            )
+            .where(Warehouse.is_active.is_(True), Product.is_active.is_(True))
             .order_by(Warehouse.name, Product.name)
         )
     ).all()
-    return [
-        ReorderSuggestionOut(
+    if not stock_rows:
+        return []
+    # napi fogyás: kiadások (partnernek / autóra) az ablakban, raktár × termék
+    cons = {
+        (wid, pid): (float(total or 0.0), first)
+        for wid, pid, total, first in (
+            await db.execute(
+                select(
+                    WarehouseMovement.warehouse_id, WarehouseMovement.product_id,
+                    sa_func.sum(-WarehouseMovement.quantity_delta), sa_func.min(WarehouseMovement.created_at),
+                )
+                .where(
+                    WarehouseMovement.created_at >= window_start,
+                    WarehouseMovement.action.in_(("issue", "transfer_out")),
+                    WarehouseMovement.quantity_delta < 0,
+                )
+                .group_by(WarehouseMovement.warehouse_id, WarehouseMovement.product_id)
+            )
+        ).all()
+    }
+    # úton lévő: megrendelt, még nem (teljesen) beérkezett PO-sorok
+    on_order: dict = {}
+    for wid, pid, qty, received in (
+        await db.execute(
+            select(PurchaseOrder.warehouse_id, PurchaseOrderLine.product_id, PurchaseOrderLine.quantity, PurchaseOrderLine.received_qty)
+            .join(PurchaseOrderLine, PurchaseOrderLine.purchase_order_id == PurchaseOrder.id)
+            .where(PurchaseOrder.status == "ordered")
+        )
+    ).all():
+        on_order[(wid, pid)] = on_order.get((wid, pid), 0.0) + max(float(qty) - float(received or 0), 0.0)
+
+    out: list[ReorderSuggestionOut] = []
+    for s, wh, p in stock_rows:
+        total, first = cons.get((wh.id, p.id), (0.0, None))
+        daily = None
+        if total > 0 and first is not None:
+            first_aware = first if first.tzinfo else first.replace(tzinfo=UTC)
+            span = max((now - first_aware).days, 14)
+            daily = round(total / span, 3)
+        days_cover = int(s.quantity / daily) if daily and daily > 0 and s.quantity > 0 else (0 if daily else None)
+        below_min = s.min_quantity is not None and s.quantity <= s.min_quantity
+        runs_out = days_cover is not None and days_cover <= RUNS_OUT_DAYS
+        if not below_min and not runs_out:
+            continue
+        pending = on_order.get((wh.id, p.id), 0.0)
+        target = (daily or 0.0) * horizon + float(s.min_quantity or 0.0)
+        if s.min_quantity is not None:
+            target = max(target, s.min_quantity * 2)
+        suggested = max(target - s.quantity - pending, 0.0)
+        out.append(ReorderSuggestionOut(
             warehouse_id=str(wh.id), warehouse_name=wh.name,
             product_id=str(p.id), product_name=p.name, unit=p.unit,
             quantity=round(s.quantity, 2), min_quantity=s.min_quantity,
-            suggested_qty=round(max(s.min_quantity * 2 - s.quantity, 0.0), 1),
-        )
-        for s, wh, p in rows
-    ]
+            suggested_qty=round(suggested, 1),
+            daily_consumption=daily, days_of_cover=days_cover, on_order_qty=round(pending, 2),
+            horizon_days=horizon,
+            reasons=[r for r, ok in (("below_min", below_min), ("runs_out", runs_out)) if ok],
+        ))
+    # a leghamarabb kifogyók elöl
+    out.sort(key=lambda r: (r.days_of_cover if r.days_of_cover is not None else 9999, r.warehouse_name, r.product_name))
+    return out
+
+
+@router.get("/reorder-suggestions", response_model=list[ReorderSuggestionOut])
+async def reorder_suggestions(
+    horizon: int = Query(default=30, ge=7, le=180),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Készlet-előrejelzés és rendelési javaslat (134. kör): küszöb alá csökkent
+    VAGY a fogyás szerint 14 napon belül kifogyó raktárkészletek; a javasolt
+    mennyiség a horizontra (alap 30 nap) elég, az úton lévőt levonva."""
+    return await _reorder_rows(db, horizon)
+
+
 
 
 # ─── Beszerzési rendelések ──────────────────────────────────────────────────
@@ -1368,3 +1439,62 @@ async def cancel_purchase_order(
     )
     await db.commit()
     return await _po_out(db, po)
+
+
+# 134. kör: rendelés-vázlat a készlet-előrejelzésből (a POOut után kell állnia)
+class ReorderCreateBody(BaseModel):
+    horizon: int = Field(default=30, ge=7, le=180)
+    warehouse_id: str | None = None  # csak ehhez a raktárhoz (None = mind)
+    supplier_partner_id: str | None = None
+
+
+@router.post("/reorder-suggestions/create-po", response_model=list[POOut], status_code=201)
+async def reorder_create_po(
+    body: ReorderCreateBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Piszkozat beszerzési rendelés(ek) a javaslatokból, raktáranként egy —
+    a sorok a javasolt mennyiséggel, a beszerzési ár a termék törzséből."""
+    from app.services.wfm.codes import generate_po_number
+
+    rows = [r for r in await _reorder_rows(db, body.horizon) if r.suggested_qty > 0]
+    if body.warehouse_id:
+        rows = [r for r in rows if r.warehouse_id == body.warehouse_id]
+    if not rows:
+        raise HTTPException(status_code=422, detail={"code": "po.nothing_to_order"})
+    supplier_id = None
+    if body.supplier_partner_id:
+        supplier = (
+            await db.execute(select(Partner).where(Partner.id == _parse_uuid(body.supplier_partner_id, "partner.not_found")))
+        ).scalar_one_or_none()
+        if supplier is None:
+            raise HTTPException(status_code=404, detail={"code": "partner.not_found"})
+        supplier_id = supplier.id
+    by_wh: dict[str, list[ReorderSuggestionOut]] = {}
+    for r in rows:
+        by_wh.setdefault(r.warehouse_id, []).append(r)
+    created: list[PurchaseOrder] = []
+    for wid, items in by_wh.items():
+        wh = await _get_visible_warehouse(db, wid, actor)
+        po = PurchaseOrder(
+            order_no=await generate_po_number(db), supplier_partner_id=supplier_id, warehouse_id=wh.id,
+            note=f"Készlet-előrejelzés alapján ({body.horizon} napra)", created_by=actor.id,
+        )
+        db.add(po)
+        await db.flush()
+        for r in items:
+            product = await _get_product_or_404(db, r.product_id)
+            db.add(PurchaseOrderLine(
+                purchase_order_id=po.id, product_id=product.id,
+                quantity=r.suggested_qty, unit_cost=product.purchase_price,
+            ))
+        created.append(po)
+    await record_audit(
+        db, actor=actor, action="po.create_from_forecast", entity_type="purchase_order",
+        entity_id=", ".join(p.order_no for p in created), detail={"count": len(created), "horizon": body.horizon},
+        request=request,
+    )
+    await db.commit()
+    return [await _po_out(db, po) for po in created]

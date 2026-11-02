@@ -74,12 +74,18 @@ interface PO {
 }
 
 interface Suggestion {
+  warehouse_id: string;
   warehouse_name: string;
   product_name: string;
   unit: string;
   quantity: number;
-  min_quantity: number;
+  min_quantity: number | null;
   suggested_qty: number;
+  daily_consumption: number | null;
+  days_of_cover: number | null;
+  on_order_qty: number;
+  horizon_days: number;
+  reasons: string[];
 }
 
 interface Movement {
@@ -410,6 +416,21 @@ export default function RaktarPage() {
 
   const fmtQty = (n: number) => n.toLocaleString("hu-HU", { maximumFractionDigits: 2 });
 
+  // 134. kör: piszkozat beszerzési rendelés(ek) a készlet-előrejelzésből
+  async function createPoFromForecast() {
+    setBusy(true);
+    setError(null);
+    try {
+      const rows = await api.post<PO[]>("/api/warehouses/reorder-suggestions/create-po", { horizon: 30 });
+      toast(t("wh.forecastPoCreated", { count: rows.length, nos: rows.map((p) => p.order_no).join(", ") }), "success");
+      load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -473,7 +494,21 @@ export default function RaktarPage() {
 
       {suggestions.length > 0 && (
         <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
-          <div className="mb-1 text-sm font-semibold text-rose-900">{t("wh.reorderTitle")}</div>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-rose-900">{t("wh.reorderTitle")}</span>
+            {isMgr && suggestions.some((s) => s.suggested_qty > 0) && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void createPoFromForecast()}
+                className="rounded-lg border border-rose-300 bg-white px-2.5 py-1 text-xs font-medium text-rose-900 hover:bg-rose-100 disabled:opacity-50"
+                title={t("wh.forecastCreatePoHint")}
+              >
+                📝 {t("wh.forecastCreatePo")}
+              </button>
+            )}
+          </div>
+          <p className="mb-2 text-xs text-rose-700">{t("wh.forecastHint", { horizon: suggestions[0].horizon_days })}</p>
           <ul className="space-y-0.5 text-sm text-rose-800">
             {suggestions.map((s, i) => (
               <li key={i}>
@@ -481,6 +516,13 @@ export default function RaktarPage() {
                   warehouse: s.warehouse_name, product: s.product_name,
                   qty: fmtQty(s.quantity), unit: s.unit, suggested: fmtQty(s.suggested_qty),
                 })}
+                <span className="ml-1 text-xs text-rose-600">
+                  {s.daily_consumption != null && s.days_of_cover != null && (
+                    <>· {t("wh.forecastCover", { daily: fmtQty(s.daily_consumption), unit: s.unit, days: s.days_of_cover })}</>
+                  )}
+                  {s.on_order_qty > 0 && <> · {t("wh.forecastOnOrder", { qty: fmtQty(s.on_order_qty), unit: s.unit })}</>}
+                  {s.reasons.includes("runs_out") && <> · ⏳ {t("wh.forecastRunsOut")}</>}
+                </span>
               </li>
             ))}
           </ul>
