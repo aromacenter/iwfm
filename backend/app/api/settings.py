@@ -1557,6 +1557,11 @@ class NotificationBody(BaseModel):
     tg_token: str | None = Field(default=None, max_length=512)  # ugyanaz a szemantika
     # Beépített Telegram-értesítések: mely eseményekről menjen üzenet.
     tg_events: list[str] = Field(default_factory=list, max_length=32)
+    # 128. kör: heti vezetői digest + számla-emlékeztető lépcső
+    weekly_digest: bool = False
+    weekly_day: int = Field(default=0, ge=0, le=6)
+    reminders_enabled: bool = False
+    reminder_days: str | None = Field(default=None, max_length=64, pattern="^[0-9,; ]*$")
 
     @field_validator("tg_events")
     @classmethod
@@ -1596,6 +1601,11 @@ async def get_notification_settings(
         ],
         "last_daily_sent": row.last_daily_sent,
         "last_backup_sent": row.last_backup_sent,
+        "weekly_digest": bool(row.weekly_digest),
+        "weekly_day": int(row.weekly_day or 0),
+        "last_weekly_sent": row.last_weekly_sent,
+        "reminders_enabled": bool(row.reminders_enabled),
+        "reminder_days": row.reminder_days or "3,7,14",
     }
 
 
@@ -1620,6 +1630,10 @@ async def update_notification_settings(
     row.tg_enabled = body.tg_enabled
     row.tg_chat_ids = (body.tg_chat_ids or "").strip() or None
     row.tg_events = ",".join(body.tg_events) or None
+    row.weekly_digest = body.weekly_digest
+    row.weekly_day = body.weekly_day
+    row.reminders_enabled = body.reminders_enabled
+    row.reminder_days = (body.reminder_days or "").strip() or None
     if body.wa_token or body.tg_token:
         from app.core.crypto import encrypt_pii
 

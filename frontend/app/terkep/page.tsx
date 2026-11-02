@@ -31,6 +31,9 @@ interface MapPartner {
   agent_user_id: string | null;
   geocode_error?: string | null;
   geocode_attempted_at?: string | null;
+  health_score?: number | null;
+  health_level?: "good" | "watch" | "risk" | null;
+  health_reasons?: string[];
   contracted?: boolean;
 }
 // Budai kerületek (I., II., III., XI., XII., XXII.) — az irányítószám 2-3.
@@ -170,14 +173,21 @@ export default function TerkepPage() {
       if (r.lat == null || r.lng == null) continue;
       const hasMachines = r.machines > 0;
       const radius = hasMachines ? Math.max(6, Math.min(18, 5 + r.machines * 2)) : 5;
-      const color = hasMachines ? "#E31E24" : "#64748b";
+      // 127. kör: a jelölő színe a partner-egészség szintje (zöld / sárga / piros); pontszám nélkül piros-szürke
+      const color = hasMachines
+        ? (r.health_level === "good" ? "#059669" : r.health_level === "watch" ? "#d97706" : r.health_level === "risk" ? "#dc2626" : "#E31E24")
+        : "#64748b";
       L.circleMarker([r.lat, r.lng], {
         radius, color, weight: 1.5, fillColor: color, fillOpacity: hasMachines ? 0.55 : 0.4,
       })
         .bindPopup(
           `<b>${r.name}</b><br/>${r.city ?? ""} ${r.zip ?? ""}<br/>` +
           (hasMachines
-            ? `☕ ${r.machines} ${t("map.machinesShort")} · 💰 ${ft(r.revenue)}`
+            ? `☕ ${r.machines} ${t("map.machinesShort")} · 💰 ${ft(r.revenue)}` +
+              (r.health_score != null
+                ? `<br/><b style="color:${color}">${t("map.health")}: ${r.health_score}/100</b>` +
+                  ((r.health_reasons ?? []).length ? `<br/><span style="font-size:11px">${(r.health_reasons ?? []).map((x) => "• " + x).join("<br/>")}</span>` : "")
+                : "")
             : `⚪ ${t("map.noMachines")}${r.contracted === false ? "" : ""}`),
         )
         .addTo(layer);

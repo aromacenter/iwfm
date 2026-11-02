@@ -937,6 +937,7 @@ export default function BeallitasokPage() {
   const [notif, setNotif] = useState({
     daily_enabled: false, recipients: "", send_hour: "6",
     weekly_backup: false, auto_receipt: false,
+    weekly_digest: false, weekly_day: "0", reminders_enabled: false, reminder_days: "3,7,14",
     wa_enabled: false, wa_phone_id: "", wa_recipients: "", wa_token: "", wa_token_set: false,
     tg_enabled: false, tg_chat_ids: "", tg_token: "", tg_token_set: false,
     tg_events: [] as string[],
@@ -949,6 +950,7 @@ export default function BeallitasokPage() {
       .get<{
         daily_enabled: boolean; recipients: string | null; send_hour: number;
         weekly_backup: boolean; auto_receipt: boolean;
+        weekly_digest?: boolean; weekly_day?: number; reminders_enabled?: boolean; reminder_days?: string | null;
         wa_enabled: boolean; wa_phone_id: string | null; wa_recipients: string | null; wa_token_set: boolean;
         tg_enabled: boolean; tg_chat_ids: string | null; tg_token_set: boolean;
         tg_events: string[];
@@ -959,6 +961,8 @@ export default function BeallitasokPage() {
         send_hour: String(s.send_hour),
         weekly_backup: s.weekly_backup,
         auto_receipt: s.auto_receipt,
+        weekly_digest: s.weekly_digest ?? false, weekly_day: String(s.weekly_day ?? 0),
+        reminders_enabled: s.reminders_enabled ?? false, reminder_days: s.reminder_days ?? "3,7,14",
         wa_enabled: s.wa_enabled, wa_phone_id: s.wa_phone_id ?? "",
         wa_recipients: s.wa_recipients ?? "", wa_token: "", wa_token_set: s.wa_token_set,
         tg_enabled: s.tg_enabled, tg_chat_ids: s.tg_chat_ids ?? "",
@@ -979,6 +983,10 @@ export default function BeallitasokPage() {
         send_hour: Number(notif.send_hour) || 6,
         weekly_backup: notif.weekly_backup,
         auto_receipt: notif.auto_receipt,
+        weekly_digest: notif.weekly_digest,
+        weekly_day: Number(notif.weekly_day) || 0,
+        reminders_enabled: notif.reminders_enabled,
+        reminder_days: notif.reminder_days || null,
         wa_enabled: notif.wa_enabled,
         wa_phone_id: notif.wa_phone_id || null,
         wa_recipients: notif.wa_recipients || null,
@@ -2570,6 +2578,29 @@ export default function BeallitasokPage() {
               <input type="checkbox" checked={notif.auto_receipt} onChange={(e) => setNotif({ ...notif, auto_receipt: e.target.checked })} className="h-4 w-4" />
               {t("notif.autoReceipt")}
             </label>
+          </div>
+          {/* 128. kör: heti vezetői digest + számla-emlékeztető lépcső */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={notif.weekly_digest} onChange={(e) => setNotif({ ...notif, weekly_digest: e.target.checked })} className="h-4 w-4" />
+              {t("notif.weeklyDigest")}
+            </label>
+            <label className="flex items-center gap-2">
+              {t("notif.weeklyDay")}
+              <select value={notif.weekly_day} onChange={(e) => setNotif({ ...notif, weekly_day: e.target.value })} className="rounded-lg border border-slate-300 px-2 py-1">
+                {["0", "1", "2", "3", "4", "5", "6"].map((d) => <option key={d} value={d}>{t(`contracts.weekday.${d}`)}</option>)}
+              </select>
+            </label>
+            <span className="block w-full text-xs text-indigo-700">{t("notif.weeklyDigestHint")}</span>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={notif.reminders_enabled} onChange={(e) => setNotif({ ...notif, reminders_enabled: e.target.checked })} className="h-4 w-4" />
+              {t("notif.reminders")}
+            </label>
+            <label className="flex items-center gap-2">
+              {t("notif.reminderDays")}
+              <input value={notif.reminder_days} onChange={(e) => setNotif({ ...notif, reminder_days: e.target.value })} placeholder="3,7,14" className="w-28 rounded-lg border border-slate-300 px-2 py-1 font-mono text-xs" />
+            </label>
+            <span className="block w-full text-xs text-indigo-700">{t("notif.remindersHint")}</span>
           </div>
           {notifMsg && <p className="text-sm text-slate-600">{notifMsg}</p>}
           {/* WhatsApp bekötés (Meta Cloud API) — belső kommunikáció + dolgozói push */}

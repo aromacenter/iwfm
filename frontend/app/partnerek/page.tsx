@@ -9,6 +9,7 @@ import PartnerInfo from "@/components/PartnerInfo";
 import SearchSelect from "@/components/SearchSelect";
 import IconLegend from "@/components/IconLegend";
 import { api, downloadFile, errorMessage } from "@/lib/api";
+import { HEALTH_CHIP, HEALTH_ICON, type HealthLevel, type PartnerHealthRow } from "@/lib/partnerHealth";
 import { COMPANIES, COMPANY_CHIP, COMPANY_SHORT, type CompanyKey } from "@/lib/companies";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -167,6 +168,7 @@ export default function PartnerekPage() {
     const q = search.trim().toLowerCase();
     const rows = partners.filter((p) => {
       if (kindFilter === "partner" && (p.placed_machine_count ?? 0) === 0) return false;
+      if (healthFilter && health[p.id]?.level !== healthFilter) return false;
       if (kindFilter === "customer" && (p.placed_machine_count ?? 0) > 0) return false;
       if (typeFilter && p.partner_type !== typeFilter) return false;
       if (companyFilter === "none" && p.invoicing_company) return false;
@@ -214,6 +216,14 @@ export default function PartnerekPage() {
   // (migrált) sorok kérésre, és azokról A4-et nem gyártunk — Billingóban új
   // bizonylat innen sosem jön létre, csak a meglévő számlakép tölthető le.
   const [docsLegacy, setDocsLegacy] = useState(false);
+  // 127. kör: partner-egészség pontszám partnerenként (csak elszámolós partnerre)
+  const [health, setHealth] = useState<Record<string, PartnerHealthRow>>({});
+  const [healthFilter, setHealthFilter] = useState<"" | HealthLevel>("");
+  useEffect(() => {
+    api.get<PartnerHealthRow[]>("/api/partners/health")
+      .then((rows) => setHealth(Object.fromEntries(rows.map((r) => [r.partner_id, r]))))
+      .catch(() => {});
+  }, [partners.length]);
   async function openDocs(p: Partner, includeLegacy = false) {
     try {
       const rows = await api.get<PartnerDoc[]>(`/api/settlements?partner_id=${p.id}&scope=${includeLegacy ? "all" : "system"}`);
@@ -708,6 +718,19 @@ export default function PartnerekPage() {
           ))}
         </div>
         <div className="flex gap-1.5">
+          {([["", t("partners.healthFilterAll")], ["good", t("partners.healthGood")], ["watch", t("partners.healthWatch")], ["risk", t("partners.healthRisk")]] as const).map(([key, label]) => (
+            <button
+              key={`h-${key}`}
+              onClick={() => setHealthFilter(key as "" | HealthLevel)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                healthFilter === key ? "bg-slate-800 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1.5">
           {([["active", t("partners.statusActive")], ["inactive", t("partners.statusInactive")], ["", t("partners.statusAll")]] as const).map(([key, label]) => (
             <button
               key={key}
@@ -853,6 +876,14 @@ export default function PartnerekPage() {
                     >
                       {p.name}
                     </button>
+                    {health[p.id] && (
+                      <span
+                        title={health[p.id].reasons.length ? health[p.id].reasons.join(" · ") : t("partners.healthOk")}
+                        className={`ml-2 inline-flex cursor-help items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${HEALTH_CHIP[health[p.id].level]}`}
+                      >
+                        {HEALTH_ICON[health[p.id].level]} {health[p.id].score}
+                      </span>
+                    )}
                     {p.company_name && p.company_name !== p.name && (
                       <div className="text-xs text-slate-400">{p.company_name}</div>
                     )}

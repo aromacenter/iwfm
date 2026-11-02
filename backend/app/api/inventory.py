@@ -282,6 +282,8 @@ class PartnerOverviewOut(BaseModel):
     # Javítás-előzmények: a partner gépeihez / nevéhez tartozó munkalapok
     # (az ügyfél-adatlapon a korábbi szervizmunkák is látszanak — 077af934).
     repairs: list[dict] = []
+    # 127. kör: partner-egészség (None = nem elszámolós partner)
+    health: dict | None = None
 
 
 @router.get("/{partner_id}/overview", response_model=PartnerOverviewOut)
@@ -401,7 +403,11 @@ async def partner_overview(
         for ws, task in repair_rows
     ]
 
+    from app.services.wfm.partner_health import compute_partner_health
+
+    _health = (await compute_partner_health(db)).get(p.id)
     return PartnerOverviewOut(
+        health=_health.as_dict() if _health else None,
         repairs=repairs,
         partner=_partner_out(p, asset_count=len(assets)),
         debt=await _partner_debt(db, p.id),
@@ -466,6 +472,22 @@ async def list_partners(
         )
         for p in partners
     ]
+
+
+@router.get("/health")
+async def partners_health(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("partners")),
+):
+    """Partner-egészség pontszám (127. kör): 0–100 és szint (good/watch/risk)
+    minden aktív, elszámolós partnerre, az okokkal — a lista-chipnek és a
+    térképnek. Csak számol, nem tárol."""
+    from app.services.wfm.partner_health import compute_partner_health
+
+    rows = await compute_partner_health(db)
+    out = [h.as_dict() for h in rows.values()]
+    out.sort(key=lambda r: r["score"])
+    return out
 
 
 @router.get("/tax-lookup")

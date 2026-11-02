@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    Employee,
     NotificationSettings,
     Partner,
     ProductOrder,
@@ -27,6 +28,7 @@ from app.services.wfm.email_service import load_smtp_config, send_email
 logger = logging.getLogger(__name__)
 
 CHECK_SECONDS = 300
+NL = chr(10)  # sortörés a digest- és emlékeztető-szövegekhez
 
 
 async def get_or_create_settings(db: AsyncSession) -> NotificationSettings:
@@ -149,6 +151,158 @@ async def build_daily_digest(db: AsyncSession) -> str:
     return "\n".join(lines)
 
 
+async def build_weekly_digest(db: AsyncSession) -> str:
+    """Heti vezetői összefoglaló (128. kör): bevétel és elszámolás-szám az
+    elmúlt 7 napban az előző 7-hez képest, kockázatos partnerek (egészség-
+    pontszám), lejárt kintlévőség, nyitott szervizjegyek, a következő 7 nap
+    esedékességei — hétfő reggelre a tulajdonosnak."""
+    import uuid as _uuid
+
+    from sqlalchemy import func as sa_func
+
+    from app.api.consignment import due_settlements
+    from app.services.wfm.partner_health import compute_partner_health
+
+    now = datetime.now(UTC)
+    wk = now - timedelta(days=7)
+    wk2 = now - timedelta(days=14)
+    today = now.date()
+
+    async def _sum(since, until):
+        return (
+            await db.execute(
+                select(sa_func.count(), sa_func.coalesce(sa_func.sum(Settlement.total_gross), 0.0)).where(
+                    Settlement.created_at >= since, Settlement.created_at < until
+                )
+            )
+        ).one()
+
+    cnt, gross = await _sum(wk, now + timedelta(days=1))
+    pcnt, pgross = await _sum(wk2, wk)
+
+    def pct(a, b):
+        return f"{((a - b) / b * 100):+.0f}%" if b else "—"
+
+    def ft(v):
+        return f"{float(v):,.0f}".replace(",", " ")
+
+    lines = [f"Iwfm heti összefoglaló — {today:%Y-%m-%d} (elmúlt 7 nap)", ""]
+    lines.append(f"💰 Bevétel: {ft(gross)} Ft ({pct(float(gross), float(pgross))} az előző héthez) · {int(cnt)} elszámolás ({int(pcnt)} volt)")
+    if hasattr(Partner, "created_at"):
+        new_p = (await db.execute(select(sa_func.count()).where(Partner.created_at >= wk))).scalar_one()
+        lines.append(f"🤝 Új partner: {int(new_p)}")
+    overdue_total = 0.0
+    overdue_n = 0
+    for s_ in (await db.execute(select(Settlement).where(Settlement.invoiced.is_(True)))).scalars().all():
+        paid = s_.paid_amount if s_.paid_amount is not None else s_.total_gross
+        rem = float(s_.total_gross) - float(paid)
+        if rem > 0.5 and s_.due_date and s_.due_date < today:
+            overdue_total += rem
+            overdue_n += 1
+    lines.append(f"⏰ Lejárt kintlévőség: {overdue_n} tétel, {ft(overdue_total)} Ft")
+    open_tickets = (
+        await db.execute(select(ServiceTicket).where(ServiceTicket.status.in_(("open", "in_progress"))))
+    ).scalars().all()
+    stale = 0
+    for t in open_tickets:
+        c = t.created_at if t.created_at.tzinfo else t.created_at.replace(tzinfo=UTC)
+        if (now - c).days > 7:
+            stale += 1
+    lines.append(f"🔧 Nyitott szervizjegy: {len(open_tickets)}" + (f" (ebből {stale} egy hétnél régebbi)" if stale else ""))
+    try:
+        health = await compute_partner_health(db, today)
+    except Exception:
+        health = {}
+    risky = sorted((h for h in health.values() if h.level == "risk"), key=lambda h: h.score)
+    watch = [h for h in health.values() if h.level == "watch"]
+    if health:
+        lines.append("")
+        lines.append(f"❤️ Partner-egészség: {sum(1 for h in health.values() if h.level == 'good')} jó · {len(watch)} figyelni · {len(risky)} kockázat")
+        if risky:
+            ids = [_uuid.UUID(h.partner_id) for h in risky[:8]]
+            names = {p.id: p.name for p in (await db.execute(select(Partner).where(Partner.id.in_(ids)))).scalars().all()}
+            for h in risky[:8]:
+                lines.append(f"- 🔴 {names.get(_uuid.UUID(h.partner_id), '?')} ({h.score}/100): " + "; ".join(h.reasons[:2]))
+    try:
+        due = await due_settlements(days=7, db=db, _=None)  # type: ignore[arg-type]
+        soon = [d for d in due if d.days_left is not None and d.days_left <= 7]
+        lines.append("")
+        lines.append(f"📅 Esedékes elszámolás a héten: {len(due)} partner" + (f", ebből {len(soon)} kifogyás előtt" if soon else ""))
+    except Exception:
+        pass
+    return NL.join(lines)
+
+
+def _reminder_thresholds(raw: str | None) -> list[int]:
+    out: list[int] = []
+    for x in (raw or "3,7,14").replace(";", ",").split(","):
+        x = x.strip()
+        if x.isdigit() and int(x) > 0:
+            out.append(int(x))
+    return sorted(set(out)) or [3, 7, 14]
+
+
+async def run_payment_reminders(db: AsyncSession, smtp, today: date | None = None) -> int:
+    """Számla-emlékeztető lépcső (128. kör, ötlet #3): lejárt, rendezetlen
+    számlákra a beállított napoknál (alap 3 / 7 / 14) e-mail a partner címeire,
+    és Telegram a felelős képviselőnek. Tételenként egy lépcső csak egyszer.
+    Visszaadja a kiküldött emlékeztetők számát."""
+    from app.services.wfm.email_service import send_email as _send, split_addresses
+    from app.services.wfm.telegram import send_personal
+
+    row = await get_or_create_settings(db)
+    if not row.reminders_enabled:
+        return 0
+    today = today or datetime.now(UTC).date()
+    thresholds = _reminder_thresholds(row.reminder_days)
+    sent = 0
+    rows = (
+        await db.execute(
+            select(Settlement, Partner)
+            .join(Partner, Partner.id == Settlement.partner_id)
+            .where(Settlement.invoiced.is_(True), Settlement.due_date.is_not(None), Settlement.due_date < today)
+        )
+    ).all()
+    for s_, partner in rows:
+        paid = s_.paid_amount if s_.paid_amount is not None else s_.total_gross
+        remaining = round(float(s_.total_gross) - float(paid))
+        if remaining <= 0:
+            continue
+        days = (today - s_.due_date).days
+        stage = sum(1 for t in thresholds if days >= t)
+        if stage <= int(s_.reminder_stage or 0):
+            continue
+        number = s_.billingo_document_number or f"ELSZ-{str(s_.id)[:8].upper()}"
+        emails = [e for e in split_addresses(partner.contact_email) + split_addresses(s_.invoice_emails) if "@" in e]
+        rem_txt = f"{remaining:,}".replace(",", " ")
+        body = NL.join([
+            "Tisztelt Partnerünk!", "",
+            f"A(z) {number} számú számla fizetési határideje {s_.due_date.isoformat()} volt, {days} napja lejárt. Nyitott összeg: {rem_txt} Ft.",
+            "Kérjük, a rendezésről mielőbb gondoskodjon; ha időközben utalták, kérjük, tekintse tárgytalannak.", "",
+            "Üdvözlettel,", "X-admin",
+        ])
+        ok_any = False
+        if smtp is not None:
+            for to in dict.fromkeys(emails):
+                if await _send(smtp, to, f"{stage}. fizetési emlékeztető — {number}", body):
+                    ok_any = True
+        if partner.agent_user_id:
+            emp = (await db.execute(select(Employee).where(Employee.user_id == partner.agent_user_id))).scalar_one_or_none()
+            if emp is not None:
+                await send_personal(
+                    db, emp,
+                    f"⏰ {stage}. emlékeztető ment: {partner.name} — {number}, {days} napja lejárt, {rem_txt} Ft nyitott"
+                    + ("" if ok_any else " (e-mail cím nélkül, csak neked)"),
+                )
+        if ok_any or not emails:
+            s_.reminder_stage = stage
+            s_.reminder_sent_at = datetime.now(UTC)
+            sent += 1
+    if sent:
+        await db.commit()
+    return sent
+
+
 async def run_pending_notifications(db: AsyncSession) -> dict:
     """Egy ellenőrzési kör: ha esedékes, kiküldi a napit és/vagy a heti
     mentést. Visszaadja, mi ment ki (teszthez is)."""
@@ -214,14 +368,46 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
     row = await get_or_create_settings(db)
     result = {"daily": False, "backup": False, "auto_clockout": closed,
               "telegram_link": tg_linked, "calendar": cal_added, "mt_check": mt_ran,
-              "stale_timers": stale_closed}
+              "stale_timers": stale_closed, "weekly": False, "reminders": 0}
     recipients = _recipients(row)
-    if not recipients:
-        return result
     now = datetime.now(UTC)
     today = f"{now:%Y-%m-%d}"
-
     smtp = await load_smtp_config(db)
+
+    # Számla-emlékeztetők naponta egyszer (e-mail nélkül is: Telegram a képviselőnek)
+    if row.reminders_enabled and row.last_reminder_run != today and now.hour >= row.send_hour:
+        try:
+            result["reminders"] = await run_payment_reminders(db, smtp, now.date())
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("payment reminders failed", exc_info=True)
+        row.last_reminder_run = today
+        await db.commit()
+
+    # Heti vezetői digest: e-mail a címzetteknek + Telegram-csoport (ha be van kötve)
+    if row.weekly_digest and now.weekday() == int(row.weekly_day or 0) and now.hour >= row.send_hour and row.last_weekly_sent != today:
+        body = await build_weekly_digest(db)
+        ok = False
+        if smtp is not None:
+            for to in recipients:
+                ok = await send_email(smtp, to, f"Iwfm heti összefoglaló — {today}", body) or ok
+        try:
+            from app.services.wfm.telegram import load_telegram_config, send_telegram
+
+            cfg = await load_telegram_config(db)
+            if cfg and cfg.get("chat_ids"):
+                for chat in cfg["chat_ids"]:
+                    ok = await send_telegram(cfg, chat, body) or ok
+        except Exception:
+            pass
+        if ok:
+            row.last_weekly_sent = today
+            await db.commit()
+            result["weekly"] = True
+
+    if not recipients:
+        return result
     if smtp is None:
         return result
 

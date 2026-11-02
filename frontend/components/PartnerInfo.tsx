@@ -45,6 +45,17 @@ interface Overview {
   open_deliveries: number;
   open_deliveries_net: number;
   open_tickets: number;
+  health?: {
+    score: number;
+    level: "good" | "watch" | "risk";
+    reasons: string[];
+    components: { trend: number; payment: number; service: number; visit: number };
+    days_since_visit: number | null;
+    trend_ratio: number | null;
+    outstanding: number;
+    overdue_items: number;
+    tickets_90d: number;
+  } | null;
   repairs: {
     task_id: string; serial: string; title: string; status: string;
     external: boolean; created_at: string; picked_up: boolean; handed_over: boolean;
@@ -102,6 +113,21 @@ export default function PartnerInfo({
               )}
             </h2>
             {p?.company_name && <p className="text-sm text-slate-500">{p.company_name}</p>}
+            {data?.health && (
+              <div className={`mt-1 inline-flex flex-col rounded-lg px-2 py-1 text-xs ${data.health.level === "good" ? "bg-emerald-50 text-emerald-800" : data.health.level === "watch" ? "bg-amber-50 text-amber-800" : "bg-rose-50 text-rose-800"}`}>
+                <span className="font-semibold">
+                  {data.health.level === "good" ? "💚" : data.health.level === "watch" ? "🟡" : "🔴"} {t("pinfo.health")}: {data.health.score}/100
+                  <span className="ml-2 font-normal opacity-80">
+                    {t("pinfo.healthTrend")} {data.health.components.trend} · {t("pinfo.healthPay")} {data.health.components.payment} · {t("pinfo.healthService")} {data.health.components.service} · {t("pinfo.healthVisit")} {data.health.components.visit}
+                  </span>
+                </span>
+                {data.health.reasons.length > 0 && (
+                  <ul className="mt-0.5 list-disc pl-4">
+                    {data.health.reasons.map((r) => <li key={r}>{r}</li>)}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
           <button onClick={onClose} className="text-sm text-slate-500 hover:underline">✕ {t("common.close")}</button>
         </div>

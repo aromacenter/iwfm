@@ -2348,6 +2348,9 @@ class Settlement(Base):
     # (a régi elszámolások nem keletkeztetnek visszamenőleg tartozást).
     debt_before: Mapped[float | None] = mapped_column(Float, nullable=True)
     paid_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 128. kör: hányadik emlékeztető-lépcső ment már ki erre a lejárt tételre
+    reminder_stage: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -2644,6 +2647,14 @@ class NotificationSettings(Base):
     # Utolsó sikeres küldések (duplikátum-védelem újraindításkor)
     last_daily_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)  # ÉÉÉÉ-HH-NN
     last_backup_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # 128. kör: heti vezetői összefoglaló (e-mail + Telegram-csoport) a hét adott napján
+    weekly_digest: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    weekly_day: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")  # 0 = hétfő
+    last_weekly_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # 128. kör: számla-emlékeztető lépcső lejárt tételekre (napok vesszővel, pl. "3,7,14")
+    reminders_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    reminder_days: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_reminder_run: Mapped[str | None] = mapped_column(String(10), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

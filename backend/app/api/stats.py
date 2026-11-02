@@ -377,6 +377,10 @@ class MapPartnerOut(BaseModel):
     # 120. kör: miért nincs a térképen — None = még nem futott, not_found | error
     geocode_error: str | None = None
     geocode_attempted_at: datetime | None = None
+    # 127. kör: partner-egészség a térkép-jelölő színéhez
+    health_score: int | None = None
+    health_level: str | None = None
+    health_reasons: list[str] = []
 
 
 @router.get(
@@ -423,12 +427,16 @@ async def stats_map(
     )
     rev_q = _range_filter(rev_q, Settlement.created_at, CASH_EPOCH, None)
     rev = {pid: float(v or 0.0) for pid, v in (await db.execute(rev_q)).all()}
+    from app.services.wfm.partner_health import compute_partner_health
+
+    health = await compute_partner_health(db)
     out: list[MapPartnerOut] = []
     for p in (
         await db.execute(select(Partner).where(Partner.is_active.is_(True)))
     ).scalars().all():
         machines = mach.get(p.id, 0)
         revenue = rev.get(p.id, 0.0)
+        h = health.get(p.id)
         # d650f1d5: MINDEN aktív partner a térképre kerül; a gép nélküli /
         # szerződés nélküli jelölten (a kliens szürkén rajzolja, szűrhető)
         out.append(MapPartnerOut(
@@ -440,6 +448,9 @@ async def stats_map(
             contracted=p.id in contracted_ids,
             geocode_error=p.geocode_error,
             geocode_attempted_at=p.geocode_attempted_at,
+            health_score=h.score if h else None,
+            health_level=h.level if h else None,
+            health_reasons=h.reasons if h else [],
         ))
     return out
 
