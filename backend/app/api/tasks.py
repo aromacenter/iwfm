@@ -78,6 +78,8 @@ class TaskCreateBody(BaseModel):
     # HELYSZÍNI javítás: egyszerűsített munkalap — nincs ajánlat-folyamat,
     # mindkét fél a helyszínen írja alá.
     onsite: bool = False
+    # Csapatos munkavégzés (136. kör): további szerelők a feladaton
+    helper_employee_ids: list[str] | None = Field(default=None, max_length=20)
     # A munkalap tárgy-gépe: ebből jön a karbantartási díj alapértéke és az
     # aláírás utáni auto-számlázás partnere.
     asset_id: str | None = None
@@ -96,6 +98,7 @@ class TaskPatchBody(BaseModel):
     status: str | None = None  # manager bármit állíthat (pl. visszanyitás)
     visit_window: str | None = Field(default=None, max_length=64)  # időkapu a partnernél
     reschedule_note: str | None = Field(default=None, max_length=512)  # KÖTELEZŐ, ha a határidő változik
+    helper_employee_ids: list[str] | None = Field(default=None, max_length=20)  # 136. kör
     save_window_for_partner: bool | None = None  # az időkaput a partnerhez is mentjük
 
 
@@ -139,6 +142,9 @@ class TaskOut(BaseModel):
     comments: list[CommentOut]
     created_at: datetime
     worksheet_serial: str | None = None  # ML-2026-0001, ha van munkalap
+    # Csapatos munkavégzés (136. kör): segítők + a néző segítő-e (me-nézetben)
+    helpers: list[dict] = []
+    is_helper: bool = False
     worksheet_completed: bool = False  # kitöltötte-e már a dolgozó
     worksheet_external: bool = False  # külső szerviznek átadott gép munkalapja
     worksheet_total_loss: bool = False  # gazdasági totálkárnak jelölt gép
@@ -836,6 +842,20 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
         )
     ).all()
     names = {eid: f"{ln} {fn}" for eid, ln, fn in emp_rows}
+    # segítők (136. kör)
+    from app.models import TaskHelper as _TaskHelper
+
+    helper_rows = (
+        await db.execute(
+            select(_TaskHelper.task_id, Employee.id, Employee.last_name, Employee.first_name)
+            .join(Employee, Employee.id == _TaskHelper.employee_id)
+            .where(_TaskHelper.task_id.in_([t.id for t in tasks]))
+            .order_by(Employee.last_name, Employee.first_name)
+        )
+    ).all()
+    helpers_by_task: dict[uuid.UUID, list[dict]] = {}
+    for tid, eid, ln, fn in helper_rows:
+        helpers_by_task.setdefault(tid, []).append({"employee_id": str(eid), "name": f"{ln} {fn}"})
     skill_rows = (
         await db.execute(
             select(Skill.id, Skill.name).where(
@@ -959,6 +979,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             description=t.description,
             employee_id=str(t.employee_id),
             employee_name=names.get(t.employee_id),
+            helpers=helpers_by_task.get(t.id, []),
             due_date=t.due_date,
             required_skill=(
                 {"id": t.required_skill_id, "name": skills[t.required_skill_id]}
@@ -1095,6 +1116,10 @@ async def create_task(
     )
     db.add(task)
     await db.flush()
+    if body.helper_employee_ids:
+        from app.services.wfm.task_team import parse_helper_ids, set_helpers
+
+        await set_helpers(db, task, await parse_helper_ids(db, body.helper_employee_ids, task.employee_id) or [])
 
     # A munkalap tárgy-gépe (opcionális): a karbantartási díj alapértéke és
     # az auto-számlázás partnere ebből jön.
@@ -1235,6 +1260,7 @@ async def update_task(
                         _p.visit_window = data["visit_window"]
     if "status" in data and data["status"] not in ALL_STATUSES:
         raise HTTPException(status_code=422, detail={"code": "tasks.bad_status"})
+    helper_raw = data.pop("helper_employee_ids", None)
     if "employee_id" in data:
         try:
             data["employee_id"] = uuid.UUID(data["employee_id"])
@@ -1247,6 +1273,14 @@ async def update_task(
     )
     for key, value in data.items():
         setattr(task, key, value)
+    if helper_raw is not None or reassigned_to is not None:
+        from app.services.wfm.task_team import helper_ids as _helper_ids, parse_helper_ids, set_helpers
+
+        new_ids = await parse_helper_ids(db, helper_raw, task.employee_id)
+        if new_ids is None:
+            new_ids = await _helper_ids(db, task.id)  # átosztásnál az új felelős kikerül a segítők közül
+        await set_helpers(db, task, new_ids)
+        data["helper_employee_ids"] = [str(i) for i in new_ids]
     # Elvegzes pillanatkepe: ki es mikor zarta le (ujranyitasnal torlodik).
     if data.get("status") == "done" and task.completed_at is None:
         task.completed_at = datetime.now(UTC)
@@ -1899,22 +1933,30 @@ async def my_tasks(
     db: AsyncSession = Depends(get_db),
     emp: Employee = Depends(get_own_employee),
 ):
+    from app.services.wfm.task_team import helper_task_ids
+
     tasks = list(
         (
             await db.execute(
                 select(Task)
-                .where(Task.employee_id == emp.id)
+                .where((Task.employee_id == emp.id) | Task.id.in_(helper_task_ids(emp.id)))
                 .order_by(Task.status == "done", Task.due_date.desc())
                 .limit(100)
             )
         ).scalars()
     )
-    return await _tasks_out(db, tasks)
+    out = await _tasks_out(db, tasks)
+    for o, t in zip(out, tasks, strict=True):
+        o.is_helper = t.employee_id != emp.id
+    return out
 
 
 async def _own_task_or_404(db: AsyncSession, emp: Employee, task_id: str) -> Task:
+    """A feladat gazdája VAGY segítője (136. kör) — más: 404, mintha nem létezne."""
+    from app.services.wfm.task_team import is_member
+
     task = await _get_task_or_404(db, task_id)
-    if task.employee_id != emp.id:  # idegen feladat: nem látható, 404
+    if not await is_member(db, task, emp.id):  # idegen feladat: nem látható, 404
         raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
     return task
 

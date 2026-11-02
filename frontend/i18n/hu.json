@@ -1377,6 +1377,9 @@
   "tasks": {
     "title": "Feladatok",
     "allStatuses": "Minden státusz",
+    "helpers": "Csapat — további szerelők",
+    "helpersHint": "Ők is látják a feladatot a Feladataim nézetben, kommentelhetnek, mérik a saját idejüket; a munkalap és a beépítés közös.",
+    "noHelpers": "nincs csapat — kattints a hozzáadáshoz",
     "new": "+ Új munkalap / feladat",
     "newTitle": "📝 Új munkalap kiállítása",
     "newHint": "A feladat online munkalapként áll ki (automatikus ML-sorszámmal) — az elvégzett munkát, anyagokat és aláírásokat a dolgozó tölti ki a telefonján.",
@@ -1524,6 +1527,8 @@
     },
     "empty": "Most nincs kiosztott feladatod. 🎉",
     "due": "Határidő: {date}",
+    "team": "Csapat: {names}",
+    "asHelper": "Segítőként vagy rajta — fő felelős: {name}",
     "commentPlaceholder": "Komment a munkáról…",
     "done": "✓ Befejezett",
     "needsMoreWork": "További munkát igényel",

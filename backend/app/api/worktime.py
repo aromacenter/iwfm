@@ -41,7 +41,9 @@ async def _own_worksheet(db: AsyncSession, emp: Employee, task_id: str) -> Works
     except ValueError:
         raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
     task = (await db.execute(select(Task).where(Task.id == tid))).scalar_one_or_none()
-    if task is None or task.employee_id != emp.id:
+    from app.services.wfm.task_team import is_member
+
+    if task is None or not await is_member(db, task, emp.id):  # gazda vagy segítő (136. kör)
         raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
     ws = (await db.execute(select(Worksheet).where(Worksheet.task_id == task.id))).scalar_one_or_none()
     if ws is None:

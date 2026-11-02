@@ -61,6 +61,9 @@ interface TaskOut {
   intake_photos: string[]; // az átvételkor készült fotók id-i
   worksheet_photos: string[]; // a munkalaphoz csatolt saját fotók id-i
   photos_needed?: number; // fotó-kötelezettség: ennyi fotó hiányzik még a lezáráshoz
+  helpers?: { employee_id: string; name: string }[]; // csapat (136. kör)
+  is_helper?: boolean; // én segítőként vagyok rajta
+  employee_name?: string | null;
   completed_at: string | null;
   completed_by_name: string | null;
 }
@@ -1003,6 +1006,13 @@ export default function FeladataimPage() {
               </span>
             </div>
             <p className="text-xs text-slate-400">{t("myTasks.due", { date: task.due_date })}</p>
+            {((task.helpers ?? []).length > 0 || task.is_helper) && (
+              <p className="mt-0.5 text-xs text-indigo-700">
+                👥 {task.is_helper
+                  ? t("myTasks.asHelper", { name: task.employee_name ?? "?" })
+                  : t("myTasks.team", { names: (task.helpers ?? []).map((h) => h.name).join(", ") })}
+              </p>
+            )}
             {/* Cégen belüli kiadás (87994b7c): melyik szerelő viszi a munkát */}
             {myTechs.length > 0 && task.status !== "done" && (
               <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm">

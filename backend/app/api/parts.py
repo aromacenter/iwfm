@@ -852,8 +852,10 @@ async def _task_and_worksheet(db: AsyncSession, task_id: str) -> tuple[Task, Wor
 
 
 async def _assert_own_task(db: AsyncSession, actor: User, task: Task) -> None:
+    from app.services.wfm.task_team import is_member
+
     emp = (await db.execute(select(Employee).where(Employee.user_id == actor.id))).scalars().first()
-    if emp is None or task.employee_id != emp.id:  # idegen feladat: 404, mint a me-végpontokon
+    if emp is None or not await is_member(db, task, emp.id):  # idegen feladat: 404, mint a me-végpontokon
         raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
 
 

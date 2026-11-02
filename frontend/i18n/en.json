@@ -1377,6 +1377,9 @@
   "tasks": {
     "title": "Tasks",
     "allStatuses": "All statuses",
+    "helpers": "Team — additional technicians",
+    "helpersHint": "They also see the task in My tasks, can comment and track their own time; the worksheet and part installs are shared.",
+    "noHelpers": "no team — click to add",
     "new": "+ New worksheet / task",
     "newTitle": "📝 Issue a new worksheet",
     "newHint": "The task is issued as an online worksheet (with an automatic serial number) — the employee fills in the work done, materials and signatures on their phone.",
@@ -1524,6 +1527,8 @@
     },
     "empty": "No tasks assigned right now. 🎉",
     "due": "Due: {date}",
+    "team": "Team: {names}",
+    "asHelper": "You are a helper — lead: {name}",
     "commentPlaceholder": "Comment about the work…",
     "done": "✓ Done",
     "needsMoreWork": "Needs more work",

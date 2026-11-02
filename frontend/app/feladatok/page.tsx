@@ -34,6 +34,7 @@ interface TaskOut {
   description: string | null;
   employee_id: string;
   employee_name: string | null;
+  helpers?: { employee_id: string; name: string }[]; // csapat (136. kör)
   due_date: string;
   required_skill: Skill | null;
   status: "open" | "done" | "needs_more_work";
@@ -96,6 +97,7 @@ export default function FeladatokPage() {
     title: "",
     description: "",
     employee_id: "",
+    helper_ids: [] as string[],
     due_date: todayIso(),
     required_skill_id: 0,
     client_name: "",
@@ -294,6 +296,7 @@ export default function FeladatokPage() {
         description: form.description || null,
         // "auto" = az AI jelöli ki a legalkalmasabb dolgozót a szerveren
         employee_id: form.employee_id === "auto" ? null : form.employee_id,
+        helper_employee_ids: form.helper_ids.filter((id) => id !== form.employee_id),
         due_date: form.due_date,
         required_skill_id: form.required_skill_id || null,
         client_name: form.client_name || null,
@@ -321,7 +324,7 @@ export default function FeladatokPage() {
       setNewAssetMode(false);
       setNewAsset({ name: "", manufacturer: "", serial_number: "", partner_id: "" });
       setForm({
-        title: "", description: "", employee_id: "", due_date: todayIso(),
+        title: "", description: "", employee_id: "", helper_ids: [], due_date: todayIso(),
         required_skill_id: 0, client_name: "", client_location: "",
       });
       const messages: string[] = [];
@@ -347,6 +350,16 @@ export default function FeladatokPage() {
       setError(errorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Csapat (136. kör): segítők módosítása a soron
+  async function setHelpers(task: TaskOut, ids: string[]) {
+    try {
+      await api.patch(`/api/tasks/${task.id}`, { helper_employee_ids: ids });
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
     }
   }
 
@@ -752,6 +765,27 @@ export default function FeladatokPage() {
                   {task.employee_name} · {task.due_date}
                   {task.comments.length > 0 && ` · ${t("tasks.comments", { count: task.comments.length })}`}
                 </p>
+                {/* Csapat (136. kör): segítők + szerkesztés */}
+                <details className="mt-0.5 text-xs text-slate-600">
+                  <summary className="cursor-pointer select-none">
+                    👥 {(task.helpers ?? []).length > 0 ? (task.helpers ?? []).map((h) => h.name).join(", ") : t("tasks.noHelpers")}
+                  </summary>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {employees.filter((e) => e.id !== task.employee_id).map((e) => {
+                      const on = (task.helpers ?? []).some((h) => h.employee_id === e.id);
+                      return (
+                        <button
+                          type="button"
+                          key={e.id}
+                          onClick={() => void setHelpers(task, on ? (task.helpers ?? []).filter((h) => h.employee_id !== e.id).map((h) => h.employee_id) : [...(task.helpers ?? []).map((h) => h.employee_id), e.id])}
+                          className={`rounded-full border px-2 py-0.5 ${on ? "border-indigo-400 bg-indigo-100 text-indigo-900" : "border-slate-300 hover:bg-slate-100"}`}
+                        >
+                          {on ? "✓ " : ""}{e.last_name} {e.first_name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </details>
                 {task.status === "done" && task.completed_at && (
                   <p className="text-xs font-medium text-emerald-700">
                     ✔ {t("tasks.completedBy", {
@@ -968,6 +1002,26 @@ export default function FeladatokPage() {
                 ))}
               </select>
             </label>
+            {/* Csapat (136. kör): további szerelők ugyanazon a feladaton */}
+            <div className="text-sm">
+              <span className="block">👥 {t("tasks.helpers")}</span>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {assignableEmployees.filter(({ emp }) => emp.id !== form.employee_id).map(({ emp }) => {
+                  const on = form.helper_ids.includes(emp.id);
+                  return (
+                    <button
+                      type="button"
+                      key={emp.id}
+                      onClick={() => setForm({ ...form, helper_ids: on ? form.helper_ids.filter((x) => x !== emp.id) : [...form.helper_ids, emp.id] })}
+                      className={`rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-indigo-400 bg-indigo-100 text-indigo-900" : "border-slate-300 text-slate-600 hover:bg-slate-100"}`}
+                    >
+                      {on ? "✓ " : ""}{emp.last_name} {emp.first_name}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="mt-0.5 block text-xs text-slate-500">{t("tasks.helpersHint")}</span>
+            </div>
             <label className="block text-sm">
               {t("tasks.dueDate")}
               <input required type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

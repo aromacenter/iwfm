@@ -375,6 +375,29 @@ class Task(Base):
     )
 
 
+class TaskHelper(Base):
+    """Csapatos munkavégzés (136. kör): a feladat fő felelőse mellett további
+    szerelők — ők is látják a feladatot a Feladataim nézetben, kommentelhetnek,
+    mérik a saját idejüket, a munkalap és a beépítés közös."""
+
+    __tablename__ = "task_helpers"
+    __table_args__ = (
+        UniqueConstraint("task_id", "employee_id", name="uq_task_helper"),
+        Index("ix_task_helpers_employee", "employee_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class TaskComment(Base):
     """A dolgozó (vagy vezető) megjegyzése a feladathoz."""
 
