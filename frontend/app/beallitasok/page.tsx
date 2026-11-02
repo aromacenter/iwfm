@@ -50,6 +50,8 @@ interface WorksheetSettings {
   show_hours: boolean;
   show_client_signature: boolean;
   show_comments: boolean;
+  photo_policy: "none" | "service" | "all";
+  photo_min: number;
   has_logo: boolean;
 }
 
@@ -618,6 +620,8 @@ export default function BeallitasokPage() {
     show_hours: true,
     show_client_signature: true,
     show_comments: true,
+    photo_policy: "none" as "none" | "service" | "all",
+    photo_min: 1,
   });
   const [wsDefaults, setWsDefaults] = useState({ customer: "", intake: "" });
   const [wsSurveyDefault, setWsSurveyDefault] = useState(5000);
@@ -738,6 +742,8 @@ export default function BeallitasokPage() {
           show_hours: s.show_hours,
           show_client_signature: s.show_client_signature,
           show_comments: s.show_comments,
+          photo_policy: s.photo_policy ?? "none",
+          photo_min: s.photo_min ?? 1,
         });
         setWsDefaults({ customer: s.customer_footer_default, intake: s.intake_footer_default });
         setWsSurveyDefault(s.survey_fee_default);
@@ -1257,6 +1263,8 @@ export default function BeallitasokPage() {
         show_hours: ws.show_hours,
         show_client_signature: ws.show_client_signature,
         show_comments: ws.show_comments,
+        photo_policy: ws.photo_policy,
+        photo_min: ws.photo_min,
         logo: wsLogo,
         remove_logo: wsRemoveLogo,
       });
@@ -1423,6 +1431,37 @@ export default function BeallitasokPage() {
                 {t(`settings.${lbl}`)}
               </label>
             ))}
+          </div>
+          {/* Fotó-kötelezettség a feladat lezárásához (131. kör) */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-sm">
+                <span className="block text-xs font-medium text-slate-600">📷 {t("settings.wsPhotoPolicy")}</span>
+                <select
+                  value={ws.photo_policy}
+                  onChange={(e) => setWs({ ...ws, photo_policy: e.target.value as "none" | "service" | "all" })}
+                  className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="none">{t("settings.wsPhotoPolicyNone")}</option>
+                  <option value="service">{t("settings.wsPhotoPolicyService")}</option>
+                  <option value="all">{t("settings.wsPhotoPolicyAll")}</option>
+                </select>
+              </label>
+              {ws.photo_policy !== "none" && (
+                <label className="text-sm">
+                  <span className="block text-xs font-medium text-slate-600">{t("settings.wsPhotoMin")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={8}
+                    value={ws.photo_min}
+                    onChange={(e) => setWs({ ...ws, photo_min: Math.min(8, Math.max(1, Number(e.target.value) || 1)) })}
+                    className="mt-1 w-20 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </label>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">{t("settings.wsPhotoPolicyHint")}</p>
           </div>
           {wsMsg && <p className="text-sm text-slate-600">{wsMsg}</p>}
           <button disabled={wsBusy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">

@@ -595,6 +595,10 @@ class WorksheetSettings(Base):
     show_hours: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_client_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_comments: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Fotó-kötelezettség a lezáráshoz (131. kör): none = nincs, service = csak
+    # gépes / szervizjegyes feladatnál, all = minden feladatnál; photo_min db.
+    photo_policy: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    photo_min: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # Az ügyfél-munkalap (−1) aljára kerülő garanciális feltételek — üresen a
     # beépített alapszöveg megy ki; adminból szerkeszthető.
     customer_footer_text: Mapped[str | None] = mapped_column(Text, nullable=True)

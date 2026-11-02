@@ -159,6 +159,8 @@ class TaskOut(BaseModel):
     intake_id: str | None = None  # az átvétel, amiből a feladat készült
     intake_photos: list[str] = []  # az átvételi fotók id-i (a szerelő is látja)
     worksheet_photos: list[str] = []  # a szervizes munkalap-fotóinak id-i
+    # Fotó-kötelezettség (131. kör): ennyi fotó hiányzik még a lezáráshoz (0 = zárható)
+    photos_needed: int = 0
 
 
 MAX_SIGNATURE_BYTES = 300_000  # ~300KB data URL-enként
@@ -781,6 +783,50 @@ async def _comments_map(
     return out
 
 
+async def _photo_rule(db: AsyncSession) -> tuple[str, int]:
+    """Fotó-kötelezettség szabálya a munkalap-beállításból: (policy, min)."""
+    from app.models import WorksheetSettings
+
+    row = (
+        await db.execute(
+            select(WorksheetSettings.photo_policy, WorksheetSettings.photo_min)
+            .where(WorksheetSettings.id == 1)
+        )
+    ).first()
+    if row is None:
+        return "none", 1
+    return (row[0] or "none"), int(row[1] or 1)
+
+
+def _photos_needed(rule: tuple[str, int], task: Task, has_asset: bool, photo_count: int) -> int:
+    """Hány fotó hiányzik még a lezáráshoz (0 = zárható). none → 0; service →
+    csak gépes vagy szervizjegyből készült feladatnál; all → mindegyiknél."""
+    policy, minimum = rule
+    if policy == "none":
+        return 0
+    if policy == "service" and not (has_asset or task.service_ticket_id is not None):
+        return 0
+    return max(minimum - photo_count, 0)
+
+
+async def _photos_needed_for_task(db: AsyncSession, task: Task) -> int:
+    from app.models import WorksheetPhoto
+
+    rule = await _photo_rule(db)
+    if rule[0] == "none":
+        return 0
+    ws = await _get_worksheet(db, task.id)
+    count = 0
+    if ws is not None:
+        count = (
+            await db.execute(
+                select(sa_func.count()).select_from(WorksheetPhoto)
+                .where(WorksheetPhoto.worksheet_id == ws.id)
+            )
+        ).scalar_one()
+    return _photos_needed(rule, task, bool(ws is not None and ws.asset_id), int(count))
+
+
 async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
     emp_rows = (
         await db.execute(
@@ -864,6 +910,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             tid: by_intake.get(iid, []) for tid, iid in intake_map.items()
         }
     ws_photo_ids: dict[uuid.UUID, list[str]] = {}
+    photo_rule = await _photo_rule(db)
     if ws_rows:
         from app.models import WorksheetPhoto
 
@@ -941,6 +988,9 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             reschedule_requested_at=t.reschedule_requested_at,
             intake_photos=intake_photo_ids.get(t.id, []),
             worksheet_photos=ws_photo_ids.get(t.id, []),
+            photos_needed=_photos_needed(
+                photo_rule, t, bool(ws_asset_ids.get(t.id)), len(ws_photo_ids.get(t.id, []))
+            ),
         )
         for t in tasks
     ]
@@ -2326,6 +2376,13 @@ async def my_status(
     if body.status not in EMPLOYEE_STATUSES:
         raise HTTPException(status_code=422, detail={"code": "tasks.bad_status"})
     task = await _own_task_or_404(db, emp, task_id)
+    if body.status == "done":
+        # Fotó-kötelezettség (131. kör): a beállított minimum alatt nem zárható
+        missing = await _photos_needed_for_task(db, task)
+        if missing > 0:
+            raise HTTPException(
+                status_code=422, detail={"code": "worksheet.photo_required", "missing": missing}
+            )
     task.status = body.status
     if body.status == "done":
         task.completed_at = datetime.now(UTC)

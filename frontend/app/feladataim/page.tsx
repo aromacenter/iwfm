@@ -60,6 +60,7 @@ interface TaskOut {
   reschedule_request_date?: string | null;
   intake_photos: string[]; // az átvételkor készült fotók id-i
   worksheet_photos: string[]; // a munkalaphoz csatolt saját fotók id-i
+  photos_needed?: number; // fotó-kötelezettség: ennyi fotó hiányzik még a lezáráshoz
   completed_at: string | null;
   completed_by_name: string | null;
 }
@@ -1156,6 +1157,11 @@ export default function FeladataimPage() {
                   {t("common.send")}
                 </button>
               </div>
+              {task.status !== "done" && (task.photos_needed ?? 0) > 0 && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                  📷 {t("myTasks.photosNeeded", { count: task.photos_needed ?? 0 })}
+                </p>
+              )}
               {task.status !== "done" && (
                 <div className="flex gap-2">
                   <button

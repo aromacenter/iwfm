@@ -332,6 +332,9 @@ class WorksheetSettingsBody(BaseModel):
     show_hours: bool = True
     show_client_signature: bool = True
     show_comments: bool = True
+    # Fotó-kötelezettség a lezáráshoz (131. kör)
+    photo_policy: str = Field(default="none", pattern="^(none|service|all)$")
+    photo_min: int = Field(default=1, ge=1, le=8)
     logo: str | None = None  # data URL (image/png|jpeg); ha üres, marad a régi
     remove_logo: bool = False
 
@@ -360,6 +363,8 @@ class WorksheetSettingsOut(BaseModel):
     show_hours: bool
     show_client_signature: bool
     show_comments: bool
+    photo_policy: str = "none"
+    photo_min: int = 1
     has_logo: bool
 
 
@@ -396,6 +401,8 @@ def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
         show_hours=row.show_hours,
         show_client_signature=row.show_client_signature,
         show_comments=row.show_comments,
+        photo_policy=row.photo_policy or "none",
+        photo_min=int(row.photo_min or 1),
         has_logo=row.logo_data is not None,
     )
 
@@ -466,6 +473,8 @@ async def update_worksheet_settings(
     row.show_hours = body.show_hours
     row.show_client_signature = body.show_client_signature
     row.show_comments = body.show_comments
+    row.photo_policy = body.photo_policy
+    row.photo_min = body.photo_min
 
     if body.remove_logo:
         row.logo_data = None
