@@ -882,6 +882,9 @@ class LicenseSettings(Base):
     # NULL = MINDEN modul megy (a saját, X-Presso példány így fut — az új
     # modulok nála kapcsolgatás nélkül, azonnal élnek).
     enabled_modules: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # 140. kör: a cég által elrejtett modulok (a licencen belül) + választott iparág-profil
+    hidden_modules: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    industry_profile: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # A Flotta-pult által lenyomott csomag-katalógus (név/limit/ár lista) —
     # az ügyfél-oldali "Elérhető csomagok" kártyák ebből épülnek.
     plan_catalog: Mapped[list | None] = mapped_column(JSON, nullable=True)

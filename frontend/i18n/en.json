@@ -2208,6 +2208,7 @@
     "intake.contact_required": "Phone number and email are required for intake.",
     "worksheet.too_many_photos": "At most 16 photos can be attached to a worksheet.",
     "worksheet.photo_required": "The task cannot be closed: photos must be attached to the worksheet first (photo requirement).",
+    "license.bad_module": "Unknown module key.",
     "timeoff.partial_one_day": "An arriving-late / leaving-early request is for a single day.",
     "timeoff.time_required": "Please give the time.",
     "timeoff.bad_time": "Invalid time (HH:MM).",
@@ -2353,6 +2354,30 @@
     "finish": "Go to the calendar!",
     "stepBilling": "Invoicing",
     "stepDemo": "Sample",
+    "stepProfile": "Profile",
+    "tipProfile": "Choose what you use the system for — irrelevant modules are hidden from the menu. Fine-tune any time under Settings → License.",
+    "profileTitle": "What kind of company are you?",
+    "profileHint": "The industry profile only simplifies the menu: it hides irrelevant modules, your license does not change.",
+    "profileLater": "Later you can toggle modules one by one under Settings → License → Module switches.",
+    "profileSaved": "Profile set — the menu follows it.",
+    "profiles": {
+      "coffee": {
+        "name": "☕ Coffee machine rental & consignment",
+        "desc": "Deployed machines, counter settlements, rental contracts, routes, partner portal — every module."
+      },
+      "service": {
+        "name": "🔧 Machine & equipment service",
+        "desc": "Service tickets, intake, quotes, worksheets, parts stock, tools — without consignment settlement."
+      },
+      "field": {
+        "name": "🚐 Field maintenance / site visits",
+        "desc": "Tasks, map and routes, time tracking, team work, tools and parts."
+      },
+      "hr": {
+        "name": "👥 HR and working time only",
+        "desc": "Employees, schedule, attendance, time off, payroll export — without service and commercial modules."
+      }
+    },
     "billingTitle": "Connect invoicing (Billingó)",
     "billingHint": "With your Billingó API key, worksheet and settlement invoices are created and sent in one click. Can be set later in Settings.",
     "billingKey": "Billingó API key",
@@ -2487,6 +2512,11 @@
     "customer": "Customer name (rented instance)",
     "upgrade": "Request an upgrade →",
     "readonlyHint": "Your current plan and usage. The plan is managed by the operator — to change it, click the desired plan and your request reaches us instantly for approval.",
+    "modulesTitle": "Module switches on this instance",
+    "modulesHint": "Green: visible. Struck through: hidden (from menu and API). Amber: you hid it but a visible module needs it, so it stays on. Your license is unchanged — it belongs to the operator.",
+    "profile": "Industry profile",
+    "modulesSaved": "Modules saved — the menu refreshes.",
+    "moduleRequired": "Required by a visible module, so it stays on.",
     "requestSent": "Change request sent ✓ — we will approve it shortly.",
     "requestCancelled": "Change request withdrawn.",
     "requestedBadge": "Request sent — cancel?",

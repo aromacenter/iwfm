@@ -40,6 +40,21 @@ export default function OnboardingPage() {
   const { toast } = useUI();
   const router = useRouter();
   const [step, setStep] = useState(0);
+  // Iparág-profil (140. kör): a nem releváns modulok elrejtése egy lépésben
+  const [profile, setProfile] = useState<"coffee" | "service" | "field" | "hr" | "">("");
+  async function saveProfile() {
+    if (!profile) { setStep(2); return; }
+    setBusy(true);
+    try {
+      await api.post("/api/settings/industry-profile", { profile });
+      toast(t("onboard.profileSaved"), "success");
+      setStep(2);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
   const [busy, setBusy] = useState(false);
 
   // 1. lépés: cégadatok
@@ -95,11 +110,11 @@ export default function OnboardingPage() {
   // 2. lépés: első telephely
   const [siteName, setSiteName] = useState("");
   async function saveSite() {
-    if (!siteName.trim()) { setStep(2); return; }
+    if (!siteName.trim()) { setStep(3); return; }
     setBusy(true);
     try {
       await api.post("/api/warehouses", { name: siteName.trim(), kind: "site" });
-      setStep(2);
+      setStep(3);
     } catch (err) {
       toast(errorMessage(err), "error");
     } finally {
@@ -144,7 +159,7 @@ export default function OnboardingPage() {
       .catch(() => setBillAvailable(false));
   }, []);
   async function saveBilling() {
-    if (!bill.api_key.trim()) { setStep(4); return; }
+    if (!bill.api_key.trim()) { setStep(5); return; }
     setBusy(true);
     try {
       await api.put("/api/settings/billingo", {
@@ -154,7 +169,7 @@ export default function OnboardingPage() {
       try { await api.post("/api/settings/billingo/test"); toast(t("onboard.billingOk"), "success"); }
       catch { toast(t("onboard.billingTestFailed"), "error"); }
       setBillSaved(true);
-      setStep(4);
+      setStep(5);
     } catch (err) {
       toast(errorMessage(err), "error");
     } finally {
@@ -177,7 +192,7 @@ export default function OnboardingPage() {
     }
   }
 
-  const steps = [t("onboard.step1"), t("onboard.step2"), t("onboard.step3"), t("onboard.stepBilling"), t("onboard.stepDemo"), t("onboard.step4")];
+  const steps = [t("onboard.step1"), t("onboard.stepProfile"), t("onboard.step2"), t("onboard.step3"), t("onboard.stepBilling"), t("onboard.stepDemo"), t("onboard.step4")];
 
   // Animált bevezető: a menedzser-figura köszön, elmondja, mi jön, aztán
   // lépcsőzetesen beúszik a varázsló. Munkamenetenként egyszer (ujratöltésnél nem).
@@ -197,7 +212,7 @@ export default function OnboardingPage() {
     try { sessionStorage.setItem("iwfm-onb-intro", "done"); } catch {}
     setIntro(false);
   }
-  const stepTips = [t("onboard.tip1"), t("onboard.tip2"), t("onboard.tip3"), t("onboard.tipBilling"), t("onboard.tipDemo"), t("onboard.tipDone")];
+  const stepTips = [t("onboard.tip1"), t("onboard.tipProfile"), t("onboard.tip2"), t("onboard.tip3"), t("onboard.tipBilling"), t("onboard.tipDemo"), t("onboard.tipDone")];
 
   if (intro) {
     return (
@@ -297,15 +312,25 @@ export default function OnboardingPage() {
 
           {step === 1 && (
             <>
-              <h2 className="font-semibold">{t("onboard.siteTitle")}</h2>
-              <p className="text-sm text-slate-500">{t("onboard.siteHint")}</p>
-              <label className="block text-sm">
-                {t("onboard.siteName")}
-                <input value={siteName} onChange={(e) => setSiteName(e.target.value)} placeholder={t("onboard.sitePh")} className={inputCls} />
-              </label>
+              <h2 className="font-semibold">{t("onboard.profileTitle")}</h2>
+              <p className="text-sm text-slate-500">{t("onboard.profileHint")}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(["coffee", "service", "field", "hr"] as const).map((key) => (
+                  <button
+                    type="button"
+                    key={key}
+                    onClick={() => setProfile(key)}
+                    className={`rounded-xl border p-3 text-left text-sm transition ${profile === key ? "border-indigo-400 bg-indigo-50" : "border-slate-200 hover:border-indigo-200"}`}
+                  >
+                    <div className="font-medium">{t(`onboard.profiles.${key}.name`)}</div>
+                    <div className="mt-0.5 text-xs text-slate-500">{t(`onboard.profiles.${key}.desc`)}</div>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400">{t("onboard.profileLater")}</p>
               <div className="flex justify-between pt-2">
                 <button type="button" onClick={() => setStep(2)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
-                <button type="button" onClick={saveSite} disabled={busy} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                <button type="button" onClick={saveProfile} disabled={busy} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
                   {t("onboard.next")}
                 </button>
               </div>
@@ -313,6 +338,23 @@ export default function OnboardingPage() {
           )}
 
           {step === 2 && (
+            <>
+              <h2 className="font-semibold">{t("onboard.siteTitle")}</h2>
+              <p className="text-sm text-slate-500">{t("onboard.siteHint")}</p>
+              <label className="block text-sm">
+                {t("onboard.siteName")}
+                <input value={siteName} onChange={(e) => setSiteName(e.target.value)} placeholder={t("onboard.sitePh")} className={inputCls} />
+              </label>
+              <div className="flex justify-between pt-2">
+                <button type="button" onClick={() => setStep(3)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
+                <button type="button" onClick={saveSite} disabled={busy} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                  {t("onboard.next")}
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 3 && (
             <>
               <h2 className="font-semibold">{t("onboard.teamTitle")}</h2>
               <p className="text-sm text-slate-500">{t("onboard.teamHint")}</p>
@@ -355,15 +397,15 @@ export default function OnboardingPage() {
                 </div>
               )}
               <div className="flex justify-between pt-2">
-                <button type="button" onClick={() => setStep(3)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
-                <button type="button" onClick={() => setStep(3)} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                <button type="button" onClick={() => setStep(4)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
+                <button type="button" onClick={() => setStep(4)} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700">
                   {t("onboard.next")}
                 </button>
               </div>
             </>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <>
               <h2 className="font-semibold">{t("onboard.billingTitle")}</h2>
               <p className="text-sm text-slate-500">{t("onboard.billingHint")}</p>
@@ -384,15 +426,15 @@ export default function OnboardingPage() {
                 </div>
               )}
               <div className="flex justify-between pt-2">
-                <button type="button" onClick={() => setStep(4)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
-                <button type="button" onClick={billSaved || !billAvailable ? () => setStep(4) : saveBilling} disabled={busy} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                <button type="button" onClick={() => setStep(5)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
+                <button type="button" onClick={billSaved || !billAvailable ? () => setStep(5) : saveBilling} disabled={busy} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
                   {t("onboard.next")}
                 </button>
               </div>
             </>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <>
               <h2 className="font-semibold">{t("onboard.demoTitle")}</h2>
               <p className="text-sm text-slate-500">{t("onboard.demoHint")}</p>
@@ -407,15 +449,15 @@ export default function OnboardingPage() {
               )}
               <p className="text-xs text-slate-400">{t("onboard.demoRemoveHint")}</p>
               <div className="flex justify-between pt-2">
-                <button type="button" onClick={() => setStep(5)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
-                <button type="button" onClick={() => setStep(5)} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                <button type="button" onClick={() => setStep(6)} className="text-sm font-medium text-slate-500 hover:text-slate-700">{t("onboard.skip")}</button>
+                <button type="button" onClick={() => setStep(6)} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700">
                   {t("onboard.next")}
                 </button>
               </div>
             </>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <>
               <h2 className="font-semibold">🎉 {t("onboard.doneTitle")}</h2>
               <p className="text-sm text-slate-500">{t("onboard.doneHint")}</p>

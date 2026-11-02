@@ -369,6 +369,34 @@ export default function BeallitasokPage() {
 
   // --- Licenc (csak olvasható — a sávot az üzemeltető állítja) ---
   const [lic, setLic] = useState<LicenseInfo | null>(null);
+  // Modul-kapcsolók ezen a példányon (140. kör)
+  interface ModulesInfo { catalog: string[]; requires: Record<string, string[]>; licensed: string[] | null; hidden: string[]; effective: string[] | null; profile: string | null; profiles: Record<string, string[]> }
+  const [mods, setMods] = useState<ModulesInfo | null>(null);
+  const loadMods = useCallback(() => {
+    api.get<ModulesInfo>("/api/settings/modules").then(setMods).catch(() => setMods(null));
+  }, []);
+  useEffect(() => { loadMods(); }, [loadMods]);
+  async function toggleModule(key: string, hide: boolean) {
+    if (!mods) return;
+    const hidden = hide ? [...mods.hidden, key] : mods.hidden.filter((m) => m !== key);
+    try {
+      setMods(await api.put<ModulesInfo>("/api/settings/modules", { hidden }));
+      toast(t("license.modulesSaved"), "success");
+      window.setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+  async function applyProfile(profile: string) {
+    if (!profile) return;
+    try {
+      setMods(await api.post<ModulesInfo>("/api/settings/industry-profile", { profile }));
+      toast(t("license.modulesSaved"), "success");
+      window.setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
   useEffect(() => {
     api.get<LicenseInfo>("/api/settings/license")
       .then(setLic)
@@ -1706,6 +1734,39 @@ export default function BeallitasokPage() {
         <div className={cardCls("license", "space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
           <h2 className="font-semibold">{t("license.title")}</h2>
           <p className="text-xs text-slate-500">{t("license.readonlyHint")}</p>
+          {/* Modul-kapcsolók + iparág-profil (140. kör) */}
+          {mods && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-medium">🧩 {t("license.modulesTitle")}</span>
+                <label className="text-xs text-slate-600">
+                  {t("license.profile")}:
+                  <select value={mods.profile ?? ""} onChange={(e) => void applyProfile(e.target.value)} className="ml-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">
+                    <option value="">—</option>
+                    {Object.keys(mods.profiles).map((k) => <option key={k} value={k}>{t(`onboard.profiles.${k}.name`)}</option>)}
+                  </select>
+                </label>
+              </div>
+              <p className="mb-2 text-xs text-slate-500">{t("license.modulesHint")}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {mods.catalog.filter((m) => mods.licensed === null || mods.licensed.includes(m)).map((m) => {
+                  const hidden = mods.hidden.includes(m);
+                  const effective = mods.effective === null || mods.effective.includes(m);
+                  return (
+                    <button
+                      type="button"
+                      key={m}
+                      onClick={() => void toggleModule(m, !hidden)}
+                      title={hidden && effective ? t("license.moduleRequired") : ""}
+                      className={`rounded-full border px-2.5 py-0.5 text-xs ${hidden ? (effective ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-300 bg-white text-slate-400 line-through") : "border-emerald-300 bg-emerald-50 text-emerald-800"}`}
+                    >
+                      {t(`modules.${m}`) === `modules.${m}` ? m : t(`modules.${m}`)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {lic && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-xl border border-slate-200 p-3 text-center">

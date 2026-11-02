@@ -85,20 +85,52 @@ def close_modules(keys: list[str]) -> list[str]:
     return [m for m in MODULES if m in wanted]
 
 
-def effective_modules(row: LicenseSettings | None) -> list[str] | None:
-    """A hatályos modul-lista: a licenc-sor beállítása, annak hiányában a
-    WFM_DEFAULT_MODULES env (bérelt példányon üres = csak alap), env nélkül
-    None = minden modul (saját példány)."""
+# 140. kör: iparág-profilok — melyik modulok LÁTSZANAK (a többi elrejtve, a licenc
+# marad). A függőségek (close_modules) visszahozzák, ami egy látható modulhoz kell.
+INDUSTRY_PROFILES: dict[str, tuple[str, ...]] = {
+    "coffee": tuple(MODULES),  # kávégép-bérlet és bizomány: minden
+    "service": (
+        "machines", "partners", "contracts", "service", "intake", "quotes", "handover", "pickup",
+        "tasks", "parts", "tools", "worktime", "employees", "schedule", "attendance", "timeoff",
+        "payroll", "calendar", "support", "stats", "automation", "audit", "import_export", "labels",
+        "billing", "szamlazz", "ai", "bugreport", "warehouse", "stocktake", "products",
+    ),
+    "field": (
+        "tasks", "map", "worktime", "tools", "parts", "service", "machines", "partners", "contracts",
+        "employees", "schedule", "attendance", "timeoff", "payroll", "calendar", "stats", "automation",
+        "audit", "support", "ai", "bugreport", "import_export", "warehouse", "products",
+    ),
+    "hr": (
+        "employees", "schedule", "attendance", "timeoff", "payroll", "calendar", "worktime",
+        "audit", "import_export", "bugreport",
+    ),
+}
+
+
+def _licensed_modules(row: LicenseSettings | None) -> list[str] | None:
+    """A licenc szerinti modul-lista (None = minden)."""
     if row is not None and row.enabled_modules is not None:
         if "*" in row.enabled_modules:  # explicit "minden modul" (X-Presso mód)
             return None
         return close_modules(list(row.enabled_modules))
     from app.core.config import get_settings
-
     env = get_settings().default_modules
     if env is None:
         return None
     return close_modules([p.strip() for p in env.split(",")])
+
+
+def effective_modules(row: LicenseSettings | None) -> list[str] | None:
+    """A hatályos modul-lista: a licenc-sor beállítása, annak hiányában a
+    WFM_DEFAULT_MODULES env (bérelt példányon üres = csak alap), env nélkül
+    None = minden modul (saját példány). 140. kör: a cég által elrejtett
+    modulok (hidden_modules) kivonva — a függőségek lezárva."""
+    base = _licensed_modules(row)
+    hidden = set(row.hidden_modules or []) if row is not None else set()
+    if not hidden:
+        return base
+    pool = base if base is not None else list(MODULES)
+    return close_modules([m for m in pool if m not in hidden])
 
 
 async def module_enabled(db: AsyncSession, key: str) -> bool:

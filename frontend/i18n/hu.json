@@ -2208,6 +2208,7 @@
     "intake.contact_required": "A telefonszám és az e-mail cím megadása kötelező az átvételhez.",
     "worksheet.too_many_photos": "Legfeljebb 16 fotó csatolható egy munkalaphoz.",
     "worksheet.photo_required": "A feladat nem zárható le: a munkalaphoz még fotót kell csatolni (fotó-kötelezettség).",
+    "license.bad_module": "Ismeretlen modul-kulcs.",
     "timeoff.partial_one_day": "A „később jövök / korábban megyek” kérelem egy napra szól.",
     "timeoff.time_required": "Add meg az időpontot.",
     "timeoff.bad_time": "Hibás időpont (ÓÓ:PP).",
@@ -2353,6 +2354,30 @@
     "finish": "Irány a naptár!",
     "stepBilling": "Számlázás",
     "stepDemo": "Minta",
+    "stepProfile": "Profil",
+    "tipProfile": "Válaszd ki, mire használjátok a rendszert — a nem releváns modulokat elrejtjük a menüből. Bármikor finomhangolható a Beállítások → Licenc alatt.",
+    "profileTitle": "Milyen cég vagytok?",
+    "profileHint": "Az iparág-profil csak a menüt egyszerűsíti: a nem releváns modulokat elrejti, a licenced nem változik.",
+    "profileLater": "Később a Beállítások → Licenc → Modul-kapcsolók alatt modulonként is állítható.",
+    "profileSaved": "Profil beállítva — a menü ehhez igazodik.",
+    "profiles": {
+      "coffee": {
+        "name": "☕ Kávégép-bérlet és bizomány",
+        "desc": "Kihelyezett gépek, számlálós elszámolás, bérleti szerződések, útvonal, partner-portál — minden modul."
+      },
+      "service": {
+        "name": "🔧 Gép- és eszközszerviz",
+        "desc": "Szervizjegyek, átvétel, ajánlat, munkalap, alkatrész-raktár, szerszámok — bizományi elszámolás nélkül."
+      },
+      "field": {
+        "name": "🚐 Terepi karbantartás / kiszállás",
+        "desc": "Feladatok, térkép és útvonal, munkaidő-mérés, csapatos munka, szerszámok és alkatrészek."
+      },
+      "hr": {
+        "name": "👥 Csak HR és munkaidő",
+        "desc": "Dolgozók, beosztás, jelenlét, távollét, bérexport — a szerviz- és kereskedelmi modulok nélkül."
+      }
+    },
     "billingTitle": "Számlázás bekötése (Billingó)",
     "billingHint": "A Billingó API-kulcsoddal a munkalapok és elszámolások számlái egy kattintással készülnek és mennek ki. Később is megadható a Beállításokban.",
     "billingKey": "Billingó API-kulcs",
@@ -2487,6 +2512,11 @@
     "customer": "Ügyfél neve (bérelt példányon)",
     "upgrade": "Bővítést kérek →",
     "readonlyHint": "A jelenlegi csomagod és a kihasználtság. A csomagot az üzemeltető kezeli — váltáshoz kattints a kívánt csomag gombjára, és a kérésed azonnal megérkezik hozzánk jóváhagyásra.",
+    "modulesTitle": "Modul-kapcsolók ezen a példányon",
+    "modulesHint": "Zöld: látszik. Áthúzott: elrejtve (menüből és API-ból is). Sárga: elrejtetted, de egy látható modulnak szüksége van rá, ezért él. A licencedet ez nem változtatja — az üzemeltetőé marad.",
+    "profile": "Iparág-profil",
+    "modulesSaved": "Modulok mentve — a menü frissül.",
+    "moduleRequired": "Egy látható modul igényli, ezért bekapcsolva marad.",
     "requestSent": "Váltási kérés elküldve ✓ — hamarosan jóváhagyjuk.",
     "requestCancelled": "A váltási kérés visszavonva.",
     "requestedBadge": "Kérés elküldve — mégse?",

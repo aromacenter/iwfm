@@ -1058,6 +1058,99 @@ async def _license_status_payload(db: AsyncSession) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# 140. kör: példány-szintű modul-kapcsolók + iparág-profil
+# ---------------------------------------------------------------------------
+
+
+class ModulesBody(BaseModel):
+    hidden: list[str] = Field(default_factory=list, max_length=100)
+
+
+class ProfileBody(BaseModel):
+    profile: str = Field(pattern="^(coffee|service|field|hr)$")
+
+
+async def _modules_out(db: AsyncSession) -> dict:
+    from app.services.wfm.license import INDUSTRY_PROFILES, MODULE_REQUIRES, MODULES, _licensed_modules
+
+    row = await license_service.get_license_row(db)
+    licensed = _licensed_modules(row)
+    return {
+        "catalog": list(MODULES),
+        "requires": {k: list(v) for k, v in MODULE_REQUIRES.items()},
+        "licensed": licensed,  # None = minden
+        "hidden": list((row.hidden_modules if row else None) or []),
+        "effective": license_service.effective_modules(row),
+        "profile": row.industry_profile if row else None,
+        "profiles": {k: list(v) for k, v in INDUSTRY_PROFILES.items()},
+    }
+
+
+@router.get("/modules")
+async def get_modules(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Modul-kapcsolók ezen a példányon: licencelt / rejtett / hatályos lista."""
+    return await _modules_out(db)
+
+
+@router.put("/modules")
+async def put_modules(
+    body: ModulesBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """A cég elrejt modulokat (a licencen belül) — a menüből és az API-ból is
+    eltűnnek; amit egy látható modul igényel, az visszajön."""
+    from app.services.wfm.license import MODULES
+
+    bad = [m for m in body.hidden if m not in MODULES]
+    if bad:
+        raise HTTPException(status_code=422, detail={"code": "license.bad_module", "modules": bad})
+    row = await license_service.get_license_row(db)
+    if row is None:
+        row = LicenseSettings(id=1)
+        db.add(row)
+    row.hidden_modules = sorted(set(body.hidden)) or None
+    await record_audit(
+        db, actor=actor, action="settings.modules", entity_type="settings",
+        entity_id="modules", detail={"hidden": row.hidden_modules}, request=request,
+    )
+    await db.commit()
+    license_service.invalidate_cache()
+    return await _modules_out(db)
+
+
+@router.post("/industry-profile")
+async def set_industry_profile(
+    body: ProfileBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """Iparág-profil választása (onboarding): a profilhoz nem tartozó modulok
+    elrejtése egy lépésben — később a modul-kapcsolóknál finomhangolható."""
+    from app.services.wfm.license import INDUSTRY_PROFILES, MODULES
+
+    visible = set(INDUSTRY_PROFILES[body.profile])
+    row = await license_service.get_license_row(db)
+    if row is None:
+        row = LicenseSettings(id=1)
+        db.add(row)
+    row.industry_profile = body.profile
+    row.hidden_modules = [m for m in MODULES if m not in visible] or None
+    await record_audit(
+        db, actor=actor, action="settings.industry_profile", entity_type="settings",
+        entity_id="modules", detail={"profile": body.profile}, request=request,
+    )
+    await db.commit()
+    license_service.invalidate_cache()
+    return await _modules_out(db)
+
+
 @router.get("/license/status")
 async def license_status(
     db: AsyncSession = Depends(get_db),
