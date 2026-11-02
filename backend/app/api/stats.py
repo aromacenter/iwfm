@@ -486,6 +486,194 @@ async def map_geocode_missing(
     return {"queued": len(ids) if enabled() else 0, "missing": len(ids)}
 
 
+class MachineProfitRow(BaseModel):
+    asset_id: str | None
+    barcode: str
+    name: str | None
+    partner_name: str | None
+    revenue_net: float  # számlálós (adag) bevétel
+    rent_net: float  # bérleti díj (a partner bérleti sorai a gépei közt arányosítva)
+    maintenance_net: float  # karbantartási díj a munkalapokról
+    service_cost: float  # anyag-költség (cost_net) + beépített alkatrész (beszerzési ár)
+    parts_cost: float
+    hours: float
+    visits: int  # elszámolások száma a géppel
+    tickets: int  # szervizjegyek száma
+    net_result: float
+    margin_pct: float | None
+
+
+class MachineProfitOut(BaseModel):
+    months: int
+    since: date
+    rows: list[MachineProfitRow]
+    totals: dict
+
+
+def _qty_of(raw) -> float:
+    try:
+        return float(str(raw or "1").replace(",", ".")) or 1.0
+    except ValueError:
+        return 1.0
+
+
+@router.get("/machine-profitability", response_model=MachineProfitOut, dependencies=[Depends(require_module("stats"))])
+async def machine_profitability(
+    months: int = Query(default=12, ge=1, le=60),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """Gép-jövedelmezőség (135. kör): bevétel (számlálós elszámolás-sorok +
+    arányosított bérleti díj + karbantartási díj) − szerviz-költség (munkalap
+    anyag-költség + beépített alkatrészek beszerzési ára) az utolsó N hónapra.
+    A bérleti díj a partner bérleti sorai a partner mostani gépei közt egyenlően
+    osztva — tájékoztató jellegű."""
+    matrix = await get_permission_matrix(db)
+    perms = permissions_for(actor.role, matrix)
+    if "invoicing" not in perms and "agent_report" not in perms:
+        raise HTTPException(status_code=403, detail={"code": "auth.forbidden"})
+    from app.models import Asset, PartsMovement, ServiceTicket, Task
+    from app.services.wfm.rental_billing import RENTAL_LINE_NAME
+
+    since_dt = datetime.now(UTC) - timedelta(days=30 * months)
+    since = since_dt.date()
+
+    rows: dict[str, dict] = {}
+
+    def _row(barcode: str) -> dict:
+        return rows.setdefault(barcode, {
+            "asset_id": None, "barcode": barcode, "name": None, "partner_name": None,
+            "revenue_net": 0.0, "rent_net": 0.0, "maintenance_net": 0.0, "service_cost": 0.0,
+            "parts_cost": 0.0, "hours": 0.0, "visits": 0, "tickets": 0,
+        })
+
+    # 1) számlálós bevétel gépenként
+    for barcode, aname, aid, net, visits in (
+        await db.execute(
+            select(
+                SettlementMachine.barcode, sa_func.max(SettlementMachine.asset_name), sa_func.max(SettlementMachine.asset_id),
+                sa_func.sum(SettlementMachine.amount_net), sa_func.count(sa_func.distinct(SettlementMachine.settlement_id)),
+            )
+            .join(Settlement, Settlement.id == SettlementMachine.settlement_id)
+            .where(Settlement.created_at >= since_dt)
+            .group_by(SettlementMachine.barcode)
+        )
+    ).all():
+        r = _row(barcode)
+        r["name"] = aname
+        r["asset_id"] = str(aid) if aid else None
+        r["revenue_net"] += float(net or 0)
+        r["visits"] += int(visits or 0)
+
+    # kihelyezett gépek: név / partner / azonosító (a bevétel nélküliek is látszanak)
+    assets = (
+        await db.execute(
+            select(Asset, Partner.name)
+            .outerjoin(Partner, Partner.id == Asset.partner_id)
+            .where(Asset.status == "deployed")
+        )
+    ).all()
+    asset_by_id: dict = {}
+    machines_at_partner: dict = {}
+    for a, pname in assets:
+        r = _row(a.barcode)
+        r["asset_id"] = str(a.id)
+        r["name"] = r["name"] or a.name
+        r["partner_name"] = pname
+        asset_by_id[a.id] = a
+        if a.partner_id is not None:
+            machines_at_partner.setdefault(a.partner_id, []).append(a.barcode)
+
+    # 2) bérleti díj: a partner bérleti sorai a gépei közt arányosítva
+    for pid, rent in (
+        await db.execute(
+            select(Settlement.partner_id, sa_func.sum(SettlementLine.amount_net))
+            .join(SettlementLine, SettlementLine.settlement_id == Settlement.id)
+            .where(Settlement.created_at >= since_dt, SettlementLine.product_id.is_(None), SettlementLine.product_name.like(f"{RENTAL_LINE_NAME}%"))
+            .group_by(Settlement.partner_id)
+        )
+    ).all():
+        codes = machines_at_partner.get(pid) or []
+        if codes and rent:
+            share = float(rent) / len(codes)
+            for code in codes:
+                _row(code)["rent_net"] += share
+
+    # 3) munkalapok: karbantartási díj (bevétel), anyag-költség, óra; + beépített alkatrészek
+    ws_rows = (
+        await db.execute(
+            select(Worksheet.id, Worksheet.asset_id, Worksheet.maintenance_fee, Worksheet.fee_discount, Worksheet.materials, Worksheet.hours_spent)
+            .join(Task, Task.id == Worksheet.task_id)
+            .where(Worksheet.asset_id.is_not(None), sa_func.coalesce(Task.completed_at, Task.created_at) >= since_dt)
+        )
+    ).all()
+    ws_asset: dict = {}
+    for wid, aid, fee, discount, materials, hours in ws_rows:
+        a = asset_by_id.get(aid)
+        if a is None:
+            a = (await db.execute(select(Asset).where(Asset.id == aid))).scalar_one_or_none()
+            if a is None:
+                continue
+            asset_by_id[aid] = a
+        ws_asset[wid] = a.barcode
+        r = _row(a.barcode)
+        r["asset_id"] = r["asset_id"] or str(a.id)
+        r["name"] = r["name"] or a.name
+        if fee and not discount:
+            r["maintenance_net"] += float(fee)
+        r["hours"] += float(hours or 0)
+        for m in (materials or []):
+            if isinstance(m, dict) and m.get("cost_net") is not None:
+                r["service_cost"] += float(m["cost_net"] or 0) * _qty_of(m.get("qty"))
+    if ws_asset:
+        for wid, qty, cost in (
+            await db.execute(
+                select(PartsMovement.worksheet_id, sa_func.sum(-PartsMovement.quantity_delta), sa_func.max(PartsMovement.unit_cost))
+                .where(PartsMovement.worksheet_id.in_(list(ws_asset)), PartsMovement.kind == "use", PartsMovement.quantity_delta < 0)
+                .group_by(PartsMovement.worksheet_id, PartsMovement.part_id)
+            )
+        ).all():
+            if cost:
+                r = _row(ws_asset[wid])
+                r["parts_cost"] += float(qty or 0) * float(cost)
+                r["service_cost"] += float(qty or 0) * float(cost)
+
+    # 4) szervizjegyek száma
+    for aid, cnt in (
+        await db.execute(
+            select(ServiceTicket.asset_id, sa_func.count())
+            .where(ServiceTicket.asset_id.is_not(None), ServiceTicket.created_at >= since_dt)
+            .group_by(ServiceTicket.asset_id)
+        )
+    ).all():
+        a = asset_by_id.get(aid)
+        if a is not None:
+            _row(a.barcode)["tickets"] += int(cnt or 0)
+
+    out: list[MachineProfitRow] = []
+    for r in rows.values():
+        income = r["revenue_net"] + r["rent_net"] + r["maintenance_net"]
+        net = income - r["service_cost"]
+        out.append(MachineProfitRow(
+            asset_id=r["asset_id"], barcode=r["barcode"], name=r["name"], partner_name=r["partner_name"],
+            revenue_net=_money(r["revenue_net"]), rent_net=_money(r["rent_net"]), maintenance_net=_money(r["maintenance_net"]),
+            service_cost=_money(r["service_cost"]), parts_cost=_money(r["parts_cost"]), hours=round(r["hours"], 1),
+            visits=r["visits"], tickets=r["tickets"], net_result=_money(net),
+            margin_pct=round(net / income * 100, 1) if income > 0 else None,
+        ))
+    out.sort(key=lambda x: -x.net_result)
+    totals = {
+        "revenue_net": _money(sum(x.revenue_net for x in out)),
+        "rent_net": _money(sum(x.rent_net for x in out)),
+        "maintenance_net": _money(sum(x.maintenance_net for x in out)),
+        "service_cost": _money(sum(x.service_cost for x in out)),
+        "net_result": _money(sum(x.net_result for x in out)),
+        "machines": len(out),
+        "loss_making": sum(1 for x in out if x.net_result < 0),
+    }
+    return MachineProfitOut(months=months, since=since, rows=out, totals=totals)
+
+
 @router.get("/machine-history", dependencies=[Depends(require_module("stats"))])
 async def machine_history(
     barcode: str = Query(min_length=3, max_length=64),

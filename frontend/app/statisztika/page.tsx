@@ -67,6 +67,18 @@ export default function StatisztikaPage() {
     service: { ticket_no: string; title: string; status: string; created_at: string; partner: string | null }[];
   }
   const [machineHist, setMachineHist] = useState<MachineHistory | null>(null);
+  // Gép-jövedelmezőség (135. kör)
+  interface ProfitRow {
+    asset_id: string | null; barcode: string; name: string | null; partner_name: string | null;
+    revenue_net: number; rent_net: number; maintenance_net: number; service_cost: number; parts_cost: number;
+    hours: number; visits: number; tickets: number; net_result: number; margin_pct: number | null;
+  }
+  interface ProfitOut { months: number; since: string; rows: ProfitRow[]; totals: Record<string, number> }
+  const [profit, setProfit] = useState<ProfitOut | null>(null);
+  const [profitMonths, setProfitMonths] = useState(12);
+  useEffect(() => {
+    api.get<ProfitOut>(`/api/stats/machine-profitability?months=${profitMonths}`).then(setProfit).catch(() => setProfit(null));
+  }, [profitMonths]);
   async function openMachine(barcode: string) {
     try {
       const h = await api.get<MachineHistory>(`/api/stats/machine-history?barcode=${encodeURIComponent(barcode)}`);
@@ -307,6 +319,76 @@ export default function StatisztikaPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Gép-jövedelmezőség (135. kör) */}
+      {profit && (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">💰 {t("stats.profitTitle")}</h2>
+            <div className="flex gap-1">
+              {[3, 6, 12, 24].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setProfitMonths(m)}
+                  className={`rounded-lg px-2.5 py-1 text-xs ${profitMonths === m ? "bg-indigo-600 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-100"}`}
+                >
+                  {t("stats.profitMonths", { n: m })}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="mb-2 text-xs text-slate-400">{t("stats.profitHint")}</p>
+          <div className="mb-3 flex flex-wrap gap-3 text-xs text-slate-600">
+            <span>{t("stats.profitRevenue")}: <b>{ft(profit.totals.revenue_net)}</b></span>
+            <span>{t("stats.profitRent")}: <b>{ft(profit.totals.rent_net)}</b></span>
+            <span>{t("stats.profitMaint")}: <b>{ft(profit.totals.maintenance_net)}</b></span>
+            <span>{t("stats.profitCost")}: <b className="text-rose-700">{ft(profit.totals.service_cost)}</b></span>
+            <span>{t("stats.profitNet")}: <b className={profit.totals.net_result < 0 ? "text-rose-700" : "text-emerald-700"}>{ft(profit.totals.net_result)}</b></span>
+            {profit.totals.loss_making > 0 && <span className="text-rose-700">⚠️ {t("stats.profitLoss", { n: profit.totals.loss_making })}</span>}
+          </div>
+          <div className="max-h-[480px] overflow-y-auto">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="sticky top-0 bg-white text-left text-xs uppercase text-slate-500">
+                    <th className="py-1.5 pr-2">{t("cons.machineBarcode")}</th>
+                    <th className="py-1.5 pr-2">{t("cons.machineName")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("stats.profitRevenue")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("stats.profitRent")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("stats.profitMaint")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("stats.profitCost")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("stats.profitNet")}</th>
+                    <th className="py-1.5 pr-2 text-right">{t("stats.profitMargin")}</th>
+                    <th className="py-1.5 text-right">{t("stats.profitVisits")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profit.rows.map((r) => (
+                    <tr key={r.barcode} className={`border-t border-slate-100 ${r.net_result < 0 ? "bg-rose-50" : ""}`}>
+                      <td className="py-1.5 pr-2 font-mono text-xs">
+                        <button onClick={() => void openMachine(r.barcode)} className="text-indigo-700 hover:underline">{r.barcode}</button>
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        {r.name}
+                        {r.partner_name && <div className="text-xs text-slate-400">{r.partner_name}</div>}
+                      </td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.revenue_net)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{ft(r.rent_net)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{ft(r.maintenance_net)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-rose-700">{ft(r.service_cost)}</td>
+                      <td className={`py-1.5 pr-2 text-right font-medium tabular-nums ${r.net_result < 0 ? "text-rose-700" : ""}`}>{ft(r.net_result)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{r.margin_pct != null ? `${r.margin_pct}%` : "—"}</td>
+                      <td className="py-1.5 text-right tabular-nums text-slate-400">{r.visits}{r.tickets > 0 ? ` · 🔧${r.tickets}` : ""}</td>
+                    </tr>
+                  ))}
+                  {profit.rows.length === 0 && (
+                    <tr><td colSpan={9} className="py-6 text-center text-slate-400">{t("stats.empty")}</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
