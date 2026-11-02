@@ -2402,6 +2402,175 @@ async def my_status(
     return (await _tasks_out(db, [task]))[0]
 
 
+# ---------------------------------------------------------------------------
+# 132. kör: alkatrész-ajánló hibakódból
+# ---------------------------------------------------------------------------
+
+_CODE_RE = re.compile(r"(?<![A-Za-z0-9])([A-Za-z]{1,3})[ -]?(\d{1,4})(?![A-Za-z0-9])")
+
+
+def _extract_codes(text: str | None) -> list[str]:
+    """Hibakód-szerű tokenek ("E8", "ERR 12", "F-03") normalizálva: E8, ERR12, F03."""
+    if not text:
+        return []
+    out: list[str] = []
+    for letters, digits in _CODE_RE.findall(text):
+        code = f"{letters.upper()}{digits}"
+        if code not in out:
+            out.append(code)
+    return out[:6]
+
+
+def _text_has_code(text: str | None, codes: list[str]) -> bool:
+    return bool(codes) and any(c in _extract_codes(text) for c in codes)
+
+
+class PartSuggestionOut(BaseModel):
+    part_id: str
+    sku: str
+    name: str
+    unit: str
+    times: int = 0  # hány korábbi munkalapon építették be
+    last_used: datetime | None = None
+    on_vehicle: float = 0.0  # ennyi van belőle a szerelő autóján
+    price_net: float | None = None
+
+
+class KnowledgeHitOut(BaseModel):
+    title: str
+    content: str
+    machine_label: str
+
+
+class PartSuggestionsOut(BaseModel):
+    machine_label: str | None
+    codes: list[str]
+    history: list[PartSuggestionOut]  # ugyanazon típus + ugyanazon kód korábbi beépítései
+    compatible: list[PartSuggestionOut]  # a típushoz kompatibilisnek jelölt cikkek
+    knowledge: list[KnowledgeHitOut]
+
+
+@me_router.get("/{task_id}/part-suggestions", response_model=PartSuggestionsOut)
+async def my_part_suggestions(
+    task_id: str,
+    q: str | None = Query(default=None, max_length=200),
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """Alkatrész-javaslat a munkalaphoz a hibakód + géptípus alapján (132. kör).
+    Forrás: ugyanazon típus korábbi munkalapjai, amelyeken ugyanaz a hibakód
+    szerepelt → ott beépített alkatrészek gyakoriság szerint; a cikktörzs
+    compatible_models mezője; a tudástár. Jelzi, mi van a szerelő autóján."""
+    from app.models import KnowledgeEntry, Part, PartsMovement, PartsStock, PartsWarehouse
+    from app.services.wfm.kb_auto import machine_label
+
+    task = await _own_task_or_404(db, emp, task_id)
+    ws = await _get_worksheet(db, task.id)
+    asset = None
+    if ws is not None and ws.asset_id:
+        asset = (await db.execute(select(Asset).where(Asset.id == ws.asset_id))).scalar_one_or_none()
+    label = machine_label(asset.manufacturer, asset.name) if asset else None
+    codes = _extract_codes(q) or _extract_codes(ws.problem_text if ws else None)
+
+    # a szerelő autója → mi van kéznél
+    on_vehicle: dict[uuid.UUID, float] = {}
+    van = (
+        await db.execute(
+            select(PartsWarehouse).where(
+                PartsWarehouse.kind == "vehicle", PartsWarehouse.owner_user_id == user.id
+            )
+        )
+    ).scalars().first()
+    if van is not None:
+        for pid, qty in (
+            await db.execute(
+                select(PartsStock.part_id, sa_func.sum(PartsStock.quantity))
+                .where(PartsStock.warehouse_id == van.id)
+                .group_by(PartsStock.part_id)
+            )
+        ).all():
+            on_vehicle[pid] = float(qty or 0)
+
+    def _out(p: Part, times: int = 0, last: datetime | None = None) -> PartSuggestionOut:
+        return PartSuggestionOut(
+            part_id=str(p.id), sku=p.sku, name=p.name, unit=p.unit, times=times, last_used=last,
+            on_vehicle=on_vehicle.get(p.id, 0.0), price_net=p.price_net,
+        )
+
+    # 1) előzmény: ugyanazon típus (gyártó+név vagy modell) korábbi munkalapjai
+    history: list[PartSuggestionOut] = []
+    if asset is not None and codes:
+        same_type = select(Asset.id).where(Asset.name == asset.name)
+        if asset.model:
+            same_type = select(Asset.id).where((Asset.name == asset.name) | (Asset.model == asset.model))
+        ws_rows = (
+            await db.execute(
+                select(Worksheet.id, Worksheet.problem_text, Worksheet.solution_text, Worksheet.work_description)
+                .where(Worksheet.asset_id.in_(same_type), Worksheet.id != ws.id)
+            )
+        ).all()
+        hit_ws = [
+            r[0] for r in ws_rows
+            if _text_has_code(r[1], codes) or _text_has_code(r[2], codes) or _text_has_code(r[3], codes)
+        ]
+        if hit_ws:
+            rows = (
+                await db.execute(
+                    select(Part, sa_func.count(sa_func.distinct(PartsMovement.worksheet_id)), sa_func.max(PartsMovement.created_at))
+                    .join(PartsMovement, PartsMovement.part_id == Part.id)
+                    .where(
+                        PartsMovement.worksheet_id.in_(hit_ws),
+                        PartsMovement.kind == "use",
+                        PartsMovement.quantity_delta < 0,
+                    )
+                    .group_by(Part.id)
+                )
+            ).all()
+            history = sorted(
+                (_out(p, int(times), last) for p, times, last in rows),
+                key=lambda s: (-s.times, s.name),
+            )[:10]
+
+    # 2) kompatibilis cikkek a cikktörzsből (compatible_models JSON-lista)
+    compatible: list[PartSuggestionOut] = []
+    if label:
+        needles = {label.lower(), asset.name.lower()} if asset else {label.lower()}
+        if asset and asset.model:
+            needles.add(asset.model.lower())
+        seen = {s.part_id for s in history}
+        parts = (
+            await db.execute(select(Part).where(Part.is_active.is_(True), Part.compatible_models.is_not(None)))
+        ).scalars().all()
+        for p in parts:
+            models = [str(m).lower() for m in (p.compatible_models or [])]
+            if str(p.id) in seen or not models:
+                continue
+            if any(n and (n in m or m in n) for m in models for n in needles):
+                compatible.append(_out(p))
+        compatible.sort(key=lambda s: (-s.on_vehicle, s.name))
+        compatible = compatible[:10]
+
+    # 3) tudástár: a típushoz tartozó bejegyzések, amelyekben a kód szerepel
+    knowledge: list[KnowledgeHitOut] = []
+    if label:
+        entries = (
+            await db.execute(
+                select(KnowledgeEntry)
+                .where(KnowledgeEntry.machine_label.ilike(f"%{label}%"))
+                .order_by(KnowledgeEntry.updated_at.desc())
+                .limit(50)
+            )
+        ).scalars().all()
+        for e in entries:
+            if not codes or _text_has_code(e.title, codes) or _text_has_code(e.content, codes):
+                knowledge.append(KnowledgeHitOut(title=e.title, content=e.content[:600], machine_label=e.machine_label))
+            if len(knowledge) >= 5:
+                break
+
+    return PartSuggestionsOut(machine_label=label, codes=codes, history=history, compatible=compatible, knowledge=knowledge)
+
+
 @me_router.get("/{task_id}/worksheet/pdf")
 async def my_worksheet_pdf(
     task_id: str,

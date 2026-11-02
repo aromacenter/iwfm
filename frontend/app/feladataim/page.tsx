@@ -91,6 +91,9 @@ interface MyPartsStock { part_id: string; sku: string; name: string; unit: strin
 // Munkaidő-mérés (worktime modul): a dolgozó csak az állapotot látja, számokat nem.
 interface TimerState { state: "running" | "paused" | "stopped" | "none"; started_at: string | null; pause_count: number; mode?: "work" | "travel" | "wait"; correction_status?: string }
 interface Kit { id: string; sku: string; name: string; items: { sku: string; name: string; quantity: number; unit: string }[] }
+// Alkatrész-ajánló hibakódból (132. kör)
+interface PartSuggestion { part_id: string; sku: string; name: string; unit: string; times: number; last_used: string | null; on_vehicle: number; price_net: number | null }
+interface PartSuggestions { machine_label: string | null; codes: string[]; history: PartSuggestion[]; compatible: PartSuggestion[]; knowledge: { title: string; content: string; machine_label: string }[] }
 interface PartsQueueItem { task_id: string; part_id: string; sku: string; quantity: number; serial_no: string | null; queued_at: string }
 
 interface WorkRow {
@@ -177,6 +180,8 @@ export default function FeladataimPage() {
   const [partPick, setPartPick] = useState<{ part_id: string; quantity: string; serial_no: string }>({ part_id: "", quantity: "1", serial_no: "" });
   const [kits, setKits] = useState<Kit[]>([]);
   const [kitPick, setKitPick] = useState("");
+  const [suggest, setSuggest] = useState<PartSuggestions | null>(null);
+  const [suggestBusy, setSuggestBusy] = useState(false);
   const [pendingParts, setPendingParts] = useState(0);
   const [partsBusy, setPartsBusy] = useState(false);
   const [timer, setTimer] = useState<TimerState | null>(null);
@@ -779,6 +784,20 @@ export default function FeladataimPage() {
       window.removeEventListener(FLUSH_EVENT, onOnline);
     };
   }, [flushPartsQueue]);
+
+  async function loadSuggestions() {
+    if (!wsTask) return;
+    setSuggestBusy(true);
+    try {
+      const q = ws.problem_text.trim();
+      const res = await api.get<PartSuggestions>(`/api/me/tasks/${wsTask.id}/part-suggestions${q ? `?q=${encodeURIComponent(q.slice(0, 200))}` : ""}`);
+      setSuggest(res);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setSuggestBusy(false);
+    }
+  }
 
   async function installPart() {
     if (!wsTask || !partPick.part_id) return;
@@ -1549,6 +1568,72 @@ export default function FeladataimPage() {
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-sm font-medium text-slate-800">{t("myTasks.wsParts")}</span>
                   <span className="text-[11px] text-slate-500">{t("myTasks.wsPartsHint")}</span>
+                </div>
+                {/* Alkatrész-ajánló hibakódból (132. kör) */}
+                <div className="mb-2">
+                  <button
+                    type="button"
+                    disabled={suggestBusy}
+                    onClick={() => void loadSuggestions()}
+                    className="rounded-lg border border-indigo-300 bg-white px-2.5 py-1 text-xs font-medium text-indigo-800 hover:bg-indigo-50 disabled:opacity-50"
+                    title={t("myTasks.wsSuggestHint")}
+                  >
+                    🔧 {suggestBusy ? t("common.loading") : t("myTasks.wsSuggest")}
+                  </button>
+                  {suggest && (
+                    <div className="mt-2 space-y-2 rounded-lg border border-indigo-100 bg-white p-2 text-xs">
+                      <p className="text-slate-500">
+                        {suggest.machine_label ?? t("myTasks.wsSuggestNoMachine")}
+                        {suggest.codes.length > 0 && <> · {t("myTasks.wsSuggestCodes")}: <span className="font-mono">{suggest.codes.join(", ")}</span></>}
+                      </p>
+                      {suggest.history.length === 0 && suggest.compatible.length === 0 && suggest.knowledge.length === 0 && (
+                        <p className="text-slate-500">{t("myTasks.wsSuggestEmpty")}</p>
+                      )}
+                      {suggest.history.length > 0 && (
+                        <div>
+                          <p className="mb-1 font-medium text-slate-700">{t("myTasks.wsSuggestHistory")}</p>
+                          {suggest.history.map((s) => (
+                            <div key={s.part_id} className="flex items-center justify-between gap-2 border-b border-slate-100 py-1 last:border-0">
+                              <span><span className="font-mono text-[11px] text-slate-400">{s.sku}</span> {s.name} <span className="text-slate-500">· {t("myTasks.wsSuggestTimes", { count: s.times })}</span></span>
+                              <span className="flex items-center gap-1 whitespace-nowrap">
+                                <span className={s.on_vehicle > 0 ? "text-emerald-700" : "text-slate-400"}>{s.on_vehicle > 0 ? `🚐 ${s.on_vehicle} ${s.unit}` : t("myTasks.wsSuggestNotOnVehicle")}</span>
+                                {s.on_vehicle > 0 && (
+                                  <button type="button" onClick={() => setPartPick({ ...partPick, part_id: s.part_id })} className="rounded border border-slate-300 px-1.5 py-0.5 hover:bg-slate-100">{t("myTasks.wsSuggestPick")}</button>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {suggest.compatible.length > 0 && (
+                        <div>
+                          <p className="mb-1 font-medium text-slate-700">{t("myTasks.wsSuggestCompatible")}</p>
+                          {suggest.compatible.map((s) => (
+                            <div key={s.part_id} className="flex items-center justify-between gap-2 border-b border-slate-100 py-1 last:border-0">
+                              <span><span className="font-mono text-[11px] text-slate-400">{s.sku}</span> {s.name}</span>
+                              <span className="flex items-center gap-1 whitespace-nowrap">
+                                <span className={s.on_vehicle > 0 ? "text-emerald-700" : "text-slate-400"}>{s.on_vehicle > 0 ? `🚐 ${s.on_vehicle} ${s.unit}` : t("myTasks.wsSuggestNotOnVehicle")}</span>
+                                {s.on_vehicle > 0 && (
+                                  <button type="button" onClick={() => setPartPick({ ...partPick, part_id: s.part_id })} className="rounded border border-slate-300 px-1.5 py-0.5 hover:bg-slate-100">{t("myTasks.wsSuggestPick")}</button>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {suggest.knowledge.length > 0 && (
+                        <div>
+                          <p className="mb-1 font-medium text-slate-700">📚 {t("myTasks.wsSuggestKnowledge")}</p>
+                          {suggest.knowledge.map((k, i) => (
+                            <details key={i} className="border-b border-slate-100 py-1 last:border-0">
+                              <summary className="cursor-pointer">{k.title}</summary>
+                              <p className="mt-1 whitespace-pre-wrap text-slate-600">{k.content}</p>
+                            </details>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {usedParts.length === 0 ? (
                   <p className="mb-2 text-xs text-slate-500">{t("myTasks.wsPartsEmpty")}</p>
