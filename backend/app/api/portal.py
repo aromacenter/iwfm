@@ -465,10 +465,10 @@ async def portal_ticket(
     description = body.description.strip()
     if contact_bits:
         description = f"{description}\n\nBejelentő (portál): {contact_bits}"
-    if body.contact_email and not partner.contact_email:
-        partner.contact_email = str(body.contact_email)
+    # A bejelentő e-mailje csak a jegyen marad: a portál-tokent bárki
+    # továbbadhatja, abból nem lesz partner-kapcsolattartó (oda megy a portál-link).
 
-    asset_label = f"{asset.name} ({asset.barcode})" if asset else None
+    asset_label =f"{asset.name} ({asset.barcode})" if asset else None
     ticket = ServiceTicket(
         ticket_no=await _next_ticket_no(db),
         kind="repair",

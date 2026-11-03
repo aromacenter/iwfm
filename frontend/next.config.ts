@@ -19,13 +19,15 @@ const API_TARGET =
 // proxyzódik, annak saját fejlécei vannak). A CSP szándékosan elnéző a Next
 // működéséhez (inline bootstrap-script + Tailwind inline style, HMR eval),
 // de blokkolja az iframe-be ágyazást és a külső kapcsolatokat.
+// 'unsafe-eval' csak fejlesztésben kell (HMR); éles buildben nem engedjük.
+const isDev = process.env.NODE_ENV !== "production";
 const CSP = [
   "default-src 'self'",
   // A térkép-csempék külső képek (9192f8d5/d8b2bbe3: az img-src 'self'
   // némán blokkolta őket — ezért volt "vaktérkép"). OSM + Carto tartalék.
   "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://tile.openstreetmap.de https://*.tile.openstreetmap.de https://server.arcgisonline.com https://*.basemaps.cartocdn.com",
   "style-src 'self' 'unsafe-inline'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "connect-src 'self'",
   "font-src 'self'",
   "base-uri 'self'",
@@ -38,9 +40,16 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "no-referrer" },
   { key: "Content-Security-Policy", value: CSP },
+  // Kamera (QR-olvasó, fotó) és helymeghatározás a saját originnek kell;
+  // minden mást (mikrofon, fizetés, USB...) letiltunk.
+  { key: "Permissions-Policy", value: "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()" },
+  // HSTS csak élesben (HTTPS mögött); a Railway edge nem teszi rá magától.
+  ...(isDev ? [] : [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]),
 ];
 
 const nextConfig: NextConfig = {
+  // Ne áruljuk el a keretrendszert a fejlécben.
+  poweredByHeader: false,
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${API_TARGET}/api/:path*` }];
   },

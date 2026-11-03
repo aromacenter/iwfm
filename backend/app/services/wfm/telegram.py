@@ -14,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_pii
 
+# Telegram-összekapcsolás: rossz törzsszám-próbálkozások csevegésenként
+# (monoton időbélyegek; folyamatonkénti memória, mint a login-throttle).
+_link_failures: dict[str, list[float]] = {}
+
 logger = logging.getLogger(__name__)
 
 API_URL = "https://api.telegram.org/bot{token}/sendMessage"
@@ -148,6 +152,8 @@ async def process_updates(db: AsyncSession) -> int:
     if not updates:
         return 0
 
+    import time as _time
+
     linked = 0
     for u in updates:
         row.tg_update_offset = max(row.tg_update_offset or 0, int(u.get("update_id", 0)) + 1)
@@ -155,15 +161,23 @@ async def process_updates(db: AsyncSession) -> int:
         chat = msg.get("chat") or {}
         if chat.get("type") != "private":
             continue  # csoport-üzenetekre nem reagálunk
+        chat_id = str(chat["id"])
         text = (msg.get("text") or "").strip()
         m = _re.fullmatch(r"(?:/start\s+)?(\d{6})", text)
         if not m:
             if text.startswith("/start"):
                 await send_telegram(
-                    config, str(chat["id"]),
+                    config, chat_id,
                     "Szia! 👋 Az összekapcsoláshoz küldd el a 6 jegyű törzsszámodat "
                     "(ugyanaz, amivel a blokkoló-terminálon jelentkezel).",
                 )
+            continue
+        # Törzsszám-próbálgatás fékje: csevegésenként legfeljebb 5 rossz kód
+        # óránként (a 6 jegyű kód önmagában gyenge titok).
+        now = _time.monotonic()
+        fails = [t for t in _link_failures.get(chat_id, []) if now - t < 3600]
+        _link_failures[chat_id] = fails
+        if len(fails) >= 5:
             continue
         emp = (
             await db.execute(
@@ -174,12 +188,28 @@ async def process_updates(db: AsyncSession) -> int:
             )
         ).scalar_one_or_none()
         if emp is None:
+            _link_failures[chat_id].append(now)
             await send_telegram(
-                config, str(chat["id"]),
+                config, chat_id,
                 "❌ Ismeretlen törzsszám. Ellenőrizd, és küldd el újra a 6 számjegyet.",
             )
             continue
-        emp.telegram_chat_id = str(chat["id"])
+        if emp.telegram_chat_id and emp.telegram_chat_id != chat_id:
+            # Már más csevegéshez van kötve: nem írjuk felül némán (eltérítés
+            # ellen). A régi kapcsolatot az appban / a vezető tudja bontani.
+            _link_failures[chat_id].append(now)
+            await send_telegram(
+                config, chat_id,
+                "⚠️ Ez a törzsszám már össze van kapcsolva egy másik Telegram-fiókkal. "
+                "Ha te vagy az, kérd a vezetődtől a régi kapcsolat bontását.",
+            )
+            await send_telegram(
+                config, emp.telegram_chat_id,
+                "⚠️ Valaki a te törzsszámoddal próbált Telegramot összekapcsolni. "
+                "Ha nem te voltál, szólj a vezetődnek.",
+            )
+            continue
+        emp.telegram_chat_id = chat_id
         linked += 1
         await send_telegram(
             config, str(chat["id"]),

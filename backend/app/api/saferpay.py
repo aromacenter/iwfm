@@ -9,6 +9,7 @@ a Saferpay felé pollozni tilos), és fizetve-állapotnál kiadja az italt.
 
 from __future__ import annotations
 
+import hmac
 import json
 import uuid
 from datetime import UTC, date, datetime, timedelta
@@ -1112,7 +1113,7 @@ async def _machine_by_key(db: AsyncSession, body: MachineAuthBody) -> VendingMac
             select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
         )
     ).scalar_one_or_none()
-    if m is None or not m.is_active or not m.api_key or m.api_key != body.key:
+    if m is None or not m.is_active or not m.api_key or not hmac.compare_digest(m.api_key, body.key):
         raise HTTPException(status_code=403, detail={"code": "vending.bad_key"})
     return m
 
@@ -1249,7 +1250,12 @@ async def upload_asset(request: Request, db: AsyncSession = Depends(get_db)):
     if a is None:
         a = VendingAsset(machine_id=m.id, kind=kind, name=name)
         db.add(a)
-    a.content_type = (request.headers.get("content-type") or "application/octet-stream").split(";")[0][:64]
+    # Csak a gépi ügynök által ténylegesen használt típusok; az SVG/HTML-t nem
+    # tároljuk a kliens által megadott MIME-mal (XSS a visszaszolgálásnál).
+    ctype = (request.headers.get("content-type") or "application/octet-stream").split(";")[0].strip().lower()
+    if ctype not in {"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4"}:
+        raise HTTPException(status_code=422, detail={"code": "vending.bad_asset_type"})
+    a.content_type = ctype
     a.data = raw
     a.sha256 = sha
     a.size = len(raw)
@@ -1930,7 +1936,7 @@ async def report_telemetry(body: TelemetryBody, request: Request, db: AsyncSessi
             select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
         )
     ).scalar_one_or_none()
-    if m is None or not m.is_active or not m.api_key or m.api_key != body.key:
+    if m is None or not m.is_active or not m.api_key or not hmac.compare_digest(m.api_key, body.key):
         # nem áruljuk el, hogy a gép vagy a kulcs hibás-e
         raise HTTPException(status_code=403, detail={"code": "vending.bad_key"})
     # a payload szigorúan ADAT — méret-korlát a napló-hízás ellen
@@ -1961,7 +1967,7 @@ async def agent_ping(body: TelemetryBody, request: Request, db: AsyncSession = D
             select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
         )
     ).scalar_one_or_none()
-    if m is None or not m.is_active or not m.api_key or m.api_key != body.key:
+    if m is None or not m.is_active or not m.api_key or not hmac.compare_digest(m.api_key, body.key):
         raise HTTPException(status_code=403, detail={"code": "vending.bad_key"})
     data = body.data if isinstance(body.data, dict) else {}
     if len(str(data)) > 4000:
@@ -2029,7 +2035,7 @@ async def upload_file(body: UploadBody, db: AsyncSession = Depends(get_db)):
             select(VendingMachine).where(VendingMachine.machine_code == body.machine_code.strip())
         )
     ).scalar_one_or_none()
-    if m is None or not m.is_active or not m.api_key or m.api_key != body.key:
+    if m is None or not m.is_active or not m.api_key or not hmac.compare_digest(m.api_key, body.key):
         raise HTTPException(status_code=403, detail={"code": "vending.bad_key"})
     if body.kind not in FILE_KINDS:
         raise HTTPException(status_code=422, detail={"code": "vending.bad_kind"})

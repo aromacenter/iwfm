@@ -63,6 +63,12 @@ def _clean_signature(value: str | None, *, required: bool) -> str | None:
     return value
 
 
+# Csak raszteres képek: az image/svg+xml scriptet hordozhat, és a saját
+# MIME-jával visszaszolgálva az API-originen futna (tárolt XSS). A munkalap-
+# fotó (tasks.py) is ezt a dekódert használja.
+_PHOTO_MIMES = {"image/jpeg", "image/png", "image/webp"}
+
+
 def _decode_photo(data_url: str) -> tuple[bytes, str]:
     import base64
 
@@ -70,13 +76,17 @@ def _decode_photo(data_url: str) -> tuple[bytes, str]:
         raise HTTPException(status_code=422, detail={"code": "intake.bad_photo"})
     try:
         header, payload = data_url.split(",", 1)
-        mime = header.split(";")[0].removeprefix("data:")
+        mime = header.split(";")[0].removeprefix("data:").strip().lower()
         raw = base64.b64decode(payload)
     except Exception:
         raise HTTPException(status_code=422, detail={"code": "intake.bad_photo"})
+    if mime == "image/jpg":
+        mime = "image/jpeg"
+    if mime not in _PHOTO_MIMES:
+        raise HTTPException(status_code=422, detail={"code": "intake.bad_photo"})
     if len(raw) > _PHOTO_MAX:
         raise HTTPException(status_code=422, detail={"code": "intake.photo_too_large"})
-    return raw, mime[:32]
+    return raw, mime
 
 
 class IntakeOut(BaseModel):

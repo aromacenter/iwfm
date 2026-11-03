@@ -7,6 +7,7 @@ throttle protects against credential stuffing (per email+IP, 5 attempts /
 
 from __future__ import annotations
 
+import secrets as _secrets
 import time as _time
 from collections import defaultdict
 
@@ -36,7 +37,10 @@ _MAX_ATTEMPTS = 5
 _WINDOW_SECONDS = 15 * 60
 # IP-től független korlát fiókonként: hamisított X-Forwarded-For fejléccel
 # (IP-váltogatással) sem lehet korlátlanul jelszót próbálgatni egy emailre.
-_MAX_EMAIL_ATTEMPTS = 20
+# Magas plafon: ez másodlagos fék elosztott próbálgatás ellen, nem fiók-zár —
+# 20-nál bárki névtelenül kizárhatta az admint (DoS); az elsődleges védelem az
+# e-mail+IP kulcs (5 / 15 perc), a valós IP-t a proxy-headers adja.
+_MAX_EMAIL_ATTEMPTS = 100
 _EMAIL_WINDOW_SECONDS = 60 * 60
 _failed_logins: dict[str, list[float]] = defaultdict(list)
 
@@ -128,7 +132,9 @@ async def bootstrap_admin(
     is empty — afterwards it always returns 403. Ha be van állítva a
     WFM_BOOTSTRAP_TOKEN, a hívásnak tartalmaznia kell az egyező tokent."""
     settings = get_settings()
-    if settings.bootstrap_token and body.token != settings.bootstrap_token:
+    if settings.bootstrap_token and not _secrets.compare_digest(
+        settings.bootstrap_token, body.token or ""
+    ):
         raise HTTPException(status_code=403, detail={"code": "auth.bootstrap_token"})
     count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
     if count > 0:

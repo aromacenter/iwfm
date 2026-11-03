@@ -65,13 +65,19 @@ def _decode_screenshot(data_url: str | None) -> tuple[bytes | None, str | None]:
         raise HTTPException(status_code=422, detail={"code": "bugs.bad_screenshot"})
     try:
         header, payload = data_url.split(",", 1)
-        mime = header.split(";")[0].removeprefix("data:")
+        mime = header.split(";")[0].removeprefix("data:").strip().lower()
         raw = base64.b64decode(payload)
     except Exception:
         raise HTTPException(status_code=422, detail={"code": "bugs.bad_screenshot"})
+    # Csak raszteres kép: SVG-ben script lehet, és a visszaszolgálásnál az
+    # API-originen futna (tárolt XSS az üzemeltető/admin ellen).
+    if mime == "image/jpg":
+        mime = "image/jpeg"
+    if mime not in {"image/png", "image/jpeg", "image/webp"}:
+        raise HTTPException(status_code=422, detail={"code": "bugs.bad_screenshot"})
     if len(raw) > MAX_SCREENSHOT:
         raise HTTPException(status_code=422, detail={"code": "bugs.screenshot_too_big"})
-    return raw, mime[:32]
+    return raw, mime
 
 
 def _aware(dt: datetime | None) -> datetime | None:

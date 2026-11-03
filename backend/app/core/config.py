@@ -77,9 +77,24 @@ def get_settings() -> Settings:
     if os.getenv("DATABASE_URL") and not os.getenv("WFM_DATABASE_URL"):
         os.environ["WFM_DATABASE_URL"] = os.environ["DATABASE_URL"]
     settings = Settings()
-    if settings.is_production:
-        if settings.secret_key == "dev-only-secret-change-me-0123456789abcdef":
-            raise RuntimeError("WFM_SECRET_KEY must be set in production.")
+    default_secret = settings.secret_key == "dev-only-secret-change-me-0123456789abcdef"
+    # Fail-closed: a publikus (repóban lévő) fejlesztői kulccsal csak helyi,
+    # SQLite-os futás engedett. Bármilyen "igazi" adatbázis (Postgres) mögött
+    # a kulcsoknak lenniük kell, akkor is, ha a WFM_ENVIRONMENT nincs beállítva —
+    # különben hamisított JWT-vel admin-átvétel, és a PII-titkosítás kulcsa is
+    # a nyilvános secret-ből származna.
+    real_db = not settings.database_url.startswith("sqlite")
+    if settings.is_production or real_db:
+        where = "production" if settings.is_production else "non-SQLite database"
+        if default_secret:
+            raise RuntimeError(f"WFM_SECRET_KEY must be set ({where}).")
         if not settings.enc_key:
-            raise RuntimeError("WFM_ENC_KEY must be set in production (PII encryption).")
+            raise RuntimeError(f"WFM_ENC_KEY must be set ({where}; PII encryption).")
+    if settings.is_production and not settings.cookie_secure:
+        # HTTPS mögött a session-süti mindig secure — ne múljon külön kapcsolón.
+        settings.cookie_secure = True
+    logger.info(
+        "Iwfm settings: environment=%s cookie_secure=%s db=%s",
+        settings.environment, settings.cookie_secure, "sqlite" if not real_db else "server",
+    )
     return settings

@@ -204,6 +204,13 @@ def create_app() -> FastAPI:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
+        # Felhasználói feltöltésből visszaszolgált kép/videó: szigorú CSP +
+        # sandbox, hogy egy (bármilyen úton bekerült) SVG/HTML-szerű tartalom
+        # se futtathasson scriptet az API-originen, ha valaki közvetlenül nyitja.
+        ctype = (response.headers.get("content-type") or "").split(";")[0].strip().lower()
+        if ctype.startswith(("image/", "video/")):
+            response.headers.setdefault("Content-Security-Policy", "default-src 'none'; sandbox")
+            response.headers.setdefault("Content-Disposition", "inline")
         if settings.is_production:
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=63072000; includeSubDomains"

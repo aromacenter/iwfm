@@ -268,8 +268,8 @@ async def support_info(token: str, db: AsyncSession = Depends(get_db)):
         "counters": asset.counters,
         "partner_name": partner.name if partner else None,
         "partner_code": partner.partner_code if partner else None,
-        "contact_name": partner.contact_name if partner else None,
-        "contact_phone": partner.contact_phone if partner else None,
+        # A kapcsolattartó nevét/telefonját NEM adjuk ki: a QR-matrica nyilvános
+        # helyen van, bárki leolvashatja — személyes adat lenne a nyilvános oldalon.
         "products": [
             {"id": str(p.id), "name": p.name, "unit": p.unit, "code": p.code}
             for p in products
@@ -325,9 +325,9 @@ async def create_support_ticket(
     description = body.description.strip()
     if contact_bits:
         description = f"{description}\n\nBejelentő: {contact_bits}"
-    # E-mail-gyűjtés: csak ÜRES partner-e-mailt töltünk (kézit nem írunk felül).
-    if body.contact_email and partner is not None and not partner.contact_email:
-        partner.contact_email = str(body.contact_email)
+    # A bejelentő e-mailje CSAK a jegyen marad (a leírásban): névtelen QR-
+    # bejelentésből nem írunk partner-kapcsolattartót, mert oda megy később a
+    # partner-portál link (készlet, elszámolások, kintlévőség).
 
     ticket = ServiceTicket(
         ticket_no=await _next_ticket_no(db),
