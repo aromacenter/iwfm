@@ -10,7 +10,9 @@ async def test_branding_public(client, admin):
     res = await client.get("/api/settings/branding")
     assert res.status_code == 200, res.text
     out = res.json()
-    assert set(out.keys()) == {"company_name", "accent_color", "has_logo"}
+    # privacy_url: az adatkezelési tájékoztató linkje (WFM_PRIVACY_URL), üresen None
+    assert set(out.keys()) == {"company_name", "accent_color", "has_logo", "privacy_url"}
+    assert out["privacy_url"] is None
 
     # a cégnév a munkalap-beállításból jön
     ws = (await client.get("/api/settings/worksheet", headers=adm)).json()

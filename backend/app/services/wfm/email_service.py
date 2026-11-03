@@ -117,7 +117,9 @@ async def send_email(
         await asyncio.to_thread(_send_sync, config, to, subject, body, attachments)
         return True
     except Exception:
-        logger.warning("Email küldés sikertelen: %s → %s", subject, to, exc_info=True)
+        # A címzett e-mail címe személyes adat: a naplóba csak a domain kerül.
+        domain = to.rsplit("@", 1)[-1] if "@" in (to or "") else "?"
+        logger.warning("Email küldés sikertelen: %s → *@%s", subject, domain, exc_info=True)
         return False
 
 

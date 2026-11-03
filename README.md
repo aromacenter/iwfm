@@ -66,6 +66,19 @@ Tesztek: `cd backend && python -m pytest` (74 teszt, valós adatbázis ellen).
 - **GDPR:** érzékeny azonosítók titkosítva (AES-128-CBC + HMAC, Fernet), minden
   hozzáférés/módosítás/export auditnaplóba kerül (`audit_events`), a válaszok
   maszkolt értéket adnak, a teljes értéket csak admin kérheti le (auditálva).
+- **Érintetti jogok és megőrzés (2026-11-03):**
+  - *Törléshez való jog:* `POST /api/employees/{id}/anonymize` (admin, megerősítő
+    szóval, auditálva) — a dolgozó személyes adatai és titkosított mezői
+    törlődnek, a fiók letiltva, a törzsszám és a dátumok megmaradnak.
+  - *Hozzáférés / hordozhatóság:* `GET /api/me/data-export` — a bejelentkezett
+    dolgozó saját adatai JSON-ban (auditálva).
+  - *Megőrzés:* `WFM_RETENTION_AUDIT_DAYS`, `WFM_RETENTION_PHOTO_DAYS`,
+    `WFM_RETENTION_SCREENSHOT_DAYS` (nap; 0 = kikapcsolva). A napi tisztítás a
+    háttérhurokból fut; kézi indítás és állapot: `/api/admin/retention`.
+  - *Tájékoztató:* `WFM_PRIVACY_URL` — a belépő oldal lábléce linkeli.
+  - *Naplózás:* a napló e-mail címet nem tartalmaz (csak domaint).
+- **Adatok helye:** a Railway-service-ek régióját az üzemeltető állítja; EU-s
+  ügyfeleknél EU-régió (pl. Amsterdam) és a landing ígéretével összhang kell.
 - A szoftver **nem helyettesít** munkajogi/adatvédelmi szakértőt; az üzemeltető
   felelőssége az adatkezelési tájékoztató és a jogalap megléte.
 

@@ -9,6 +9,7 @@ by construction).
 * POST /me/time-off    — új kérelem
 * GET  /me/clock       — nyitott bejegyzés állapota (CSAK olvasás)
 * GET  /me/profile     — név + törzsszám
+* GET  /me/data-export — saját adatok JSON-ban (GDPR 15./20. cikk), naplózva
 
 Be-/kiblokkolás telefonról szándékosan NEM lehetséges (visszaélés-veszély):
 a munkaidő rögzítése kizárólag a helyszíni blokkoló-terminálon történik
@@ -17,11 +18,13 @@ a munkaidő rögzítése kizárólag a helyszíni blokkoló-terminálon történ
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import set_session_cookie
@@ -29,9 +32,10 @@ from app.api.deps import get_current_user, get_own_employee, record_audit
 from app.api.shifts import ShiftOut, _shift_out, _week_bounds
 from app.api.timeclock import to_out as entry_out
 from app.api.timeoff import TimeOffOut, ensure_no_overlap, to_out as timeoff_out, validate_range
+from app.core.crypto import decrypt_pii
 from app.core.security import hash_password, mint_token, verify_password
 from app.db import get_db
-from app.models import Employee, Shift, TimeEntry, TimeOffRequest, User
+from app.models import AuditEvent, Employee, Shift, Task, TimeEntry, TimeOffRequest, User
 
 router = APIRouter()
 
@@ -53,6 +57,103 @@ async def my_profile(emp: Employee = Depends(get_own_employee)):
         "employee_code": emp.employee_code,
         "job_title": emp.job_title,
     }
+
+
+@router.get("/data-export")
+async def my_data_export(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """GDPR 15./20. cikk (hozzáférés / adathordozhatóság): a dolgozó SAJÁT
+    törzsadatai géppel olvasható JSON-ban — az érzékeny azonosítók
+    visszafejtve (a saját adata), jelszó-hash nélkül. Naplózva."""
+    employee = {
+        "id": str(emp.id),
+        "employee_code": emp.employee_code,
+        "status": emp.status,
+        "last_name": emp.last_name,
+        "first_name": emp.first_name,
+        "birth_name": emp.birth_name,
+        "mother_name": emp.mother_name,
+        "birth_place": emp.birth_place,
+        "birth_date": emp.birth_date,
+        "citizenship": emp.citizenship,
+        "phone": emp.phone,
+        "address": emp.address,
+        "residence_address": emp.residence_address,
+        "tax_id": decrypt_pii(emp.tax_id_encrypted),
+        "taj": decrypt_pii(emp.taj_encrypted),
+        "bank_account": decrypt_pii(emp.bank_account_encrypted),
+        "wage_amount": decrypt_pii(emp.wage_encrypted),
+        "hire_date": emp.hire_date,
+        "termination_date": emp.termination_date,
+        "job_title": emp.job_title,
+        "feor_code": emp.feor_code,
+        "employment_type": emp.employment_type,
+        "contract_type": emp.contract_type,
+        "weekly_hours": emp.weekly_hours,
+        "wage_type": emp.wage_type,
+        "annual_leave_days": emp.annual_leave_days,
+        "payroll_source": emp.payroll_source,
+        "site": emp.site,
+        "sunday_bonus": emp.sunday_bonus,
+        "shift_bonus": emp.shift_bonus,
+        "bonus_in_base_salary": emp.bonus_in_base_salary,
+        "break_rule": emp.break_rule,
+        "availability": emp.availability,
+        "is_contractor": emp.is_contractor,
+        "is_company": emp.is_company,
+        "company_name": emp.company_name,
+        "company_technicians": emp.company_technicians,
+        "company_tax_number": emp.company_tax_number,
+        "telegram_linked": emp.telegram_chat_id is not None,
+        "notes": emp.notes,
+        "created_at": emp.created_at,
+        "updated_at": emp.updated_at,
+    }
+    user_out = {
+        "id": str(user.id),
+        "email": user.email,
+        "username": user.username,
+        "display_name": user.display_name,
+        "role": user.role,
+        "is_active": user.is_active,
+        "created_at": user.created_at,
+    }
+
+    async def _count(model, *where) -> int:
+        return int(
+            (await db.execute(select(func.count()).select_from(model).where(*where))).scalar_one()
+        )
+
+    counts = {
+        "time_entries": await _count(TimeEntry, TimeEntry.employee_id == emp.id),
+        "time_off_requests": await _count(TimeOffRequest, TimeOffRequest.employee_id == emp.id),
+        "shifts": await _count(Shift, Shift.employee_id == emp.id),
+        "tasks_assigned": await _count(Task, Task.employee_id == emp.id),
+        "audit_events_as_actor": await _count(AuditEvent, AuditEvent.actor_user_id == user.id),
+    }
+
+    await record_audit(
+        db, actor=user, action="me.data_export", entity_type="employee",
+        entity_id=str(emp.id), request=request,
+    )
+    await db.commit()
+
+    payload = jsonable_encoder(
+        {
+            "exported_at": datetime.now(UTC),
+            "employee": employee,
+            "user": user_out,
+            "counts": counts,
+        }
+    )
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": 'attachment; filename="sajat-adatok.json"'},
+    )
 
 
 class PasswordChange(BaseModel):

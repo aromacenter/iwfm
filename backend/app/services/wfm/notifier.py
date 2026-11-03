@@ -451,6 +451,33 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
     return result
 
 
+# GDPR megőrzési takarítás: naponta egyszer, modul-állapotban őrzött utolsó
+# futás-időponttal (újraindításkor az első körben fut, ha be van kapcsolva).
+RETENTION_INTERVAL = timedelta(hours=24)
+_retention_last_run: datetime | None = None
+
+
+async def maybe_run_retention(session_factory, now: datetime | None = None) -> bool:
+    """Lefuttatja a megőrzési takarítást, ha legalább egy beállítás > 0 és az
+    utolsó futás óta eltelt 24 óra. Hiba esetén naplóz, nem dob — a hurok
+    nem halhat meg. Visszaadja, hogy futott-e."""
+    global _retention_last_run
+    from app.services.wfm.retention import is_enabled, run_retention
+
+    now = now or datetime.now(UTC)
+    if not is_enabled():
+        return False
+    if _retention_last_run is not None and now - _retention_last_run < RETENTION_INTERVAL:
+        return False
+    _retention_last_run = now  # hibánál se pörögjön 5 percenként újra
+    try:
+        await run_retention(session_factory, now=now)
+    except Exception:  # noqa: BLE001
+        logger.exception("retention run failed")
+        return False
+    return True
+
+
 async def notification_loop() -> None:
     """Háttérhurok — a lifespan indítja."""
     from app.db import get_session_factory
@@ -461,4 +488,8 @@ async def notification_loop() -> None:
                 await run_pending_notifications(db)
         except Exception:  # noqa: BLE001 — a hurok nem halhat meg
             logger.exception("notification loop iteration failed")
+        try:
+            await maybe_run_retention(get_session_factory())
+        except Exception:  # noqa: BLE001
+            logger.exception("retention pass failed")
         await asyncio.sleep(CHECK_SECONDS)

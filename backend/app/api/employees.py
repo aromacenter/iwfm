@@ -681,6 +681,90 @@ async def reveal_sensitive(
     )
 
 
+class AnonymizeBody(BaseModel):
+    """Megerősítés: a dolgozó törzsszáma VAGY vezetékneve — véletlen kattintás ellen."""
+
+    confirm: str = Field(min_length=1, max_length=128)
+
+
+ANONYMIZED_LAST_NAME = "Törölt"
+ANONYMIZED_FIRST_NAME = "dolgozó"
+
+
+@router.post("/{employee_id}/anonymize", response_model=EmployeeOut)
+async def anonymize_employee(
+    employee_id: str,
+    body: AnonymizeBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """GDPR 17. cikk (törléshez való jog): a dolgozó személyes adatainak
+    visszafordíthatatlan anonimizálása — admin only, naplózva.
+
+    Megmarad: id, törzsszám, belépés/kilépés dátuma, munkaügyi besorolás
+    (bérszámfejtési előzmény + audit-lánc). Törlődik minden név/azonosító/cím/
+    elérhetőség, a titkosított azonosítók és a bér. A login-fiók letiltva,
+    minden munkamenete érvénytelen. Idempotens: többször is hívható."""
+    emp = await _get_or_404(db, employee_id)
+    if emp.user_id == actor.id:
+        raise HTTPException(status_code=409, detail={"code": "employee.anonymize_self"})
+
+    confirm = body.confirm.strip()
+    accepted = {v.casefold() for v in (emp.employee_code, emp.last_name) if v}
+    if confirm.casefold() not in accepted:
+        raise HTTPException(status_code=422, detail={"code": "employee.confirm_mismatch"})
+
+    # --- Employee: személyes adatok törlése ---
+    emp.last_name = ANONYMIZED_LAST_NAME
+    emp.first_name = ANONYMIZED_FIRST_NAME
+    emp.birth_name = None
+    emp.mother_name = None
+    emp.birth_place = None
+    emp.birth_date = None
+    emp.citizenship = ""  # NOT NULL oszlop
+    emp.phone = None
+    emp.address = None
+    emp.residence_address = None
+    emp.notes = None
+    emp.tax_id_encrypted = None
+    emp.tax_id_masked = None
+    emp.taj_encrypted = None
+    emp.taj_masked = None
+    emp.bank_account_encrypted = None
+    emp.bank_account_masked = None
+    emp.wage_encrypted = None
+    emp.telegram_chat_id = None
+    emp.availability = None
+    emp.status = "inactive"  # ck_employees_status: active|inactive — ez az „archivált”
+
+    # --- User (login-fiók): letiltás + munkamenetek érvénytelenítése ---
+    user = (await db.execute(select(User).where(User.id == emp.user_id))).scalar_one_or_none()
+    if user is not None:
+        user.is_active = False
+        user.token_version += 1
+        user.email = f"deleted-{emp.id}@anonymized.invalid"
+        user.username = None
+        user.display_name = f"{ANONYMIZED_LAST_NAME} {ANONYMIZED_FIRST_NAME}"
+        user.signature_sample = None  # aláírás-minta (PNG) — biometrikus jellegű
+        user.substitute_user_id = None
+        # A jelszó is használhatatlanná válik (visszaaktiválás esetén sem lép be vele).
+        user.password_hash = hash_password(secrets.token_urlsafe(32))
+
+    await record_audit(
+        db, actor=actor, action="employee.anonymize", entity_type="employee",
+        entity_id=str(emp.id), request=request,
+        detail={"user_id": str(emp.user_id), "employee_code": emp.employee_code},
+    )
+    await db.commit()
+    out = _employee_out(
+        emp, user.email if user else None, user.role if user else None,
+        user.username if user else None,
+    )
+    out.skills = (await _load_skills_map(db, [emp.id])).get(emp.id, [])
+    return out
+
+
 class PasswordResetOut(BaseModel):
     generated_password: str
 

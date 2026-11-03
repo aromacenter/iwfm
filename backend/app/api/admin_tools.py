@@ -282,6 +282,46 @@ async def billingo_sync_status(_: User = Depends(require_role("admin"))):
     return _SYNC_STATE
 
 
+# ─── GDPR adatmegőrzés ──────────────────────────────────────────────────────
+
+
+@router.get("/retention")
+async def retention_status(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Megőrzési beállítások (nap; 0 = kikapcsolva) + a legutóbbi futás."""
+    from app.services.wfm.retention import PROTECTED_AUDIT_PREFIXES, current_settings, last_run
+
+    cfg = current_settings()
+    return {
+        "settings": cfg,
+        "enabled": any(v > 0 for v in cfg.values()),
+        "protected_audit_prefixes": list(PROTECTED_AUDIT_PREFIXES),
+        "last_run": await last_run(db),
+    }
+
+
+@router.post("/retention/run")
+async def retention_run_now(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """Megőrzési takarítás azonnali futtatása (a beállítások szerint)."""
+    from app.db import get_session_factory
+    from app.services.wfm.retention import run_retention
+
+    result = await run_retention(get_session_factory())
+    await record_audit(
+        db, actor=actor, action="admin.retention_run", entity_type="retention",
+        detail={"ran": result["ran"], "counts": result["counts"], "settings": result["settings"]},
+        request=request,
+    )
+    await db.commit()
+    return result
+
+
 class WipeBody(BaseModel):
     entity: str
     confirm: str

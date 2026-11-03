@@ -423,10 +423,14 @@ async def get_branding(db: AsyncSession = Depends(get_db)):
     row = (
         await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
     ).scalar_one_or_none()
+    from app.core.config import get_settings as _gs
+
     return {
         "company_name": row.company_name if row else None,
         "accent_color": row.accent_color if row else "#1e40af",
         "has_logo": bool(row and row.logo_data is not None),
+        # Adatkezelési tájékoztató (WFM_PRIVACY_URL): a belépő-oldal lábléce linkeli
+        "privacy_url": _gs().privacy_url or None,
     }
 
 

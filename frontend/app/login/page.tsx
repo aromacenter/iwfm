@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BrandLogo from "@/components/BrandLogo";
+import PrivacyLink from "@/components/PrivacyLink";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
@@ -152,6 +153,7 @@ export default function LoginPage() {
         >
           {t("login.kioskLink")}
         </a>
+        <PrivacyLink className="mt-3" />
       </div>
     </div>
   );

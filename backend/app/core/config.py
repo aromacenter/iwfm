@@ -52,7 +52,18 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_tls: bool = True
 
-    model_config = {"env_prefix": "WFM_", "env_file": ".env", "extra": "ignore"}
+    # --- adatvédelem (GDPR) ---
+    # Adatkezelési tájékoztató URL-je: a bejelentkező oldal és a nyilvános
+    # oldalak lábléce linkeli (WFM_PRIVACY_URL). Üres = nincs link.
+    privacy_url: str = ""
+    # Megőrzési idők napban; 0 = nincs automatikus törlés (alapértelmezés,
+    # a mai viselkedés). A napi tisztítás a háttérhurokból fut
+    # (services/wfm/retention.py), minden futás audit-naplózott.
+    retention_audit_days: int = 0        # audit_events sorok
+    retention_photo_days: int = 0        # átvételi és munkalap-fotók
+    retention_screenshot_days: int = 0   # hibajegy-képernyőképek
+
+    model_config ={"env_prefix": "WFM_", "env_file": ".env", "extra": "ignore"}
 
     @property
     def is_production(self) -> bool:
