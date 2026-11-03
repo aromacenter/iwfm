@@ -370,6 +370,10 @@ async def my_attempt(
     """Teszt beadása: minden kérdésre a jelölt opciók; 100 % = elvégezve
     (érvényesség a beállított hónapokig). Minden próbálkozás naplózva."""
     a, m = await _own_assignment(db, emp, assignment_id)
+    # elvégzett (100 %-os, még érvényes) tananyagot nem lehet újra beadni —
+    # csak az érvényesség lejárta után (expired) nyílik meg újra a teszt
+    if _status(a, date.today()) == "done":
+        raise HTTPException(status_code=422, detail={"code": "learning.already_done"})
     qs = {str(q.id): q for q in await _questions(db, m.id)}
     if not qs:
         raise HTTPException(status_code=422, detail={"code": "learning.no_test"})
@@ -412,6 +416,7 @@ async def my_attempt(
 @router.get("/my/{assignment_id}/certificate.pdf")
 async def my_certificate(
     assignment_id: str,
+    inline: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     emp: Employee = Depends(get_own_employee),
 ):
@@ -421,8 +426,9 @@ async def my_certificate(
     from app.services.wfm.learning_pdf import build_certificate_pdf
 
     pdf, serial = await build_certificate_pdf(db, a, m, emp)
+    disp = "inline" if inline else "attachment"
     return Response(content=pdf, media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="oklevel_{serial}.pdf"'})
+                    headers={"Content-Disposition": f'{disp}; filename="oklevel_{serial}.pdf"'})
 
 
 # ─── Vezetői rész (learning jogosultság) ─────────────────────────────────────

@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, api, downloadFile, errorMessage } from "@/lib/api";
+import { ApiError, api, errorMessage, printFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { STATUS_CLS, fmtSize, renderMarkdown, type AttachmentMeta, type MyItem } from "../shared";
 
@@ -85,7 +85,7 @@ export default function LearningMaterialPage() {
       // friss állapot + (véletlen kérdéssornál) új kérdések
       api.get<Detail>(`/api/learning/my/${id}`).then((d) => {
         setData(d);
-        if (!r.passed) setAnswers({});
+        setAnswers({});
       }).catch(() => {});
     } catch (err) {
       setError(errorMessage(err));
@@ -140,6 +140,9 @@ export default function LearningMaterialPage() {
               className="absolute inset-0 h-full w-full"
               src={`https://www.youtube-nocookie.com/embed/${m.video_id}`}
               title={m.title}
+              // a dokumentum Referrer-Policy: no-referrer (biztonsági audit) — a YouTube
+              // referrer nélkül 153-as hibát ad, ezért az iframe saját szabályt kap
+              referrerPolicy="strict-origin-when-cross-origin"
               allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
@@ -172,24 +175,43 @@ export default function LearningMaterialPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold">{t("learning.detail.test")}</h2>
-        {data.questions.length === 0 ? (
+        {isDone ? (
+          /* 100 %-os teszt: nincs újrapróbálás, a kérdések eltűnnek — oklevél megtekintés + nyomtatás */
+          <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            <div className="font-semibold">{t("learning.detail.passed")}</div>
+            <div>{t("learning.detail.doneInfo", { date: fd(a.completed_at), attempts: data.attempts.length })}</div>
+            {a.valid_until && (
+              <div className="text-xs">
+                {t("learning.my.validUntil")}: {fd(a.valid_until)}
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => window.open(`/api/learning/my/${id}/certificate.pdf?inline=1`, "_blank", "noopener")}
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+              >
+                🎓 {t("learning.detail.viewCertificate")}
+              </button>
+              <button
+                type="button"
+                onClick={() => printFile(`/api/learning/my/${id}/certificate.pdf?inline=1`).catch((err) => setError(errorMessage(err)))}
+                className="rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+              >
+                🖨️ {t("learning.detail.printCertificate")}
+              </button>
+            </div>
+            {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+          </div>
+        ) : data.questions.length === 0 ? (
           <p className="mt-2 text-sm text-slate-500">{t("learning.detail.noTest")}</p>
         ) : (
           <>
-            <p className="mt-1 text-xs text-slate-500">{isDone ? t("learning.detail.retake") : t("learning.detail.testHint")}</p>
-            {result && (
-              <div
-                className={`mt-3 rounded-xl px-4 py-3 text-sm ${
-                  result.passed ? "bg-emerald-50 text-emerald-900" : "bg-rose-50 text-rose-900"
-                }`}
-              >
-                <div className="font-semibold">{result.passed ? t("learning.detail.passed") : t("learning.detail.failed")}</div>
+            <p className="mt-1 text-xs text-slate-500">{a.status === "expired" ? t("learning.detail.expiredHint") : t("learning.detail.testHint")}</p>
+            {result && !result.passed && (
+              <div className="mt-3 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                <div className="font-semibold">{t("learning.detail.failed")}</div>
                 <div>{t("learning.detail.result", { correct: result.correct, total: result.total, score: result.score_percent })}</div>
-                {result.passed && result.valid_until && (
-                  <div className="text-xs">
-                    {t("learning.my.validUntil")}: {fd(result.valid_until)}
-                  </div>
-                )}
               </div>
             )}
             <ol className="mt-4 space-y-4">
@@ -231,17 +253,6 @@ export default function LearningMaterialPage() {
               {!allAnswered && <span className="text-xs text-slate-400">{t("learning.detail.answerAll")}</span>}
             </div>
           </>
-        )}
-        {isDone && (
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <button
-              type="button"
-              onClick={() => downloadFile(`/api/learning/my/${id}/certificate.pdf`, `oklevel_${m.title.replace(/[^\w-]+/g, "_")}.pdf`).catch((err) => setError(errorMessage(err)))}
-              className="rounded-lg border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-            >
-              🎓 {t("learning.detail.certificate")}
-            </button>
-          </div>
         )}
       </section>
 

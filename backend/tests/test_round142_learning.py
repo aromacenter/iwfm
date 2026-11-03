@@ -105,6 +105,12 @@ async def test_learning_flow(client, admin, manager):
     assert (vu.year, vu.month) == (today.year + 1, today.month)
     res = await client.get(f"/api/learning/my/{aid}/certificate.pdf", headers=a_h)
     assert res.status_code == 200 and res.content.startswith(b"%PDF") and "oklevel_XL-" in res.headers["content-disposition"]
+    assert res.headers["content-disposition"].startswith("attachment")
+    res = await client.get(f"/api/learning/my/{aid}/certificate.pdf?inline=1", headers=a_h)
+    assert res.status_code == 200 and res.headers["content-disposition"].startswith("inline")
+    # elvégzett tananyag: újrapróbálás zárva
+    res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": {q1: [1], q2: [2, 0]}}, headers=a_h)
+    assert res.status_code == 422 and res.json()["detail"]["code"] == "learning.already_done"
     my = (await client.get("/api/learning/my", headers=a_h)).json()["items"][0]
     assert my["status"] == "done" and my["attempts"] == 2 and my["last_score"] == 100
 
