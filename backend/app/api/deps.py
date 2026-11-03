@@ -47,6 +47,7 @@ FEATURES = (
     "service",        # szerviz (hibajegyek, karbantartás) — magában foglalja az átvételt+tudásbázist
     "intake",         # gép-átvétel (elismervény) — önállóan is adható (pl. alvállalkozó)
     "knowledge",      # tudásbázis — önállóan is adható
+    "learning",       # X-Learning: tananyagok, kiosztás, eredmények (vezetői rész)
     "import_export",  # import/export
     "payroll",        # bérexport
     "my_schedule",    # saját beosztás (önkiszolgáló)
@@ -59,7 +60,7 @@ DEFAULT_MATRIX: dict[str, list[str]] = {
     "manager": [
         "dashboard", "tasks", "schedule", "attendance", "timeoff", "employees",
         "partners", "machines", "products", "settlements", "invoicing",
-        "agent_report", "service", "import_export", "payroll", "parts",
+        "agent_report", "service", "import_export", "payroll", "parts", "learning",
     ],
     "uzletkoto": [
         "dashboard", "partners", "machines", "products", "settlements",

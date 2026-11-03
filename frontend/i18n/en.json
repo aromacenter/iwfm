@@ -159,6 +159,8 @@
     "automation": "Automations",
     "service": "Service",
     "kb": "Knowledge base",
+    "learning": "X-Learning",
+    "learningAdmin": "X-Learning admin",
     "tools": "Tools",
     "audit": "Audit log",
     "bugs": "Bug reports",
@@ -220,6 +222,7 @@
     "service": "Service (tickets, maintenance — also grants intake+knowledge)",
     "intake": "Machine intake (receipt)",
     "knowledge": "Knowledge base",
+    "learning": "X-Learning (materials, assignment, results)",
     "import_export": "Import / Export",
     "payroll": "Payroll export",
     "my_schedule": "My schedule",
@@ -692,6 +695,162 @@
       "waiting_parts": "Waiting for parts",
       "done": "Done",
       "closed": "Closed"
+    }
+  },
+  "learning": {
+    "nav": {
+      "my": "My learning",
+      "admin": "Edit / Results"
+    },
+    "status": {
+      "open": "In progress",
+      "overdue": "Overdue",
+      "done": "Completed",
+      "expired": "Due again"
+    },
+    "source": {
+      "manual": "individual",
+      "role": "role"
+    },
+    "login": {
+      "title": "Sign in to X-Learning",
+      "hint": "Sign in with the account you got from your company system (e-mail or username + password). If you have no account yet, your manager creates it under Employees.",
+      "identifier": "E-mail or username",
+      "email": "E-mail",
+      "password": "Password",
+      "submit": "Sign in",
+      "forgotLink": "Forgot password",
+      "forgotTitle": "Forgot password",
+      "forgotHint": "Enter your e-mail; if an account exists, we send a reset link.",
+      "forgotSubmit": "Send link",
+      "forgotDone": "If such an account exists, the link has been sent — check your inbox.",
+      "backToLogin": "Back to sign-in",
+      "footer": "You only see the materials assigned to you. Every test attempt is logged."
+    },
+    "my": {
+      "title": "My learning",
+      "empty": "No material is assigned to you right now.",
+      "todo": "To do",
+      "doneSection": "Completed",
+      "noEmployee": "No employee record belongs to this account — ask your manager to link it under Employees.",
+      "moduleOff": "The X-Learning module is not enabled on this system.",
+      "due": "Due",
+      "validUntil": "Valid until",
+      "hasVideo": "video",
+      "hasTest": "test",
+      "noTest": "no test",
+      "attempts": "{n} attempt(s)",
+      "bestScore": "best {n} %"
+    },
+    "detail": {
+      "back": "Back to my learning",
+      "completed": "Completed",
+      "validity": "Validity: {n} months from completion",
+      "attachments": "Attachments",
+      "test": "Test",
+      "noTest": "This material has no test — reading/watching is the task.",
+      "testHint": "Mark the correct answer(s) for every question. Only a 100 % test counts as completed — unlimited attempts, all logged.",
+      "retake": "Material completed. You may retake the test (e.g. when validity expires).",
+      "multi": "more than one answer may be correct",
+      "submit": "Submit test",
+      "answerAll": "Answer every question to submit.",
+      "result": "{correct} / {total} correct — {score} %",
+      "passed": "Passed! The material is completed.",
+      "failed": "Not 100 % — review the material and try again.",
+      "certificate": "Download certificate (PDF)",
+      "history": "Previous attempts"
+    },
+    "admin": {
+      "title": "X-Learning — materials and results",
+      "forbidden": "You have no permission for this area.",
+      "backToMy": "My learning",
+      "export": "Training log CSV",
+      "new": "+ New material",
+      "noMaterials": "No material yet — create the first one.",
+      "selectHint": "Pick a material from the list or create a new one.",
+      "inactive": "inactive",
+      "questionsN": "{n} questions",
+      "assignedN": "{n} assigned",
+      "save": "Save",
+      "saved": "Material saved.",
+      "delete": "Delete",
+      "deleteConfirm": "Delete “{title}” with all its assignments and results?",
+      "deleted": "Material deleted.",
+      "overview": {
+        "materials": "Materials",
+        "assigned": "Assigned",
+        "open": "In progress",
+        "done": "Completed",
+        "overdue": "Overdue",
+        "expired": "Due again"
+      },
+      "tabs": {
+        "edit": "Material",
+        "questions": "Question bank",
+        "files": "Attachments",
+        "assign": "Assign",
+        "results": "Results"
+      },
+      "fields": {
+        "title": "Title",
+        "category": "Category",
+        "categoryHint": "e.g. fire safety, machine operation",
+        "video": "YouTube video link",
+        "body": "Material text",
+        "bodyHint": "Simple formatting: # heading, - bullet, 1. numbered list, **bold**, *italic*, [link](https://…)",
+        "validity": "Validity (months)",
+        "validityHint": "Must be completed again after expiry; empty: never expires.",
+        "random": "Random question count",
+        "randomHint": "This many questions are drawn randomly from the bank; empty: the whole set.",
+        "dueDays": "Default due (days)",
+        "dueDaysHint": "For role-based automatic assignment, counted from the employee's first visit.",
+        "externalOk": "May be assigned to external (contractor) staff",
+        "active": "Active (visible to employees)",
+        "autoRoles": "Automatic assignment by role",
+        "autoRolesHint": "Employees with a ticked role who join later get it automatically."
+      },
+      "questions": {
+        "hint": "Multiple-choice questions, more than one answer may be correct. The tick marks the correct option; every question needs at least one.",
+        "none": "No questions yet — without a test the material is reading only.",
+        "text": "Question text",
+        "option": "Answer option",
+        "addOption": "answer option",
+        "add": "New question",
+        "remove": "Remove question",
+        "correct": "Correct answer",
+        "save": "Save question bank",
+        "saved": "Question bank saved."
+      },
+      "files": {
+        "hint": "PDF, PNG or JPG, up to 20 MB. Employees open it on the material page.",
+        "none": "No attachments.",
+        "uploaded": "Attachment uploaded.",
+        "tooLarge": "The file is larger than 20 MB.",
+        "deleteConfirm": "Delete this attachment?"
+      },
+      "assign": {
+        "hint": "Individually and/or by role. By role, current employees get it now and later joiners automatically. External staff only if allowed on the material.",
+        "employees": "Employees",
+        "contractor": "external",
+        "roles": "Roles",
+        "autoRolesNow": "Automatic assignment already: {roles}",
+        "due": "Due date",
+        "submit": "Assign",
+        "done": "{created} new assignment(s), {already} already existed."
+      },
+      "results": {
+        "none": "Not assigned to anyone yet.",
+        "employee": "Employee",
+        "status": "Status",
+        "due": "Due",
+        "completed": "Completed",
+        "valid": "Valid until",
+        "attempts": "Attempts",
+        "best": "Best",
+        "source": "Assigned",
+        "unassign": "unassign",
+        "unassignConfirm": "Unassign {name}? Their results are deleted too."
+      }
     }
   },
   "tools": {
@@ -2215,6 +2374,16 @@
     "tools.serial_exists": "A tool with this serial already exists.",
     "tools.not_found": "Tool not found.",
     "tools.bad_employee": "Unknown employee.",
+    "learning.not_found": "Material or assignment not found.",
+    "learning.incomplete": "You have not answered every question.",
+    "learning.no_test": "This material has no test.",
+    "learning.no_correct_option": "Every question needs at least one correct answer.",
+    "learning.external_not_allowed": "External staff can only be assigned if allowed on the material.",
+    "learning.bad_employee": "Unknown employee.",
+    "learning.nobody": "No employee or role selected.",
+    "learning.not_completed": "The material is not completed yet — certificate only after a 100 % test.",
+    "learning.bad_attachment": "Only PDF, PNG or JPG can be attached.",
+    "learning.attachment_too_large": "The attachment is larger than 20 MB.",
     "worksheet.photo_not_found": "Photo not found.",
     "settlement.customer_only": "This partner is a customer (no placed machine) — only instant sale/delivery is available.",
     "cash.transfer_not_found": "Transfer not found.",
@@ -4270,6 +4439,7 @@
     "warehouse": "Warehouse",
     "parts": "Parts warehouse",
     "worktime": "Work time tracking",
-    "tools": "Tool registry"
+    "tools": "Tool registry",
+    "learning": "X-Learning"
   }
 }

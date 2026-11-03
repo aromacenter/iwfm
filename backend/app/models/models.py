@@ -378,6 +378,97 @@ class Task(Base):
     )
 
 
+class LearningMaterial(Base):
+    """X-Learning tananyag (142. kör): szöveg (Markdown), YouTube-link, csatolmány;
+    teszt-beállítás (véletlen kérdésszám), érvényesség hónapokban, külsős engedély,
+    szerepkör szerinti automatikus kiosztás."""
+
+    __tablename__ = "learning_materials"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    video_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    validity_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    random_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    external_ok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    auto_roles: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    default_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class LearningAttachment(Base):
+    __tablename__ = "learning_attachments"
+    __table_args__ = (Index("ix_learning_att_material", "material_id"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("learning_materials.id", ondelete="CASCADE"), nullable=False)
+    filename: Mapped[str] = mapped_column(String(256), nullable=False)
+    mime: Mapped[str] = mapped_column(String(64), nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class LearningQuestion(Base):
+    __tablename__ = "learning_questions"
+    __table_args__ = (Index("ix_learning_q_material", "material_id", "sort"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("learning_materials.id", ondelete="CASCADE"), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    options: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # [{text, correct}]
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class LearningAssignment(Base):
+    """Kiosztás dolgozónként — a dolgozó csak a sajátjait látja."""
+
+    __tablename__ = "learning_assignments"
+    __table_args__ = (
+        UniqueConstraint("material_id", "employee_id", name="uq_learning_assignment"),
+        Index("ix_learning_asg_employee", "employee_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("learning_materials.id", ondelete="CASCADE"), nullable=False)
+    employee_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), nullable=False)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")  # manual | role
+    assigned_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reminded_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class LearningAttempt(Base):
+    __tablename__ = "learning_attempts"
+    __table_args__ = (Index("ix_learning_attempt_asg", "assignment_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    assignment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("learning_assignments.id", ondelete="CASCADE"), nullable=False)
+    employee_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    score_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    answers: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Tool(Base):
     """Szerszám / mérőeszköz (137. kör): kinél van, állapot, következő
     ellenőrzés (kalibrálás, érintésvédelem…); a mozgások a ToolEvent-ben."""
@@ -877,6 +968,10 @@ class LicenseSettings(Base):
     # egyedi megállapodás esetén a sáv-limit felülírható
     max_users_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_employees_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 142. kör: X-Learning csomag a Flottából — a tanulói fiókok a fiók-limithez
+    # ADÓDNAK (learning_max_users; None a csomag mellett = korlátlan fiók)
+    learning_plan: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    learning_max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)
     customer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     # Bekapcsolt extra modulok listája (billing/gls/labels/ai/portal/support).
     # NULL = MINDEN modul megy (a saját, X-Presso példány így fut — az új

@@ -28,6 +28,7 @@ MODULES = (
     "parts",  # alkatrész-raktár (ERP-szerű helykódos készlet) — alapból KI
     "worktime",  # munkaidő-mérés munkalaponként (timer + vezetői statisztika) — alapból KI
     "tools",  # szerszám-nyilvántartás: kinél mi van, ellenőrzés/kalibrálás esedékesség (137. kör)
+    "learning",  # X-Learning: oktatóanyagok, teszt, oklevél — külön felület a dolgozónak (142. kör)
     # 116. kör: MINDEN menüpont kapcsolható (többféle raktár-/szerviz-profil).
     # A vezérlőpult, a beállítások, a kézikönyv és a roadmap az alap — nem kapcsolható.
     "calendar", "tasks", "service", "intake", "handover", "pickup", "quotes",
@@ -48,6 +49,7 @@ MODULE_REQUIRES: dict[str, tuple[str, ...]] = {
     "payroll": ("employees", "attendance"),
     "worktime": ("tasks",),
     "tools": ("employees",),
+    "learning": ("employees",),
     "handover": ("tasks",),
     "pickup": ("tasks",),
     "service": ("machines", "partners"),
@@ -191,15 +193,26 @@ def limits_for(row: LicenseSettings | None) -> dict:
     (Flotta-oldali egyedi) csomagkódnál a limitek az override-okból jönnek —
     a Flotta hozzárendeléskor mindig explicit átküldi őket."""
     if row is None:
-        return {"plan": "xl", "max_users": None, "max_employees": None}
+        return {"plan": "xl", "max_users": None, "max_employees": None,
+                "learning_plan": None, "learning_max_users": None}
     base = PLANS.get(row.plan, {"max_users": None, "max_employees": None})
-    return {
+    lim = {
         "plan": row.plan,
         "max_users": row.max_users_override
         if row.max_users_override is not None else base["max_users"],
         "max_employees": row.max_employees_override
         if row.max_employees_override is not None else base["max_employees"],
+        "learning_plan": row.learning_plan,
+        "learning_max_users": row.learning_max_users,
     }
+    # 142. kör: X-Learning csomag — a tanulói fiókok a fiók-limithez adódnak
+    # (korlátlan X-Learning csomag = korlátlan fiók)
+    if row.learning_plan:
+        if row.learning_max_users is None:
+            lim["max_users"] = None
+        elif lim["max_users"] is not None:
+            lim["max_users"] = lim["max_users"] + row.learning_max_users
+    return lim
 
 
 def license_state(row: LicenseSettings | None, today: date | None = None) -> dict:

@@ -1009,6 +1009,9 @@ class LicenseBody(BaseModel):
     enabled_modules: list[str] | None = None
     # Próbaidős példány-jelző — csak ha a kérés kifejezetten küldi, változik
     is_trial: bool | None = None
+    # 142. kör: X-Learning csomag (a Flotta küldi; csak kifejezett küldéskor változik)
+    learning_plan: str | None = Field(default=None, pattern="^[a-z0-9_-]{1,16}$")
+    learning_max_users: int | None = Field(default=None, ge=1, le=100_000)
 
     @field_validator("enabled_modules")
     @classmethod
@@ -1200,6 +1203,9 @@ async def apply_license_update(
         row.enabled_modules = body.enabled_modules
     if body.is_trial is not None:
         row.is_trial = body.is_trial
+    if "learning_plan" in body.model_fields_set:
+        row.learning_plan = body.learning_plan or None
+        row.learning_max_users = body.learning_max_users if body.learning_plan else None
     # az üzemeltetői mentés a függő csomagváltás-kérést lezárja
     row.requested_plan = None
     row.requested_at = None

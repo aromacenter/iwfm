@@ -209,6 +209,19 @@ async def build_weekly_digest(db: AsyncSession) -> str:
         if (now - c).days > 7:
             stale += 1
     lines.append(f"🔧 Nyitott szervizjegy: {len(open_tickets)}" + (f" (ebből {stale} egy hétnél régebbi)" if stale else ""))
+    # X-Learning (142. kör): nyitott / lejárt kiosztások
+    try:
+        from app.api.learning import _status as _learn_status
+        from app.models import LearningAssignment
+
+        asg = (await db.execute(select(LearningAssignment))).scalars().all()
+        if asg:
+            today_d = datetime.now(UTC).date()
+            overdue = sum(1 for a in asg if _learn_status(a, today_d) in ("overdue", "expired"))
+            open_n = sum(1 for a in asg if _learn_status(a, today_d) == "open")
+            lines.append(f"📚 Tananyag: {open_n} folyamatban, {overdue} lejárt / újra esedékes")
+    except Exception:
+        pass
     try:
         health = await compute_partner_health(db, today)
     except Exception:
@@ -368,13 +381,23 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
     row = await get_or_create_settings(db)
     result = {"daily": False, "backup": False, "auto_clockout": closed,
               "telegram_link": tg_linked, "calendar": cal_added, "mt_check": mt_ran,
-              "stale_timers": stale_closed, "weekly": False, "reminders": 0}
+              "stale_timers": stale_closed, "weekly": False, "reminders": 0, "learning": 0}
     recipients = _recipients(row)
     now = datetime.now(UTC)
     today = f"{now:%Y-%m-%d}"
     smtp = await load_smtp_config(db)
 
     # Számla-emlékeztetők naponta egyszer (e-mail nélkül is: Telegram a képviselőnek)
+    # X-Learning határidő-emlékeztetők (142. kör): soronként naponta egyszer (reminded_on)
+    if now.hour >= row.send_hour:
+        try:
+            from app.api.learning import run_learning_reminders
+
+            result["learning"] = await run_learning_reminders(db, now.date())
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("learning reminders failed", exc_info=True)
     if row.reminders_enabled and row.last_reminder_run != today and now.hour >= row.send_hour:
         try:
             result["reminders"] = await run_payment_reminders(db, smtp, now.date())

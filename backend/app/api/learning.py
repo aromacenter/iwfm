@@ -441,12 +441,6 @@ async def list_materials(
             select(LearningQuestion.material_id, sa_func.count()).group_by(LearningQuestion.material_id)
         )).all()
     }
-    acount: dict = {}
-    for mid, meta in (await db.execute(
-        select(LearningAttachment.material_id, LearningAttachment.id, LearningAttachment.filename, LearningAttachment.mime, LearningAttachment.size)
-    )).all():
-        acount.setdefault(mid, []).append({"id": str(meta), "filename": None})
-    # a csatolmány-metákat egyszerűbb külön lekérni
     atts: dict = {}
     for att in (await db.execute(select(LearningAttachment))).scalars().all():
         atts.setdefault(att.material_id, []).append(_att_meta(att))
@@ -471,6 +465,7 @@ async def create_material(
     await record_audit(db, actor=actor, action="learning.material_create", entity_type="learning_material",
                        entity_id=str(m.id), detail={"title": m.title}, request=request)
     await db.commit()
+    await db.refresh(m)
     return _material_out(m)
 
 
@@ -493,6 +488,7 @@ async def update_material(
     await record_audit(db, actor=actor, action="learning.material_update", entity_type="learning_material",
                        entity_id=str(m.id), detail={"fields": sorted(data)}, request=request)
     await db.commit()
+    await db.refresh(m)  # updated_at onupdate → lejárt attribútum
     qs = await _questions(db, m.id)
     return _material_out(m, len(qs), [_att_meta(x) for x in await _attachments(db, m.id)])
 

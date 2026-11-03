@@ -49,6 +49,9 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/sajat-alkatreszek", key: "nav.myParts", perm: "always", icon: "🔩", module: "parts" },
       { href: "/szerszamok", key: "nav.tools", perm: "always", icon: "🧰", module: "tools" },
       { href: "/tudasbazis", key: "nav.kb", perm: "knowledge", icon: "📚", module: "support" },
+      // X-Learning (142. kör): külön felület — a saját karton mindenkinek, a kezelés a learning joggal
+      { href: "/learning", key: "nav.learning", perm: "always", icon: "🎓", module: "learning" },
+      { href: "/learning/admin", key: "nav.learningAdmin", perm: "learning", icon: "📖", module: "learning" },
       { href: "/kezikonyv", key: "nav.manual", perm: "always", icon: "📖" },
       { href: "/roadmap", key: "nav.roadmap", perm: "always", icon: "🗺" },
       { href: "/beosztas", key: "nav.schedule", perm: "schedule", icon: "🗓️", module: "schedule" },

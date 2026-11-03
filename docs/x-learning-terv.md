@@ -42,3 +42,10 @@
 - Pult: Csomagok fül → „📚 X-Learning csomagok” (app=learning; a Fiók oszlop = tanulói belépők száma, dolgozó nem használt).
 - Seed irányárak: xl-s 10 fiók 9 900 Ft/hó, xl-m 30 fiók 19 900 Ft/hó, xl-l korlátlan 34 900 Ft/hó (bruttó) — a user átírja.
 - NINCS még: X-Learning csomag hozzárendelése példányhoz (az instance egy plan-mezős) és a fiók-limit számítása a tanulói belépőkre — ezt a kivitelezés részeként kell megoldani (pl. instance.learning_plan + a licenc-push `learning_max_users`).
+
+## KÉSZ — 2026-11-03 (142. kör kivitelezve)
+- Backend: modellek + migrációk `c6d7e8f9a0b1` (learning_*) és `d7e8f9a0b1c2` (licenc: learning_plan, learning_max_users), `learning` modul + jog (admin, manager), router `/api/learning`, notifier (Telegram-emlékeztető + heti digest-sor), oklevél PDF. Tesztek: `tests/test_round142_learning.py`.
+- Fiók-limit: a licenc `learning_max_users` értéke HOZZÁADÓDIK a csomag fiók-limitjéhez (korlátlan X-Learning = korlátlan fiók); a Flotta küldi a katalógusból.
+- Frontend: `/learning` (saját karton), `/learning/login`, `/learning/[id]` (szöveg + YouTube + csatolmány + teszt + oklevél), `/learning/admin` (szerkesztő, kérdésbank, csatolmányok, kiosztás, eredmények, CSV); AppShell-nélküli keret saját X-Learning arculattal; X-admin menü: 🎓 X-Learning (mindenki) + 📖 X-Learning kezelés (`learning` jog).
+- Flotta: `instance.learning_plan`, licenc-modal „X-Learning csomag” választó (a learning + employees modul automatikusan bekapcsol), pult-chip, `/learning` kapu-oldal (`static/learning.html`), `learning.*` hoszton a gyökér is a kapu, `POST /api/flotta/domain` a saját domain felvételéhez (Railway + Cloudflare).
+- Nem készült (később, a terv szerint): partner-oldali oktatóanyag-kategória, központi tananyag-csomag a Flottából.

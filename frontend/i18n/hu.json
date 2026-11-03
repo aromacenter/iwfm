@@ -159,6 +159,8 @@
     "automation": "Automatizálások",
     "service": "Szerviz",
     "kb": "Tudásbázis",
+    "learning": "X-Learning",
+    "learningAdmin": "X-Learning kezelés",
     "tools": "Szerszámok",
     "audit": "Napló",
     "bugs": "Hibabejelentések",
@@ -220,6 +222,7 @@
     "service": "Szerviz (jegyek, karbantartás — átvételt+tudásbázist is ad)",
     "intake": "Átvétel (elismervény)",
     "knowledge": "Tudásbázis",
+    "learning": "X-Learning (tananyagok, kiosztás, eredmények)",
     "import_export": "Import / Export",
     "payroll": "Bérexport",
     "my_schedule": "Saját beosztás",
@@ -692,6 +695,162 @@
       "waiting_parts": "Alkatrészre vár",
       "done": "Kész",
       "closed": "Lezárva"
+    }
+  },
+  "learning": {
+    "nav": {
+      "my": "Tanulnivalóim",
+      "admin": "Szerkesztés / Eredmények"
+    },
+    "status": {
+      "open": "Folyamatban",
+      "overdue": "Lejárt határidő",
+      "done": "Elvégezve",
+      "expired": "Újra esedékes"
+    },
+    "source": {
+      "manual": "egyéni",
+      "role": "szerepkör"
+    },
+    "login": {
+      "title": "Belépés az X-Learningbe",
+      "hint": "Lépj be a céges rendszerben kapott fiókoddal (e-mail vagy felhasználónév + jelszó). Ha még nincs fiókod, a vezetőd adja a Dolgozók menüben.",
+      "identifier": "E-mail vagy felhasználónév",
+      "email": "E-mail",
+      "password": "Jelszó",
+      "submit": "Belépés",
+      "forgotLink": "Elfelejtett jelszó",
+      "forgotTitle": "Elfelejtett jelszó",
+      "forgotHint": "Add meg az e-mail-címed, és ha van hozzá fiók, küldünk egy jelszó-visszaállító linket.",
+      "forgotSubmit": "Link küldése",
+      "forgotDone": "Ha van ilyen fiók, elküldtük a linket — nézd meg a postafiókod.",
+      "backToLogin": "Vissza a belépéshez",
+      "footer": "Csak a saját kiosztott tananyagaidat látod. Minden teszt-próbálkozás naplózásra kerül."
+    },
+    "my": {
+      "title": "Tanulnivalóim",
+      "empty": "Jelenleg nincs kiosztott tananyagod.",
+      "todo": "Teendő",
+      "doneSection": "Elvégezve",
+      "noEmployee": "Ehhez a fiókhoz nem tartozik dolgozói karton — kérd a vezetőd, hogy a Dolgozók menüben rendelje hozzá a fiókot.",
+      "moduleOff": "Az X-Learning modul ezen a rendszeren nincs bekapcsolva.",
+      "due": "Határidő",
+      "validUntil": "Érvényes",
+      "hasVideo": "videó",
+      "hasTest": "teszt",
+      "noTest": "nincs teszt",
+      "attempts": "{n} próbálkozás",
+      "bestScore": "legjobb {n} %"
+    },
+    "detail": {
+      "back": "Vissza a kartonhoz",
+      "completed": "Elvégezve",
+      "validity": "Érvényesség: {n} hónap a teljesítéstől",
+      "attachments": "Csatolmányok",
+      "test": "Teszt",
+      "noTest": "Ehhez a tananyaghoz nincs teszt — az olvasás/megtekintés a feladat.",
+      "testHint": "Minden kérdésnél jelöld a helyes válasz(oka)t. Elvégzettnek a 100 %-os teszt számít — korlátlanul próbálkozhatsz, minden próbálkozás naplózva.",
+      "retake": "A tananyag elvégezve. A tesztet újra kitöltheted (pl. érvényesség lejártakor).",
+      "multi": "több helyes válasz is lehet",
+      "submit": "Teszt beadása",
+      "answerAll": "Válaszolj minden kérdésre a beadáshoz.",
+      "result": "{correct} / {total} helyes — {score} %",
+      "passed": "Sikeres! A tananyag elvégezve.",
+      "failed": "Nem lett 100 % — nézd át újra az anyagot, és próbáld meg ismét.",
+      "certificate": "Oklevél letöltése (PDF)",
+      "history": "Korábbi próbálkozások"
+    },
+    "admin": {
+      "title": "X-Learning — tananyagok és eredmények",
+      "forbidden": "Ehhez a részhez nincs jogosultságod.",
+      "backToMy": "Saját kartonom",
+      "export": "Képzés-napló CSV",
+      "new": "+ Új tananyag",
+      "noMaterials": "Még nincs tananyag — hozd létre az elsőt.",
+      "selectHint": "Válassz tananyagot a listából, vagy hozz létre újat.",
+      "inactive": "inaktív",
+      "questionsN": "{n} kérdés",
+      "assignedN": "{n} kiosztva",
+      "save": "Mentés",
+      "saved": "Tananyag mentve.",
+      "delete": "Törlés",
+      "deleteConfirm": "Biztosan törlöd a(z) „{title}” tananyagot minden kiosztásával és eredményével együtt?",
+      "deleted": "Tananyag törölve.",
+      "overview": {
+        "materials": "Tananyag",
+        "assigned": "Kiosztva",
+        "open": "Folyamatban",
+        "done": "Elvégezve",
+        "overdue": "Lejárt",
+        "expired": "Újra esedékes"
+      },
+      "tabs": {
+        "edit": "Tananyag",
+        "questions": "Kérdésbank",
+        "files": "Csatolmányok",
+        "assign": "Kiosztás",
+        "results": "Eredmények"
+      },
+      "fields": {
+        "title": "Cím",
+        "category": "Kategória",
+        "categoryHint": "pl. tűzvédelem, gépkezelés",
+        "video": "YouTube-videó linkje",
+        "body": "Tananyag szövege",
+        "bodyHint": "Egyszerű formázás: # címsor, - felsorolás, 1. számozott lista, **félkövér**, *dőlt*, [link](https://…)",
+        "validity": "Érvényesség (hónap)",
+        "validityHint": "Lejárat után újra el kell végezni; üresen: nem jár le.",
+        "random": "Véletlen kérdésszám",
+        "randomHint": "Ennyi kérdés jön a kérdésbankból véletlenszerűen; üresen: a teljes kérdéssor.",
+        "dueDays": "Alap határidő (nap)",
+        "dueDaysHint": "Szerepkör szerinti automatikus kiosztásnál a határidő a belépéstől számítva.",
+        "externalOk": "Külsős (alvállalkozó) dolgozónak is kiosztható",
+        "active": "Aktív (a dolgozók látják)",
+        "autoRoles": "Automatikus kiosztás szerepkör szerint",
+        "autoRolesHint": "A jelölt szerepkörű, később belépő dolgozók automatikusan megkapják."
+      },
+      "questions": {
+        "hint": "Feleletválasztós kérdések, több helyes válasz is lehet. A pipa a helyes opciót jelöli; minden kérdésnél legalább egy helyes kell.",
+        "none": "Még nincs kérdés — teszt nélkül a tananyag csak olvasnivaló.",
+        "text": "Kérdés szövege",
+        "option": "Válaszlehetőség",
+        "addOption": "válaszlehetőség",
+        "add": "Új kérdés",
+        "remove": "Kérdés törlése",
+        "correct": "Helyes válasz",
+        "save": "Kérdésbank mentése",
+        "saved": "Kérdésbank mentve."
+      },
+      "files": {
+        "hint": "PDF, PNG vagy JPG, legfeljebb 20 MB. A dolgozó a tananyag oldalán nyitja meg.",
+        "none": "Nincs csatolmány.",
+        "uploaded": "Csatolmány feltöltve.",
+        "tooLarge": "A fájl nagyobb 20 MB-nál.",
+        "deleteConfirm": "Törlöd a csatolmányt?"
+      },
+      "assign": {
+        "hint": "Egyénileg és/vagy szerepkör szerint. Szerepkörnél a mostani dolgozók megkapják, és a későbbi belépők is automatikusan. Külsős csak akkor, ha a tananyagon engedélyezett.",
+        "employees": "Dolgozók",
+        "contractor": "külsős",
+        "roles": "Szerepkörök",
+        "autoRolesNow": "Automatikus kiosztás már: {roles}",
+        "due": "Határidő",
+        "submit": "Kiosztás",
+        "done": "{created} új kiosztás, {already} már megvolt."
+      },
+      "results": {
+        "none": "Még senkinek nincs kiosztva.",
+        "employee": "Dolgozó",
+        "status": "Állapot",
+        "due": "Határidő",
+        "completed": "Elvégezve",
+        "valid": "Érvényes",
+        "attempts": "Próbák",
+        "best": "Legjobb",
+        "source": "Kiosztás",
+        "unassign": "visszavonás",
+        "unassignConfirm": "Visszavonod a kiosztást: {name}? Az eredményei is törlődnek."
+      }
     }
   },
   "tools": {
@@ -2215,6 +2374,16 @@
     "tools.serial_exists": "Ezzel a gyári számmal már van szerszám.",
     "tools.not_found": "A szerszám nem található.",
     "tools.bad_employee": "Ismeretlen dolgozó.",
+    "learning.not_found": "A tananyag vagy kiosztás nem található.",
+    "learning.incomplete": "Nem válaszoltál minden kérdésre.",
+    "learning.no_test": "Ehhez a tananyaghoz nincs teszt.",
+    "learning.no_correct_option": "Minden kérdésnél legalább egy helyes válasz kell.",
+    "learning.external_not_allowed": "Külsős dolgozónak csak akkor osztható ki, ha a tananyagon engedélyezett.",
+    "learning.bad_employee": "Ismeretlen dolgozó.",
+    "learning.nobody": "Nincs kiválasztott dolgozó vagy szerepkör.",
+    "learning.not_completed": "A tananyag még nincs elvégezve — oklevél csak 100 %-os teszt után.",
+    "learning.bad_attachment": "Csak PDF, PNG vagy JPG csatolható.",
+    "learning.attachment_too_large": "A csatolmány nagyobb 20 MB-nál.",
     "worksheet.photo_not_found": "A fotó nem található.",
     "settlement.customer_only": "Ez a partner ügyfél (nincs kihelyezett gépünk nála) — elszámolás nem készíthető, csak azonnali értékesítés/kiszállítás.",
     "cash.transfer_not_found": "A pénz-átadás nem található.",
@@ -4270,6 +4439,7 @@
     "warehouse": "Raktár",
     "parts": "Alkatrész-raktár",
     "worktime": "Munkaidő-mérés",
-    "tools": "Szerszám-nyilvántartás"
+    "tools": "Szerszám-nyilvántartás",
+    "learning": "X-Learning"
   }
 }

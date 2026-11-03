@@ -32,7 +32,7 @@ async def certificate_serial(db: AsyncSession, assignment: LearningAssignment) -
 async def build_certificate_pdf(db: AsyncSession, assignment, material, employee) -> tuple[bytes, str]:
     ws = (await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))).scalar_one_or_none()
     company = (ws.company_name if ws and ws.company_name else None) or "X-admin"
-    accent = _hex_rgb(ws.accent_color if ws and ws.accent_color else "#1e40af")
+    accent = _hex_rgb(ws.accent_color if ws else None, (0.12, 0.25, 0.69))
     logo = _logo_image(bytes(ws.logo_data)) if ws and ws.logo_data else None
     serial = await certificate_serial(db, assignment)
 
