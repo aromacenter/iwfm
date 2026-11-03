@@ -373,6 +373,10 @@ export default function ElszamolasPage() {
 
   // Késedelmi felár kikapcsolása erre az elszámolásra (9c7f54e5)
   const [lateFeeWaived, setLateFeeWaived] = useState(false);
+  // Kedvezményes elszámolás: a KÁVÉ ÁFA és számla nélkül megy (a nettó a
+  // fizetendő), a többi termék bruttó marad — és CSAK készpénzben mehet.
+  // (A loadCtx előtt kell állnia: a setter-t az is használja.)
+  const [discountAll, setDiscountAll] = useState(false);
   // Bizonylat nyomtatása az elszámolás végén: A4 / 50 mm / 80 mm nyugta / nem (11e969d6)
   const [printChoice, setPrintChoice] = useState<{ id: string; label: string; download?: boolean; docId?: string | null; docNo?: string | null } | null>(null);
 
@@ -781,13 +785,9 @@ export default function ElszamolasPage() {
     return { rows, billedByProduct, amountByProduct, brewedByProduct };
   }, [ctx, machineInputs, machineProducts, machinePrices, stockRows, products]);
 
-  // Kedvezményes elszámolás: a KÁVÉ ÁFA és számla nélkül megy (a nettó a
-  // fizetendő), a többi termék bruttó marad — és CSAK készpénzben mehet.
-  const [discountAll, setDiscountAll] = useState(false);
   const noVat = discountAll;
   useEffect(() => {
     if (discountAll) setPayment("cash");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discountAll]);
 
   // A következő kitöltendő számláló-mezőre ugrás (gomb + Enter a mezőkben).

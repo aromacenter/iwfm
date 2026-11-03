@@ -5,8 +5,13 @@
  * frissítés, újraindulás, hálózat-váltás, hibák), 3) áttekintő táblázat
  * trendsávokkal, soronként lenyitható, szekciókra bontott részletekkel. */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { useT } from "@/lib/i18n";
+
+// "Most" percre kerekítve, külső store-ként: render közben nem hívunk Date.now()-t
+// (react-hooks/purity), és a "N perce" felirat percenként magától frissül.
+const subscribeMinute = (cb: () => void) => { const id = setInterval(cb, 60_000); return () => clearInterval(id); };
+const nowMinute = () => Math.floor(Date.now() / 60_000);
 
 export interface TelemetryRow {
   created_at: string;
@@ -76,6 +81,8 @@ export default function TelemetryHistory({ rows }: { rows: TelemetryRow[] }) {
   };
   const ramPct = (d: Record<string, unknown>) => { const f = num(d.ram_free_mb), tot = num(d.ram_total_mb); return f != null && tot ? (f / tot) * 100 : null; };
 
+  const minuteNow = useSyncExternalStore(subscribeMinute, nowMinute, nowMinute);
+
   if (!latest) return <p className="py-6 text-center text-sm text-slate-400">{t("vtel.noHistory")}</p>;
   const L = latest.data;
   const card = (title: string, value: string, sub?: string, tone = "") => (
@@ -86,7 +93,7 @@ export default function TelemetryHistory({ rows }: { rows: TelemetryRow[] }) {
     </div>
   );
   const ramFreePct = ramPct(L);
-  const ageMin = Math.round((Date.now() - new Date(latest.created_at).getTime()) / 60000);
+  const ageMin = Math.max(0, minuteNow - Math.floor(new Date(latest.created_at).getTime() / 60_000));
 
   const section = (title: string, keys: string[], d: Record<string, unknown>) => {
     const present = keys.filter((k) => d[k] !== undefined);

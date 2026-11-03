@@ -167,7 +167,6 @@ export default function FeladataimPage() {
       el.classList.add("ring-2", "ring-indigo-400");
       setTimeout(() => el.classList.remove("ring-2", "ring-indigo-400"), 4000);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks.length]);
   const [comments, setComments] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -211,16 +210,6 @@ export default function FeladataimPage() {
     }
   }, [tasks]);
 
-  // Feladat kiadása a cég szerelőjének (87994b7c)
-  async function assignTechnician(taskId: string, name: string) {
-    try {
-      await api.post(`/api/me/tasks/${taskId}/technician`, { name: name || null });
-      toast(name ? t("myTasks.techAssigned", { name }) : t("myTasks.techCleared"), "success");
-      load();
-    } catch (err) {
-      toast(errorMessage(err), "error");
-    }
-  }
   const { t } = useT();
   const { toast, prompt, confirm } = useUI();
 
@@ -372,6 +361,17 @@ export default function FeladataimPage() {
     }
   }, [canService]);
   useEffect(load, [load]);
+
+  // Feladat kiadása a cég szerelőjének (87994b7c) — a load után, mert azt hívja
+  async function assignTechnician(taskId: string, name: string) {
+    try {
+      await api.post(`/api/me/tasks/${taskId}/technician`, { name: name || null });
+      toast(name ? t("myTasks.techAssigned", { name }) : t("myTasks.techCleared"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   async function startTicket(tk: MyTicket) {
     try {
@@ -775,7 +775,6 @@ export default function FeladataimPage() {
     }
     setPendingParts(q.length);
     if (sent > 0) toast(t("myTasks.wsPartsFlushed", { count: sent }), "success");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast, t]);
   useEffect(() => {
     void Promise.resolve().then(() => flushPartsQueue());

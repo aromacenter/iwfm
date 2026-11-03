@@ -14,6 +14,8 @@ export default function PhotoLightbox({ src, onClose }: { src: string | null; on
   const pinch = useRef<{ dist: number; scale: number; cx: number; cy: number; tx: number; ty: number } | null>(null);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const lastTap = useRef(0);
+  // Van-e lenyomott ujj/egér: a render ezt nézi (ref-et render közben nem olvasunk)
+  const [touching, setTouching] = useState(false);
 
   const reset = useCallback(() => { setScale(1); setTx(0); setTy(0); }, []);
   useEffect(() => { reset(); }, [src, reset]);
@@ -31,6 +33,7 @@ export default function PhotoLightbox({ src, onClose }: { src: string | null; on
   function onPointerDown(e: React.PointerEvent) {
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setTouching(true);
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), scale, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, tx, ty };
@@ -64,7 +67,7 @@ export default function PhotoLightbox({ src, onClose }: { src: string | null; on
   function onPointerUp(e: React.PointerEvent) {
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinch.current = null;
-    if (pointers.current.size === 0) drag.current = null;
+    if (pointers.current.size === 0) { drag.current = null; setTouching(false); }
     if (pointers.current.size === 1) { const [p] = [...pointers.current.values()]; drag.current = { x: p.x, y: p.y, tx, ty }; }
   }
   function onWheel(e: React.WheelEvent) {
@@ -88,7 +91,7 @@ export default function PhotoLightbox({ src, onClose }: { src: string | null; on
           alt=""
           draggable={false}
           className="absolute left-1/2 top-1/2 max-h-full max-w-full"
-          style={{ transform: `translate(-50%, -50%) translate(${tx}px, ${ty}px) scale(${scale})`, transformOrigin: "center", transition: pointers.current.size ? "none" : "transform 80ms" }}
+          style={{ transform: `translate(-50%, -50%) translate(${tx}px, ${ty}px) scale(${scale})`, transformOrigin: "center", transition: touching ? "none" : "transform 80ms" }}
         />
       </div>
       <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs text-white">

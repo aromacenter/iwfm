@@ -201,13 +201,13 @@ export default function VendingPromocioPage() {
     try {
       const rows = await api.get<MachineAsset[]>(`/api/saferpay/machines/${m.id}/assets`);
       setAssets({ machine: m, rows, thumbs: {} });
-      // bélyegképek lustán, egymás után (sütis fetch → blob URL)
-      const thumbs: Record<string, string> = {};
+      // bélyegképek lustán, egymás után (sütis fetch → blob URL) — minden kép
+      // az előző state-ből képzett új objektumba kerül (nincs helyben módosítás)
       for (const r of rows) {
         if (!r.content_type.startsWith("image/")) continue;
         try {
-          thumbs[r.id] = await fetchBlobUrl(`/api/saferpay/machines/${m.id}/assets/${r.id}`);
-          setAssets((prev) => (prev && prev.machine.id === m.id ? { ...prev, thumbs: { ...thumbs } } : prev));
+          const url = await fetchBlobUrl(`/api/saferpay/machines/${m.id}/assets/${r.id}`);
+          setAssets((prev) => (prev && prev.machine.id === m.id ? { ...prev, thumbs: { ...prev.thumbs, [r.id]: url } } : prev));
         } catch { /* egy kép kimaradhat */ }
       }
     } catch (err) {
