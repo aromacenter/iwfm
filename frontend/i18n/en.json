@@ -172,7 +172,8 @@
       "system": "System",
       "personal": "Personal",
       "vending": "Vending",
-      "parts": "Parts"
+      "parts": "Parts",
+      "learning": "Training"
     },
     "warehouse": "Warehouse",
     "contracts": "Contracts",

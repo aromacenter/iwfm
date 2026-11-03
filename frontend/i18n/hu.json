@@ -172,7 +172,8 @@
       "system": "Rendszer",
       "personal": "Saját",
       "vending": "Vending",
-      "parts": "Alkatrészek"
+      "parts": "Alkatrészek",
+      "learning": "Oktatás"
     },
     "warehouse": "Raktár",
     "contracts": "Szerződések",
