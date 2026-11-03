@@ -7,12 +7,16 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ApiError, errorMessage, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePerms } from "@/lib/perms";
 import { STATUS_CLS, type MyItem } from "./shared";
 
 export default function LearningHomePage() {
   const { t, lang } = useT();
   const [data, setData] = useState<{ employee_name: string; items: MyItem[] } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [noCard, setNoCard] = useState(false);
+  const [reload, setReload] = useState(0);
+  const perms = usePerms();
   const fd = (d: string | null) => (d ? new Date(d).toLocaleDateString(lang === "hu" ? "hu-HU" : "en-GB") : "—");
 
   useEffect(() => {
@@ -20,15 +24,46 @@ export default function LearningHomePage() {
       .get<{ employee_name: string; items: MyItem[] }>("/api/learning/my")
       .then(setData)
       .catch((err) => {
-        if (err instanceof ApiError && err.code === "employee.none_for_user") setProblem(t("learning.my.noEmployee"));
+        if (err instanceof ApiError && err.code === "employee.none_for_user") {
+          setProblem(t("learning.my.noEmployee"));
+          setNoCard(true);
+        }
         else if (err instanceof ApiError && err.status === 403) setProblem(t("learning.my.moduleOff"));
         else if (err instanceof ApiError && err.status === 401) setProblem(null);
         else setProblem(errorMessage(err));
       });
-  }, [t]);
+  }, [t, reload]);
+
+  // vezetői fiók karton nélkül: egy gombbal létrehozható a saját karton (142. kör)
+  async function createOwnCard() {
+    try {
+      await api.post("/api/employees/me");
+      setProblem(null);
+      setNoCard(false);
+      setReload((n) => n + 1);
+    } catch (err) {
+      setProblem(errorMessage(err));
+    }
+  }
 
   if (problem) {
-    return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{problem}</div>;
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        {problem}
+        {noCard && perms.can("employees") && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={createOwnCard}
+              className="rounded-lg bg-[#E31E24] px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              {t("learning.my.createCard")}
+            </button>
+            <p className="mt-1 text-xs text-amber-800">{t("learning.my.createCardHint")}</p>
+          </div>
+        )}
+      </div>
+    );
   }
   if (!data) return <p className="text-sm text-slate-500">…</p>;
 

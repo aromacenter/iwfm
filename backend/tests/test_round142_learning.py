@@ -234,3 +234,22 @@ async def test_learning_plan_adds_to_user_limit(client, admin, monkeypatch):
     assert res.status_code == 200
     st = (await client.get("/api/settings/license/status", headers=adm)).json()
     assert st["max_users"] == 2 and st["learning_plan"] is None
+
+
+async def test_manager_own_card_and_self_assignment(client, admin, manager):
+    """142. kör: vezetői fiók saját dolgozói kartont készít egy gombbal, aztán
+    magának is kiosztható a tananyag; másodszor 409; dolgozó-jog nélkül 403."""
+    _, adm = admin
+    _, mgr = manager
+    _, e_h = await make_emp(email="sima@example.com")
+    assert (await client.get("/api/learning/my", headers=adm)).status_code == 404
+    res = await client.post("/api/employees/me", headers=adm)
+    assert res.status_code == 201, res.text
+    own_id = res.json()["id"]
+    assert (await client.post("/api/employees/me", headers=adm)).status_code == 409
+    assert (await client.post("/api/employees/me", headers=e_h)).status_code == 403
+    assert (await client.get("/api/learning/my", headers=adm)).json()["items"] == []
+    mat = (await client.post("/api/learning/materials", json={"title": "Önképzés"}, headers=mgr)).json()
+    assert (await client.post(f"/api/learning/materials/{mat['id']}/assign", json={"employee_ids": [own_id]}, headers=adm)).json()["created"] == 1
+    my = (await client.get("/api/learning/my", headers=adm)).json()["items"]
+    assert len(my) == 1 and my[0]["title"] == "Önképzés"

@@ -559,6 +559,43 @@ async def create_employee(
     return out
 
 
+@router.post("/me", status_code=201)
+async def create_own_card(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("employees")),
+):
+    """Dolgozói karton a SAJÁT login-fiókhoz (admin/vezető) — pl. hogy az
+    X-Learning tananyagok neki is kioszthatók legyenek (142. kör). Fiók nem
+    jön létre, csak a karton; a dolgozó-limitbe beleszámít."""
+    existing = (
+        await db.execute(select(Employee).where(Employee.user_id == actor.id))
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail={"code": "employee.card_exists"})
+    from app.services.wfm.license import check_capacity
+
+    await check_capacity(db, new_employees=1)
+    name = (actor.display_name or actor.email or "Admin").strip()
+    parts = name.split(" ", 1)
+    emp = Employee(
+        user_id=actor.id,
+        employee_code=await generate_unique_employee_code(db),
+        last_name=parts[0][:128],
+        first_name=(parts[1] if len(parts) > 1 else "-")[:128],
+        hire_date=date.today(),
+        weekly_hours=40,
+    )
+    db.add(emp)
+    await db.flush()
+    await record_audit(
+        db, actor=actor, action="employee.own_card", entity_type="employee",
+        entity_id=str(emp.id), detail={"name": name}, request=request,
+    )
+    await db.commit()
+    return {"id": str(emp.id), "last_name": emp.last_name, "first_name": emp.first_name}
+
+
 @router.get("/{employee_id}", response_model=EmployeeOut)
 async def get_employee(
     employee_id: str,
