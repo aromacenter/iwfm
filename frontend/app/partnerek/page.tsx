@@ -150,6 +150,17 @@ export default function PartnerekPage() {
   // Állapot-szűrő: alapértelmezésben CSAK az aktív partnerek (002de7c6)
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "">("active");
   const [sortByAgent, setSortByAgent] = useState(false);
+  // 127. kör: partner-egészség pontszám partnerenként (csak elszámolós partnerre).
+  // A `filtered` memo ELŐTT kell állnia: a szűrő használja, és a `const`
+  // deklaráció előtti hivatkozás ReferenceError-ral dobta el az egész oldalt
+  // ("Cannot access ... before initialization" — /partnerek üres lap, 2026-11-03).
+  const [health, setHealth] = useState<Record<string, PartnerHealthRow>>({});
+  const [healthFilter, setHealthFilter] = useState<"" | HealthLevel>("");
+  useEffect(() => {
+    api.get<PartnerHealthRow[]>("/api/partners/health")
+      .then((rows) => setHealth(Object.fromEntries(rows.map((r) => [r.partner_id, r]))))
+      .catch(() => {});
+  }, [partners.length]);
   const agentName = useMemo(
     () => Object.fromEntries(agents.map((a) => [a.id, a.display_name])),
     [agents],
@@ -195,7 +206,7 @@ export default function PartnerekPage() {
       });
     }
     return rows;
-  }, [partners, search, typeFilter, companyFilter, kindFilter, agentFilter, statusFilter, sortByAgent, agentName]);
+  }, [partners, search, typeFilter, companyFilter, kindFilter, agentFilter, statusFilter, sortByAgent, agentName, health, healthFilter]);
 
   // Portál-link e-mailben a partner beállított címeire — megerősítés után (26e6a4fc)
   async function sendPortalLink(p: Partner) {
@@ -216,14 +227,6 @@ export default function PartnerekPage() {
   // (migrált) sorok kérésre, és azokról A4-et nem gyártunk — Billingóban új
   // bizonylat innen sosem jön létre, csak a meglévő számlakép tölthető le.
   const [docsLegacy, setDocsLegacy] = useState(false);
-  // 127. kör: partner-egészség pontszám partnerenként (csak elszámolós partnerre)
-  const [health, setHealth] = useState<Record<string, PartnerHealthRow>>({});
-  const [healthFilter, setHealthFilter] = useState<"" | HealthLevel>("");
-  useEffect(() => {
-    api.get<PartnerHealthRow[]>("/api/partners/health")
-      .then((rows) => setHealth(Object.fromEntries(rows.map((r) => [r.partner_id, r]))))
-      .catch(() => {});
-  }, [partners.length]);
   async function openDocs(p: Partner, includeLegacy = false) {
     try {
       const rows = await api.get<PartnerDoc[]>(`/api/settlements?partner_id=${p.id}&scope=${includeLegacy ? "all" : "system"}`);
