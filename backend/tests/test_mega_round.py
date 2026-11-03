@@ -230,7 +230,10 @@ async def test_signature_collects_email(client, manager):
     assert got["contact_email"] == "uj@partner.hu"
 
 
-async def test_support_ticket_collects_email(client, manager):
+async def test_support_ticket_keeps_email_on_ticket_only(client, manager):
+    """2026-11-03 biztonsági audit: a névtelen QR-bejelentés e-mailje a jegyen
+    marad (a leírásban), de NEM lesz belőle partner-kapcsolattartó — oda menne
+    később a partner-portál link (készlet, elszámolások, kintlévőség)."""
     from tests.test_support import _asset_with_token
 
     _, mgr = manager
@@ -252,4 +255,8 @@ async def test_support_ticket_collects_email(client, manager):
         p for p in (await client.get("/api/partners", headers=mgr)).json()
         if p["id"] == partner["id"]
     )
-    assert got["contact_email"] == "qr@partner.hu"
+    assert not got.get("contact_email")
+    # a jegy leírásában viszont ott van a bejelentő elérhetősége
+    tickets = (await client.get("/api/service", headers=mgr)).json()
+    mine = [t for t in tickets if "qr@partner.hu" in (t.get("description") or "")]
+    assert mine, "a bejelentő e-mailje a jegyen kell maradjon"
