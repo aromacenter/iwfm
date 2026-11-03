@@ -16,7 +16,7 @@ from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func as sa_func, select
+from sqlalchemy import String, cast, func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_permission_matrix, is_manager, permissions_for, require_perm
@@ -548,10 +548,12 @@ async def machine_profitability(
         })
 
     # 1) számlálós bevétel gépenként
+    # Az asset_id-t szövegként aggregáljuk: Postgresben nincs max(uuid), és a
+    # /statisztika oldal emiatt 500-at adott (SQLite-on — a tesztekben — átment).
     for barcode, aname, aid, net, visits in (
         await db.execute(
             select(
-                SettlementMachine.barcode, sa_func.max(SettlementMachine.asset_name), sa_func.max(SettlementMachine.asset_id),
+                SettlementMachine.barcode, sa_func.max(SettlementMachine.asset_name), sa_func.max(cast(SettlementMachine.asset_id, String)),
                 sa_func.sum(SettlementMachine.amount_net), sa_func.count(sa_func.distinct(SettlementMachine.settlement_id)),
             )
             .join(Settlement, Settlement.id == SettlementMachine.settlement_id)

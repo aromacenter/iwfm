@@ -3,3 +3,6 @@ pytest>=8
 pytest-asyncio>=0.24
 httpx>=0.27
 ruff>=0.6
+# tests/test_round117_timesheet.py és test_round121_protocols.py PDF-olvasása;
+# nélküle a pytest a gyűjtésnél leáll (ImportError), és a CI minden commitnál piros.
+pypdf>=4
