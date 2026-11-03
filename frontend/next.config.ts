@@ -33,6 +33,9 @@ const CSP = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
+  // X-Learning (142. kör): a tananyag YouTube-videója beágyazva — a default-src
+  // 'self' némán blokkolná az iframe-et (szürke "törött lap")
+  "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
 ].join("; ");
 
 const securityHeaders = [
