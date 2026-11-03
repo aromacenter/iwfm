@@ -68,6 +68,7 @@ function todayIso(): string {
 
 export default function FeladatokPage() {
   const [tasks, setTasks] = useState<TaskOut[]>([]);
+  const [reloadTick, setReloadTick] = useState(0);
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   // Alapból a NYITOTT feladatok látszanak — a „Minden státusz" választható.
@@ -151,13 +152,38 @@ export default function FeladatokPage() {
   } | null>(null);
   const { t, lang } = useT();
   const { toast, confirm, prompt } = useUI();
+  // Átütemezés a vezetői listából is (b6cf8baa): új nap + kötelező indok —
+  // ugyanaz a szabály, mint a naptárban (a backend indok nélkül 422-t ad)
+  const [resch, setResch] = useState<{ task: TaskOut; due: string; note: string } | null>(null);
+  const [reschBusy, setReschBusy] = useState(false);
+  async function saveResch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!resch) return;
+    if (resch.note.trim().length < 3) {
+      toast(t("tasks.rescheduleNoteRequired"), "error");
+      return;
+    }
+    setReschBusy(true);
+    try {
+      await api.patch(`/api/tasks/${resch.task.id}`, { due_date: resch.due, reschedule_note: resch.note.trim() });
+      toast(t("tasks.rescheduleSaved"), "success");
+      setResch(null);
+      setReloadTick((n) => n + 1);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setReschBusy(false);
+    }
+  }
 
   const load = useCallback(() => {
     api
       .get<TaskOut[]>(`/api/tasks${statusFilter ? `?status=${statusFilter}` : ""}`)
       .then(setTasks)
       .catch(() => {});
-  }, [statusFilter]);
+    // reloadTick: az átütemezés utáni újratöltés kapcsolója
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, reloadTick]);
 
   useEffect(() => {
     api.get<EmployeeOut[]>("/api/employees").then(setEmployees).catch(() => {});
@@ -764,6 +790,16 @@ export default function FeladatokPage() {
                 <p className="text-sm text-slate-500">
                   {task.employee_name} · {task.due_date}
                   {task.comments.length > 0 && ` · ${t("tasks.comments", { count: task.comments.length })}`}
+                  {task.status !== "done" && (
+                    <button
+                      type="button"
+                      onClick={() => setResch({ task, due: task.due_date, note: "" })}
+                      className="ml-2 rounded-lg border border-slate-300 px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-100"
+                      title={t("tasks.rescheduleTitle")}
+                    >
+                      🔁 {t("tasks.reschedule")}
+                    </button>
+                  )}
                 </p>
                 {/* Csapat (136. kör): segítők + szerkesztés */}
                 <details className="mt-0.5 text-xs text-slate-600">
@@ -1503,6 +1539,44 @@ export default function FeladatokPage() {
         </div>
       )}
       <PhotoLightbox src={lightbox} onClose={() => setLightbox(null)} />
+      {/* Átütemezés a vezetői listából (b6cf8baa): új nap + kötelező indok */}
+      {resch && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={saveResch} className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-bold">🔁 {t("tasks.rescheduleTitle")}</h2>
+            <p className="text-sm text-slate-600">{resch.task.title} · {resch.task.employee_name} · {resch.task.due_date}</p>
+            <label className="block text-sm">
+              {t("tasks.rescheduleDate")}
+              <input
+                type="date"
+                required
+                value={resch.due}
+                onChange={(e) => setResch({ ...resch, due: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              {t("tasks.rescheduleNote")} <span className="text-rose-600">*</span>
+              <textarea
+                value={resch.note}
+                onChange={(e) => setResch({ ...resch, note: e.target.value })}
+                rows={3}
+                required
+                minLength={3}
+                maxLength={512}
+                placeholder={t("tasks.rescheduleNotePh")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setResch(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={reschBusy || resch.note.trim().length < 3 || !resch.due || resch.due === resch.task.due_date} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50">
+                {t("tasks.reschedule")}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </AppShell>
   );
 }

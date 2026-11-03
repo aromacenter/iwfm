@@ -71,6 +71,13 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
     right = width - 18 * mm
     y = height - 18 * mm
 
+    # Kedvezményes (ÁFA nélküli kávé, készpénz) elszámoláson a tételek BRUTTÓN
+    # (7bee598e): a nem-kávé áru a saját ÁFA-jával, a kávé 0 %-kal — így a sor
+    # és a fizetendő egyezik. Normál elszámoláson marad a nettó oszlop.
+    gross_mode = bool(data.get("no_vat"))
+    amt_label = "Bruttó" if gross_mode else "Nettó"
+    unit_label = "Ft/adag (br.)" if gross_mode else "Ft/adag"
+
     def line(label: str, value: str, *, label_w: float = 42 * mm) -> None:
         nonlocal y
         c.setFont(FONT_BOLD, 9)
@@ -161,11 +168,11 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
             ("Számláló", left + 96 * mm),
             ("Szerviz", left + 116 * mm),
             ("Adag", left + 132 * mm),
-            ("Nettó", right - 22 * mm),
+            (amt_label, right - 22 * mm),
         ]
         c.setFont(FONT_BOLD, 8.5)
         for label, x in m_headers:
-            if label == "Nettó":
+            if label == amt_label:
                 c.drawRightString(x + 22 * mm, y, label)
             else:
                 c.drawString(x, y, label)
@@ -205,12 +212,12 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
         ("Leltár", left + 82 * mm),
         ("Fogyás", left + 102 * mm),
         ("Adag", left + 122 * mm),
-        ("Ft/adag", left + 138 * mm),
-        ("Nettó", right - 22 * mm),
+        (unit_label, left + 138 * mm),
+        (amt_label, right - 22 * mm),
     ]
     c.setFont(FONT_BOLD, 8.5)
     for label, x in headers:
-        if label in ("Nettó",):
+        if label == amt_label:
             c.drawRightString(x + 22 * mm, y, label)
         else:
             c.drawString(x, y, label)
@@ -222,8 +229,12 @@ def build_settlement_pdf(data: dict, settings: dict | None = None) -> bytes:
         c.drawString(left + 82 * mm, y, _fmt_qty(item.get("physical_qty", 0)))
         c.drawString(left + 102 * mm, y, _fmt_qty(item.get("consumed_qty", 0)))
         c.drawString(left + 122 * mm, y, f"{item.get('portions', 0):.0f}")
-        c.drawString(left + 138 * mm, y, _fmt_money(item.get("price_per_portion", 0)))
-        c.drawRightString(right, y, _fmt_money(item.get("amount_net", 0)))
+        if gross_mode:
+            c.drawString(left + 138 * mm, y, _fmt_money(item.get("price_gross", item.get("price_per_portion", 0))))
+            c.drawRightString(right, y, _fmt_money(item.get("amount_gross", item.get("amount_net", 0))))
+        else:
+            c.drawString(left + 138 * mm, y, _fmt_money(item.get("price_per_portion", 0)))
+            c.drawRightString(right, y, _fmt_money(item.get("amount_net", 0)))
         y -= 4.5 * mm
 
     y -= 2 * mm
@@ -385,10 +396,13 @@ def build_settlement_receipt_pdf(data: dict, settings: dict | None = None, *, wi
     if items:
         rule()
         txt("TÉTELEK", base, True)
+        gross_mode = bool(data.get("no_vat"))  # 7bee598e: kedvezményes blokkon bruttó tételek
         for item in items[:40]:
             txt(str(item.get("product_name", ""))[:30], small, True)
-            txt(f"{_fmt_qty(item.get('previous_qty', 0))} → {_fmt_qty(item.get('physical_qty', 0))}  fogy. {_fmt_qty(item.get('consumed_qty', 0))}  {item.get('portions', 0):.0f} adag × {_fmt_money(item.get('price_per_portion', 0))}", small)
-            lines_out.append(("amt", "", _fmt_money(item.get("amount_net", 0))))
+            unit = item.get("price_gross", item.get("price_per_portion", 0)) if gross_mode else item.get("price_per_portion", 0)
+            amt = item.get("amount_gross", item.get("amount_net", 0)) if gross_mode else item.get("amount_net", 0)
+            txt(f"{_fmt_qty(item.get('previous_qty', 0))} → {_fmt_qty(item.get('physical_qty', 0))}  fogy. {_fmt_qty(item.get('consumed_qty', 0))}  {item.get('portions', 0):.0f} adag × {_fmt_money(unit)}" + (" br." if gross_mode else ""), small)
+            lines_out.append(("amt", "", _fmt_money(amt)))
     rule()
     lines_out.append(("amt", "Összesen nettó:", _fmt_money(data.get("total_net", 0))))
     if data.get("rounding_adjust"):

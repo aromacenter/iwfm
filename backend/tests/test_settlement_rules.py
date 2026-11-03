@@ -51,6 +51,20 @@ async def test_no_vat_cash_only_and_coffee_scope(client, manager):
     assert cream_line["vat_percent"] == 27
     assert abs(cream_line["amount_gross"] - 2 * 226 * 1.27) < 0.5
 
+    # 7bee598e: a kedvezményes bizonylaton a nem-kávé tétel BRUTTÓN szerepel
+    # (A4 és nyugta), a normál elszámoláson marad a nettó oszlop
+    import io as _io
+
+    from pypdf import PdfReader
+
+    sid = res.json()["id"]
+    for fmt in ("a4", "80"):
+        pdf = await client.get(f"/api/settlements/{sid}/pdf?format={fmt}", headers=mgr)
+        assert pdf.status_code == 200, pdf.text
+        text = " ".join(p.extract_text() for p in PdfReader(_io.BytesIO(pdf.content)).pages)
+        assert "574 Ft" in text, text  # 2 × 226 × 1,27 bruttó a tételsorban
+    assert "Bruttó" in " ".join(p.extract_text() for p in PdfReader(_io.BytesIO((await client.get(f"/api/settlements/{sid}/pdf", headers=mgr)).content)).pages)
+
 
 async def test_handover_only_settlement(client, manager):
     """Csak átadott áruval (leltár és gép nélkül) is rögzíthető elszámolás."""

@@ -3813,6 +3813,10 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement, width_mm: int |
             "billingo_document_number": s.billingo_document_number,
             "rounding_adjust": s.rounding_adjust,
             "note": s.note,
+            # 7bee598e: kedvezményes (készpénzes) elszámoláson a tételek bruttón
+            # jelennek meg — a kávé ÁFA nélkül megy, a nem-kávé a saját ÁFA-jával,
+            # így a sor és a fizetendő egyezik
+            "no_vat": bool(s.no_vat),
             "lines": [
                 {
                     "product_name": line.product_name,
@@ -3821,6 +3825,8 @@ async def _build_settlement_pdf(db: AsyncSession, s: Settlement, width_mm: int |
                     "consumed_qty": line.consumed_qty,
                     "portions": line.portions,
                     "price_per_portion": line.price_per_portion,
+                    "vat_percent": line.vat_percent,
+                    "price_gross": round(line.price_per_portion * (1 + line.vat_percent / 100), 2),
                     "amount_net": line.amount_net,
                     "amount_gross": _money(line.amount_net * (1 + line.vat_percent / 100)),
                 }

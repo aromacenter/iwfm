@@ -297,10 +297,34 @@ async def update_contract(
     partner = await _get_partner_or_404(db, partner_id)
     c = await _get_contract_or_404(db, partner, contract_id)
     _check_dates(body)
+    old_fee, old_fixed = float(c.rent_fee or 0), bool(c.fixed_rental)
     values = body.model_dump()
     values["default_product_id"] = _parse_product_id(values.get("default_product_id"))
     for key, value in values.items():
         setattr(c, key, value)
+    # 72cfa180 (újranyitva): ha a fix díj MOST lett pozitív (vagy a fix bérlet most
+    # kapcsolt be), és a havi őr ebben a hónapban elszámolás NÉLKÜL zárt (a reggeli
+    # futás „nincs díjas gép”-ként átugrotta), az őr törlődik — a következő
+    # percben elkészül az elszámolás. Ha már van e havi automata elszámolás, marad.
+    new_fee = float(c.rent_fee or 0)
+    if c.fixed_rental and new_fee > 0 and (old_fee <= 0 or not old_fixed) and c.rental_last_billed:
+        from datetime import date as _date
+
+        from app.models import Settlement
+        from app.services.wfm.rental_billing import AUTO_SETTLED_BY
+
+        today = _date.today()
+        lb = c.rental_last_billed
+        if lb.year == today.year and lb.month == today.month:
+            billed = (await db.execute(
+                select(Settlement.id).where(
+                    Settlement.partner_id == partner.id,
+                    Settlement.settled_by_name == AUTO_SETTLED_BY,
+                    Settlement.created_at >= today.replace(day=1),
+                ).limit(1)
+            )).scalars().first()
+            if billed is None:
+                c.rental_last_billed = None
     await apply_active_contract(db, partner)
     await record_audit(
         db, actor=actor, action="contract.update", entity_type="partner_contract",

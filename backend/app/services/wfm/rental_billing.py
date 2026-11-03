@@ -106,6 +106,9 @@ def _is_due(c: PartnerContract, today: date, now_local: datetime) -> bool:
     return (today - last).days >= period
 
 
+AUTO_SETTLED_BY = "Automata bérleti számlázás"
+
+
 async def run_fixed_rental_billing(db: AsyncSession, now: datetime | None = None) -> int:
     """Esedékes fix bérleti szerződések számlázása. Visszaadja, hány
     elszámolás készült (a háttérhurok hívja, best-effort)."""
@@ -205,7 +208,7 @@ async def _bill_contract(
     settlement = Settlement(
         partner_id=partner.id,
         settled_by_user_id=None,
-        settled_by_name="Automata bérleti számlázás",
+        settled_by_name=AUTO_SETTLED_BY,
         invoicing_company=partner.invoicing_company,
         payment_method=c.payment_method or "transfer",
         due_days=c.payment_terms_days,

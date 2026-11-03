@@ -83,6 +83,10 @@ export default function NaptarPage() {
   // Szerkesztő-modal: határidő (indokkal), időkapu a partnernél (700ab5b2)
   const [edit, setEdit] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
+  // Átütemezés-kérés a naptárból is (b6cf8baa): a dolgozó a saját feladatára,
+  // kötelező indokkal — ugyanaz a folyamat, mint a Feladataim oldalon
+  const [resch, setResch] = useState<{ task: CalTask; note: string; date: string } | null>(null);
+  const [reschBusy, setReschBusy] = useState(false);
   const canAll = can("tasks");
   const canMine = can("my_tasks");
 
@@ -184,6 +188,39 @@ export default function NaptarPage() {
       await api.post(`/api/tasks/${task.id}/reschedule-request/reject`, { note: reason.trim() || null });
       toast(t("cal.reqRejected"), "success");
       setEdit(null);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function sendResch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!resch) return;
+    if (resch.note.trim().length < 3) {
+      toast(t("myTasks.reschNoteRequired"), "error");
+      return;
+    }
+    setReschBusy(true);
+    try {
+      await api.post(`/api/me/tasks/${resch.task.id}/reschedule-request`, {
+        note: resch.note.trim(),
+        proposed_date: resch.date || null,
+      });
+      toast(t("myTasks.reschSent"), "success");
+      setResch(null);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setReschBusy(false);
+    }
+  }
+
+  async function withdrawResch(task: CalTask) {
+    try {
+      await api.delete(`/api/me/tasks/${task.id}/reschedule-request`);
+      toast(t("myTasks.reschWithdrawn"), "success");
       setReloadKey((k) => k + 1);
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -495,7 +532,25 @@ export default function NaptarPage() {
                       {task.reschedule_request_note && (
                         <p className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">
                           🙋 {t("cal.reqBadge")}{task.reschedule_request_date ? ` → ${task.reschedule_request_date}` : ""}
+                          {!canAll && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); void withdrawResch(task); }}
+                              className="ml-2 rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[11px] hover:bg-amber-50"
+                            >
+                              {t("myTasks.reschWithdraw")}
+                            </button>
+                          )}
                         </p>
+                      )}
+                      {!canAll && !task.reschedule_request_note && task.status !== "done" && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setResch({ task, note: "", date: "" }); }}
+                          className="mt-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                        >
+                          🔁 {t("myTasks.reschAsk")}
+                        </button>
                       )}
                       {task.asset?.name && (
                         <p>☕ {task.asset.name}{task.asset.barcode ? ` (${task.asset.barcode})` : ""}</p>
@@ -519,6 +574,46 @@ export default function NaptarPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Átütemezés-kérés modal (dolgozó, saját feladat) */}
+      {resch && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={sendResch} className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-bold">🔁 {t("myTasks.reschTitle")}</h2>
+            <p className="text-sm text-slate-600">{resch.task.title} · {resch.task.due_date?.slice(0, 10)}</p>
+            <p className="text-xs text-slate-500">{t("myTasks.reschHint")}</p>
+            <label className="block text-sm">
+              {t("myTasks.reschDate")}
+              <input
+                type="date"
+                value={resch.date}
+                min={todayIso}
+                onChange={(e) => setResch({ ...resch, date: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              {t("myTasks.reschNote")} <span className="text-rose-600">*</span>
+              <textarea
+                value={resch.note}
+                onChange={(e) => setResch({ ...resch, note: e.target.value })}
+                rows={3}
+                required
+                minLength={3}
+                maxLength={512}
+                placeholder={t("myTasks.reschNotePh")}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setResch(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={reschBusy || resch.note.trim().length < 3} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50">
+                {t("myTasks.reschSend")}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

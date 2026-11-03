@@ -95,3 +95,44 @@ async def test_contract_rent_fee_validation(client, manager):
         "valid_from": "2026-01-01", "fixed_rental": True, "billing_day": 5, "rent_fee": -1,
     }, headers=mgr)
     assert res.status_code == 422
+
+
+async def test_fee_set_later_in_month_clears_guard_and_bills(client, manager, no_invoice):
+    """72cfa180 (újranyitva, Margarets): a reggeli futás díj nélkül átugrotta a
+    szerződést és havi őrt tett rá; a díj utólagos beállítása törli az őrt, és
+    az elszámolás elkészül — de csak egyszer a hónapban."""
+    import app.db as app_db
+    from app.services.wfm.rental_billing import run_fixed_rental_billing
+
+    _, mgr = manager
+    today = date.today()
+    partner, _ids = await _partner_with_machines(client, mgr, "Margarets Teszt", machines=1)  # gépen nincs díj
+    body = {
+        "valid_from": "2026-01-01", "no_minimum": True, "fixed_rental": True,
+        "billing_day": min(today.day, 28), "billing_time": "00:00",
+        "payment_method": "transfer", "payment_terms_days": 8,
+    }
+    res = await client.post(f"/api/partners/{partner['id']}/contracts", json=body, headers=mgr)
+    assert res.status_code == 201, res.text
+    cid = res.json()["id"]
+    factory = app_db.get_session_factory()
+    async with factory() as db:
+        assert await run_fixed_rental_billing(db) == 0  # díj nélkül: kihagyva, őr beáll
+    c = (await client.get(f"/api/partners/{partner['id']}/contracts", headers=mgr)).json()[0]
+    assert c["rental_last_billed"] == today.isoformat()
+    assert (await client.get(f"/api/settlements?partner_id={partner['id']}", headers=mgr)).json() == []
+
+    # a díj utólag beállítva → az őr törlődik → a következő futás számláz
+    res = await client.patch(f"/api/partners/{partner['id']}/contracts/{cid}", json={**body, "rent_fee": 15000}, headers=mgr)
+    assert res.status_code == 200, res.text
+    assert res.json()["rental_last_billed"] is None
+    async with factory() as db:
+        assert await run_fixed_rental_billing(db) == 1
+    rows = (await client.get(f"/api/settlements?partner_id={partner['id']}", headers=mgr)).json()
+    assert len(rows) == 1 and rows[0]["total_net"] == 15000
+
+    # újramentés ugyanazzal a díjjal: az őr marad, nincs dupla
+    res = await client.patch(f"/api/partners/{partner['id']}/contracts/{cid}", json={**body, "rent_fee": 15000}, headers=mgr)
+    assert res.json()["rental_last_billed"] == today.isoformat()
+    async with factory() as db:
+        assert await run_fixed_rental_billing(db) == 0
