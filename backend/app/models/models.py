@@ -3037,6 +3037,14 @@ class PartnerContract(Base):
     # (ezzel a normával számolva), és az átadott kávé 0 Ft-os tételként a
     # számlára kerül. SEMMILYEN más számítás nem használja.
     invoice_norma: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 144. kör (94970648): egyedi számla-referencia (pl. Strabag belső kód) — a számla
+    # megjegyzés-rovatába kerül; a szerződés ablakban szerkeszthető
+    invoice_reference: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # 144. kör (d5d54ecf): a számlán az adagáras kávésorok EGY tételben —
+    # „Kávéfőző gép bérleti díj”, 1 hónap; a belső elszámolás változatlan
+    invoice_monthly_rent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     # Alapértelmezett kávéfajta, amivel a partnert ellátjuk — az elszámolás
     # átadott-kávé sora ezt ajánlja fel, de a képviselő mást is adhat.
     default_product_id: Mapped[uuid.UUID | None] = mapped_column(

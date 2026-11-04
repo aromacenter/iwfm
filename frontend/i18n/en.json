@@ -1180,6 +1180,7 @@
     "contractSection": "Contract (settlement terms)",
     "contractHint": "If set here, these override the terms configured on the machines. Use either portion-based or kg-based minimum — if both are filled, the kg-based one applies.",
     "contractMinPortions": "Monthly minimum portions",
+    "contractMinPortionsHint": "Partner-level monthly minimum: if filled, THIS applies (all machines together, e.g. 2 × 300 = 600). Empty: the machines' own minimums add up.",
     "contractBelowMinPrice": "Below-minimum portion price (HUF, net)",
     "contractMinKg": "Monthly minimum intake (kg)",
     "contractBelowMinPriceKg": "Below-minimum price (HUF/kg, net)",
@@ -3019,6 +3020,11 @@
     "invoiceNorma": "Invoice norma (portions/kg)",
     "invoiceNormaPh": "e.g. 80",
     "invoiceNormaHint": "If set: the invoice comment shows brewable portions from handed-over coffee (with this norma), and the coffee appears as a 0 Ft line. Affects no other calculation.",
+    "invoiceReference": "Invoice reference (partner's own code)",
+    "invoiceReferencePh": "e.g. Strabag internal order code",
+    "invoiceReferenceHint": "If filled, every invoice and proforma comment gets “Reference: …”. Not the PO number: this stays constant for the contract.",
+    "invoiceMonthlyRent": "One invoice line: “Coffee machine rental fee”, 1 month",
+    "invoiceMonthlyRentHint": "Per-portion coffee lines are merged into a single invoice line (quantity: 1 month, amount: the calculated net). Settlement, receipt and statistics are unchanged.",
     "sumInvoiceNorma": "invoice norma: {n}/kg",
     "phoneSettlement": "Phone settlement",
     "phoneSettlementHint": "Route planning skips this partner — readings are reported by phone/QR.",
@@ -3257,6 +3263,7 @@
     "pickup_no_email": "No customer email — enter an address."
   },
   "intake": {
+    "worksheetAuto": "Worksheet created automatically: {serial} — a manager can reassign it under Tasks.",
     "title": "Intake",
     "subtitle": "Register machines brought in by customers and print intake receipts",
     "new": "+ New intake",

@@ -43,6 +43,8 @@ COMPANIES = {"xp": "X-Presso Coffee Kft.", "pc": "Premium Caffe Kft."}
 PORTION_LINE_NAME = (
     "Bérleti díj (szerződés szerint tartalmazza az 1 adagra jutó kávé árát is)"
 )
+# 144. kör (d5d54ecf): szerződés-kapcsolóval a kávésorok egy havi tételben
+MONTHLY_RENT_LINE_NAME = "Kávéfőző gép bérleti díj"
 # A nem elektronikus bizonylatokra kerülő megjegyzés.
 INVOICE_COMMENT = "A bizonylat aláírás és bélyegző nélkül is érvényes!"
 
@@ -91,6 +93,14 @@ async def settlement_invoice_items(db: AsyncSession, settlement: Settlement) -> 
             await db.execute(select(Product.id).where(Product.id.in_(pids), Product.is_consignment.is_(True)))
         ).scalars().all()
         consignment_ids = set(rows)
+    # 144. kör (d5d54ecf): szerződés-kapcsolóval az adagáras kávésorok EGY tételben,
+    # „Kávéfőző gép bérleti díj”, 1 hónap — az összeg a sorok nettó összege
+    from app.services.wfm.contracts import active_contract
+
+    contract = await active_contract(db, settlement.partner_id)
+    monthly_rent = bool(contract is not None and contract.invoice_monthly_rent)
+    rent_net = 0.0
+    rent_vat: int | None = None
     items = []
     for line in lines:
         # A 0 Ft-os "utólagos adagelszámolásra átadva" kávésor a számlára
@@ -122,6 +132,10 @@ async def settlement_invoice_items(db: AsyncSession, settlement: Settlement) -> 
             line.product_id in consignment_ids
             and not line.product_name.startswith("Készlethiány")
         )
+        if portion_based and monthly_rent:
+            rent_net += float(line.amount_net or 0)
+            rent_vat = line.vat_percent if rent_vat is None else rent_vat
+            continue
         items.append({
             "name": PORTION_LINE_NAME if portion_based
             else f"{line.product_name} — fogyás ({line.consumed_qty:g} kg / {line.portions:.0f} adag)"
@@ -132,6 +146,15 @@ async def settlement_invoice_items(db: AsyncSession, settlement: Settlement) -> 
             "quantity": round(line.portions, 2),
             "unit": "adag" if portion_based else ("adag" if line.product_id in consignment_ids else "db"),
             "vat": _vat_label(line.vat_percent),
+        })
+    if monthly_rent and rent_vat is not None:
+        items.insert(0, {
+            "name": MONTHLY_RENT_LINE_NAME,
+            "unit_price": round(rent_net, 2),
+            "unit_price_type": "net",
+            "quantity": 1,
+            "unit": "hónap",
+            "vat": _vat_label(rent_vat),
         })
     return items
 
@@ -259,6 +282,9 @@ async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> in
     taxcode = (partner.tax_number or "").strip()
     if taxcode:
         body["taxcode"] = taxcode
+        # e0a4e310: a Billingó a „vevő adószámmal rendelkezik” jelölést a tax_type
+        # mezőből veszi — a taxcode önmagában nem állítja be
+        body["tax_type"] = "HAS_TAX_NUMBER"
     try:
         created = await _api(api_key, "POST", "/partners", body)
     except BillingoApiError as exc:
@@ -278,6 +304,13 @@ async def settlement_invoice_comment(
     from app.models import SettlementMachine
 
     parts = [INVOICE_COMMENT]
+    # 144. kör (94970648): a szerződés egyedi számla-referenciája (pl. Strabag kód)
+    if partner is not None:
+        from app.services.wfm.contracts import active_contract
+
+        contract = await active_contract(db, partner.id)
+        if contract is not None and (contract.invoice_reference or "").strip():
+            parts.append(f"Referencia: {contract.invoice_reference.strip()}")
     # Késedelmi felár: a számla-megjegyzésben ÁSZF-hivatkozás + a lejárt
     # tétel adatai (az elszámolás note-jában állnak össze).
     if settlement.late_fee_pct:
@@ -551,8 +584,13 @@ async def _complete_billingo_partner(api_key: str, bid: int, remote: dict, partn
     """Csak a hiányzó mezőket pótoljuk a Billingóban (adószám, cím, e-mail)."""
     body: dict = {}
     taxcode = (partner.tax_number or "").strip()
-    if taxcode and not (remote.get("taxcode") or "").strip():
+    # e0a4e310: hiányzó adószám VAGY hiányzó „adószámmal rendelkezik” jelölés → pótoljuk
+    if taxcode and (
+        not (remote.get("taxcode") or "").strip()
+        or (remote.get("tax_type") or "") != "HAS_TAX_NUMBER"
+    ):
         body["taxcode"] = taxcode
+        body["tax_type"] = "HAS_TAX_NUMBER"
     emails = [e for e in split_addresses(partner.contact_email) if "@" in e]
     if emails and not remote.get("emails"):
         body["emails"] = emails

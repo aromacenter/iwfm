@@ -383,6 +383,14 @@ export default function AtvetelPage() {
         router.push(`/feladatok?intake=${created.id}&force=1`);
         return;
       }
+      // 25fb7952: feladat-jog nélküli átvevőnél (pl. üzletkötő) is készüljön munkalap
+      // automatikusan — a felelős az átvevő, a vezető a Feladatokban átteszi
+      try {
+        const ws = await api.post<{ worksheet_serial?: string | null }>(`/api/intakes/${created.id}/worksheet`);
+        toast(t("intake.worksheetAuto", { serial: ws.worksheet_serial ?? "" }), "success");
+      } catch (err) {
+        toast(errorMessage(err), "error");
+      }
     } catch (err) {
       setError(errorMessage(err));
     } finally {

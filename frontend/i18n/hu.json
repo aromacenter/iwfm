@@ -1180,6 +1180,7 @@
     "contractSection": "Szerződés (elszámolási feltételek)",
     "contractHint": "Ha itt megadod, ez felülírja a gépeken beállított feltételeket. Vagy adag-, vagy kg-alapú minimumot használj — ha mindkettő ki van töltve, a kg-alapú érvényesül.",
     "contractMinPortions": "Havi minimum adag",
+    "contractMinPortionsHint": "Partner-szintű havi minimum: ha ki van töltve, EZ számít (több gépnél az összes gép együtt, pl. 2 × 300 = 600). Üresen a gépek saját minimumai összeadódnak.",
     "contractBelowMinPrice": "Minimum alatti adagár (Ft, nettó)",
     "contractMinKg": "Havi minimum átvétel (kg)",
     "contractBelowMinPriceKg": "Minimum alatti ár (Ft/kg, nettó)",
@@ -3019,6 +3020,11 @@
     "invoiceNorma": "Számlára kerülő norma (adag/kg)",
     "invoiceNormaPh": "pl. 80",
     "invoiceNormaHint": "Ha ki van töltve: a számla megjegyzésében megjelenik az átadott kávéból lefőzhető adagok száma (ezzel a normával), és az átadott kávé 0 Ft-os tételként a számlára kerül. Más számítást NEM befolyásol.",
+    "invoiceReference": "Számla-referencia (partner egyedi kódja)",
+    "invoiceReferencePh": "pl. Strabag belső rendelési kód",
+    "invoiceReferenceHint": "Ha ki van töltve, minden számla és díjbekérő megjegyzésébe bekerül „Referencia: …” formában. Nem a PO-szám: ez a szerződés idejére állandó.",
+    "invoiceMonthlyRent": "A számlán egy tétel: „Kávéfőző gép bérleti díj”, 1 hónap",
+    "invoiceMonthlyRentHint": "Az adagáras kávésorok a számlán egyetlen tételbe olvadnak (mennyiség: 1 hónap, az összeg a kiszámolt nettó). Az elszámolás, bizonylat és statisztika változatlan.",
     "sumInvoiceNorma": "számla-norma: {n} adag/kg",
     "phoneSettlement": "Telefonos elszámolás",
     "phoneSettlementHint": "A partnert az útvonal-tervezés NEM ütemezi be — az állásokat telefonon/QR-oldalon diktálja.",
@@ -3257,6 +3263,7 @@
     "pickup_no_email": "Nincs ügyfél-e-mail — add meg a címet."
   },
   "intake": {
+    "worksheetAuto": "Munkalap automatikusan kiállítva: {serial} — a vezető a Feladatokban oszthatja át.",
     "title": "Átvétel",
     "subtitle": "Behozott gépek rögzítése és átvételi elismervény nyomtatása",
     "new": "+ Új átvétel",

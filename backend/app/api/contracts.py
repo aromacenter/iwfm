@@ -103,6 +103,9 @@ class ContractBody(BaseModel):
     # Sávos adagárazás (tiered modul): az elszámolt adagszám sávja adja az
     # adagárat. qty_to None = nincs felső határ (utolsó sáv).
     price_tiers: list[dict] | None = None
+    # 144. kör: egyedi számla-referencia (számla-megjegyzés) + havi bérleti díjas számlasor
+    invoice_reference: str | None = Field(default=None, max_length=256)
+    invoice_monthly_rent: bool = False
     note: str | None = None
 
     @field_validator("price_tiers")
@@ -174,6 +177,8 @@ class ContractOut(BaseModel):
     invoice_norma: int | None = None
     default_product_id: str | None = None
     default_product_name: str | None = None
+    invoice_reference: str | None = None
+    invoice_monthly_rent: bool = False
     note: str | None
     status: str  # active | future | expired
     created_at: datetime
@@ -232,6 +237,8 @@ def _out(c: PartnerContract, product_name: str | None = None) -> ContractOut:
         invoice_norma=c.invoice_norma,
         default_product_id=str(c.default_product_id) if c.default_product_id else None,
         default_product_name=product_name,
+        invoice_reference=c.invoice_reference,
+        invoice_monthly_rent=bool(c.invoice_monthly_rent),
         note=c.note,
         status=_status(c, date.today()), created_at=c.created_at,
     )

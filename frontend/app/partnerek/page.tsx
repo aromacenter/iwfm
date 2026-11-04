@@ -390,6 +390,8 @@ export default function PartnerekPage() {
     billing_day?: number | null;
     rental_merge_company?: boolean;
     rent_fee?: number | null;
+    invoice_reference?: string | null;
+    invoice_monthly_rent?: boolean;
     billing_cycle?: string;
     billing_weekday?: number | null;
     billing_time?: string | null;
@@ -441,6 +443,7 @@ export default function PartnerekPage() {
     rent_if_below_min: boolean; settlement_weeks: string;
     payment_method: string; payment_terms_days: string;
     no_minimum: boolean; auto_billing: boolean; fixed_rental: boolean; billing_day: string; rental_merge_company: boolean; rent_fee: string; billing_cycle: string; billing_weekday: string; billing_time: string; auto_settlement: boolean; phone_settlement: boolean; visit_weeks: string; tiers: { from: string; to: string; price: string }[]; invoice_norma: string; default_product_id: string; note: string;
+    invoice_reference: string; invoice_monthly_rent: boolean;
   } | null>(null);
   const [cError, setCError] = useState<string | null>(null);
   const [cBusy, setCBusy] = useState(false);
@@ -510,6 +513,7 @@ export default function PartnerekPage() {
       rent_if_below_min: false, settlement_weeks: "4",
       payment_method: "", payment_terms_days: "",
       no_minimum: false, auto_billing: false, fixed_rental: false, billing_day: "", rental_merge_company: false, rent_fee: "", billing_cycle: "monthly", billing_weekday: "0", billing_time: "06:00", auto_settlement: true, phone_settlement: false, visit_weeks: "", tiers: [], invoice_norma: "", default_product_id: "", note: "",
+      invoice_reference: "", invoice_monthly_rent: false,
     });
   }
 
@@ -541,6 +545,8 @@ export default function PartnerekPage() {
         from: String(tr.qty_from), to: tr.qty_to != null ? String(tr.qty_to) : "", price: String(tr.price),
       })),
       invoice_norma: c.invoice_norma != null ? String(c.invoice_norma) : "",
+      invoice_reference: c.invoice_reference ?? "",
+      invoice_monthly_rent: c.invoice_monthly_rent ?? false,
       default_product_id: c.default_product_id ?? "",
       note: c.note ?? "",
     });
@@ -585,6 +591,8 @@ export default function PartnerekPage() {
               }))
           : null,
         invoice_norma: cForm.invoice_norma ? Number(cForm.invoice_norma) : null,
+        invoice_reference: cForm.invoice_reference.trim() || null,
+        invoice_monthly_rent: cForm.invoice_monthly_rent,
         default_product_id: cForm.default_product_id || null,
         note: cForm.note || null,
       };
@@ -1410,6 +1418,7 @@ export default function PartnerekPage() {
                   <label className="block text-sm">
                     {t("partners.contractMinPortions")}
                     <input type="number" min={0} value={cForm.min_portions} onChange={(e) => setCForm({ ...cForm, min_portions: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+                    <span className="mt-0.5 block text-xs text-slate-400">{t("partners.contractMinPortionsHint")}</span>
                   </label>
                   <label className="block text-sm">
                     {t("partners.contractBelowMinPrice")}
@@ -1596,6 +1605,25 @@ export default function PartnerekPage() {
                     className="mt-1 w-32 rounded-lg border border-amber-300 px-2 py-1.5"
                   />
                   <span className="mt-0.5 block text-xs text-amber-800">{t("contracts.invoiceNormaHint")}</span>
+                </label>
+                {/* 144. kör: számla-referencia + havi bérleti díjas számlasor */}
+                <label className="block text-sm">
+                  🧾 {t("contracts.invoiceReference")}
+                  <input
+                    value={cForm.invoice_reference}
+                    maxLength={256}
+                    onChange={(e) => setCForm({ ...cForm, invoice_reference: e.target.value })}
+                    placeholder={t("contracts.invoiceReferencePh")}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                  <span className="mt-0.5 block text-xs text-slate-400">{t("contracts.invoiceReferenceHint")}</span>
+                </label>
+                <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-3 text-sm">
+                  <input type="checkbox" className="mt-1" checked={cForm.invoice_monthly_rent} onChange={(e) => setCForm({ ...cForm, invoice_monthly_rent: e.target.checked })} />
+                  <span>
+                    {t("contracts.invoiceMonthlyRent")}
+                    <span className="mt-0.5 block text-xs text-slate-400">{t("contracts.invoiceMonthlyRentHint")}</span>
+                  </span>
                 </label>
                 <div className="block text-sm">
                   ☕ {t("contracts.defaultCoffee")}
