@@ -254,6 +254,7 @@ async def create_handover_invoice(
     payment_method: str,  # "cash" | "card" | "transfer"
     due_days: int | None = None,
     vat_percent: int = 27,
+    comment: str | None = None,  # 145. kör: csak a Billingó-ágon használt
 ) -> tuple[str, str]:
     """Szerviz-átadás számlázása a helyszínen (azonnali teljesítés/fizetés)."""
     settings = await _get_settings(db)

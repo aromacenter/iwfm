@@ -636,6 +636,11 @@ class Worksheet(Base):
     quote_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     quote_selected_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     quote_accepted_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # 145. kör (7ca9c6f6): hivatalos ajánlat sorszáma (AJ-ÉÉÉÉ-NNNN, kiküldéskor) és
+    # az ügyfél PO-száma (az elfogadó oldalon adja meg, utólag szerkeszthető) —
+    # mindkettő a munkalapra és a számla megjegyzésébe kerül
+    quote_serial: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    po_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # A kész gépet elhoztuk a külsős szerelőtől — ekkor kap az ügyfél e-mailt,
     # hogy a javítás elkészült és a gép átvehető.
     picked_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -753,6 +758,13 @@ class WorksheetSettings(Base):
     accent_color: Mapped[str] = mapped_column(String(7), nullable=False, default="#1e40af")
     logo_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     logo_mime: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 145. kör: ügyvezetői aláírás + cégbélyegző képe az árajánlat-PDF-hez
+    signature_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    signature_mime: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    stamp_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    stamp_mime: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    signer_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    signer_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
     show_materials: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_hours: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_client_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

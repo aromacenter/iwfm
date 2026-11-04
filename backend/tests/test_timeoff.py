@@ -64,6 +64,9 @@ async def test_annual_balance_blocks_approval(client, manager):
     _, headers = manager
     emp = await make_emp()
     start = date.today() + timedelta(days=30)
+    # az évfordulón átlógó kérés az új év keretéből számolna — maradjon egy éven belül
+    if (start + timedelta(days=40)).year != start.year:
+        start = date(start.year + 1, 2, 1)
     long_req = payload(
         str(emp.id),
         start_date=start.isoformat(),

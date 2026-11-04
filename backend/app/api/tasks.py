@@ -273,6 +273,9 @@ class WorksheetOut(BaseModel):
     quote_sent_at: datetime | None = None
     quote_accepted_at: datetime | None = None
     quote_selected_name: str | None = None
+    # 145. kör: hivatalos ajánlat sorszáma + az ügyfél PO-száma
+    quote_serial: str | None = None
+    po_number: str | None = None
     picked_up_at: datetime | None = None  # a gépet elhoztuk a szerelőtől
     updated_at: datetime
 
@@ -344,6 +347,8 @@ def _worksheet_out(
         quote_sent_at=ws.quote_sent_at,
         quote_accepted_at=ws.quote_accepted_at,
         quote_selected_name=ws.quote_selected_name,
+        quote_serial=ws.quote_serial,
+        po_number=ws.po_number,
         picked_up_at=ws.picked_up_at,
         updated_at=ws.updated_at,
     )
@@ -362,6 +367,71 @@ async def _next_worksheet_serial(db: AsyncSession, external: bool = False) -> st
         )
     ).scalar_one()
     return f"{prefix}-{year}-{count + 1:04d}"
+
+
+async def _next_quote_serial(db: AsyncSession) -> str:
+    """Hivatalos árajánlat sorszáma: AJ-ÉÉÉÉ-NNNN (145. kör) — a kiküldéskor kapja."""
+    year = datetime.now(UTC).year
+    count = (
+        await db.execute(
+            select(sa_func.count()).select_from(Worksheet).where(
+                Worksheet.quote_serial.like(f"AJ-{year}-%")
+            )
+        )
+    ).scalar_one()
+    return f"AJ-{year}-{count + 1:04d}"
+
+
+def _handover_invoice_comment(ws: Worksheet) -> str | None:
+    """A szerviz-számla megjegyzése: munkalap + elfogadott ajánlat + PO (7ca9c6f6)."""
+    parts = [f"Munkalap: {ws.serial}"]
+    if ws.quote_serial:
+        parts.append(f"Elfogadott árajánlat: {ws.quote_serial}")
+    if ws.po_number:
+        parts.append(f"Megrendelői PO-szám: {ws.po_number}")
+    return " · ".join(parts)
+
+
+async def _build_quote_pdf(db: AsyncSession, ws: Worksheet, option_index: int) -> tuple[bytes, str]:
+    """Hivatalos árajánlat-PDF egy konstrukcióhoz (1-től számozva). ValueError,
+    ha nincs ilyen konstrukció vagy az ajánlat nincs kiküldve."""
+    from app.services.wfm.quote_pdf import QUOTE_VALID_WORKING_DAYS, add_working_days, build_quote_pdf
+
+    options = [w for w in (ws.repair_options or []) if w.get("name") and w.get("price_net") is not None]
+    if not ws.quote_serial or option_index < 1 or option_index > len(options):
+        raise ValueError("quote.bad_option")
+    opt = options[option_index - 1]
+    asset_name = None
+    if ws.asset_id is not None:
+        a = (await db.execute(select(Asset).where(Asset.id == ws.asset_id))).scalar_one_or_none()
+        if a is not None:
+            asset_name = f"{a.name} — {a.manufacturer}" if a.manufacturer else a.name
+            if a.serial_number:
+                asset_name += f" (gyári szám: {a.serial_number})"
+    issued = (ws.quote_sent_at or datetime.now(UTC)).date()
+    valid_until = add_working_days(issued, QUOTE_VALID_WORKING_DAYS)
+    settings = await _worksheet_pdf_settings(db) or {}
+    pdf = build_quote_pdf({
+        "quote_serial": ws.quote_serial,
+        "option_index": option_index,
+        "option_count": len(options),
+        "option_name": opt.get("name"),
+        "price_net": float(opt.get("price_net") or 0),
+        "issued_at": issued.isoformat(),
+        "valid_until": valid_until.isoformat(),
+        "worksheet_serial": ws.serial,
+        "client_name": ws.client_name,
+        "client_location": ws.client_location,
+        "machine": asset_name,
+        "po_number": ws.po_number,
+        "public_note": ws.public_note,
+        "accepted": ws.quote_status == "accepted" and (ws.quote_selected_name or "") == (opt.get("name") or ""),
+        "accepted_by": ws.quote_accepted_by,
+        "accepted_at": ws.quote_accepted_at.isoformat() if ws.quote_accepted_at else None,
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
+    }, settings)
+    serial = f"{ws.quote_serial}" + (f"-{option_index}" if len(options) > 1 else "")
+    return pdf, serial
 
 
 async def _intake_client_email(db: AsyncSession, ws: Worksheet) -> str | None:
@@ -1595,6 +1665,8 @@ async def _build_worksheet_pdf(
     pdf = build_worksheet_pdf(
         {
             "quote_history": quote_history,
+            "quote_serial": ws.quote_serial,
+            "po_number": ws.po_number,
             "extra_footer": extra_footer,
             "handover_url": handover_url,
             "serial": serial,
@@ -1651,6 +1723,11 @@ async def _worksheet_pdf_settings(db: AsyncSession) -> dict | None:
         "show_hours": row.show_hours,
         "show_client_signature": row.show_client_signature,
         "show_comments": row.show_comments,
+        # 145. kör: árajánlat-PDF aláírás/bélyegző
+        "signature_bytes": bytes(row.signature_data) if row.signature_data else None,
+        "stamp_bytes": bytes(row.stamp_data) if row.stamp_data else None,
+        "signer_name": row.signer_name,
+        "signer_title": row.signer_title,
     }
 
 
@@ -2727,6 +2804,8 @@ async def send_worksheet_quote(
     ws.quote_status = "sent"
     ws.quote_email = str(body.to)
     ws.quote_sent_at = datetime.now(UTC)
+    if not ws.quote_serial:  # 145. kör: hivatalos ajánlat-sorszám a kiküldéskor
+        ws.quote_serial = await _next_quote_serial(db)
     link = f"{get_settings().frontend_origin.rstrip('/')}/munkalap-ajanlat/{ws.quote_token}"
 
     smtp = await load_smtp_config(db)
@@ -2801,6 +2880,15 @@ async def public_worksheet_quote(token: str, db: AsyncSession = Depends(get_db))
         "total_loss": ws.total_loss,
         # A szervizes ügyfélnek szánt megjegyzése — az ajánlat-oldalon is látszik
         "public_note": ws.public_note,
+        # 145. kör: hivatalos ajánlat — sorszám, érvényesség (10 munkanap), PO-szám
+        "quote_serial": ws.quote_serial,
+        "quote_sent_at": ws.quote_sent_at,
+        "valid_until": (
+            __import__("app.services.wfm.quote_pdf", fromlist=["add_working_days"]).add_working_days(
+                ws.quote_sent_at.date(), 10
+            ).isoformat() if ws.quote_sent_at else None
+        ),
+        "po_number": ws.po_number,
         # Mindig felkínált opció: "nem kérem a javítást" — felmérési díjjal.
         "survey_fee_net": survey_fee,
         "survey_fee_gross": round(survey_fee * 1.27, 0),
@@ -2823,6 +2911,8 @@ class QuoteAcceptBody(BaseModel):
     accepted_by: str = Field(min_length=2, max_length=256)
     decline: bool = False
     renounce: bool = False
+    # 145. kör: az ügyfél megrendelői PO-száma (opcionális; utólag a cég szerkeszti)
+    po_number: str | None = Field(default=None, max_length=64)
 
 
 @quote_public_router.post("/{token}/accept")
@@ -2889,6 +2979,8 @@ async def public_worksheet_quote_accept(
 
     ws.quote_accepted_by = body.accepted_by.strip()
     ws.quote_accepted_at = datetime.now(UTC)
+    if body.po_number is not None and body.po_number.strip():
+        ws.po_number = body.po_number.strip()[:64]
     task = (
         await db.execute(select(Task).where(Task.id == ws.task_id))
     ).scalar_one_or_none()
@@ -2954,6 +3046,70 @@ async def public_worksheet_quote_accept(
         except Exception:
             pass
     return {"ok": True, "selected": selected_label, "declined": body.decline}
+
+
+@quote_public_router.get("/{token}/pdf")
+async def public_worksheet_quote_pdf(
+    token: str,
+    option: int = Query(default=1, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """Hivatalos javítási árajánlat PDF egy konstrukcióhoz (145. kör) — az
+    ügyfél a linkről letölti/kinyomtatja; aláírás + bélyegző a beállításokból."""
+    ws = await _ws_by_quote_token(db, token)
+    try:
+        pdf, serial = await _build_quote_pdf(db, ws, option)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "quote.not_found"})
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="arajanlat_{serial}.pdf"'})
+
+
+class PoBody(BaseModel):
+    po_number: str | None = Field(default=None, max_length=64)
+
+
+@router.patch("/{task_id}/worksheet/po", response_model=WorksheetOut)
+async def set_worksheet_po(
+    task_id: str,
+    body: PoBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """Az ügyfél PO-számának utólagos szerkesztése (elgépelés / később kapott PO)."""
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    ws.po_number = (body.po_number or "").strip()[:64] or None
+    await record_audit(
+        db, actor=actor, action="worksheet.po_update", entity_type="worksheet",
+        entity_id=ws.serial, detail={"po_number": ws.po_number}, request=request,
+    )
+    await db.commit()
+    await db.refresh(ws)
+    return _worksheet_out(ws)
+
+
+@router.get("/{task_id}/worksheet/quote-pdf")
+async def worksheet_quote_pdf(
+    task_id: str,
+    option: int = Query(default=1, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("tasks")),
+):
+    """A hivatalos árajánlat-PDF belülről (ugyanaz, mint az ügyfél linkje)."""
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    try:
+        pdf, serial = await _build_quote_pdf(db, ws, option)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "quote.bad_option"})
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="arajanlat_{serial}.pdf"'})
 
 
 # ─── Gép elhozva a szerelőtől → az ügyfél értesítése (átvehető) ──────────────
@@ -3622,6 +3778,7 @@ async def do_handover(
         try:
             document_id, _mode = await invoicing.create_handover_invoice(
                 db, partner, serial=ws.serial, items=invoice_items,
+                comment=_handover_invoice_comment(ws),
                 payment_method=body.payment_method,
                 due_days=(body.due_days or 8) if body.payment_method == "transfer" else None,
             )

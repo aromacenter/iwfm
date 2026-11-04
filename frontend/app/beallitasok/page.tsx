@@ -53,6 +53,10 @@ interface WorksheetSettings {
   photo_policy: "none" | "service" | "all";
   photo_min: number;
   has_logo: boolean;
+  has_signature?: boolean;
+  has_stamp?: boolean;
+  signer_name?: string | null;
+  signer_title?: string | null;
 }
 
 const inputCls = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
@@ -656,7 +660,16 @@ export default function BeallitasokPage() {
     show_comments: true,
     photo_policy: "none" as "none" | "service" | "all",
     photo_min: 1,
+    signer_name: "",
+    signer_title: "",
   });
+  // 145. kör: árajánlat-PDF aláírás + bélyegző képe
+  const [wsHasSignature, setWsHasSignature] = useState(false);
+  const [wsSignature, setWsSignature] = useState<string | null>(null);
+  const [wsRemoveSignature, setWsRemoveSignature] = useState(false);
+  const [wsHasStamp, setWsHasStamp] = useState(false);
+  const [wsStamp, setWsStamp] = useState<string | null>(null);
+  const [wsRemoveStamp, setWsRemoveStamp] = useState(false);
   const [wsDefaults, setWsDefaults] = useState({ customer: "", intake: "" });
   const [wsSurveyDefault, setWsSurveyDefault] = useState(5000);
   const [wsHasLogo, setWsHasLogo] = useState(false);
@@ -778,7 +791,15 @@ export default function BeallitasokPage() {
           show_comments: s.show_comments,
           photo_policy: s.photo_policy ?? "none",
           photo_min: s.photo_min ?? 1,
+          signer_name: s.signer_name ?? "",
+          signer_title: s.signer_title ?? "",
         });
+        setWsHasSignature(!!s.has_signature);
+        setWsSignature(null);
+        setWsRemoveSignature(false);
+        setWsHasStamp(!!s.has_stamp);
+        setWsStamp(null);
+        setWsRemoveStamp(false);
         setWsDefaults({ customer: s.customer_footer_default, intake: s.intake_footer_default });
         setWsSurveyDefault(s.survey_fee_default);
         setWsHasLogo(s.has_logo);
@@ -1269,6 +1290,17 @@ export default function BeallitasokPage() {
     }
   }
 
+  function onImageFile(e: React.ChangeEvent<HTMLInputElement>, set: (v: string) => void, clearRemove: () => void) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      set(reader.result as string);
+      clearRemove();
+    };
+    reader.readAsDataURL(file);
+  }
+
   function onLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1301,6 +1333,12 @@ export default function BeallitasokPage() {
         photo_min: ws.photo_min,
         logo: wsLogo,
         remove_logo: wsRemoveLogo,
+        signer_name: ws.signer_name || null,
+        signer_title: ws.signer_title || null,
+        signature: wsSignature,
+        remove_signature: wsRemoveSignature,
+        stamp: wsStamp,
+        remove_stamp: wsRemoveStamp,
       });
       setWsMsg(t("common.saved"));
       load();
@@ -1457,6 +1495,46 @@ export default function BeallitasokPage() {
                 </button>
               )}
             </div>
+          </div>
+          {/* 145. kör: hivatalos árajánlat-PDF — aláíró, aláírás-kép, bélyegző */}
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+            <p className="text-sm font-medium text-indigo-900">📄 {t("settings.wsQuoteTitle")}</p>
+            <p className="mb-2 text-xs text-indigo-800">{t("settings.wsQuoteHint")}</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className="block text-sm">
+                {t("settings.wsSignerName")}
+                <input value={ws.signer_name} maxLength={128} onChange={(e) => setWs({ ...ws, signer_name: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block text-sm">
+                {t("settings.wsSignerTitle")}
+                <input value={ws.signer_title} maxLength={128} placeholder="ügyvezető" onChange={(e) => setWs({ ...ws, signer_title: e.target.value })} className={inputCls} />
+              </label>
+            </div>
+            {([
+              ["signature", t("settings.wsSignature"), wsSignature, wsHasSignature, wsRemoveSignature, setWsSignature, setWsRemoveSignature],
+              ["stamp", t("settings.wsStamp"), wsStamp, wsHasStamp, wsRemoveStamp, setWsStamp, setWsRemoveStamp],
+            ] as const).map(([key, label, img, has, removed, setImg, setRemoved]) => (
+              <div key={key} className="mt-2 space-y-1">
+                <span className="block text-sm">{label}</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  {img ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={img} alt={key} className="h-12 w-auto rounded border border-slate-200 bg-white" />
+                  ) : has && !removed ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={`/api/settings/worksheet/${key}?v=${wsLogoVer}`} alt={key} className="h-12 w-auto rounded border border-slate-200 bg-white" />
+                  ) : (
+                    <span className="text-xs text-slate-400">{t("settings.wsNoImage")}</span>
+                  )}
+                  <input type="file" accept="image/png,image/jpeg" onChange={(e) => onImageFile(e, setImg, () => setRemoved(false))} className="text-xs" />
+                  {(has || img) && !removed && (
+                    <button type="button" onClick={() => { setImg(null); setRemoved(true); }} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
+                      {t("settings.wsRemoveImage")}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {wsToggles.map(([key, lbl]) => (

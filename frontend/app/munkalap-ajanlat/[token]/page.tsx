@@ -28,6 +28,10 @@ interface QuoteInfo {
   survey_fee_gross: number;
   public_note: string | null; // a szervizes megjegyzése az ügyfélnek
   options: QuoteOption[];
+  // 145. kör: hivatalos ajánlat — sorszám, érvényesség, PO-szám
+  quote_serial: string | null;
+  valid_until: string | null;
+  po_number: string | null;
 }
 
 const DECLINE = "__decline__";
@@ -41,6 +45,7 @@ export default function MunkalapAjanlatPage() {
   const [notFound, setNotFound] = useState(false);
   const [selected, setSelected] = useState<string>("");
   const [name, setName] = useState("");
+  const [po, setPo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -65,6 +70,7 @@ export default function MunkalapAjanlatPage() {
         decline: selected === DECLINE,
         renounce: selected === RENOUNCE,
         accepted_by: name.trim(),
+        po_number: po.trim() || null,
       });
       setDone(true);
     } catch {
@@ -103,6 +109,13 @@ export default function MunkalapAjanlatPage() {
         <h1 className="mt-1 text-2xl font-semibold">{info.serial}</h1>
         {info.machine && <p className="mt-1 text-sm text-slate-600">☕ {info.machine}</p>}
         {info.client_name && <p className="text-sm text-slate-500">{info.client_name} részére</p>}
+        {info.quote_serial && (
+          <p className="mt-2 text-xs text-slate-500">
+            Ajánlat sorszáma: <strong>{info.quote_serial}</strong>
+            {info.valid_until && <> · Érvényes: <strong>{info.valid_until}</strong>-ig (10 munkanap)</>}
+            {info.po_number && <> · PO: <strong>{info.po_number}</strong></>}
+          </p>
+        )}
         {/* A szervizes megjegyzése az ügyfélnek — pl. a konstrukciók közti
             különbség magyarázata */}
         {info.public_note && (
@@ -136,6 +149,16 @@ export default function MunkalapAjanlatPage() {
               Kiválasztott konstrukció:{" "}
               <strong>{done ? selected : info.selected_name}</strong>
             </p>
+            {info.quote_serial && (
+              <p className="mt-1 text-sm text-emerald-900">
+                Ajánlat sorszáma: <strong>{info.quote_serial}</strong>
+                {(done ? po.trim() : info.po_number) && <> · PO: <strong>{done ? po.trim() : info.po_number}</strong></>}
+                {" "}·{" "}
+                <a href={`/api/public/worksheet-quote/${token}/pdf?option=1`} target="_blank" rel="noopener noreferrer" className="underline">
+                  📄 hivatalos árajánlat (PDF)
+                </a>
+              </p>
+            )}
             <p className="mt-1 text-sm text-emerald-900">
               Szervizünk megkapta a jóváhagyást, és megkezdi a javítást. Amint elkészült,
               értesítjük.
@@ -220,6 +243,19 @@ export default function MunkalapAjanlatPage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
+            <label className="mt-3 block text-sm">
+              Megrendelői PO-szám <span className="text-slate-400">(ha a cégüknél szükséges)</span>
+              <input
+                value={po}
+                maxLength={64}
+                onChange={(e) => setPo(e.target.value)}
+                placeholder="pl. PO-2026-0471"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+              <span className="mt-0.5 block text-xs text-slate-400">
+                A megadott PO-szám a munkalapon és a számlán is szerepelni fog.
+              </span>
+            </label>
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             <button
               onClick={accept}
@@ -239,7 +275,7 @@ export default function MunkalapAjanlatPage() {
               Választható javítási konstrukciók
             </h2>
             <div className="mt-3 space-y-2">
-              {info.options.map((o) => (
+              {info.options.map((o, i) => (
                 <label
                   key={o.name}
                   className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 transition ${
@@ -263,6 +299,17 @@ export default function MunkalapAjanlatPage() {
                     <span className="block text-xs text-slate-400">
                       + ÁFA {o.price_gross != null ? `(bruttó ${ft(o.price_gross)})` : ""}
                     </span>
+                    {info.quote_serial && (
+                      <a
+                        href={`/api/public/worksheet-quote/${token}/pdf?option=${i + 1}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1 block text-xs font-medium text-indigo-600 hover:underline"
+                      >
+                        📄 Hivatalos árajánlat (PDF)
+                      </a>
+                    )}
                   </span>
                 </label>
               ))}
@@ -305,6 +352,19 @@ export default function MunkalapAjanlatPage() {
                 placeholder="pl. Kovács Anna"
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               />
+            </label>
+            <label className="mt-3 block text-sm">
+              Megrendelői PO-szám <span className="text-slate-400">(ha a cégüknél szükséges)</span>
+              <input
+                value={po}
+                maxLength={64}
+                onChange={(e) => setPo(e.target.value)}
+                placeholder="pl. PO-2026-0471"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+              <span className="mt-0.5 block text-xs text-slate-400">
+                A megadott PO-szám a munkalapon és a számlán is szerepelni fog.
+              </span>
             </label>
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             <button

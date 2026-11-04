@@ -337,6 +337,13 @@ class WorksheetSettingsBody(BaseModel):
     photo_min: int = Field(default=1, ge=1, le=8)
     logo: str | None = None  # data URL (image/png|jpeg); ha üres, marad a régi
     remove_logo: bool = False
+    # 145. kör: árajánlat-PDF aláírója + aláírás- és bélyegző-kép (data URL)
+    signer_name: str | None = Field(default=None, max_length=128)
+    signer_title: str | None = Field(default=None, max_length=128)
+    signature: str | None = None
+    remove_signature: bool = False
+    stamp: str | None = None
+    remove_stamp: bool = False
 
     @field_validator("accent_color")
     @classmethod
@@ -366,6 +373,10 @@ class WorksheetSettingsOut(BaseModel):
     photo_policy: str = "none"
     photo_min: int = 1
     has_logo: bool
+    has_signature: bool = False
+    has_stamp: bool = False
+    signer_name: str | None = None
+    signer_title: str | None = None
 
 
 async def _get_or_create_worksheet(db: AsyncSession) -> WorksheetSettings:
@@ -404,6 +415,10 @@ def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
         photo_policy=row.photo_policy or "none",
         photo_min=int(row.photo_min or 1),
         has_logo=row.logo_data is not None,
+        has_signature=row.signature_data is not None,
+        has_stamp=row.stamp_data is not None,
+        signer_name=row.signer_name,
+        signer_title=row.signer_title,
     )
 
 
@@ -458,6 +473,45 @@ async def get_worksheet_logo(
     return Response(content=bytes(row.logo_data), media_type=row.logo_mime or "image/png")
 
 
+def _decode_settings_image(data_url: str, code: str) -> tuple[bytes, str]:
+    """data URL → (bájtok, mime) a logó szabályaival (png/jpeg, max 2 MB)."""
+    if not data_url.startswith("data:"):
+        raise HTTPException(status_code=422, detail={"code": code})
+    try:
+        header, b64 = data_url.split(",", 1)
+        mime = header.split(";")[0].removeprefix("data:").lower()
+        raw = base64.b64decode(b64)
+    except Exception:
+        raise HTTPException(status_code=422, detail={"code": code})
+    if mime not in _LOGO_MIME:
+        raise HTTPException(status_code=422, detail={"code": code})
+    if len(raw) > _MAX_LOGO_BYTES:
+        raise HTTPException(status_code=422, detail={"code": "settings.logo_too_large"})
+    return raw, ("image/jpeg" if mime in ("image/jpg", "image/jpeg") else "image/png")
+
+
+@router.get("/worksheet/signature")
+async def get_worksheet_signature(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("manager")),
+):
+    row = (await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))).scalar_one_or_none()
+    if row is None or row.signature_data is None:
+        raise HTTPException(status_code=404, detail={"code": "settings.no_logo"})
+    return Response(content=bytes(row.signature_data), media_type=row.signature_mime or "image/png")
+
+
+@router.get("/worksheet/stamp")
+async def get_worksheet_stamp(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("manager")),
+):
+    row = (await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))).scalar_one_or_none()
+    if row is None or row.stamp_data is None:
+        raise HTTPException(status_code=404, detail={"code": "settings.no_logo"})
+    return Response(content=bytes(row.stamp_data), media_type=row.stamp_mime or "image/png")
+
+
 @router.put("/worksheet", response_model=WorksheetSettingsOut)
 async def update_worksheet_settings(
     body: WorksheetSettingsBody,
@@ -498,6 +552,20 @@ async def update_worksheet_settings(
             raise HTTPException(status_code=422, detail={"code": "settings.logo_too_large"})
         row.logo_data = raw
         row.logo_mime = "image/jpeg" if mime in ("image/jpg", "image/jpeg") else "image/png"
+
+    # 145. kör: aláíró + aláírás/bélyegző kép az árajánlat-PDF-hez
+    row.signer_name = (body.signer_name or "").strip() or None
+    row.signer_title = (body.signer_title or "").strip() or None
+    if body.remove_signature:
+        row.signature_data = None
+        row.signature_mime = None
+    elif body.signature:
+        row.signature_data, row.signature_mime = _decode_settings_image(body.signature, "settings.bad_logo")
+    if body.remove_stamp:
+        row.stamp_data = None
+        row.stamp_mime = None
+    elif body.stamp:
+        row.stamp_data, row.stamp_mime = _decode_settings_image(body.stamp, "settings.bad_logo")
 
     await record_audit(
         db, actor=actor, action="settings.worksheet_update", entity_type="settings",

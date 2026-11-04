@@ -152,6 +152,7 @@ export default function FeladatokPage() {
   } | null>(null);
   const { t, lang } = useT();
   const { toast, confirm, prompt } = useUI();
+  const poRef = useRef<HTMLInputElement>(null); // 145. kör: PO-szám szerkesztés
   // Átütemezés a vezetői listából is (b6cf8baa): új nap + kötelező indok —
   // ugyanaz a szabály, mint a naptárban (a backend indok nélkül 422-t ad)
   const [resch, setResch] = useState<{ task: TaskOut; due: string; note: string } | null>(null);
@@ -457,6 +458,8 @@ export default function FeladatokPage() {
     quote_sent_at: string | null;
     quote_accepted_at: string | null;
     quote_selected_name: string | null;
+    quote_serial?: string | null;
+    po_number?: string | null;
     picked_up_at: string | null;
   }
   async function acceptInternal(optionName: string) {
@@ -1258,6 +1261,17 @@ export default function FeladatokPage() {
                       <tr key={i} className="border-t border-slate-100">
                         <td className="py-1.5 pr-2">
                           🛠 {w.name}
+                          {priceEdit.ws.quote_serial && w.price_net != null && (
+                            <a
+                              href={`/api/tasks/${priceEdit.task.id}/worksheet/quote-pdf?option=${i + 1}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={t("tasks.quotePdf")}
+                              className="ml-2 text-xs text-indigo-700 hover:underline"
+                            >
+                              📄 PDF
+                            </a>
+                          )}
                           {priceEdit.ws.quote_status !== "accepted" && priceEdit.ws.quote_status !== "declined" && (
                             <button
                               type="button"
@@ -1405,6 +1419,40 @@ export default function FeladatokPage() {
               />
               <span className="mt-0.5 block text-xs text-slate-400">{t("tasks.customerNoteHint")}</span>
             </label>
+            {/* 145. kör: hivatalos ajánlat sorszáma + az ügyfél PO-száma (utólag szerkeszthető) */}
+            {priceEdit.ws.quote_serial && (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm">
+                <p className="font-medium text-indigo-900">📄 {t("tasks.quoteSerial")}: {priceEdit.ws.quote_serial}</p>
+                <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <label className="text-xs text-slate-600">
+                    {t("tasks.poNumber")}
+                    <input
+                      key={priceEdit.task.id}
+                      ref={poRef}
+                      defaultValue={priceEdit.ws.po_number ?? ""}
+                      maxLength={64}
+                      className="mt-1 block w-48 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const ws = await api.patch<typeof priceEdit.ws>(`/api/tasks/${priceEdit.task.id}/worksheet/po`, { po_number: poRef.current?.value ?? null });
+                        setPriceEdit({ ...priceEdit, ws });
+                        toast(t("tasks.poSaved"), "success");
+                      } catch (err) {
+                        toast(errorMessage(err), "error");
+                      }
+                    }}
+                    className="rounded-lg border border-indigo-300 bg-white px-3 py-1 text-xs font-medium text-indigo-800 hover:bg-indigo-100"
+                  >
+                    {t("tasks.poSave")}
+                  </button>
+                  <span className="text-xs text-slate-500">{t("tasks.poHint")}</span>
+                </div>
+              </div>
+            )}
             {/* Ajánlat-előzmény: mik voltak az opciók, ki/mikor döntött */}
             {quoteHistory && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">

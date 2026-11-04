@@ -541,6 +541,7 @@ async def create_handover_invoice(
     payment_method: str,  # "cash" | "card" | "transfer"
     vat_percent: int = 27,
     due_days: int | None = None,  # átutalásnál a fizetési határidő (nap)
+    comment: str | None = None,  # 145. kör: munkalap + ajánlat-sorszám + PO
 ) -> tuple[str, str]:
     """Szerviz-átadás számlázása a helyszínen: azonnali teljesítés/fizetés,
     készpénz vagy bankkártya. ``items``: [{name, amount_net}].
@@ -564,6 +565,7 @@ async def create_handover_invoice(
         "language": "hu",
         "currency": "HUF",
         "electronic": False,
+        **({"comment": comment[:4000]} if comment else {}),
         "items": [
             {
                 "name": (it["name"] if serial in str(it["name"]) else f"{it['name']} ({serial})")[:255],

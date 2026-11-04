@@ -222,6 +222,13 @@ def build_worksheet_pdf(data: dict, settings: dict | None = None) -> bytes:
         wrapped(data["task_description"])
     line("Határidő:", data.get("due_date", ""))
     line("Státusz:", data.get("status_label", ""))
+    # 145. kör: az elfogadott hivatalos árajánlat sorszáma + az ügyfél PO-száma
+    if data.get("quote_serial") or data.get("po_number"):
+        ref = " · ".join(x for x in (
+            f"Árajánlat: {data['quote_serial']}" if data.get("quote_serial") else None,
+            f"PO: {data['po_number']}" if data.get("po_number") else None,
+        ) if x)
+        line("Hivatkozás:", ref)
 
     # ─── Dolgozó ───
     section("Munkavégző")
