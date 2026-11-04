@@ -24,7 +24,7 @@ async def test_handover_transfer_due_days_and_cash_register(client, admin, manag
 
     calls: list[dict] = []
 
-    async def fake_invoice(db, partner, *, serial, items, payment_method, vat_percent=27, due_days=None):
+    async def fake_invoice(db, partner, *, serial, items, payment_method, vat_percent=27, due_days=None, comment=None):
         calls.append({"pm": payment_method, "due_days": due_days})
         return "DOC-T1", "invoice"
 

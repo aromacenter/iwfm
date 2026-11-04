@@ -13,7 +13,7 @@ async def test_handover_single_invoice_item_sent_and_link(client, admin, manager
     calls: list[dict] = []
     sent: list[tuple[str, list[str]]] = []
 
-    async def fake_invoice(db, partner, *, serial, items, payment_method, vat_percent=27, due_days=None):
+    async def fake_invoice(db, partner, *, serial, items, payment_method, vat_percent=27, due_days=None, comment=None):
         calls.append({"serial": serial, "items": items, "pm": payment_method, "due_days": due_days})
         return "DOC-111", "invoice"
 
