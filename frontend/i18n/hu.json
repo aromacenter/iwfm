@@ -803,7 +803,7 @@
         "categoryHint": "pl. tűzvédelem, gépkezelés",
         "video": "YouTube-videó linkje",
         "body": "Tananyag szövege",
-        "bodyHint": "Egyszerű formázás: # címsor, - felsorolás, 1. számozott lista, **félkövér**, *dőlt*, [link](https://…)",
+        "bodyHint": "Egyszerű formázás: # címsor, - felsorolás, 1. számozott lista, **félkövér**, *dőlt*, [link](https://…), kép a saját sorában: ![felirat](att:CSATOLMÁNY-ID) — az ID a Csatolmányok fülön másolható.",
         "validity": "Érvényesség (hónap)",
         "validityHint": "Lejárat után újra el kell végezni; üresen: nem jár le.",
         "random": "Véletlen kérdésszám",

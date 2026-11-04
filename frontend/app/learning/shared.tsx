@@ -91,7 +91,10 @@ function inline(text: string, keyBase: string): ReactNode[] {
   return out;
 }
 
-export function renderMarkdown(body: string | null | undefined): ReactNode {
+/** Képhivatkozás feloldása: `att:<id>` → a csatolmány URL-je (az oldal adja meg). */
+export type ImageResolver = (ref: string) => string | null;
+
+export function renderMarkdown(body: string | null | undefined, resolveImage?: ImageResolver): ReactNode {
   if (!body) return null;
   const lines = body.replace(/\r\n/g, "\n").split("\n");
   const blocks: ReactNode[] = [];
@@ -127,6 +130,23 @@ export function renderMarkdown(body: string | null | undefined): ReactNode {
   };
   for (const raw of lines) {
     const line = raw.trimEnd();
+    // kép a saját sorában: ![felirat](att:<id>) vagy ![felirat](https://…)
+    const img = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(line.trim());
+    if (img) {
+      flushPara();
+      flushList();
+      const src = img[2].startsWith("att:") ? (resolveImage ? resolveImage(img[2].slice(4)) : null) : (/^https?:\/\//.test(img[2]) ? img[2] : null);
+      if (src) {
+        blocks.push(
+          <figure key={`img${k++}`} className="my-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt={img[1]} className="max-h-[520px] w-auto max-w-full rounded-xl border border-slate-200 shadow-sm" />
+            {img[1] && <figcaption className="mt-1 text-xs text-slate-500">{img[1]}</figcaption>}
+          </figure>,
+        );
+      }
+      continue;
+    }
     const h = /^(#{1,3})\s+(.*)$/.exec(line);
     const ul = /^[-*]\s+(.*)$/.exec(line);
     const ol = /^\d+[.)]\s+(.*)$/.exec(line);

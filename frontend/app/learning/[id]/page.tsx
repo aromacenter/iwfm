@@ -150,7 +150,11 @@ export default function LearningMaterialPage() {
         </section>
       )}
 
-      {m.body && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">{renderMarkdown(m.body)}</section>}
+      {m.body && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          {renderMarkdown(m.body, (ref) => (m.attachments.some((a) => a.id === ref) ? `/api/learning/my/${id}/attachments/${ref}` : null))}
+        </section>
+      )}
 
       {m.attachments.length > 0 && (
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

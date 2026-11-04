@@ -541,9 +541,14 @@ export default function LearningAdminPage() {
                   <ul className="space-y-1 text-sm">
                     {current.attachments.map((att) => (
                       <li key={att.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                        <a href={`/api/learning/materials/${current.id}/attachments/${att.id}`} target="_blank" rel="noopener noreferrer" className="text-sky-700 underline">
-                          {att.mime === "application/pdf" ? "📄" : "🖼️"} {att.filename} <span className="text-xs text-slate-400">({fmtSize(att.size)})</span>
-                        </a>
+                        <span>
+                          <a href={`/api/learning/materials/${current.id}/attachments/${att.id}`} target="_blank" rel="noopener noreferrer" className="text-sky-700 underline">
+                            {att.mime === "application/pdf" ? "📄" : "🖼️"} {att.filename} <span className="text-xs text-slate-400">({fmtSize(att.size)})</span>
+                          </a>
+                          {att.mime !== "application/pdf" && (
+                            <code className="ml-2 rounded bg-slate-100 px-1 text-[11px] text-slate-600" title="Beszúrás a szövegbe: ![felirat](att:ID)">![](att:{att.id})</code>
+                          )}
+                        </span>
                         <button type="button" onClick={() => deleteFile(att.id)} className="text-slate-400 hover:text-rose-600">
                           ✕
                         </button>

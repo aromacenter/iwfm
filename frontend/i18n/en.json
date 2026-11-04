@@ -803,7 +803,7 @@
         "categoryHint": "e.g. fire safety, machine operation",
         "video": "YouTube video link",
         "body": "Material text",
-        "bodyHint": "Simple formatting: # heading, - bullet, 1. numbered list, **bold**, *italic*, [link](https://…)",
+        "bodyHint": "Simple formatting: # heading, - bullet, 1. numbered list, **bold**, *italic*, [link](https://…), image on its own line: ![caption](att:ATTACHMENT-ID) — copy the ID on the Attachments tab.",
         "validity": "Validity (months)",
         "validityHint": "Must be completed again after expiry; empty: never expires.",
         "random": "Random question count",
