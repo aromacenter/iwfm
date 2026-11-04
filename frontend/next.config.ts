@@ -25,7 +25,8 @@ const CSP = [
   "default-src 'self'",
   // A térkép-csempék külső képek (9192f8d5/d8b2bbe3: az img-src 'self'
   // némán blokkolta őket — ezért volt "vaktérkép"). OSM + Carto tartalék.
-  "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://tile.openstreetmap.de https://*.tile.openstreetmap.de https://server.arcgisonline.com https://*.basemaps.cartocdn.com",
+  // X-Learning központi oktatóanyag-képek a Flottáról (x-admin.hu) — 146. kör
+  "img-src 'self' data: blob: https://x-admin.hu https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://tile.openstreetmap.de https://*.tile.openstreetmap.de https://server.arcgisonline.com https://*.basemaps.cartocdn.com",
   "style-src 'self' 'unsafe-inline'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "connect-src 'self'",
