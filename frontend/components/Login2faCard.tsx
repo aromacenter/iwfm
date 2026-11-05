@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import type { AuthUser } from "@/lib/types";
 
 interface Twofa {
   mode: "off" | "linked" | "required";
@@ -22,8 +23,21 @@ export default function Login2faCard() {
   const [mode, setMode] = useState<Twofa["mode"]>("off");
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [me, setMe] = useState<AuthUser | null>(null);
+  const loadMe = () => api.get<AuthUser>("/api/auth/me").then(setMe).catch(() => {});
+
+  async function unlink() {
+    try {
+      await api.post("/api/auth/me/telegram-unlink");
+      setMsg(t("twofa.unlinked"));
+      void loadMe();
+    } catch (err) {
+      setMsg(errorMessage(err));
+    }
+  }
 
   useEffect(() => {
+    void loadMe();
     api
       .get<Twofa>("/api/settings/login-2fa")
       .then((d) => {
@@ -67,6 +81,20 @@ export default function Login2faCard() {
         {t("twofa.stats", { linked: data.telegram_linked, users: data.users, email: data.with_email })}{" "}
         {data.telegram_configured ? "✅ Telegram-bot" : `⚠️ ${t("twofa.noBot")}`} · {data.smtp_configured ? "✅ e-mail" : `⚠️ ${t("twofa.noSmtp")}`}
       </p>
+      {me && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+          <p>
+            {t("twofa.myCode")}: <span className="font-mono text-base font-semibold text-indigo-700">{me.user_code ?? "—"}</span>{" "}
+            · Telegram: {me.telegram_linked ? `✅ ${t("twofa.linkedYes")}` : `❌ ${t("twofa.linkedNo")}`}
+            {me.telegram_linked && (
+              <button type="button" onClick={unlink} className="ml-2 rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">
+                {t("twofa.unlink")}
+              </button>
+            )}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">{t("twofa.myCodeHint")}</p>
+        </div>
+      )}
       <div className="flex items-center gap-3">
         <button type="button" disabled={busy || mode === data.mode} onClick={save} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {t("common.save")}

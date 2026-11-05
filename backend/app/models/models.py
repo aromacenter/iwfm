@@ -65,6 +65,10 @@ class User(Base):
     # A kiadott JWT-k érvényességi pecsétje: növelésekor minden korábbi token
     # érvénytelenné válik (jelszóváltás / kényszerített kijelentkeztetés).
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 148. kör: saját 6 jegyű szám a dolgozói karton nélküli (admin/vezetői) fiókoknak
+    # is — ezzel kapcsolják össze a Telegramot a bottal (kétlépcsős belépés kódjai)
+    user_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Elmentett aláírás-minta (PNG data URL) — munkalapon egy kattintással
     # beszúrható a dolgozói aláíráshoz.
     signature_sample: Mapped[str | None] = mapped_column(Text, nullable=True)

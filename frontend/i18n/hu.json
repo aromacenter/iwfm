@@ -885,7 +885,14 @@
     },
     "stats": "{linked} / {users} aktív fióknak van összekapcsolt Telegramja, {email} fióknak van e-mail-címe.",
     "noBot": "nincs beállított Telegram-bot",
-    "noSmtp": "nincs beállított e-mail-küldés"
+    "noSmtp": "nincs beállított e-mail-küldés",
+    "myCode": "A te számod",
+    "myCodeTitle": "Saját számod — ezt küldd el privátban a céges Telegram-botnak az összekapcsoláshoz",
+    "myCodeHint": "Összekapcsolás: nyisd meg a cég Telegram-botját, és küldd el neki privátban ezt a 6 számjegyet. A bot néhány percen belül visszaigazol; utána ide kapod a belépési kódokat. Minden fióknak van saját száma — a dolgozóknak a törzsszámuk, a karton nélküli (admin, vezető) fiókoknak a fiók-számuk.",
+    "linkedYes": "összekapcsolva",
+    "linkedNo": "nincs összekapcsolva",
+    "unlink": "Kapcsolat bontása",
+    "unlinked": "A Telegram-kapcsolat bontva — a számoddal újra összekapcsolhatod."
   },
   "tools": {
     "title": "Szerszám-nyilvántartás",

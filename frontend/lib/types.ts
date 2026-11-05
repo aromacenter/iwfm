@@ -8,6 +8,8 @@ export interface AuthUser {
   display_name: string;
   role: Role;
   permissions: string[];
+  user_code?: string | null; // saját szám (törzsszám vagy fiók-szám) — Telegram-összekapcsoláshoz
+  telegram_linked?: boolean;
 }
 
 export interface EmployeeOut {

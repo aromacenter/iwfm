@@ -188,10 +188,40 @@ async def process_updates(db: AsyncSession) -> int:
             )
         ).scalar_one_or_none()
         if emp is None:
-            _link_failures[chat_id].append(now)
+            # 148. kör: karton nélküli (admin/vezetői) fiók saját száma
+            from app.models import User as _User
+
+            usr = (
+                await db.execute(
+                    _select(_User).where(_User.user_code == m.group(1), _User.is_active.is_(True))
+                )
+            ).scalar_one_or_none()
+            if usr is None:
+                _link_failures[chat_id].append(now)
+                await send_telegram(
+                    config, chat_id,
+                    "❌ Ismeretlen törzsszám. Ellenőrizd, és küldd el újra a 6 számjegyet.",
+                )
+                continue
+            if usr.telegram_chat_id and usr.telegram_chat_id != chat_id:
+                _link_failures[chat_id].append(now)
+                await send_telegram(
+                    config, chat_id,
+                    "⚠️ Ez a szám már össze van kapcsolva egy másik Telegram-fiókkal. "
+                    "Ha te vagy az, bontsd a régi kapcsolatot a Beállítások → Jogosultságok "
+                    "→ Kétlépcsős belépés kártyán.",
+                )
+                await send_telegram(
+                    config, usr.telegram_chat_id,
+                    "⚠️ Valaki a te számoddal próbált Telegramot összekapcsolni. "
+                    "Ha nem te voltál, változtasd meg a jelszavad.",
+                )
+                continue
+            usr.telegram_chat_id = chat_id
+            linked += 1
             await send_telegram(
                 config, chat_id,
-                "❌ Ismeretlen törzsszám. Ellenőrizd, és küldd el újra a 6 számjegyet.",
+                f"✅ Összekapcsolva, {usr.display_name}! Mostantól ide kapod a belépési kódokat.",
             )
             continue
         if emp.telegram_chat_id and emp.telegram_chat_id != chat_id:

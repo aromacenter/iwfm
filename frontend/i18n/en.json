@@ -885,7 +885,14 @@
     },
     "stats": "{linked} / {users} active accounts have linked Telegram, {email} accounts have an e-mail address.",
     "noBot": "no Telegram bot configured",
-    "noSmtp": "no e-mail sending configured"
+    "noSmtp": "no e-mail sending configured",
+    "myCode": "Your number",
+    "myCodeTitle": "Your own number — send it privately to the company Telegram bot to link",
+    "myCodeHint": "Linking: open the company Telegram bot and send it these 6 digits in a private chat. The bot confirms within a few minutes; after that you receive sign-in codes there. Every account has its own number — employees their employee code, accounts without an employee card (admin, manager) their account number.",
+    "linkedYes": "linked",
+    "linkedNo": "not linked",
+    "unlink": "Unlink",
+    "unlinked": "Telegram unlinked — you can link again with your number."
   },
   "tools": {
     "title": "Tool registry",

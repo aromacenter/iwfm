@@ -50,16 +50,24 @@ async def set_mode(db: AsyncSession, mode: str) -> None:
     row.login_2fa_mode = mode
 
 
-async def _linked_employee(db: AsyncSession, user: User) -> Employee | None:
-    emp = (await db.execute(select(Employee).where(Employee.user_id == user.id))).scalar_one_or_none()
-    return emp if emp is not None and emp.telegram_chat_id else None
+async def telegram_chat(db: AsyncSession, user: User) -> str | None:
+    """A fiók Telegram-csevegése: a dolgozói kartoné, annak híján a fiók saját
+    (148. kör, karton nélküli admin/vezető) kapcsolata."""
+    emp_chat = (
+        await db.execute(
+            select(Employee.telegram_chat_id).where(
+                Employee.user_id == user.id, Employee.telegram_chat_id.is_not(None)
+            )
+        )
+    ).scalars().first()
+    return emp_chat or user.telegram_chat_id or None
 
 
 async def available_channel(db: AsyncSession, user: User, mode: str) -> str | None:
     """Melyik csatornán mehet a kód: 'telegram' | 'email' | None."""
     if mode == "off":
         return None
-    if await _linked_employee(db, user) is not None and await tg.load_telegram_config(db) is not None:
+    if await telegram_chat(db, user) is not None and await tg.load_telegram_config(db) is not None:
         return "telegram"
     if mode == "required" and user.email and await es.load_smtp_config(db) is not None:
         return "email"
@@ -84,8 +92,9 @@ async def _send(db: AsyncSession, user: User, channel: str, code: str) -> bool:
         "és változtasd meg a jelszavad."
     )
     if channel == "telegram":
-        emp = await _linked_employee(db, user)
-        return bool(emp is not None and await tg.send_personal(db, emp, text))
+        config = await tg.load_telegram_config(db)
+        chat = await telegram_chat(db, user)
+        return bool(config is not None and chat and await tg.send_telegram(config, chat, text))
     smtp = await es.load_smtp_config(db)
     if smtp is None or not user.email:
         return False
@@ -208,7 +217,7 @@ async def stats(db: AsyncSession) -> dict:
     )).scalars())
     return {
         "users": len(users),
-        "telegram_linked": sum(1 for u in users if u.id in linked_ids),
+        "telegram_linked": sum(1 for u in users if u.id in linked_ids or u.telegram_chat_id),
         "with_email": sum(1 for u in users if u.email),
         "telegram_configured": await tg.load_telegram_config(db) is not None,
         "smtp_configured": await es.load_smtp_config(db) is not None,

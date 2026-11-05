@@ -8,7 +8,7 @@ import secrets
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Employee, Partner
+from app.models import Employee, Partner, User
 
 
 async def generate_unique_employee_code(session: AsyncSession) -> str:
@@ -18,9 +18,32 @@ async def generate_unique_employee_code(session: AsyncSession) -> str:
         exists = (
             await session.execute(select(Employee.id).where(Employee.employee_code == code))
         ).first()
-        if exists is None:
+        # 148. kör: a fiók-szintű számokkal (User.user_code) sem ütközhet — a bot
+        # ugyanabból a számtérből azonosít dolgozót és karton nélküli fiókot
+        taken = (
+            await session.execute(select(User.id).where(User.user_code == code))
+        ).first()
+        if exists is None and taken is None:
             return code
     raise RuntimeError("Nem sikerült egyedi törzsszámot generálni 50 próbából.")
+
+
+async def ensure_user_code(session: AsyncSession, user: User) -> tuple[str | None, bool]:
+    """A fiók saját száma: ha van dolgozói kartonja törzsszámmal, AZ; különben a
+    fiók saját user_code-ja (első kéréskor generálódik). Vissza: (szám, most_készült)."""
+    emp_code = (
+        await session.execute(
+            select(Employee.employee_code).where(
+                Employee.user_id == user.id, Employee.employee_code.is_not(None)
+            )
+        )
+    ).scalars().first()
+    if emp_code:
+        return emp_code, False
+    if user.user_code:
+        return user.user_code, False
+    user.user_code = await generate_unique_employee_code(session)
+    return user.user_code, True
 
 
 async def backfill_employee_codes(session: AsyncSession) -> int:

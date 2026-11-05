@@ -401,7 +401,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {theme === "light" ? "☀️" : theme === "dark" ? "🌙" : "🖥️"}
           </button>
         </div>
-        <div className="text-sm text-slate-500">{user.display_name}</div>
+        <div className="text-sm text-slate-500">
+          {user.display_name}
+          {user.user_code && (
+            <span title={t("twofa.myCodeTitle")} className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-xs text-indigo-700">
+              #{user.user_code}
+            </span>
+          )}
+        </div>
         <button
           onClick={openPassword}
           className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"

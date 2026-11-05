@@ -81,6 +81,9 @@ class UserOut(BaseModel):
     permissions: list[str] = []
     denied_actions: list[str] = []  # „feature.action” amit NEM tehet
     substitute_user_id: str | None = None  # helyettes távollét idejére
+    # 148. kör: a fiók saját száma (törzsszám vagy fiók-szám) + van-e összekapcsolt Telegram
+    user_code: str | None = None
+    telegram_linked: bool = False
 
 
 def _user_out(
@@ -106,7 +109,15 @@ async def _me(db: AsyncSession, user: User) -> UserOut:
     matrix = await get_permission_matrix(db)
     actions = await get_action_matrix(db)
     name = next((r.name for r in await get_roles(db) if r.key == user.role), None)
-    return _user_out(user, permissions_for(user.role, matrix), denied_actions_for(user.role, actions), role_name=name)
+    out = _user_out(user, permissions_for(user.role, matrix), denied_actions_for(user.role, actions), role_name=name)
+    from app.services.wfm.codes import ensure_user_code
+
+    code, generated = await ensure_user_code(db, user)
+    if generated:
+        await db.commit()
+    out.user_code = code
+    out.telegram_linked = (await twofa.telegram_chat(db, user)) is not None
+    return out
 
 
 def set_session_cookie(response: Response, token: str) -> None:
@@ -303,6 +314,28 @@ async def login_resend(body: TwofaResendBody, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=502, detail={"code": "auth.twofa_send_failed"})
     await db.commit()
     return {"ok": True, "channel": ch.channel}
+
+
+@router.post("/me/telegram-unlink")
+async def my_telegram_unlink(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """A SAJÁT Telegram-kapcsolat bontása (fiók-szintű és a saját kartoné is) —
+    telefoncsere vagy teszt után a számmal újra összekapcsolható."""
+    from app.models import Employee
+
+    user.telegram_chat_id = None
+    emp = (await db.execute(select(Employee).where(Employee.user_id == user.id))).scalar_one_or_none()
+    if emp is not None:
+        emp.telegram_chat_id = None
+    await record_audit(
+        db, actor=user, action="auth.telegram_unlink", entity_type="user",
+        entity_id=str(user.id), request=request,
+    )
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/logout")
