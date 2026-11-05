@@ -859,6 +859,34 @@
       }
     }
   },
+  "twofa": {
+    "title": "Two-step sign-in",
+    "sentTelegram": "We sent the sign-in code to your Telegram (from the company bot).",
+    "sentEmail": "We sent the sign-in code by e-mail to {hint}.",
+    "ttl": "The code is valid for {n} minutes.",
+    "code": "6-digit code",
+    "trust": "Trust this device for 30 days (do not ask for a code)",
+    "verify": "Sign in",
+    "resend": "Request a new code",
+    "resent": "A new code has been sent.",
+    "back": "Back",
+    "badCode": "Wrong code — {left} attempt(s) left.",
+    "settingsTitle": "Two-step sign-in (password + Telegram code)",
+    "settingsHint": "After the password the system sends a one-time code, valid for 5 minutes, to the employee's Telegram (linked to the company bot with their employee code). The employee can mark a device as trusted for 30 days.",
+    "mode": {
+      "off": "Off",
+      "linked": "Required for accounts with linked Telegram",
+      "required": "Required for everyone"
+    },
+    "modeHint": {
+      "off": "Password only.",
+      "linked": "For gradual rollout: accounts without linked Telegram sign in with password only.",
+      "required": "Telegram code, or e-mail code if Telegram is not linked. Accounts with neither cannot sign in."
+    },
+    "stats": "{linked} / {users} active accounts have linked Telegram, {email} accounts have an e-mail address.",
+    "noBot": "no Telegram bot configured",
+    "noSmtp": "no e-mail sending configured"
+  },
   "tools": {
     "title": "Tool registry",
     "hint": "Tools and measuring instruments: who has them, condition, when the next inspection/calibration is due. Handovers and checks are logged.",
@@ -2212,6 +2240,14 @@
   },
   "errors": {
     "auth.bad_credentials": "Invalid email or password.",
+    "auth.twofa_bad_code": "Wrong code.",
+    "auth.twofa_expired": "The code expired or there were too many wrong attempts — sign in again.",
+    "auth.twofa_unavailable": "Two-step sign-in is required, but your account has neither linked Telegram nor an e-mail address. Ask your manager.",
+    "auth.twofa_resend_limit": "No more codes can be requested for this sign-in — sign in again.",
+    "auth.twofa_resend_too_soon": "Wait half a minute before requesting a new code.",
+    "auth.twofa_send_failed": "Sending the code failed — try again.",
+    "settings.twofa_no_channel": "Set up a Telegram bot first (Notifications tab) — without it no code can be sent.",
+    "settings.twofa_admin_no_channel": "You can only make it required if your own account has linked Telegram or an e-mail address (with e-mail sending set up) — otherwise you would lock yourself out.",
     "auth.rate_limited": "Too many attempts — wait 15 minutes.",
     "auth.bootstrap_closed": "The first admin already exists — sign in instead.",
     "auth.forbidden": "You don't have permission for this.",

@@ -378,6 +378,27 @@ class Task(Base):
     )
 
 
+class LoginChallenge(Base):
+    """Kétlépcsős belépés kihívása (147. kör): a jelszó után kiküldött egyszer
+    használatos kód HASH-e, lejárattal és próbálkozás-számlálóval."""
+
+    __tablename__ = "login_challenges"
+    __table_args__ = (Index("ix_login_challenges_expires", "expires_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)  # telegram | email
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sends: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class LearningMaterial(Base):
     """X-Learning tananyag (142. kör): szöveg (Markdown), YouTube-link, csatolmány;
     teszt-beállítás (véletlen kérdésszám), érvényesség hónapokban, külsős engedély,
@@ -2258,6 +2279,8 @@ class PermissionSettings(Base):
     # Művelet-szintű finomítás: {role: {feature: ["view","create","edit","delete"]}}
     # — hiányzó bejegyzés = a funkción belül minden művelet engedett (RBAC v2)
     actions: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # 147. kör: kétlépcsős belépés módja — off | linked | required (login_2fa szolgáltatás)
+    login_2fa_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="off", server_default="off")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

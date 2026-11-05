@@ -350,6 +350,26 @@ async def operator_set_plan_catalog(
     return {"ok": True, "count": len(cleaned)}
 
 
+class OperatorLogin2faBody(BaseModel):
+    mode: str = Field(pattern="^(off|linked|required)$")
+
+
+@router.put("/login-2fa", dependencies=[Depends(require_operator)])
+async def operator_login_2fa(body: OperatorLogin2faBody, db: AsyncSession = Depends(get_db)):
+    """Vészkapcsoló a Flotta-pultról (147. kör): a kétlépcsős belépés módjának
+    átállítása, ha a cég kizárta magát (pl. a bot leállt)."""
+    from app.api.deps import record_audit
+    from app.services.wfm import login_2fa as twofa
+
+    await twofa.set_mode(db, body.mode)
+    await record_audit(
+        db, actor=None, action="settings.login_2fa_operator", entity_type="settings",
+        entity_id="login_2fa", detail={"mode": body.mode}, request=None,
+    )
+    await db.commit()
+    return {"mode": body.mode}
+
+
 @router.put("/license", dependencies=[Depends(require_operator)])
 async def operator_set_license(
     body: LicenseBody,

@@ -9,6 +9,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
 import LearningWordmark from "../Wordmark";
+import TwofaStep, { isTwofaStart, type TwofaStart } from "@/components/TwofaStep";
 
 export default function LearningLoginPage() {
   const [mode, setMode] = useState<"login" | "forgot">("login");
@@ -17,6 +18,7 @@ export default function LearningLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [forgotDone, setForgotDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [twofa, setTwofa] = useState<TwofaStart | null>(null); // 147. kör: jelszó után kód
   const router = useRouter();
   const { t } = useT();
 
@@ -30,7 +32,11 @@ export default function LearningLoginPage() {
         setForgotDone(true);
         return;
       }
-      await api.post<AuthUser>("/api/auth/login", { email, password });
+      const res = await api.post<AuthUser | TwofaStart>("/api/auth/login", { email, password });
+      if (isTwofaStart(res)) {
+        setTwofa(res);
+        return;
+      }
       router.replace("/learning");
     } catch (err) {
       setError(errorMessage(err));
@@ -46,7 +52,10 @@ export default function LearningLoginPage() {
       <div className="mb-6 flex justify-center">
         <LearningWordmark size="lg" />
       </div>
-      <form onSubmit={submit} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      {twofa && (
+        <TwofaStep start={twofa} accent="red" onDone={() => router.replace("/learning")} onBack={() => { setTwofa(null); setPassword(""); }} />
+      )}
+      <form onSubmit={submit} hidden={!!twofa} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">{mode === "login" ? t("learning.login.title") : t("learning.login.forgotTitle")}</h2>
         <p className="text-xs text-slate-500">{mode === "login" ? t("learning.login.hint") : t("learning.login.forgotHint")}</p>
         <label className="block text-sm">

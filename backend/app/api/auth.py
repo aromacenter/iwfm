@@ -30,6 +30,7 @@ from app.core.config import get_settings
 from app.core.security import SESSION_COOKIE, hash_password, mint_token, verify_password
 from app.db import get_db
 from app.models import User
+from app.services.wfm import login_2fa as twofa
 
 router = APIRouter()
 
@@ -156,7 +157,25 @@ async def bootstrap_admin(
     return await _me(db, user)
 
 
-@router.post("/login", response_model=UserOut)
+async def _finish_login(
+    db: AsyncSession, user: User, request: Request, response: Response, *, twofa_channel: str | None = None
+) -> UserOut:
+    """A sikeres belépés közös lezárása (jelszó, vagy jelszó + kód után)."""
+    # Aznapi első belépéskor automatikus jelenlét-nyitás (látszik, mikor
+    # kezdett) — a kiléptetést a háttérhurok végzi a munkaidő végén.
+    from app.services.wfm.timeclock_auto import auto_clockin_on_login
+
+    await auto_clockin_on_login(db, user.id)
+    await record_audit(
+        db, actor=user, action="auth.login", entity_type="user",
+        entity_id=str(user.id), detail=({"twofa": twofa_channel} if twofa_channel else None), request=request,
+    )
+    await db.commit()
+    set_session_cookie(response, mint_token(user_id=user.id, role=user.role, token_version=user.token_version))
+    return await _me(db, user)
+
+
+@router.post("/login")
 async def login(
     body: LoginBody,
     response: Response,
@@ -188,18 +207,102 @@ async def login(
 
     _failed_logins.pop(throttle_key, None)
     _failed_logins.pop(email_key, None)
-    # Aznapi első belépéskor automatikus jelenlét-nyitás (látszik, mikor
-    # kezdett) — a kiléptetést a háttérhurok végzi a munkaidő végén.
-    from app.services.wfm.timeclock_auto import auto_clockin_on_login
 
-    await auto_clockin_on_login(db, user.id)
-    await record_audit(
-        db, actor=user, action="auth.login", entity_type="user",
-        entity_id=str(user.id), request=request,
-    )
+    # 147. kör: kétlépcsős belépés — a jelszó után kód Telegramon (tartalék: e-mail).
+    # Megbízható eszközön (30 napos süti) nem kérünk kódot.
+    mode = await twofa.get_mode(db)
+    if mode != "off" and not twofa.trust_token_valid(request.cookies.get(twofa.TRUST_COOKIE), user):
+        challenge, channel = await twofa.start_challenge(db, user, mode)
+        if channel == "unavailable":
+            await record_audit(
+                db, actor=user, action="auth.twofa_unavailable", entity_type="user",
+                entity_id=str(user.id), request=request,
+            )
+            await db.commit()
+            raise HTTPException(status_code=403, detail={"code": "auth.twofa_unavailable"})
+        if challenge is not None:
+            await record_audit(
+                db, actor=user, action="auth.twofa_sent", entity_type="user",
+                entity_id=str(user.id), detail={"channel": channel}, request=request,
+            )
+            await db.commit()
+            return {
+                "twofa_required": True,
+                "challenge_id": str(challenge.id),
+                "channel": channel,
+                "hint": twofa.challenge_hint(user, channel),
+                "ttl_minutes": twofa.CODE_TTL_MINUTES,
+            }
+    return await _finish_login(db, user, request, response)
+
+
+class TwofaVerifyBody(BaseModel):
+    challenge_id: str = Field(min_length=8, max_length=64)
+    code: str = Field(min_length=4, max_length=12)
+    trust_device: bool = False
+
+
+@router.post("/login/verify", response_model=UserOut)
+async def login_verify(
+    body: TwofaVerifyBody,
+    response: Response,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Második lépés: a kiküldött kód ellenőrzése. 5 hibás próba után a kihívás
+    érvénytelen; a kód 5 percig él. Siker esetén kiadja a munkamenet-sütit."""
+    ip = request.client.host if request.client else "?"
+    key = f"2fa|{ip}"
+    if _throttled(key, 20, _WINDOW_SECONDS):
+        raise HTTPException(status_code=429, detail={"code": "auth.rate_limited"})
+    ch = await twofa.load_challenge(db, body.challenge_id)
+    if not twofa.challenge_usable(ch):
+        raise HTTPException(status_code=401, detail={"code": "auth.twofa_expired"})
+    user = (await db.execute(select(User).where(User.id == ch.user_id))).scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail={"code": "auth.twofa_expired"})
+    if not twofa.check_code(ch, body.code):
+        _record_failure(key)
+        left = max(0, twofa.MAX_ATTEMPTS - ch.attempts)
+        await record_audit(
+            db, actor=user, action="auth.twofa_bad_code", entity_type="user",
+            entity_id=str(user.id), request=request,
+        )
+        await db.commit()
+        raise HTTPException(status_code=401, detail={"code": "auth.twofa_bad_code", "attempts_left": left})
+    out = await _finish_login(db, user, request, response, twofa_channel=ch.channel)
+    if body.trust_device:
+        settings = get_settings()
+        response.set_cookie(
+            twofa.TRUST_COOKIE, twofa.mint_trust_token(user),
+            max_age=twofa.TRUST_DAYS * 86400, httponly=True, secure=settings.cookie_secure,
+            samesite="lax", path="/",
+        )
+    return out
+
+
+class TwofaResendBody(BaseModel):
+    challenge_id: str = Field(min_length=8, max_length=64)
+
+
+@router.post("/login/resend")
+async def login_resend(body: TwofaResendBody, db: AsyncSession = Depends(get_db)):
+    """Új kód kérése ugyanahhoz a belépéshez (legfeljebb 3 küldés, 30 mp-enként)."""
+    ch = await twofa.load_challenge(db, body.challenge_id)
+    if ch is None or ch.consumed_at is not None:
+        raise HTTPException(status_code=401, detail={"code": "auth.twofa_expired"})
+    user = (await db.execute(select(User).where(User.id == ch.user_id))).scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail={"code": "auth.twofa_expired"})
+    result = await twofa.resend(db, ch, user)
+    if result == "limit":
+        raise HTTPException(status_code=429, detail={"code": "auth.twofa_resend_limit"})
+    if result == "too_soon":
+        raise HTTPException(status_code=429, detail={"code": "auth.twofa_resend_too_soon"})
+    if result == "failed":
+        raise HTTPException(status_code=502, detail={"code": "auth.twofa_send_failed"})
     await db.commit()
-    set_session_cookie(response, mint_token(user_id=user.id, role=user.role, token_version=user.token_version))
-    return await _me(db, user)
+    return {"ok": True, "channel": ch.channel}
 
 
 @router.post("/logout")

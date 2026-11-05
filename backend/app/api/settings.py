@@ -430,6 +430,51 @@ async def get_worksheet_settings(
     return _worksheet_out(await _get_or_create_worksheet(db))
 
 
+class Login2faBody(BaseModel):
+    mode: str = Field(pattern="^(off|linked|required)$")
+
+
+async def _login_2fa_payload(db: AsyncSession) -> dict:
+    from app.services.wfm import login_2fa as twofa
+
+    return {"mode": await twofa.get_mode(db), **(await twofa.stats(db))}
+
+
+@router.get("/login-2fa")
+async def get_login_2fa(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """Kétlépcsős belépés (147. kör): mód + hány fiók kaphat kódot."""
+    return await _login_2fa_payload(db)
+
+
+@router.put("/login-2fa")
+async def put_login_2fa(
+    body: Login2faBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin")),
+):
+    """Mód váltása. Bekapcsolni csak működő csatornával lehet; kötelező módban
+    a beállító adminnak magának is kell csatorna, hogy ne zárja ki magát."""
+    from app.services.wfm import login_2fa as twofa
+
+    if body.mode != "off":
+        st = await twofa.stats(db)
+        if not st["telegram_configured"] and not (body.mode == "required" and st["smtp_configured"]):
+            raise HTTPException(status_code=422, detail={"code": "settings.twofa_no_channel"})
+        if body.mode == "required" and await twofa.available_channel(db, actor, "required") is None:
+            raise HTTPException(status_code=422, detail={"code": "settings.twofa_admin_no_channel"})
+    await twofa.set_mode(db, body.mode)
+    await record_audit(
+        db, actor=actor, action="settings.login_2fa", entity_type="settings",
+        entity_id="login_2fa", detail={"mode": body.mode}, request=request,
+    )
+    await db.commit()
+    return await _login_2fa_payload(db)
+
+
 @router.get("/branding")
 async def get_branding(db: AsyncSession = Depends(get_db)):
     """Publikus arculat a felületnek (fejléc, belépő-oldal): cégnév, szín és

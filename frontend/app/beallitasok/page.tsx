@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import PermissionMatrix from "@/components/PermissionMatrix";
+import Login2faCard from "@/components/Login2faCard";
 import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -1409,6 +1410,11 @@ export default function BeallitasokPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* Kétlépcsős belépés: jelszó + Telegram-kód (147. kör) */}
+      <div className={cardCls("permissions", "mb-4 max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-sm")}>
+        <Login2faCard />
       </div>
 
       {/* Jogosultságok — szerepkörök × funkciók × műveletek (RBAC v2) */}

@@ -90,6 +90,7 @@ from app.models.models import (  # noqa: F401
     LearningAttempt,
     LearningMaterial,
     LearningQuestion,
+    LoginChallenge,
     Tool,
     ToolEvent,
     TicketAttachment,

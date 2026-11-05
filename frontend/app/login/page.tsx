@@ -9,6 +9,7 @@ import PrivacyLink from "@/components/PrivacyLink";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/types";
+import TwofaStep, { isTwofaStart, type TwofaStart } from "@/components/TwofaStep";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "bootstrap" | "forgot">("login");
@@ -28,6 +29,7 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [twofa, setTwofa] = useState<TwofaStart | null>(null); // 147. kör: jelszó után kód
   const router = useRouter();
   const { t } = useT();
 
@@ -43,14 +45,17 @@ export default function LoginPage() {
       }
       const user =
         mode === "login"
-          ? await api.post<AuthUser>("/api/auth/login", { email, password })
+          ? await api.post<AuthUser | TwofaStart>("/api/auth/login", { email, password })
           : await api.post<AuthUser>("/api/auth/bootstrap", {
               email,
               password,
               display_name: displayName,
               token: bootToken ?? undefined,
             });
-      void user;
+      if (isTwofaStart(user)) {
+        setTwofa(user);
+        return;
+      }
       // friss telepítésnél (bootstrap) a beüzemelő varázsló fogad
       router.replace(mode === "bootstrap" ? "/onboarding" : "/naptar");
     } catch (err) {
@@ -69,7 +74,10 @@ export default function LoginPage() {
         <div className="mb-6 flex justify-center">
           <BrandLogo size="lg" />
         </div>
-        <form onSubmit={submit} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        {twofa && (
+          <TwofaStep start={twofa} onDone={() => router.replace("/naptar")} onBack={() => { setTwofa(null); setPassword(""); }} />
+        )}
+        <form onSubmit={submit} hidden={!!twofa} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold">
             {mode === "login" ? t("login.title") : mode === "forgot" ? t("login.forgotTitle") : t("login.bootstrapTitle")}
           </h2>

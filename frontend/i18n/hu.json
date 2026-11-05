@@ -859,6 +859,34 @@
       }
     }
   },
+  "twofa": {
+    "title": "Kétlépcsős belépés",
+    "sentTelegram": "A belépési kódot elküldtük a Telegramodra (a cég botjától).",
+    "sentEmail": "A belépési kódot elküldtük e-mailben ide: {hint}.",
+    "ttl": "A kód {n} percig érvényes.",
+    "code": "6 jegyű kód",
+    "trust": "Megbízom ebben az eszközben 30 napig (ne kérjen kódot)",
+    "verify": "Belépés",
+    "resend": "Új kód kérése",
+    "resent": "Új kódot küldtünk.",
+    "back": "Vissza",
+    "badCode": "Hibás kód — még {left} próbálkozásod van.",
+    "settingsTitle": "Kétlépcsős belépés (jelszó + Telegram-kód)",
+    "settingsHint": "A jelszó után a rendszer egyszer használatos, 5 percig érvényes kódot küld a dolgozó Telegramjára (amit a törzsszámával kapcsolt össze a céges bottal). A dolgozó megjelölheti az eszközt megbízhatónak 30 napra.",
+    "mode": {
+      "off": "Kikapcsolva",
+      "linked": "Akinek össze van kapcsolva a Telegramja, annak kód is kell",
+      "required": "Mindenkinek kötelező"
+    },
+    "modeHint": {
+      "off": "Csak jelszó.",
+      "linked": "Fokozatos bevezetéshez: aki még nem kapcsolta össze a Telegramot, jelszóval lép be.",
+      "required": "Telegram-kód, annak híján e-mailes kód. Akinek egyik sincs, nem tud belépni — előbb kapcsolja össze a Telegramot, vagy legyen e-mail-címe."
+    },
+    "stats": "{linked} / {users} aktív fióknak van összekapcsolt Telegramja, {email} fióknak van e-mail-címe.",
+    "noBot": "nincs beállított Telegram-bot",
+    "noSmtp": "nincs beállított e-mail-küldés"
+  },
   "tools": {
     "title": "Szerszám-nyilvántartás",
     "hint": "Szerszámok és mérőeszközök: kinél van, milyen állapotban, mikor esedékes az ellenőrzés/kalibrálás. Átadás és ellenőrzés naplózva.",
@@ -2212,6 +2240,14 @@
   },
   "errors": {
     "auth.bad_credentials": "Hibás email vagy jelszó.",
+    "auth.twofa_bad_code": "Hibás kód.",
+    "auth.twofa_expired": "A kód lejárt vagy túl sok volt a hibás próbálkozás — lépj be újra.",
+    "auth.twofa_unavailable": "A kétlépcsős belépés kötelező, de a fiókodhoz nincs összekapcsolt Telegram és e-mail-cím sem. Kérd a vezetőd segítségét.",
+    "auth.twofa_resend_limit": "Ehhez a belépéshez nem kérhető több kód — lépj be újra.",
+    "auth.twofa_resend_too_soon": "Várj fél percet az új kód kérése előtt.",
+    "auth.twofa_send_failed": "A kód küldése nem sikerült — próbáld újra.",
+    "settings.twofa_no_channel": "Előbb állíts be Telegram-botot (Értesítések fül) — enélkül nem tudunk kódot küldeni.",
+    "settings.twofa_admin_no_channel": "Kötelező módot csak akkor kapcsolhatsz be, ha a saját fiókodnak van összekapcsolt Telegramja vagy e-mail-címe (és van e-mail-küldés) — különben kizárnád magad.",
     "auth.rate_limited": "Túl sok próbálkozás — várj 15 percet.",
     "auth.bootstrap_closed": "Az első admin már létrejött, jelentkezz be.",
     "auth.forbidden": "Ehhez nincs jogosultságod.",
