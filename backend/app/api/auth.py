@@ -231,6 +231,16 @@ async def login(
             )
             await db.commit()
             raise HTTPException(status_code=403, detail={"code": "auth.twofa_unavailable"})
+        if channel == "rate_limited":
+            raise HTTPException(status_code=429, detail={"code": "auth.rate_limited"})
+        if channel == "send_failed":
+            # 150. kör: küldési hibánál nincs „jelszó is elég" — zárva marad
+            await record_audit(
+                db, actor=user, action="auth.twofa_send_failed", entity_type="user",
+                entity_id=str(user.id), request=request,
+            )
+            await db.commit()
+            raise HTTPException(status_code=503, detail={"code": "auth.twofa_send_failed"})
         if challenge is not None:
             await record_audit(
                 db, actor=user, action="auth.twofa_sent", entity_type="user",

@@ -7,6 +7,11 @@ Módok (PermissionSettings.login_2fa_mode):
 - required — mindenkinek kell kód: Telegram, annak híján e-mail; ha egyik sem
              megy, a belépés elutasítva (a Flotta-pultról kikapcsolható).
 
+Ha valakinek KELL kód, de a küldés nem sikerül (se Telegram, se e-mail), a
+belépés mindkét módban elutasítva — különben a jelszó birtokában a küldés
+megakasztásával (pl. a bot túlterhelésével) megkerülhető lenne a második
+lépés (150. kör). Fiókonként a kód-kérések száma is korlátos.
+
 A kód 6 jegyű, 5 percig él, 5 próbálkozás után érvénytelen; a kihívásban csak a
 hash tárolódik. „Megbízható eszköz”: 30 napos aláírt süti, ami a jelszó
 változásával érvényét veszti."""
@@ -19,7 +24,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import jwt
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -34,6 +39,10 @@ MAX_SENDS = 3
 RESEND_MIN_SECONDS = 30
 TRUST_DAYS = 30
 TRUST_COOKIE = "wfm_trusted"
+# fiókonként ennyi belépési kihívás indítható az ablakon belül (kód-áradat és
+# a küldő-csatorna szándékos túlterhelése ellen)
+CHALLENGE_LIMIT = 6
+CHALLENGE_WINDOW_MINUTES = 15
 
 
 async def get_mode(db: AsyncSession) -> str:
@@ -103,11 +112,23 @@ async def _send(db: AsyncSession, user: User, channel: str, code: str) -> bool:
 
 async def start_challenge(db: AsyncSession, user: User, mode: str) -> tuple[LoginChallenge | None, str | None]:
     """Kihívás indítása. Vissza: (kihívás, csatorna) — (None, None), ha nem kell
-    második lépés; (None, 'unavailable'), ha kötelező, de nincs csatorna vagy a
-    küldés nem sikerült."""
+    második lépés; (None, 'unavailable'), ha kötelező, de nincs csatorna;
+    (None, 'rate_limited'), ha a fiókra túl sok kód ment ki rövid időn belül;
+    (None, 'send_failed'), ha kellene kód, de a küldés nem sikerült — ilyenkor
+    a belépés NEM mehet tovább jelszóval."""
     channel = await available_channel(db, user, mode)
     if channel is None:
         return (None, "unavailable") if mode == "required" else (None, None)
+    since = datetime.now(UTC) - timedelta(minutes=CHALLENGE_WINDOW_MINUTES)
+    recent = (
+        await db.execute(
+            select(func.count()).select_from(LoginChallenge).where(
+                LoginChallenge.user_id == user.id, LoginChallenge.created_at >= since
+            )
+        )
+    ).scalar_one()
+    if recent >= CHALLENGE_LIMIT:
+        return None, "rate_limited"
     # régi kihívások takarítása (a tábla ne nőjön)
     await db.execute(delete(LoginChallenge).where(LoginChallenge.expires_at < datetime.now(UTC) - timedelta(days=1)))
     code = f"{secrets.randbelow(1_000_000):06d}"
@@ -122,8 +143,9 @@ async def start_challenge(db: AsyncSession, user: User, mode: str) -> tuple[Logi
         channel = ch.channel = "email"
         ok = await _send(db, user, channel, code)
     if not ok:
-        # puha módban a küldési hiba nem zárhatja ki a felhasználót; kötelezőben igen
-        return (None, "unavailable") if mode == "required" else (None, None)
+        # zárva marad: akinek kód kell, az küldési hiba esetén sem léphet be
+        # jelszóval (a régi „puha" viselkedés megkerülhetővé tette a 2. lépést)
+        return None, "send_failed"
     db.add(ch)
     return ch, channel
 

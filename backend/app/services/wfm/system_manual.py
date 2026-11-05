@@ -101,6 +101,8 @@ A kártya alján látszik, hány aktív fióknak van összekapcsolt Telegramja �
 
 ## Ha valami nem megy
 - Nem jön kód: ellenőrizd a kártyán az összekapcsolást és a bot állapotát; kérj új kódot.
+- „A kód küldése nem sikerült”: akinek kód kell, az küldési hiba esetén nem léphet be csak jelszóval (ez szándékos, különben a második lépés megkerülhető lenne). Próbáld újra pár perc múlva; ha tartós, a vezető bonthatja a Telegram-kapcsolatot, vagy az üzemeltető kikapcsolja a kétlépcsős belépést.
+- Negyedóránként legfeljebb 6 belépési kód kérhető egy fiókra; fölötte „Túl sok próbálkozás” üzenet jön.
 - „Ez a szám már össze van kapcsolva egy másik Telegram-fiókkal”: előbb bontani kell a régi kapcsolatot.
 - A cég kizárta magát (leállt a bot, elveszett az admin telefonja): az üzemeltető a Flotta-pulton a példány Licenc-ablakában a „Kétlépcsős belépés ki” gombbal kikapcsolja, utána jelszóval be lehet lépni.
 - Minden kódküldés, hibás kód és módváltás a Napló oldalon visszakereshető (auth.twofa_sent, auth.twofa_bad_code, settings.login_2fa).""",

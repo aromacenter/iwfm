@@ -2252,7 +2252,7 @@
     "auth.twofa_unavailable": "Two-step sign-in is required, but your account has neither linked Telegram nor an e-mail address. Ask your manager.",
     "auth.twofa_resend_limit": "No more codes can be requested for this sign-in — sign in again.",
     "auth.twofa_resend_too_soon": "Wait half a minute before requesting a new code.",
-    "auth.twofa_send_failed": "Sending the code failed — try again.",
+    "auth.twofa_send_failed": "We could not send the sign-in code, so we cannot sign you in right now — try again in a few minutes or ask your manager.",
     "settings.twofa_no_channel": "Set up a Telegram bot first (Notifications tab) — without it no code can be sent.",
     "settings.twofa_admin_no_channel": "You can only make it required if your own account has linked Telegram or an e-mail address (with e-mail sending set up) — otherwise you would lock yourself out.",
     "auth.rate_limited": "Too many attempts — wait 15 minutes.",

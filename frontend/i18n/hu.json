@@ -2252,7 +2252,7 @@
     "auth.twofa_unavailable": "A kétlépcsős belépés kötelező, de a fiókodhoz nincs összekapcsolt Telegram és e-mail-cím sem. Kérd a vezetőd segítségét.",
     "auth.twofa_resend_limit": "Ehhez a belépéshez nem kérhető több kód — lépj be újra.",
     "auth.twofa_resend_too_soon": "Várj fél percet az új kód kérése előtt.",
-    "auth.twofa_send_failed": "A kód küldése nem sikerült — próbáld újra.",
+    "auth.twofa_send_failed": "A belépési kód küldése nem sikerült, ezért most nem tudunk beléptetni — próbáld újra pár perc múlva, vagy szólj a vezetődnek.",
     "settings.twofa_no_channel": "Előbb állíts be Telegram-botot (Értesítések fül) — enélkül nem tudunk kódot küldeni.",
     "settings.twofa_admin_no_channel": "Kötelező módot csak akkor kapcsolhatsz be, ha a saját fiókodnak van összekapcsolt Telegramja vagy e-mail-címe (és van e-mail-küldés) — különben kizárnád magad.",
     "auth.rate_limited": "Túl sok próbálkozás — várj 15 percet.",
