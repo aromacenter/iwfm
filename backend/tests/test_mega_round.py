@@ -175,7 +175,7 @@ async def test_billingo_partner_sync(client, admin, manager, monkeypatch):
 
 
 async def test_assistant_create_settlement(client, admin, monkeypatch):
-    from tests.test_assistant import _enable_ai, _script
+    from tests.test_assistant import _confirm_all, _enable_ai, _script
     from tests.test_consignment import make_product
 
     _, adm = admin
@@ -202,7 +202,10 @@ async def test_assistant_create_settlement(client, admin, monkeypatch):
         headers=adm,
     )
     assert res.status_code == 200, res.text
-    assert any("Elszámolás" in e["label"] for e in res.json()["events"])
+    # megerősítés előtt nincs elszámolás
+    assert (await client.get("/api/settlements", headers=adm)).json() == []
+    events = await _confirm_all(client, adm, res.json())
+    assert any("Elszámolás" in e["label"] for e in events)
 
     listed = (await client.get("/api/settlements", headers=adm)).json()
     assert len(listed) == 1

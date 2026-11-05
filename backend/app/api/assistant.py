@@ -43,8 +43,34 @@ class ChatEvent(BaseModel):
     path: str | None = None
 
 
+class PendingArg(BaseModel):
+    key: str
+    value: str
+
+
+class PendingAction(BaseModel):
+    """Megerősítésre váró írási művelet (151. kör): a token aláírt és rövid
+    életű; a kártya az itt adott eszköz-nevet és paramétereket mutatja."""
+
+    token: str
+    tool: str
+    args: list[PendingArg]
+
+
 class ChatOut(BaseModel):
     reply: str
+    events: list[ChatEvent]
+    pending: list[PendingAction] = Field(default_factory=list)
+
+
+class ConfirmBody(BaseModel):
+    token: str = Field(min_length=20, max_length=8000)
+
+
+class ConfirmOut(BaseModel):
+    ok: bool
+    tool: str
+    message: str
     events: list[ChatEvent]
 
 
@@ -69,6 +95,27 @@ async def chat(
         raise
     return ChatOut(
         reply=result["reply"],
+        events=[ChatEvent(**e) for e in result["events"]],
+        pending=[PendingAction(**p) for p in result.get("pending") or []],
+    )
+
+
+@router.post("/confirm", response_model=ConfirmOut)
+async def confirm(
+    body: ConfirmBody,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    """Az asszisztens által javasolt írási művelet végrehajtása — csak a
+    felhasználó megerősítésére, a SAJÁT jogosultságaival, egyszer."""
+    try:
+        result = await assistant.confirm_action(db, actor, body.token)
+    except ValueError as exc:
+        code = str(exc)
+        status = 410 if code in ("action_expired", "action_used") else 422
+        raise HTTPException(status_code=status, detail={"code": f"assistant.{code}"})
+    return ConfirmOut(
+        ok=result["ok"], tool=result["tool"], message=result["message"],
         events=[ChatEvent(**e) for e in result["events"]],
     )
 

@@ -4,7 +4,9 @@
  * nézetben a tartalom mellé rendeződik (nem takar), mobilon teljes képernyő.
  * A nyitott állapot és az előzmény munkameneten belül megmarad (navigálás
  * közben is). A szerveroldali eszköz-hurokkal beszél (/api/assistant/chat);
- * a műveletek chipként jelennek meg, a navigate eseményre átnavigál. */
+ * a műveletek chipként jelennek meg, a navigate eseményre átnavigál.
+ * Írási műveletet az asszisztens nem hajt végre magától: megerősítő kártyát
+ * kapunk (pending), és csak a „Végrehajtom” gombra fut le (/api/assistant/confirm). */
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -18,10 +20,19 @@ interface ChatEvent {
   path?: string | null;
 }
 
+interface PendingAction {
+  token: string;
+  tool: string;
+  args: { key: string; value: string }[];
+  state?: "pending" | "running" | "done" | "cancelled" | "failed";
+  note?: string;
+}
+
 interface Msg {
   role: "user" | "assistant";
   content: string;
   events?: ChatEvent[];
+  pending?: PendingAction[];
 }
 
 const STORE_KEY = "iwfm-assistant-chat";
@@ -147,16 +158,22 @@ export default function AssistantChat() {
     setInput("");
     setBusy(true);
     try {
-      const res = await api.post<{ reply: string; events: ChatEvent[] }>(
+      const res = await api.post<{ reply: string; events: ChatEvent[]; pending?: PendingAction[] }>(
         "/api/assistant/chat",
         {
           messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })),
           context: getAssistantContext(),
         },
       );
+      const pending = (res.pending ?? []).map((p) => ({ ...p, state: "pending" as const }));
       setMessages((ms) => [
         ...ms,
-        { role: "assistant", content: res.reply, events: res.events },
+        {
+          role: "assistant",
+          content: res.reply || (pending.length ? t("assistant.confirmIntro") : "…"),
+          events: res.events,
+          pending: pending.length ? pending : undefined,
+        },
       ]);
       const nav = res.events.find((e) => e.kind === "navigate" && e.path);
       if (nav?.path) router.push(nav.path);
@@ -173,6 +190,51 @@ export default function AssistantChat() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function setPendingState(mi: number, ai: number, patch: Partial<PendingAction>) {
+    setMessages((ms) =>
+      ms.map((m, i) =>
+        i === mi && m.pending
+          ? { ...m, pending: m.pending.map((p, j) => (j === ai ? { ...p, ...patch } : p)) }
+          : m,
+      ),
+    );
+  }
+
+  /** A felhasználó jóváhagyta: a szerver a SAJÁT jogosultságainkkal végrehajtja. */
+  async function confirmAction(mi: number, ai: number) {
+    const action = messages[mi]?.pending?.[ai];
+    if (!action || action.state !== "pending") return;
+    setPendingState(mi, ai, { state: "running" });
+    try {
+      const res = await api.post<{ ok: boolean; tool: string; message: string; events: ChatEvent[] }>(
+        "/api/assistant/confirm",
+        { token: action.token },
+      );
+      setPendingState(mi, ai, { state: res.ok ? "done" : "failed", note: res.ok ? undefined : res.message });
+      setMessages((ms) => [
+        ...ms,
+        {
+          role: "assistant",
+          content: res.ok
+            ? `${t("assistant.confirmDone")}${res.message ? `: ${res.message}` : ""}`
+            : `${t("assistant.confirmFailed")}: ${res.message}`,
+          events: res.events,
+        },
+      ]);
+      const nav = res.events.find((e) => e.kind === "navigate" && e.path);
+      if (nav?.path) router.push(nav.path);
+    } catch (err) {
+      setPendingState(mi, ai, { state: "failed", note: errorMessage(err) });
+    }
+  }
+
+  function cancelAction(mi: number, ai: number) {
+    const action = messages[mi]?.pending?.[ai];
+    if (!action || action.state !== "pending") return;
+    setPendingState(mi, ai, { state: "cancelled" });
+    setMessages((ms) => [...ms, { role: "assistant", content: t("assistant.confirmCancelled") }]);
   }
 
   if (!open) {
@@ -259,6 +321,56 @@ export default function AssistantChat() {
                         {e.kind === "created" || e.kind === "updated" ? "✔ " : ""}
                         {e.label}
                       </button>
+                    ))}
+                  </div>
+                )}
+                {m.pending && m.pending.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    {m.pending.map((p, j) => (
+                      <div
+                        key={j}
+                        className="whitespace-normal rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs text-slate-800"
+                      >
+                        <div className="font-semibold">⚠ {t(`assistant.action.${p.tool}`)}</div>
+                        <div className="mt-1 space-y-0.5">
+                          {p.args.map((a, k) => (
+                            <div key={k} className="break-words">
+                              <span className="text-slate-500">{t(`assistant.arg.${a.key}`)}:</span> {a.value}
+                            </div>
+                          ))}
+                        </div>
+                        {p.state === "pending" && (
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              onClick={() => void confirmAction(i, j)}
+                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                            >
+                              {t("assistant.confirmRun")}
+                            </button>
+                            <button
+                              onClick={() => cancelAction(i, j)}
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                              {t("assistant.confirmCancel")}
+                            </button>
+                          </div>
+                        )}
+                        {p.state === "running" && (
+                          <div className="mt-2 text-slate-500">{t("assistant.confirmRunning")}</div>
+                        )}
+                        {p.state === "done" && (
+                          <div className="mt-2 font-medium text-emerald-700">✔ {t("assistant.confirmDone")}</div>
+                        )}
+                        {p.state === "cancelled" && (
+                          <div className="mt-2 text-slate-500">{t("assistant.confirmCancelled")}</div>
+                        )}
+                        {p.state === "failed" && (
+                          <div className="mt-2 font-medium text-rose-700">
+                            {t("assistant.confirmFailed")}
+                            {p.note ? `: ${p.note}` : ""}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}

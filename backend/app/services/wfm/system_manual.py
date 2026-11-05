@@ -409,6 +409,12 @@ Rendszer → Napló: minden fontos művelet (ki, mikor, mit), szűrhető akciór
         "body": """## Mire használd?
 A jobb alsó ✨ gomb. Beszélgetve (diktálva is) tudsz: partnert/gépet keresni, gép-történetet kérni, szervizjegyet nyitni, számlálót jelenteni, készletet feltölteni, munkalapot kitölteni, elszámolást rögzíteni (megerősítés után), napi összefoglalót kérni, oldalt megnyitni.
 
+## Megerősítés az írási műveleteknél
+Ha az asszisztens adatot rögzítene (szervizjegy, számláló, készlet-feltöltés, jegyzet, feladat, munkalap, elszámolás), előbb megerősítő kártyát mutat: mit és milyen adatokkal hajtana végre. A művelet csak a „Végrehajtom” gombra fut le, a te jogosultságaiddal; a „Mégse” elveti. A kártya 10 percig érvényes. Így az asszisztens a te tudtod nélkül semmit nem ír a rendszerbe.
+
+## Adatvédelem
+Az asszisztens külső AI-szolgáltatót használ (a Beállítások → AI fülön megadott kulccsal). A kérdésed és a válaszhoz lekért adatok oda kerülnek feldolgozásra. A partnerek elérhetőségi adatait (kapcsolattartó, telefon, cím, adószám) alapból nem küldi ki: csak akkor, ha kifejezetten ezekre kérdezel rá (pl. „mi a Minta Kft. telefonszáma?”). Az AI modul a licencben kikapcsolható.
+
 ## „Hogyan csináljam?”
 Kérdezd meg bármelyik folyamatot („hogyan adok át egy gépet átutalással?”, „hogyan hozok létre auditor szerepkört?”): az asszisztens a rendszer-kézikönyvben keres, és a teljes folyamatot lépésről lépésre elmondja. A kézikönyv a /kezikonyv oldalon is olvasható és kereshető.""",
     },

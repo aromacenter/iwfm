@@ -38,6 +38,19 @@ def _script(monkeypatch, steps: list[tuple[str, list[dict]]]) -> None:
     monkeypatch.setattr(assistant, "_anthropic_step", fake_step)
 
 
+async def _confirm_all(client, headers, body: dict) -> list[dict]:
+    """151. kör: az írási műveleteket a felhasználó erősíti meg — a teszt
+    „rányom” minden megerősítő kártyára, és visszaadja az eseményeket."""
+    assert body["pending"], body
+    events: list[dict] = []
+    for p in body["pending"]:
+        res = await client.post("/api/assistant/confirm", json={"token": p["token"]}, headers=headers)
+        assert res.status_code == 200, res.text
+        assert res.json()["ok"] is True, res.text
+        events.extend(res.json()["events"])
+    return events
+
+
 async def test_chat_requires_ai(client, admin):
     _, adm = admin
     res = await client.post(
@@ -69,8 +82,10 @@ async def test_chat_tool_creates_ticket(client, admin, monkeypatch):
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert "Felvettem" in body["reply"]
-    assert any("Szervizjegy" in e["label"] for e in body["events"])
+    # megerősítés előtt nincs jegy
+    assert body["events"] == [] and (await client.get("/api/service", headers=adm)).json() == []
+    events = await _confirm_all(client, adm, body)
+    assert any("Szervizjegy" in e["label"] for e in events)
 
     tickets = (await client.get("/api/service", headers=adm)).json()
     assert len(tickets) == 1
@@ -92,8 +107,8 @@ async def test_chat_tool_permission_denied(client, employee_user, monkeypatch):
         headers=headers,
     )
     assert res.status_code == 200
-    # nem jött létre jegy, és nincs "created" esemény
-    assert res.json()["events"] == []
+    # nem jött létre jegy, nincs "created" esemény, és megerősítő kártya sem jár
+    assert res.json()["events"] == [] and res.json()["pending"] == []
 
 
 async def test_chat_navigate_event(client, admin, monkeypatch):
@@ -135,6 +150,7 @@ async def test_counter_tool_updates_asset(client, admin, monkeypatch):
         headers=adm,
     )
     assert res.status_code == 200
+    await _confirm_all(client, adm, res.json())
     detail = (await client.get(f"/api/assets/{asset['id']}", headers=adm)).json()
     assert detail["counter"] == 4321
     assert any(m["action"] == "counter" for m in detail["movements"])
@@ -172,7 +188,8 @@ async def test_fill_worksheet_by_serial(client, admin, manager, monkeypatch):
         headers=adm,
     )
     assert res.status_code == 200, res.text
-    assert any(serial in e["label"] for e in res.json()["events"])
+    events = await _confirm_all(client, adm, res.json())
+    assert any(serial in e["label"] for e in events)
 
     ws = (
         await client.get(f"/api/tasks/{created.json()['id']}/worksheet", headers=adm)
