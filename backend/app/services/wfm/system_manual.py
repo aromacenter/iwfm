@@ -68,6 +68,44 @@ Minden funkcióhoz (Feladatok, Partnerek, Elszámolás, Raktár…) szerepkörö
 A felület piros hibát mutat („Nincs jogosultságod: Feladatok · módosítás”), a kérés nem hajtódik végre, és a Napló oldalon „auth.denied” sor keletkezik: ki, mikor, melyik funkció, melyik művelet, melyik útvonal. Így az admin látja, ki próbálkozott.""",
     },
     {
+        "key": "ketlepcsos_belepes",
+        "title": "Kétlépcsős belépés (jelszó + Telegram-kód) és a saját szám",
+        "keywords": "kétlépcsős belépés 2fa kód telegram bot törzsszám fiók-szám saját szám összekapcsolás megbízható eszköz e-mail kód kötelező biztonság kizártam magam vészkapcsoló elveszett telefon kapcsolat bontása",
+        "body": """## Mi ez?
+A jelszó után a rendszer egyszer használatos, 6 jegyű kódot küld a felhasználó Telegramjára (a cég botjától); a kódot be kell írni a belépéshez. A kód 5 percig érvényes, 5 hibás próba után újra kell kezdeni a belépést. Az X-Learning belépő ugyanígy működik. Alapból ki van kapcsolva, cégenként kapcsolható.
+
+## Saját szám (minden fióknak van)
+- Dolgozónál a törzsszám (Dolgozók lista, Beosztásom oldal).
+- Karton nélküli admin és vezetői fióknál a 6 jegyű fiók-szám.
+- Hol látod: a bal oldali menü alján a neved mellett (#123456), és a Beállítások → Jogosultságok fül tetején a „Kétlépcsős belépés” kártyán („A te számod”).
+
+## Telegram összekapcsolása
+1. Legyen beállítva a cég Telegram-botja: Beállítások → Értesítések → Telegram (bekapcsolva, bot-token megadva). Új bot a Telegramban a @BotFather-nél készíthető (/newbot).
+2. Nyisd meg a botot, és PRIVÁT üzenetben küldd el neki a saját 6 jegyű számodat (vagy: /start 123456).
+3. A bot 5 percenként olvas, néhány percen belül visszaigazol („Összekapcsolva”). A kártyán ezután „Telegram: összekapcsolva” látszik.
+4. Ha valaki más próbálja a te számoddal összekapcsolni a saját Telegramját, a rendszer nem írja felül a kapcsolatot, és mindkét fél figyelmeztetést kap.
+5. Bontás (telefoncsere, teszt): a kártyán „Kapcsolat bontása”; dolgozónál a vezető is bonthatja a Dolgozók menüben. Utána a számmal újra összekapcsolható.
+
+## Bekapcsolás és módok
+Beállítások → Jogosultságok → „Kétlépcsős belépés (jelszó + Telegram-kód)” kártya, csak admin állíthatja:
+- Kikapcsolva: csak jelszó.
+- „Akinek össze van kapcsolva a Telegramja, annak kód is kell”: fokozatos bevezetéshez — aki még nem kapcsolta össze, jelszóval lép be.
+- „Mindenkinek kötelező”: Telegram-kód, annak híján e-mailes kód (ehhez beállított e-mail-küldés és a fiókon e-mail-cím kell). Akinek egyik sincs, nem tud belépni. Ezt a módot a rendszer csak akkor engedi bekapcsolni, ha a beállító admin saját fiókjának van működő csatornája.
+A kártya alján látszik, hány aktív fióknak van összekapcsolt Telegramja és e-mail-címe, és hogy működik-e a bot és az e-mail-küldés.
+
+## Belépés a gyakorlatban
+1. Azonosító + jelszó, majd megjelenik a kód-mező.
+2. A kód a Telegramra érkezik; ha a Telegram-küldés nem sikerül és van e-mail-küldés, e-mailben.
+3. „Új kód kérése”: fél percenként, belépésenként legfeljebb háromszor.
+4. „Megbízom ebben az eszközben 30 napig”: azon az eszközön nem kér kódot; jelszócsere után újra kér.
+
+## Ha valami nem megy
+- Nem jön kód: ellenőrizd a kártyán az összekapcsolást és a bot állapotát; kérj új kódot.
+- „Ez a szám már össze van kapcsolva egy másik Telegram-fiókkal”: előbb bontani kell a régi kapcsolatot.
+- A cég kizárta magát (leállt a bot, elveszett az admin telefonja): az üzemeltető a Flotta-pulton a példány Licenc-ablakában a „Kétlépcsős belépés ki” gombbal kikapcsolja, utána jelszóval be lehet lépni.
+- Minden kódküldés, hibás kód és módváltás a Napló oldalon visszakereshető (auth.twofa_sent, auth.twofa_bad_code, settings.login_2fa).""",
+    },
+    {
         "key": "naptar",
         "title": "Naptár (feladatok ütemezése, időkapu)",
         "keywords": "naptár hónap idővonal határidő átütemezés indok időkapu partner mikor lehet menni kereső",
