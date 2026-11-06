@@ -276,6 +276,9 @@ class WorksheetOut(BaseModel):
     # 145. kör: hivatalos ajánlat sorszáma + az ügyfél PO-száma
     quote_serial: str | None = None
     po_number: str | None = None
+    # 152. kör: csak az ajánlat kiküldésének válaszában — igaz, ha sem a kiküldő
+    # saját aláírása, sem a beállításokban feltöltött aláírás nincs meg
+    quote_signature_missing: bool | None = None
     picked_up_at: datetime | None = None  # a gépet elhoztuk a szerelőtől
     updated_at: datetime
 
@@ -410,7 +413,16 @@ async def _build_quote_pdf(db: AsyncSession, ws: Worksheet, option_index: int) -
                 asset_name += f" (gyári szám: {a.serial_number})"
     issued = (ws.quote_sent_at or datetime.now(UTC)).date()
     valid_until = add_working_days(issued, QUOTE_VALID_WORKING_DAYS)
-    settings = await _worksheet_pdf_settings(db) or {}
+    settings = dict(await _worksheet_pdf_settings(db) or {})
+    # 152. kör (7ca9c6f6): az ajánlatot KÉSZÍTŐ aláírása — ha van elmentett
+    # aláírása, az kerül a lapra a nevével; különben a beállított (ügyvezetői)
+    if ws.quote_sent_by is not None:
+        sender = (await db.execute(select(User).where(User.id == ws.quote_sent_by))).scalar_one_or_none()
+        sender_sig = _signature_sample_bytes(sender.signature_sample if sender is not None else None)
+        if sender is not None and sender_sig:
+            settings["signature_bytes"] = sender_sig
+            settings["signer_name"] = sender.display_name
+            settings["signer_title"] = "az ajánlatot készítette"
     pdf = build_quote_pdf({
         "quote_serial": ws.quote_serial,
         "option_index": option_index,
@@ -432,6 +444,18 @@ async def _build_quote_pdf(db: AsyncSession, ws: Worksheet, option_index: int) -
     }, settings)
     serial = f"{ws.quote_serial}" + (f"-{option_index}" if len(options) > 1 else "")
     return pdf, serial
+
+
+def _signature_sample_bytes(data_url: str | None) -> bytes | None:
+    """A felhasználó elmentett aláírás-mintája (PNG data URL) → képbájtok."""
+    if not data_url or "," not in data_url:
+        return None
+    import base64
+
+    try:
+        return base64.b64decode(data_url.split(",", 1)[1]) or None
+    except Exception:  # noqa: BLE001 — sérült minta: mintha nem lenne
+        return None
 
 
 async def _intake_client_email(db: AsyncSession, ws: Worksheet) -> str | None:
@@ -2804,6 +2828,7 @@ async def send_worksheet_quote(
     ws.quote_status = "sent"
     ws.quote_email = str(body.to)
     ws.quote_sent_at = datetime.now(UTC)
+    ws.quote_sent_by = actor.id  # 152. kör: az ő aláírása kerül a hivatalos PDF-re
     if not ws.quote_serial:  # 145. kör: hivatalos ajánlat-sorszám a kiküldéskor
         ws.quote_serial = await _next_quote_serial(db)
     link = f"{get_settings().frontend_origin.rstrip('/')}/munkalap-ajanlat/{ws.quote_token}"
@@ -2835,9 +2860,16 @@ async def send_worksheet_quote(
         entity_id=ws.serial, detail={"to": quote_to, "options": len(options)},
         request=request,
     )
+    # aláírás nélkül a hivatalos PDF-en üres az aláírás helye — jelezzük a kiküldőnek
+    pdf_settings = await _worksheet_pdf_settings(db) or {}
+    signature_missing = not (
+        _signature_sample_bytes(actor.signature_sample) or pdf_settings.get("signature_bytes")
+    )
     await db.commit()
     await db.refresh(ws)
-    return _worksheet_out(ws)
+    out = _worksheet_out(ws)
+    out.quote_signature_missing = signature_missing
+    return out
 
 
 async def _ws_by_quote_token(db: AsyncSession, token: str) -> Worksheet:

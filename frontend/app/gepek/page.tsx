@@ -144,7 +144,7 @@ export default function GepekPage() {
   const EMPTY_DEPLOY = { partner_id: "", note: "", site_zip: "", site_city: "", site_street: "", site_number: "" };
   const [deploy, setDeploy] = useState({ ...EMPTY_DEPLOY });
   // 121. kör: jegyzőkönyv-adatok (helyszíni aláírás, számlálók, helyszín) a mozgás mellé
-  const EMPTY_PROTO = { on_site: false, signer_name: "", signature: null as string | null, location: "", counters: "", note: "" };
+  const EMPTY_PROTO = { on_site: false, signer_name: "", signature: null as string | null, location: "", counters: "", note: "", delivery_mode: "", delivery_ref: "" };
   const [proto, setProto] = useState({ ...EMPTY_PROTO });
   const [returnFor, setReturnFor] = useState<Asset | null>(null);
   const [protocols, setProtocols] = useState<{ asset_id: string; rows: ProtocolRow[] } | null>(null);
@@ -161,6 +161,9 @@ export default function GepekPage() {
       counters: nums && nums.length ? nums : null,
       note: proto.note.trim() || null,
       send_email: false,
+      // 152. kör: az átadás módja (személyesen / futárszolgálattal)
+      delivery_mode: proto.delivery_mode || null,
+      delivery_ref: proto.delivery_mode === "courier" ? proto.delivery_ref.trim() || null : null,
     };
   }
   // A mozgás után felugró kérdés: menjen-e a jegyzőkönyv a partner beállított címére
@@ -185,6 +188,16 @@ export default function GepekPage() {
       {showCounters && (
         <input value={proto.counters} onChange={(e) => setProto({ ...proto, counters: e.target.value })} placeholder={t("inv.protoCounters")} className="mb-2 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" />
       )}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <select value={proto.delivery_mode} onChange={(e) => setProto({ ...proto, delivery_mode: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm">
+          <option value="">{t("inv.protoDelivery")}</option>
+          <option value="personal">🤝 {t("inv.protoDeliveryPersonal")}</option>
+          <option value="courier">🚚 {t("inv.protoDeliveryCourier")}</option>
+        </select>
+        {proto.delivery_mode === "courier" && (
+          <input value={proto.delivery_ref} onChange={(e) => setProto({ ...proto, delivery_ref: e.target.value })} maxLength={128} placeholder={t("inv.protoDeliveryRef")} className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" />
+        )}
+      </div>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={proto.on_site} onChange={(e) => setProto({ ...proto, on_site: e.target.checked })} className="h-4 w-4" />
         {t("inv.protoOnSite")}
@@ -525,6 +538,23 @@ export default function GepekPage() {
 
   // Gépcsere: a kihelyezett gép helyére raktári cseregép, szerződés-örökléssel.
   const [swapFor, setSwapFor] = useState<Asset | null>(null);
+  // 152. kör: ?swap=<gép-azonosító> — a Gépcserék oldalról érkezve a kiválasztott
+  // kihelyezett gép csere-ablaka azonnal megnyílik
+  const swapParamDone = useRef(false);
+  useEffect(() => {
+    if (swapParamDone.current) return;
+    const id = new URLSearchParams(window.location.search).get("swap");
+    if (!id) { swapParamDone.current = true; return; }
+    swapParamDone.current = true;
+    api.get<Asset>(`/api/assets/${encodeURIComponent(id)}`)
+      .then((a) => {
+        if (a.status !== "deployed") { toast(t("inv.swapNotDeployed"), "error"); return; }
+        setError(null); setSwapCode(""); resetProto(null); setSwapFor(a);
+      })
+      .catch((err) => toast(errorMessage(err), "error"))
+      .finally(() => window.history.replaceState(null, "", window.location.pathname));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [swapCode, setSwapCode] = useState("");
   const [inStock, setInStock] = useState<Asset[]>([]);
   // Számlálónkénti adagárak a cseregépre — eltérő kiosztásnál kézzel adandók.

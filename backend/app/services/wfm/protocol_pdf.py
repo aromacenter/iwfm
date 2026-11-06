@@ -155,6 +155,9 @@ def build_protocol_pdf(data: dict, settings: dict | None = None) -> bytes:
     line("Dátum:", data.get("created_at"))
     line("Helyszín:", data.get("location") or data.get("partner_address"))
     line("Helyszíni készítés:", "igen" if data.get("on_site") else "nem")
+    if data.get("delivery_mode"):
+        mode = "személyesen" if data["delivery_mode"] == "personal" else "futárszolgálattal"
+        line("Átadás módja:", mode + (f" ({data['delivery_ref']})" if data.get("delivery_ref") else ""))
     line("Rögzítette:", data.get("created_by_name"))
     if data.get("note"):
         section("Megjegyzés")

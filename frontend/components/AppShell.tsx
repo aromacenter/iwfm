@@ -9,6 +9,7 @@ import { usePathname, useRouter } from "next/navigation";
 import AssistantChat from "@/components/AssistantChat";
 import BrandLogo from "@/components/BrandLogo";
 import BugReporter from "@/components/BugReporter";
+import MySignatureDialog from "@/components/MySignatureDialog";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 import { requestFlush, useOffline } from "@/lib/offline";
@@ -45,6 +46,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/atvetel", key: "nav.intake", perm: "intake", icon: "📥", module: "intake" },
       { href: "/atadas", key: "nav.handover", perm: "invoicing", icon: "🤝", module: "handover" },
       { href: "/szerelo-atadas", key: "nav.serviceHandover", perm: "tasks", icon: "🔧", module: "pickup" },
+      { href: "/gepcserek", key: "nav.swaps", perm: "machines", icon: "🔁", module: "machines" },
       { href: "/sajat-raktar", key: "nav.myWarehouse", perm: "always", icon: "🚚", module: "warehouse" },
       { href: "/sajat-alkatreszek", key: "nav.myParts", perm: "always", icon: "🔩", module: "parts" },
       { href: "/szerszamok", key: "nav.tools", perm: "always", icon: "🧰", module: "tools" },
@@ -129,6 +131,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [sigOpen, setSigOpen] = useState(false);
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [pwBusy, setPwBusy] = useState(false);
   const [pwErr, setPwErr] = useState<string | null>(null);
@@ -416,6 +419,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {t("account.password")}
         </button>
         <button
+          onClick={() => setSigOpen(true)}
+          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+        >
+          ✍️ {t("mySignature.title")}
+        </button>
+        <button
           onClick={logout}
           className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
         >
@@ -521,6 +530,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {moduleOn("ai") && <AssistantChat />}
       {moduleOn("bugreport") && <BugReporter />}
+
+      {sigOpen && <MySignatureDialog onClose={() => setSigOpen(false)} />}
 
       {pwOpen && (
         <div

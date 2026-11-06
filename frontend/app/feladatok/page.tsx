@@ -460,6 +460,7 @@ export default function FeladatokPage() {
     quote_selected_name: string | null;
     quote_serial?: string | null;
     po_number?: string | null;
+    quote_signature_missing?: boolean | null;
     picked_up_at: string | null;
   }
   async function acceptInternal(optionName: string) {
@@ -604,6 +605,8 @@ export default function FeladatokPage() {
       );
       setPriceEdit({ ...priceEdit, ws });
       toast(t("tasks.quoteSent", { to }), "success");
+      // 152. kör: aláírás nélkül a hivatalos ajánlat-PDF-en üres az aláírás helye
+      if (ws.quote_signature_missing) toast(t("tasks.quoteSignatureMissing"), "info");
     } catch (err) {
       toast(errorMessage(err), "error");
     }

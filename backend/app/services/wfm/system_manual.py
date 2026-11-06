@@ -68,6 +68,26 @@ Minden funkcióhoz (Feladatok, Partnerek, Elszámolás, Raktár…) szerepkörö
 A felület piros hibát mutat („Nincs jogosultságod: Feladatok · módosítás”), a kérés nem hajtódik végre, és a Napló oldalon „auth.denied” sor keletkezik: ki, mikor, melyik funkció, melyik művelet, melyik útvonal. Így az admin látja, ki próbálkozott.""",
     },
     {
+        "key": "gepcserek",
+        "title": "Gépcserék (csere indítása, előzmények, jegyzőkönyvek)",
+        "keywords": "gépcsere csere cseregép előzmény történet jegyzőkönyv letöltés futár futárszolgálat személyesen átadás módja szerződés gép cseréje kereshető",
+        "body": """## Hol találod?
+Munkavégzés → Gépcserék. Itt van egy helyen az összes eddigi gépcsere, és innen indítható új is.
+
+## Új gépcsere
+1. „Új gépcsere” → válaszd ki a partnernél lévő (kihelyezett) gépet.
+2. A megnyíló csere-ablakban add meg a leszerelt gép ZÁRÓ számlálóit, a cseregépet (raktári vonalkód), az induló állásokat és az adagárakat. A cseregép örökli a szerződéses feltételeket (minimum adag, bérleti díj).
+3. Jelöld az átadás módját: személyesen vagy futárszolgálattal (futár neve / csomagszám is megadható). Helyszíni cserénél a partner a telefonon alá is írhat.
+4. Mentés után elkészül a gépcsere-jegyzőkönyv (CS-ÉÉÉÉ-NNNN), és a hibás gépre szerviz-munkalap nyílik.
+Ugyanez a csere a Gépek oldalon a gép sorában lévő „Gépcsere” gombbal is indítható.
+
+## Előzmények és keresés
+A lista mutatja: dátum, sorszám, partner, leszerelt gép → cseregép, átadás módja, ki rögzítette, alá van-e írva. Keresni lehet partnerre, vonalkódra, gyári számra, sorszámra, rögzítőre; szűrni dátumra és az átadás módjára. A korábbi cseréknél az átadás módja utólag is beállítható a sorban.
+
+## Jegyzőkönyv
+Minden sorban letölthető a jegyzőkönyv PDF-je, és e-mailben elküldhető a partnernek. Az átadás módja a jegyzőkönyvön is szerepel.""",
+    },
+    {
         "key": "ketlepcsos_belepes",
         "title": "Kétlépcsős belépés (jelszó + Telegram-kód) és a saját szám",
         "keywords": "kétlépcsős belépés 2fa kód telegram bot törzsszám fiók-szám saját szám összekapcsolás megbízható eszköz e-mail kód kötelező biztonság kizártam magam vészkapcsoló elveszett telefon kapcsolat bontása",

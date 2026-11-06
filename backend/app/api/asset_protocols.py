@@ -6,8 +6,9 @@ Helyszíni készítésnél a partner mobilon aláír: a név és az időbélyeg 
 from __future__ import annotations
 
 import logging
+import unicodedata
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field
@@ -35,6 +36,9 @@ class ProtocolFields(BaseModel):
     counters: list[int] | None = Field(default=None, max_length=99)  # átadáskori állások (deploy/return)
     note: str | None = Field(default=None, max_length=2000)
     send_email: bool = False
+    # 152. kör: az átadás módja — személyesen vagy futárszolgálattal (+ futár / csomagszám)
+    delivery_mode: str | None = Field(default=None, pattern="^(personal|courier)$")
+    delivery_ref: str | None = Field(default=None, max_length=128)
 
 
 class ProtocolOut(BaseModel):
@@ -56,6 +60,12 @@ class ProtocolOut(BaseModel):
     emailed_at: datetime | None
     emailed_to: str | None
     note: str | None
+    # 152. kör: gépcsere-lista
+    asset_serial: str | None = None
+    replacement_name: str | None = None
+    replacement_serial: str | None = None
+    delivery_mode: str | None = None  # personal | courier | None (nincs jelölve)
+    delivery_ref: str | None = None
 
 
 def _local(dt: datetime | None) -> str:
@@ -132,6 +142,8 @@ async def create_protocol(
         employee_signature=f.employee_signature if f.on_site else None,
         signed_at=now if signed else None,
         note=((f.note or note or "").strip() or None),
+        delivery_mode=f.delivery_mode,
+        delivery_ref=(f.delivery_ref or "").strip()[:128] or None,
         created_by_user_id=actor.id,
         created_by_name=actor.display_name or actor.email,
         created_at=now,
@@ -152,7 +164,17 @@ def _out(p: AssetProtocol) -> ProtocolOut:
         location=p.location, on_site=bool(p.on_site), signer_name=p.signer_name, signed_at=p.signed_at,
         created_by_name=p.created_by_name, created_at=p.created_at, emailed_at=p.emailed_at,
         emailed_to=p.emailed_to, note=p.note,
+        asset_serial=snap.get("serial_number") or None,
+        replacement_name=rsnap.get("name") or None,
+        replacement_serial=rsnap.get("serial_number") or None,
+        delivery_mode=p.delivery_mode, delivery_ref=p.delivery_ref,
     )
+
+
+def _fold(text: str | None) -> str:
+    """Kereséshez: kisbetű, ékezet nélkül."""
+    norm = unicodedata.normalize("NFD", (text or "").lower())
+    return "".join(ch for ch in norm if unicodedata.category(ch) != "Mn")
 
 
 async def _get_or_404(db: AsyncSession, protocol_id: str) -> AssetProtocol:
@@ -183,6 +205,7 @@ async def build_pdf(db: AsyncSession, p: AssetProtocol) -> bytes:
             "location": p.location, "note": p.note, "created_by_name": p.created_by_name,
             "on_site": bool(p.on_site), "signer_name": p.signer_name, "signature": p.signature,
             "employee_signature": p.employee_signature, "signed_at": _local(p.signed_at) if p.signed_at else None,
+            "delivery_mode": p.delivery_mode, "delivery_ref": p.delivery_ref,
             "generated_at": _local(datetime.now(UTC)),
         },
         settings,
@@ -236,17 +259,77 @@ TITLE_SUBJECT = {"deploy": "Kihelyezési jegyzőkönyv", "return": "Visszavétel
 async def list_protocols(
     partner_id: str | None = Query(default=None),
     asset_id: str | None = Query(default=None),
+    kind: str | None = Query(default=None, pattern="^(deploy|return|swap)$"),
+    search: str | None = Query(default=None, max_length=128, alias="q"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    delivery_mode: str | None = Query(default=None, pattern="^(personal|courier|unset)$"),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_perm("machines")),
 ):
-    q = select(AssetProtocol).order_by(AssetProtocol.created_at.desc()).limit(500)
+    """Jegyzőkönyvek listája. 152. kör: típus-, dátum- és átadási mód szűrő +
+    szabad szavas keresés (sorszám, partner, gép vonalkódja / neve / gyári
+    száma, rögzítő, megjegyzés, futár) — a Gépcserék oldal ebből dolgozik."""
+    q = select(AssetProtocol).order_by(AssetProtocol.created_at.desc())
     for col, val in ((AssetProtocol.partner_id, partner_id), (AssetProtocol.asset_id, asset_id)):
         if val:
             try:
                 q = q.where(col == uuid.UUID(val))
             except ValueError:
                 raise HTTPException(status_code=422, detail={"code": "protocol.bad_filter"})
-    return [_out(p) for p in (await db.execute(q)).scalars().all()]
+    if kind:
+        q = q.where(AssetProtocol.kind == kind)
+    if date_from:
+        q = q.where(AssetProtocol.created_at >= datetime(date_from.year, date_from.month, date_from.day, tzinfo=UTC))
+    if date_to:
+        end = datetime(date_to.year, date_to.month, date_to.day, tzinfo=UTC) + timedelta(days=1)
+        q = q.where(AssetProtocol.created_at < end)
+    if delivery_mode == "unset":
+        q = q.where(AssetProtocol.delivery_mode.is_(None))
+    elif delivery_mode:
+        q = q.where(AssetProtocol.delivery_mode == delivery_mode)
+    rows = [_out(p) for p in (await db.execute(q.limit(3000))).scalars().all()]
+    needle = _fold(search).strip()
+    if needle:
+        words = needle.split()
+
+        def hit(r: ProtocolOut) -> bool:
+            hay = _fold(" ".join(str(x or "") for x in (
+                r.serial, r.partner_name, r.asset_barcode, r.asset_name, r.asset_serial,
+                r.replacement_barcode, r.replacement_name, r.replacement_serial,
+                r.created_by_name, r.note, r.delivery_ref, r.location, r.signer_name,
+            )))
+            return all(w in hay for w in words)
+
+        rows = [r for r in rows if hit(r)]
+    return rows[:500]
+
+
+class ProtocolPatch(BaseModel):
+    delivery_mode: str | None = Field(default=None, pattern="^(personal|courier)$")
+    delivery_ref: str | None = Field(default=None, max_length=128)
+
+
+@router.patch("/{protocol_id}", response_model=ProtocolOut)
+async def patch_protocol(
+    protocol_id: str,
+    body: ProtocolPatch,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("machines")),
+):
+    """Az átadás módjának utólagos jelölése / javítása (a korábbi, jelöletlen
+    gépcseréknél is). A jegyzőkönyv többi adata pillanatkép, nem módosítható."""
+    p = await _get_or_404(db, protocol_id)
+    sent = body.model_fields_set
+    if "delivery_mode" in sent:
+        p.delivery_mode = body.delivery_mode
+    if "delivery_ref" in sent:
+        p.delivery_ref = (body.delivery_ref or "").strip()[:128] or None
+    await record_audit(db, actor=actor, action="asset.protocol_delivery", entity_type="asset_protocol",
+                       entity_id=p.serial, detail={"mode": p.delivery_mode, "ref": p.delivery_ref}, request=request)
+    await db.commit()
+    return _out(p)
 
 
 @router.get("/{protocol_id}", response_model=ProtocolOut)

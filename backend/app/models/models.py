@@ -666,6 +666,9 @@ class Worksheet(Base):
     # mindkettő a munkalapra és a számla megjegyzésébe kerül
     quote_serial: Mapped[str | None] = mapped_column(String(32), nullable=True)
     po_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 152. kör: ki küldte ki az ajánlatot — az ő elmentett aláírása kerül a
+    # hivatalos ajánlat-PDF-re (ha nincs neki, a beállításokban feltöltött)
+    quote_sent_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     # A kész gépet elhoztuk a külsős szerelőtől — ekkor kap az ügyfél e-mailt,
     # hogy a javítás elkészült és a gép átvehető.
     picked_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -2261,6 +2264,10 @@ class AssetProtocol(Base):
     employee_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 152. kör (x-presso 56276b1d): az átadás módja — personal (személyesen) |
+    # courier (futárszolgálattal); a futár neve / csomagszám szabad szöveg
+    delivery_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    delivery_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     created_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
