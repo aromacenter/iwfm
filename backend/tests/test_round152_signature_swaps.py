@@ -99,6 +99,31 @@ async def test_quote_pdf_uses_senders_signature(client, admin, manager, monkeypa
     assert res.json()["quote_signature_missing"] is False  # a céges aláírás megvan
 
 
+async def test_quote_sent_before_round152_finds_sender_from_audit(client, manager, monkeypatch):
+    """Korábban kiküldött ajánlat (a munkalapon még nincs kiküldő): a naplóból
+    derül ki, ki küldte — az ő aláírása kerül a PDF-re."""
+    import app.db as app_db
+    from sqlalchemy import update
+
+    from app.models import Worksheet
+
+    mgr_user, mgr = manager
+    _emp_h, task_id = await _setup(client, mgr)
+    sent = _fake_mail(monkeypatch)
+    seen = _capture_pdf_settings(monkeypatch)
+    res = await client.post(f"/api/tasks/{task_id}/worksheet/send-quote", json={"to": "regi@example.com"}, headers=mgr)
+    assert res.status_code == 200, res.text
+    token = sent[0][2].split("/munkalap-ajanlat/")[1].split()[0]
+    # a régi állapot utánzása: a kiküldő nincs a munkalapon, csak a naplóban
+    async with app_db.get_session_factory()() as s:
+        await s.execute(update(Worksheet).values(quote_sent_by=None))
+        await s.commit()
+    await client.put("/api/auth/me/signature", json={"signature": PNG_1PX}, headers=mgr)
+    pdf = await client.get(f"/api/public/worksheet-quote/{token}/pdf?option=1")
+    assert pdf.status_code == 200
+    assert seen[-1]["signature_bytes"] and seen[-1]["signer_name"] == mgr_user.display_name
+
+
 async def _swap(client, mgr, n: int, partner_name: str, **protocol):
     partner = (await client.post("/api/partners", json={"name": partner_name}, headers=mgr)).json()
     old = (await client.post("/api/assets", json={

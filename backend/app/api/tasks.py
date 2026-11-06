@@ -416,8 +416,25 @@ async def _build_quote_pdf(db: AsyncSession, ws: Worksheet, option_index: int) -
     settings = dict(await _worksheet_pdf_settings(db) or {})
     # 152. kör (7ca9c6f6): az ajánlatot KÉSZÍTŐ aláírása — ha van elmentett
     # aláírása, az kerül a lapra a nevével; különben a beállított (ügyvezetői)
-    if ws.quote_sent_by is not None:
-        sender = (await db.execute(select(User).where(User.id == ws.quote_sent_by))).scalar_one_or_none()
+    sender_id = ws.quote_sent_by
+    if sender_id is None:
+        # a 152. kör ELŐTT kiküldött ajánlatnál a kiküldő nincs a munkalapon —
+        # a naplóból (worksheet.quote_sent) visszakereshető, ki küldte utoljára
+        sender_id = (
+            await db.execute(
+                select(AuditEvent.actor_user_id)
+                .where(
+                    AuditEvent.action == "worksheet.quote_sent",
+                    AuditEvent.entity_type == "worksheet",
+                    AuditEvent.entity_id == ws.serial,
+                    AuditEvent.actor_user_id.is_not(None),
+                )
+                .order_by(AuditEvent.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    if sender_id is not None:
+        sender = (await db.execute(select(User).where(User.id == sender_id))).scalar_one_or_none()
         sender_sig = _signature_sample_bytes(sender.signature_sample if sender is not None else None)
         if sender is not None and sender_sig:
             settings["signature_bytes"] = sender_sig
