@@ -235,8 +235,33 @@ async def _materialize_role_assignments(db: AsyncSession, emp: Employee) -> None
             due = today + timedelta(days=m.default_due_days)
         db.add(LearningAssignment(material_id=m.id, employee_id=emp.id, due_date=due, source="role", assigned_by_name="szerepkör"))
         changed = True
+        await _notify_assigned(db, emp, m, due)
     if changed:
         await db.commit()
+
+
+def _option_order(assignment_id, question_id, attempt_no: int, n: int) -> list[int]:
+    """153. kör (883d89d0): a válaszok KEVERT sorrendje — kitöltésenként más, de a
+    beadásig ugyanaz (az azonosítókból és a próbálkozás-számból számolt
+    determinisztikus keverés), így a beadott indexek visszafejthetők."""
+    rng = random.Random(f"{assignment_id}:{question_id}:{attempt_no}")
+    order = list(range(n))
+    rng.shuffle(order)
+    return order
+
+
+async def _notify_assigned(db: AsyncSession, emp: Employee, m: LearningMaterial, due) -> bool:
+    """Telegram a dolgozónak az új tananyagról (153. kör). Best-effort."""
+    from app.services.wfm.telegram import send_personal
+
+    text = f"📚 Új tananyagot kaptál: {m.title}"
+    if due:
+        text += f" — határidő: {due:%Y.%m.%d}"
+    text += "\nNyisd meg az X-Learning oldalon (Oktatás → Tanulnivalóim), és töltsd ki a tesztet."
+    try:
+        return await send_personal(db, emp, text)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 async def _own_assignment(db: AsyncSession, emp: Employee, assignment_id: str) -> tuple[LearningAssignment, LearningMaterial]:
@@ -326,7 +351,9 @@ async def my_material(
             "validity_months": m.validity_months,
         },
         "questions": [
-            {"id": str(q.id), "text": q.text, "options": [o.get("text") for o in (q.options or [])],
+            {"id": str(q.id), "text": q.text,
+             # kevert sorrend (153. kör) — a beadásnál ugyanez a sorrend fejti vissza
+             "options": [(q.options or [])[i].get("text") for i in _option_order(a.id, q.id, len(attempts), len(q.options or []))],
              "multi": sum(1 for o in (q.options or []) if o.get("correct")) > 1}
             for q in qs
         ],
@@ -381,11 +408,17 @@ async def my_attempt(
     expected = m.random_count if (m.random_count and len(qs) > m.random_count) else len(qs)
     if len(answered) < expected:
         raise HTTPException(status_code=422, detail={"code": "learning.incomplete", "expected": expected, "got": len(answered)})
+    attempt_no = (await db.execute(
+        select(sa_func.count()).select_from(LearningAttempt).where(LearningAttempt.assignment_id == a.id)
+    )).scalar_one()
     correct = 0
     for qid, picked in answered.items():
         q = qs[qid]
         right = {i for i, o in enumerate(q.options or []) if o.get("correct")}
-        if set(picked) == right:
+        # a kliens a KEVERT sorrend indexeit küldi → vissza az eredeti indexekre
+        order = _option_order(a.id, q.id, attempt_no, len(q.options or []))
+        picked_orig = {order[i] for i in picked if 0 <= i < len(order)}
+        if picked_orig == right:
             correct += 1
     score = int(round(correct / len(answered) * 100))
     passed = score == 100
@@ -648,6 +681,7 @@ async def assign_material(
         select(LearningAssignment.employee_id).where(LearningAssignment.material_id == m.id)
     )).scalars())
     created = 0
+    notified = 0
     for eid in targets:
         if eid in have:
             continue
@@ -655,12 +689,14 @@ async def assign_material(
                                   source="manual" if str(eid) in body.employee_ids else "role",
                                   assigned_by_name=actor.display_name))
         created += 1
+        if await _notify_assigned(db, targets[eid], m, body.due_date):
+            notified += 1
     if body.roles:
         m.auto_roles = sorted(set(list(m.auto_roles or []) + list(body.roles)))
     await record_audit(db, actor=actor, action="learning.assign", entity_type="learning_material",
                        entity_id=str(m.id), detail={"created": created, "roles": body.roles}, request=request)
     await db.commit()
-    return {"created": created, "already": len(targets) - created}
+    return {"created": created, "already": len(targets) - created, "notified": notified}
 
 
 @router.delete("/materials/{material_id}/assignments/{assignment_id}", status_code=204)

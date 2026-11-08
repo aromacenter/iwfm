@@ -1787,6 +1787,8 @@ class NotificationBody(BaseModel):
     weekly_day: int = Field(default=0, ge=0, le=6)
     reminders_enabled: bool = False
     reminder_days: str | None = Field(default=None, max_length=64, pattern="^[0-9,; ]*$")
+    # 153. kör: el nem végzett feladatok automatikus átütemezése (alapból BE)
+    task_carry_over: bool = True
 
     @field_validator("tg_events")
     @classmethod
@@ -1810,6 +1812,7 @@ async def get_notification_settings(
     await db.commit()
     return {
         "daily_enabled": row.daily_enabled,
+        "task_carry_over": bool(row.task_carry_over),
         "recipients": row.recipients,
         "send_hour": row.send_hour,
         "weekly_backup": row.weekly_backup,
@@ -1845,6 +1848,7 @@ async def update_notification_settings(
 
     row = await _get(db)
     row.daily_enabled = body.daily_enabled
+    row.task_carry_over = body.task_carry_over
     row.recipients = (body.recipients or "").strip() or None
     row.send_hour = body.send_hour
     row.weekly_backup = body.weekly_backup

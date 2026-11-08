@@ -140,7 +140,10 @@ Belépés után mindenki a Naptárt látja: hónap-rács vagy idővonal nézet a
 3. Időkapu: mikor lehet a partnerhez menni (pl. „8–10 h”). „Az időkaput a partnerhez is mentem” pipával a következő feladatoknál is látszik.
 
 ## Keresés
-A jobb felső keresőmező címre, partnerre, ügyfélre, gépre, dolgozóra, munkalap-számra és időkapura szűr.""",
+A jobb felső keresőmező címre, partnerre, ügyfélre, gépre, dolgozóra, munkalap-számra és időkapura szűr.
+
+## El nem végzett feladatok automatikus átütemezése
+Ami a határidejéig nem lett elvégezve (nyitott vagy „további munka kell”), az éjfél után magától a következő munkanapra kerül — szerelőnél és képviselőnél is, beavatkozás nélkül. A feladaton látszik az eredeti határidő és hogy hányszor csúszott („↻ ×2”), az átütemezés a feladat indok-naplójába is bekerül, a dolgozó Telegramon értesül. A vezérlőpulton az „Átcsúszott feladatok” blokk személyenként mutatja, kinek mennyi nyitott átcsúszása van, és hány feladata csúszott az elmúlt 30 napban — számonkéréshez. Kikapcsolni a Beállítások → Értesítések kártyán lehet („El nem végzett feladatok átütemezése”).""",
     },
     {
         "key": "feladatok_munkalap",

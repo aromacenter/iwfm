@@ -264,6 +264,45 @@ async def consignment_stats(
     }
 
 
+@router.get("/carry-over")
+async def carry_over_stats(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("dashboard")),
+):
+    """153. kör: kinek mennyi feladata csúszott át automatikusan — a most is
+    nyitott átcsúszottak, és az elmúlt N napban átcsúszottak száma (elvégzettekkel
+    együtt), személyenként. Számonkéréshez."""
+    from app.models import Task
+
+    days = max(1, min(int(days), 365))
+    today = date.today()
+    since = today - timedelta(days=days)
+    rows = (
+        await db.execute(
+            select(Task, Employee.last_name, Employee.first_name)
+            .join(Employee, Employee.id == Task.employee_id)
+            .where(Task.carry_over_count > 0)
+        )
+    ).all()
+    per: dict = {}
+    for t, ln, fn in rows:
+        entry = per.setdefault(str(t.employee_id), {
+            "employee_id": str(t.employee_id), "employee_name": f"{ln} {fn}",
+            "open_carried": 0, "open_days_total": 0, "carried_recent": 0, "oldest_original": None,
+        })
+        recent = (t.original_due_date or t.due_date) >= since
+        if t.status in ("open", "needs_more_work"):
+            entry["open_carried"] += 1
+            entry["open_days_total"] += (today - (t.original_due_date or t.due_date)).days
+            if entry["oldest_original"] is None or (t.original_due_date or t.due_date) < date.fromisoformat(entry["oldest_original"]):
+                entry["oldest_original"] = (t.original_due_date or t.due_date).isoformat()
+        if recent:
+            entry["carried_recent"] += 1
+    out = sorted(per.values(), key=lambda e: (-e["open_carried"], -e["carried_recent"], e["employee_name"]))
+    return {"days": days, "employees": out, "open_total": sum(e["open_carried"] for e in out)}
+
+
 @router.get("")
 async def dashboard(
     db: AsyncSession = Depends(get_db),

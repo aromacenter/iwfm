@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
+import CameraScanner, { cameraScanSupported } from "@/components/CameraScanner";
 import SearchSelect from "@/components/SearchSelect";
 import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -61,6 +62,20 @@ export default function GepcserekPage() {
   const [picker, setPicker] = useState(false);
   const [deployed, setDeployed] = useState<DeployedAsset[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // 153. kör (56276b1d újranyitás): a telefon kamerájával is kiválasztható a cserélendő gép
+  const [cameraOpen, setCameraOpen] = useState(false);
+  function onScan(raw: string) {
+    setCameraOpen(false);
+    // vonalkód vagy a gép QR-címkéjének linkje (a végén a kód / token)
+    const code = raw.trim();
+    const tail = code.split(/[/?=#]/).filter(Boolean).pop() ?? code;
+    const hit = deployed.find((a) => a.barcode === code || a.barcode === tail || code.endsWith(`/${a.barcode}`));
+    if (hit) {
+      router.push(`/gepek?swap=${encodeURIComponent(hit.id)}`);
+    } else {
+      toast(t("swaps.scanNotDeployed", { code: tail }), "error");
+    }
+  }
 
   const load = useCallback(() => {
     const params = new URLSearchParams({ kind: "swap" });
@@ -275,6 +290,12 @@ export default function GepcserekPage() {
               onChange={(id) => { if (id) router.push(`/gepek?swap=${encodeURIComponent(id)}`); }}
               placeholder={t("swaps.pickPh")}
             />
+            {cameraScanSupported() && (
+              <button type="button" onClick={() => setCameraOpen(true)} className="w-full rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-100">
+                📷 {t("swaps.scan")}
+              </button>
+            )}
+            {cameraOpen && <CameraScanner onDetect={onScan} onClose={() => setCameraOpen(false)} />}
             {deployed.length === 0 && <p className="text-sm text-slate-400">{t("swaps.pickEmpty")}</p>}
           </div>
         </div>

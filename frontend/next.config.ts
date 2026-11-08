@@ -36,7 +36,9 @@ const CSP = [
   "frame-ancestors 'none'",
   // X-Learning (142. kör): a tananyag YouTube-videója beágyazva — a default-src
   // 'self' némán blokkolná az iframe-et (szürke "törött lap")
-  "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
+  // 153. kör: a blob: a saját PDF-ekhez kell (nyomtatás rejtett iframe-ben,
+  // oklevél-néző) — a november 3-i CSP óta ezek némán nem működtek
+  "frame-src 'self' blob: https://www.youtube-nocookie.com https://www.youtube.com",
 ].join("; ");
 
 const securityHeaders = [

@@ -387,6 +387,21 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
     today = f"{now:%Y-%m-%d}"
     smtp = await load_smtp_config(db)
 
+    # 153. kör: el nem végzett feladatok → következő munkanap, naponta egyszer,
+    # a nap elején (éjfél után, az emlékeztetők előtt — azok már a friss dátummal mennek)
+    result["carry_over"] = 0
+    if row.task_carry_over and row.last_carry_over != today:
+        try:
+            from app.services.wfm.task_carry_over import run_task_carry_over
+
+            result["carry_over"] = (await run_task_carry_over(db, now.date()))["moved"]
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("task carry-over failed", exc_info=True)
+        row.last_carry_over = today
+        await db.commit()
+
     # Számla-emlékeztetők naponta egyszer (e-mail nélkül is: Telegram a képviselőnek)
     # X-Learning határidő-emlékeztetők (142. kör): soronként naponta egyszer (reminded_on)
     if now.hour >= row.send_hour:

@@ -80,6 +80,25 @@ def is_non_working_day(d: date) -> bool:
     return is_public_holiday(d) or is_bridge_rest_day(d)
 
 
+def is_working_day(d: date) -> bool:
+    """Hétköznap (vagy ledolgozó szombat), ami nem ünnep / áthelyezett pihenőnap."""
+    if is_non_working_day(d):
+        return False
+    return d.weekday() < 5 or is_worked_saturday(d)
+
+
+def next_working_day(d: date) -> date:
+    """A d-t KÖVETŐ első munkanap (ha d maga munkanap, akkor is a következő)."""
+    from datetime import timedelta
+
+    cur = d + timedelta(days=1)
+    for _ in range(31):
+        if is_working_day(cur):
+            return cur
+        cur += timedelta(days=1)
+    return cur
+
+
 # ─── Adatbázis-kiegészítés ───────────────────────────────────────────────────
 # A calendar_overrides tábla évei (AI-frissítés / admin-szerkesztés) a
 # beégetett táblákat EGÉSZÍTIK KI. A load_overrides tölti a modul-cache-t —

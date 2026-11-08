@@ -21,6 +21,13 @@ interface ConsStats {
   low_stock_count: number;
 }
 
+// 153. kör: automatikusan átcsúsztatott feladatok személyenként (számonkéréshez)
+interface CarryOver {
+  days: number;
+  open_total: number;
+  employees: { employee_id: string; employee_name: string; open_carried: number; open_days_total: number; carried_recent: number; oldest_original: string | null }[];
+}
+
 interface DashboardData {
   todays_tasks: { id: string; title: string; employee_name: string; status: string }[];
   pending_time_off: {
@@ -102,8 +109,10 @@ export default function VezerlopultPage() {
   const { t, lang } = useT();
   const { toast } = useUI();
 
+  const [carry, setCarry] = useState<CarryOver | null>(null);
   const load = useCallback(() => {
     api.get<DashboardData>("/api/dashboard").then(setData).catch(() => {});
+    api.get<CarryOver>("/api/dashboard/carry-over").then(setCarry).catch(() => {});
     api.get<ConsStats>("/api/dashboard/consignment-stats").then(setStats).catch(() => {});
     api.get<PartnerPerformance>("/api/dashboard/partner-performance").then(setPerformance).catch(() => {});
     api.get<CoverageRow[]>("/api/dashboard/coverage").then(setCoverage).catch(() => {});
@@ -269,6 +278,41 @@ export default function VezerlopultPage() {
               ))}
             </ul>
           )}
+        </section>
+        )}
+
+        {/* 153. kör: átcsúszott feladatok személyenként */}
+        {carry && carry.employees.length > 0 && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm lg:col-span-2">
+          <h2 className="mb-1 text-lg font-semibold text-amber-900">↻ {t("dash.carryTitle")}</h2>
+          <p className="mb-3 text-xs text-amber-800">{t("dash.carryHint", { days: carry.days })}</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase text-amber-700">
+                <tr>
+                  <th className="py-1 pr-3">{t("dash.carryEmployee")}</th>
+                  <th className="py-1 pr-3 text-right">{t("dash.carryOpen")}</th>
+                  <th className="py-1 pr-3 text-right">{t("dash.carryRecent", { days: carry.days })}</th>
+                  <th className="py-1 pr-3">{t("dash.carryOldest")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {carry.employees.map((r) => (
+                  <tr key={r.employee_id} className="border-t border-amber-100">
+                    <td className="py-1 pr-3 font-medium">{r.employee_name}</td>
+                    <td className="py-1 pr-3 text-right">
+                      {r.open_carried > 0 ? (
+                        <span className="rounded bg-rose-100 px-2 py-0.5 font-semibold text-rose-800">{r.open_carried}</span>
+                      ) : "0"}
+                    </td>
+                    <td className="py-1 pr-3 text-right">{r.carried_recent}</td>
+                    <td className="py-1 pr-3 text-xs text-slate-600">{r.oldest_original ? new Date(r.oldest_original).toLocaleDateString(lang === "hu" ? "hu-HU" : "en-GB") : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Link href="/feladatok" className="mt-2 inline-block text-xs font-medium text-indigo-700 underline">{t("dash.carryLink")}</Link>
         </section>
         )}
 

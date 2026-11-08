@@ -15,6 +15,13 @@ from tests.test_tasks import make_emp
 PDF_DATA_URL = "data:application/pdf;base64," + base64.b64encode(b"%PDF-1.4 teszt oktatoanyag").decode()
 
 
+def pick(detail: dict, qid: str, *texts: str) -> list[int]:
+    """153. kör: a válaszok kevert sorrendben jönnek — a megadott szövegek
+    AKTUÁLIS indexei (ezeket kell beadni)."""
+    q = next(x for x in detail["questions"] if x["id"] == qid)
+    return sorted(q["options"].index(t) for t in texts)
+
+
 def _questions_body():
     return {"questions": [
         {"text": "Mi a teendő tűz esetén?", "options": [
@@ -58,8 +65,9 @@ async def test_learning_flow(client, admin, manager):
     # kiosztás egyénileg; ismételt kiosztás nem duplikál; külsős csak external_ok-nál
     due = (date.today() + timedelta(days=5)).isoformat()
     res = await client.post(f"/api/learning/materials/{mat['id']}/assign", json={"employee_ids": [str(a.id)], "due_date": due}, headers=mgr)
-    assert res.status_code == 200 and res.json() == {"created": 1, "already": 0}
-    assert (await client.post(f"/api/learning/materials/{mat['id']}/assign", json={"employee_ids": [str(a.id)]}, headers=mgr)).json() == {"created": 0, "already": 1}
+    assert res.status_code == 200 and {k: res.json()[k] for k in ("created", "already")} == {"created": 1, "already": 0}
+    again = (await client.post(f"/api/learning/materials/{mat['id']}/assign", json={"employee_ids": [str(a.id)]}, headers=mgr)).json()
+    assert {k: again[k] for k in ("created", "already")} == {"created": 0, "already": 1}
     res = await client.post(f"/api/learning/materials/{mat['id']}/assign", json={"employee_ids": [str(c.id)]}, headers=mgr)
     assert res.status_code == 422 and res.json()["detail"]["code"] == "learning.external_not_allowed"
     assert (await client.patch(f"/api/learning/materials/{mat['id']}", json={"external_ok": True}, headers=mgr)).status_code == 200
@@ -84,21 +92,24 @@ async def test_learning_flow(client, admin, manager):
     assert detail["material"]["video_id"] == "dQw4w9WgXcQ" and detail["material"]["attachments"][0]["id"] == att["id"]
     qs = detail["questions"]
     assert len(qs) == 2 and "correct" not in str(qs) and [q["multi"] for q in qs] == [False, True]
-    assert qs[0]["options"] == ["Elfutok", "Riasztok és oltok", "Semmi"]
+    assert sorted(qs[0]["options"]) == ["Elfutok", "Riasztok és oltok", "Semmi"]  # kevert sorrend (153. kör)
     res = await client.get(f"/api/learning/my/{aid}/attachments/{att['id']}", headers=a_h)
     assert res.status_code == 200 and res.content.startswith(b"%PDF")
 
     # teszt: hiányos → 422; részleges → 50 %, nem elvégzett; oklevél még nincs
     q1, q2 = qs[0]["id"], qs[1]["id"]
-    res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": {q1: [1]}}, headers=a_h)
+    good1 = pick(detail, q1, "Riasztok és oltok")
+    res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": {q1: good1}}, headers=a_h)
     assert res.status_code == 422 and res.json()["detail"]["code"] == "learning.incomplete"
-    res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": {q1: [1], q2: [0]}}, headers=a_h)
+    res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": {q1: good1, q2: pick(detail, q2, "Papucs")}}, headers=a_h)
     assert res.status_code == 200, res.text
     assert res.json()["score_percent"] == 50 and res.json()["passed"] is False and res.json()["status"] == "open"
     assert (await client.get(f"/api/learning/my/{aid}/certificate.pdf", headers=a_h)).status_code == 422
 
     # 100 % → elvégezve, érvényesség +12 hónap; oklevél PDF sorszámmal
-    res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": {q1: [1], q2: [2, 0]}}, headers=a_h)
+    # (új próbálkozás = új keverés: a régi indexekkel már nem jó, újra kell olvasni)
+    detail = (await client.get(f"/api/learning/my/{aid}", headers=a_h)).json()
+    res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": {q1: pick(detail, q1, "Riasztok és oltok"), q2: pick(detail, q2, "Sisak", "Kesztyű")}}, headers=a_h)
     assert res.status_code == 200 and res.json()["passed"] is True and res.json()["status"] == "done"
     vu = date.fromisoformat(res.json()["valid_until"])
     today = date.today()
@@ -109,7 +120,7 @@ async def test_learning_flow(client, admin, manager):
     res = await client.get(f"/api/learning/my/{aid}/certificate.pdf?inline=1", headers=a_h)
     assert res.status_code == 200 and res.headers["content-disposition"].startswith("inline")
     # elvégzett tananyag: újrapróbálás zárva
-    res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": {q1: [1], q2: [2, 0]}}, headers=a_h)
+    res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": {q1: [0], q2: [0, 1]}}, headers=a_h)
     assert res.status_code == 422 and res.json()["detail"]["code"] == "learning.already_done"
     my = (await client.get("/api/learning/my", headers=a_h)).json()["items"][0]
     assert my["status"] == "done" and my["attempts"] == 2 and my["last_score"] == 100
@@ -178,7 +189,7 @@ async def test_random_subset_and_role_assignment_and_reminders(client, manager, 
     aid = my_d[0]["id"]
     detail = (await client.get(f"/api/learning/my/{aid}", headers=d_h)).json()
     assert len(detail["questions"]) == 2
-    answers = {q["id"]: [0] for q in detail["questions"]}
+    answers = {q["id"]: pick(detail, q["id"], "jó") for q in detail["questions"]}
     res = await client.post(f"/api/learning/my/{aid}/attempt", json={"answers": answers}, headers=d_h)
     assert res.status_code == 200 and res.json()["passed"] is True and res.json()["valid_until"] is None
 

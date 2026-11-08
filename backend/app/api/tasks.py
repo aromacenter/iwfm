@@ -139,6 +139,9 @@ class TaskOut(BaseModel):
     due_date: date
     required_skill: dict | None
     status: str
+    # 153. kör: automatikus átcsúsztatás nyoma
+    carry_over_count: int = 0
+    original_due_date: date | None = None
     comments: list[CommentOut]
     created_at: datetime
     worksheet_serial: str | None = None  # ML-2026-0001, ha van munkalap
@@ -1115,6 +1118,8 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
             intake_id=str(t.intake_id) if t.intake_id else None,
         visit_window=t.visit_window,
         reschedule_note=t.reschedule_note,
+            carry_over_count=t.carry_over_count or 0,
+            original_due_date=t.original_due_date,
             reschedule_request_note=t.reschedule_request_note,
             reschedule_request_date=t.reschedule_request_date,
             reschedule_requested_at=t.reschedule_requested_at,

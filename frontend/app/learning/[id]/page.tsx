@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, api, errorMessage, printFile } from "@/lib/api";
+import { API_URL, ApiError, api, errorMessage, printFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { STATUS_CLS, fmtSize, renderMarkdown, type AttachmentMeta, type MyItem } from "../shared";
 
@@ -50,6 +50,26 @@ export default function LearningMaterialPage() {
   const [answers, setAnswers] = useState<Record<string, number[]>>({});
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [busy, setBusy] = useState(false);
+  // 153. kör (883d89d0): az oklevél az alkalmazáson belül nyílik (új ablak
+  // helyett — telefonos alkalmazásból / felugró-tiltással az nem nyílt meg)
+  const [cert, setCert] = useState<{ url: string; name: string } | null>(null);
+  const [certBusy, setCertBusy] = useState(false);
+  async function openCertificate() {
+    setCertBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/learning/my/${id}/certificate.pdf?inline=1`, { credentials: "include" });
+      if (!res.ok) throw new ApiError(res.status, `http.${res.status}`, null);
+      const blob = await res.blob();
+      const cd = res.headers.get("content-disposition") ?? "";
+      const m = /filename\*?=(?:UTF-8'')?"?([^";]+)/i.exec(cd);
+      setCert({ url: URL.createObjectURL(blob), name: decodeURIComponent(m?.[1] ?? "oklevel.pdf") });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCertBusy(false);
+    }
+  }
   const fd = (d: string | null) => (d ? new Date(d).toLocaleDateString(lang === "hu" ? "hu-HU" : "en-GB") : "—");
   const fdt = (d: string) => new Date(d).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "short" });
 
@@ -192,10 +212,11 @@ export default function LearningMaterialPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => window.open(`/api/learning/my/${id}/certificate.pdf?inline=1`, "_blank", "noopener")}
-                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+                disabled={certBusy}
+                onClick={() => void openCertificate()}
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
               >
-                🎓 {t("learning.detail.viewCertificate")}
+                🎓 {certBusy ? t("learning.detail.certLoading") : t("learning.detail.viewCertificate")}
               </button>
               <button
                 type="button"
@@ -206,6 +227,28 @@ export default function LearningMaterialPage() {
               </button>
             </div>
             {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+            {cert && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3">
+                <div className="flex h-[92vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-2">
+                    <span className="font-semibold">🎓 {t("learning.detail.viewCertificate")}</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <a href={cert.url} download={cert.name} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
+                        ⬇ {t("learning.detail.certDownload")}
+                      </a>
+                      <a href={cert.url} target="_blank" rel="noopener" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
+                        ↗ {t("learning.detail.certOpenTab")}
+                      </a>
+                      <button type="button" onClick={() => { URL.revokeObjectURL(cert.url); setCert(null); }} className="rounded-lg px-2 py-1 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={t("common.close")}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  <iframe src={cert.url} title={t("learning.detail.viewCertificate")} className="min-h-0 flex-1 rounded-b-2xl" />
+                  <p className="border-t border-slate-100 px-4 py-1.5 text-xs text-slate-500">{t("learning.detail.certMobileHint")}</p>
+                </div>
+              </div>
+            )}
           </div>
         ) : data.questions.length === 0 ? (
           <p className="mt-2 text-sm text-slate-500">{t("learning.detail.noTest")}</p>
