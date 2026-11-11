@@ -211,6 +211,7 @@ class PartBody(BaseModel):
     sku: str | None = Field(default=None, max_length=64)  # üresen automatikus cikkszám (dcdae1bc)
     name: str = Field(min_length=1, max_length=256)
     manufacturer_code: str | None = Field(default=None, max_length=128)
+    barcode: str | None = Field(default=None, max_length=64)  # 154. kör: opcionális vonalkód
     unit: str = Field(default="db", max_length=16)
     min_stock: float = Field(default=0.0, ge=0)
     price_net: float | None = Field(default=None, ge=0)
@@ -232,6 +233,7 @@ class PartOut(BaseModel):
     sku: str
     name: str
     manufacturer_code: str | None
+    barcode: str | None = None
     unit: str
     min_stock: float
     price_net: float | None
@@ -254,7 +256,7 @@ class PartOut(BaseModel):
 
 def _part_out(p: Part, total: float = 0.0) -> PartOut:
     return PartOut(
-        id=str(p.id), sku=p.sku, name=p.name, manufacturer_code=p.manufacturer_code, unit=p.unit,
+        id=str(p.id), sku=p.sku, name=p.name, manufacturer_code=p.manufacturer_code, barcode=p.barcode, unit=p.unit,
         min_stock=p.min_stock, price_net=p.price_net, cost_net=p.cost_net, supplier=p.supplier,
         notes=p.notes, is_active=p.is_active, total_qty=total, low=p.min_stock > 0 and total < p.min_stock,
         warranty_months=p.warranty_months, supplier_id=str(p.supplier_id) if p.supplier_id else None,
@@ -290,7 +292,7 @@ async def list_parts(
         query = query.where(Part.is_active.is_(True))
     if q:
         like = f"%{q.strip()}%"
-        query = query.where(Part.name.ilike(like) | Part.sku.ilike(like) | Part.manufacturer_code.ilike(like))
+        query = query.where(Part.name.ilike(like) | Part.sku.ilike(like) | Part.manufacturer_code.ilike(like) | Part.barcode.ilike(like))
     totals = await _totals(db)
     return [_part_out(p, totals.get(p.id, 0.0)) for p in (await db.execute(query)).scalars().all()]
 
@@ -308,6 +310,7 @@ async def create_part(
         raise HTTPException(status_code=409, detail={"code": "parts.sku_taken"})
     p = Part(
         sku=sku, name=body.name.strip(), manufacturer_code=body.manufacturer_code, unit=body.unit.strip() or "db",
+        barcode=(body.barcode or "").strip() or None,
         min_stock=body.min_stock, price_net=body.price_net, cost_net=body.cost_net, supplier=body.supplier,
         notes=body.notes, is_active=body.is_active,
         warranty_months=body.warranty_months, supplier_id=uuid.UUID(body.supplier_id) if body.supplier_id else None,
@@ -340,6 +343,7 @@ async def update_part(
         if dup is not None:
             raise HTTPException(status_code=409, detail={"code": "parts.sku_taken"})
     p.sku, p.name, p.manufacturer_code, p.unit = sku, body.name.strip(), body.manufacturer_code, body.unit.strip() or "db"
+    p.barcode = (body.barcode or "").strip() or None
     p.min_stock, p.price_net, p.cost_net, p.supplier = body.min_stock, body.price_net, body.cost_net, body.supplier
     p.notes, p.is_active = body.notes, body.is_active
     p.warranty_months, p.reorder_qty = body.warranty_months, body.reorder_qty
@@ -1301,9 +1305,9 @@ async def export_csv(
         totals = await _totals(db)
         parts = (await db.execute(select(Part).order_by(Part.sku))).scalars().all()
         resp = _csv(
-            [[p.sku, p.name, p.manufacturer_code, p.unit, float(totals.get(p.id, 0.0)), float(p.min_stock),
+            [[p.sku, p.name, p.manufacturer_code, p.barcode, p.unit, float(totals.get(p.id, 0.0)), float(p.min_stock),
               p.price_net, p.cost_net, p.supplier, "igen" if p.is_active else "nem"] for p in parts],
-            ["Cikkszám", "Megnevezés", "Gyártói kód", "Egység", "Készlet összesen", "Min. készlet",
+            ["Cikkszám", "Megnevezés", "Gyártói kód", "Vonalkód", "Egység", "Készlet összesen", "Min. készlet",
              "Eladási nettó", "Beszerzési nettó", "Beszállító", "Aktív"],
         )
         name = "alkatreszek"
@@ -1359,6 +1363,7 @@ class PartImportRow(BaseModel):
     sku: str | None = Field(default=None, max_length=64)
     name: str = Field(min_length=1, max_length=256)
     manufacturer_code: str | None = Field(default=None, max_length=128)
+    barcode: str | None = Field(default=None, max_length=64)
     cost_net: float | None = Field(default=None, ge=0)
     price_net: float | None = Field(default=None, ge=0)
     min_stock: float | None = Field(default=None, ge=0)
@@ -1392,6 +1397,7 @@ async def import_parts(
                 sku = await _next_auto_sku(db)
                 await db.flush()
             p = Part(sku=sku, name=name, manufacturer_code=(r.manufacturer_code or None), unit=(r.unit or "db").strip() or "db",
+                     barcode=(r.barcode or "").strip() or None,
                      min_stock=float(r.min_stock or 0), price_net=r.price_net, cost_net=r.cost_net, is_active=True)
             db.add(p)
             await db.flush()
@@ -1402,6 +1408,8 @@ async def import_parts(
             p.name = name or p.name
             if r.manufacturer_code:
                 p.manufacturer_code = r.manufacturer_code
+            if r.barcode:
+                p.barcode = r.barcode.strip()
             if r.price_net is not None:
                 p.price_net = r.price_net
             if r.cost_net is not None:

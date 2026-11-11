@@ -80,6 +80,10 @@ class TaskCreateBody(BaseModel):
     onsite: bool = False
     # Csapatos munkavégzés (136. kör): további szerelők a feladaton
     helper_employee_ids: list[str] | None = Field(default=None, max_length=20)
+    # 154. kör: visszatérő / garanciális javítás — egy korábbi munka miatt kell
+    # visszamenni (opcionálisan annak a feladatnak az azonosítója)
+    rework: bool = False
+    rework_of_task_id: str | None = None
     # A munkalap tárgy-gépe: ebből jön a karbantartási díj alapértéke és az
     # aláírás utáni auto-számlázás partnere.
     asset_id: str | None = None
@@ -99,6 +103,8 @@ class TaskPatchBody(BaseModel):
     visit_window: str | None = Field(default=None, max_length=64)  # időkapu a partnernél
     reschedule_note: str | None = Field(default=None, max_length=512)  # KÖTELEZŐ, ha a határidő változik
     helper_employee_ids: list[str] | None = Field(default=None, max_length=20)  # 136. kör
+    rework: bool | None = None  # 154. kör
+    rework_of_task_id: str | None = None
     save_window_for_partner: bool | None = None  # az időkaput a partnerhez is mentjük
 
 
@@ -142,6 +148,9 @@ class TaskOut(BaseModel):
     # 153. kör: automatikus átcsúsztatás nyoma
     carry_over_count: int = 0
     original_due_date: date | None = None
+    # 154. kör: visszatérő / garanciális javítás
+    rework: bool = False
+    rework_of_task_id: str | None = None
     comments: list[CommentOut]
     created_at: datetime
     worksheet_serial: str | None = None  # ML-2026-0001, ha van munkalap
@@ -464,6 +473,15 @@ async def _build_quote_pdf(db: AsyncSession, ws: Worksheet, option_index: int) -
     }, settings)
     serial = f"{ws.quote_serial}" + (f"-{option_index}" if len(options) > 1 else "")
     return pdf, serial
+
+
+def _uuid_or_none(value: str | None):
+    if not value:
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "tasks.bad_rework_ref"})
 
 
 def _signature_sample_bytes(data_url: str | None) -> bytes | None:
@@ -1120,6 +1138,8 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
         reschedule_note=t.reschedule_note,
             carry_over_count=t.carry_over_count or 0,
             original_due_date=t.original_due_date,
+            rework=bool(t.rework),
+            rework_of_task_id=str(t.rework_of_task_id) if t.rework_of_task_id else None,
             reschedule_request_note=t.reschedule_request_note,
             reschedule_request_date=t.reschedule_request_date,
             reschedule_requested_at=t.reschedule_requested_at,
@@ -1229,6 +1249,8 @@ async def create_task(
         required_skill_id=body.required_skill_id,
         intake_id=intake_uuid,
         created_by=actor.id,
+        rework=bool(body.rework or body.rework_of_task_id),
+        rework_of_task_id=_uuid_or_none(body.rework_of_task_id),
     )
     db.add(task)
     await db.flush()
@@ -1348,6 +1370,10 @@ async def update_task(
 ):
     task = await _get_task_or_404(db, task_id)
     data = body.model_dump(exclude_unset=True)
+    if "rework_of_task_id" in data:
+        data["rework_of_task_id"] = _uuid_or_none(data["rework_of_task_id"])
+        if data["rework_of_task_id"] is not None:
+            data["rework"] = True
     save_window = bool(data.pop("save_window_for_partner", False))
     note = (data.pop("reschedule_note", None) or "").strip()
     if "due_date" in data and data["due_date"] is not None and data["due_date"] != task.due_date:

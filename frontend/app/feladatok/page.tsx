@@ -35,6 +35,7 @@ interface TaskOut {
   employee_id: string;
   employee_name: string | null;
   helpers?: { employee_id: string; name: string }[]; // csapat (136. kör)
+  rework?: boolean; // 154. kör: visszatérő / garanciális javítás
   due_date: string;
   required_skill: Skill | null;
   status: "open" | "done" | "needs_more_work";
@@ -99,6 +100,7 @@ export default function FeladatokPage() {
     description: "",
     employee_id: "",
     helper_ids: [] as string[],
+    rework: false,
     due_date: todayIso(),
     required_skill_id: 0,
     client_name: "",
@@ -324,6 +326,7 @@ export default function FeladatokPage() {
         // "auto" = az AI jelöli ki a legalkalmasabb dolgozót a szerveren
         employee_id: form.employee_id === "auto" ? null : form.employee_id,
         helper_employee_ids: form.helper_ids.filter((id) => id !== form.employee_id),
+        rework: form.rework,
         due_date: form.due_date,
         required_skill_id: form.required_skill_id || null,
         client_name: form.client_name || null,
@@ -351,7 +354,7 @@ export default function FeladatokPage() {
       setNewAssetMode(false);
       setNewAsset({ name: "", manufacturer: "", serial_number: "", partner_id: "" });
       setForm({
-        title: "", description: "", employee_id: "", helper_ids: [], due_date: todayIso(),
+        title: "", description: "", employee_id: "", helper_ids: [], rework: false, due_date: todayIso(),
         required_skill_id: 0, client_name: "", client_location: "",
       });
       const messages: string[] = [];
@@ -715,6 +718,9 @@ export default function FeladatokPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{task.title}</span>
+                  {task.rework && (
+                    <span title={t("tasks.reworkHint")} className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">↩ {t("tasks.reworkBadge")}</span>
+                  )}
                   <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[task.status]}`}>
                     {t(`tasks.statuses.${task.status}`)}
                   </span>
@@ -1064,6 +1070,14 @@ export default function FeladatokPage() {
               </div>
               <span className="mt-0.5 block text-xs text-slate-500">{t("tasks.helpersHint")}</span>
             </div>
+            {/* 154. kör: visszatérő / garanciális javítás — a csapat- és egyéni statisztikához */}
+            <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-sm">
+              <input type="checkbox" checked={form.rework} onChange={(e) => setForm({ ...form, rework: e.target.checked })} className="mt-0.5 h-4 w-4" />
+              <span>
+                <span className="block font-medium text-amber-900">↩ {t("tasks.rework")}</span>
+                <span className="block text-xs text-amber-800">{t("tasks.reworkHint")}</span>
+              </span>
+            </label>
             <label className="block text-sm">
               {t("tasks.dueDate")}
               <input required type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />

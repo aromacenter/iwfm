@@ -375,6 +375,10 @@ class Task(Base):
     # a következő munkanapra, és mi volt az EREDETI határidő
     carry_over_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     original_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 154. kör (Senzortech 481ab7f4): visszatérő / garanciális javítás — egy korábbi
+    # munkához kellett visszamenni; a csapat- és egyéni statisztika ebből számol
+    rework: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    rework_of_task_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -1330,6 +1334,9 @@ class Part(Base):
     sku: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     manufacturer_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # 154. kör (Senzortech aa541fa1): opcionális vonalkód (EAN / gyári címke) —
+    # a cikkszámtól független, szkennelésnél és keresésnél ez is találat
+    barcode: Mapped[str | None] = mapped_column(String(64), nullable=True)
     unit: Mapped[str] = mapped_column(String(16), nullable=False, default="db")
     min_stock: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     price_net: Mapped[float | None] = mapped_column(Float, nullable=True)  # eladási nettó (ajánlatba)

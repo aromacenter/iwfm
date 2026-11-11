@@ -430,3 +430,29 @@ def test_night_and_shift_bonus_columns():
     sched = Emp(payroll_source="schedule")
     sh2 = build_month_sheet(sched, year=2026, month=6, shifts=[Sh(d, time(22, 0), time(6, 0))], entries=[], leaves=[])
     assert fmt_hm(sh2.rows[1].ep15) == "08:00" and fmt_hm(sh2.rows[1].work_minutes) == "08:00"
+
+
+def test_day_rows_fall_back_to_the_other_source(monkeypatch):
+    """154. kör (x-presso 8fba1fe9): a napi sor akkor is kitöltődik, ha a
+    bérszámfejtési forrásban nincs adat — beosztás-alapú dolgozónál műszak
+    híján a blokkolás, blokkolás-alapúnál blokkolás híján a beosztás."""
+    monkeypatch.setattr("app.services.wfm.timesheet_calc.TZ", UTC)
+    shifts = [Sh(date(2026, 6, 2), time(8, 0), time(16, 20), 20)]  # csak keddre van műszak
+    entries = [En(datetime(2026, 6, 1, 7, 52, tzinfo=UTC), datetime(2026, 6, 1, 16, 31, tzinfo=UTC))]  # csak hétfőre blokkolás
+
+    # beosztás-alapú: kedd a műszakból, hétfő a blokkolásból (eddig üres maradt)
+    sheet = build_month_sheet(Emp(payroll_source="schedule"), year=2026, month=6, shifts=shifts, entries=entries, leaves=[])
+    mon = next(r for r in sheet.rows if r.day == date(2026, 6, 1))
+    tue = next(r for r in sheet.rows if r.day == date(2026, 6, 2))
+    assert (tue.work_start, tue.work_end, tue.work_minutes) == (time(8, 0), time(16, 20), 480)
+    assert mon.work_start == time(7, 52) and mon.work_end == time(16, 31) and mon.work_minutes > 0
+
+    # blokkolás-alapú: hétfő a blokkolásból, kedd a beosztásból (eddig üres maradt)
+    sheet = build_month_sheet(Emp(payroll_source="attendance"), year=2026, month=6, shifts=shifts, entries=entries, leaves=[])
+    mon = next(r for r in sheet.rows if r.day == date(2026, 6, 1))
+    tue = next(r for r in sheet.rows if r.day == date(2026, 6, 2))
+    assert mon.work_start == time(7, 52) and mon.work_minutes > 0
+    assert (tue.work_start, tue.work_end, tue.work_minutes) == (time(8, 0), time(16, 20), 480)
+    # amelyik napra semmi sincs, az üres marad
+    wed = next(r for r in sheet.rows if r.day == date(2026, 6, 3))
+    assert wed.work_start is None and wed.work_minutes == 0

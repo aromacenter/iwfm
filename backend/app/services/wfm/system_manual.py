@@ -163,7 +163,10 @@ Az Átvétel után ez az űrlap automatikusan, előtöltve nyílik (gép, ügyf�
 - Részletek: a dolgozó által kitöltött munkák, anyagok, beépített alkatrészek (sorozatszám, garancia), mért munkaidő (timer).
 - Ár-szerkesztő: a mi áraink a tételekhez (a külsős szerviz az ügyfél-árainkat SOHA nem látja).
 - Irodai nyomtatás (nyomtató-ügynökön át) vagy Email az ügyfélnek; Lezárás, ha kész.
-- Ajánlat (KSZ): az ügyfél e-mailben kapja a konstrukciókat, a nyilvános linken elfogad vagy elutasít; belső elfogadás is lehetséges.""",
+- Ajánlat (KSZ): az ügyfél e-mailben kapja a konstrukciókat, a nyilvános linken elfogad vagy elutasít; belső elfogadás is lehetséges.
+
+## Visszatérő / garanciális javítás és csapat-statisztika
+Ha egy korábbi munka miatt kell visszamenni (garancia, nem sikerült javítás), a feladaton pipáld a „Visszatérő / garanciális javítás” jelölést — létrehozáskor vagy utólag is. A csapat (felelős + segítők) a feladaton utólag is módosítható. A vezérlőpult „Csapatok és egyének — visszatérő javítások” blokkja mutatja, kinek és melyik csapatnak hány munkája volt az elmúlt 90 napban, és ebből mennyi a visszatérő — számonkéréshez és garanciális elemzéshez.""",
     },
     {
         "key": "feladataim",
@@ -295,7 +298,7 @@ Termékenként minimum állítható; a Raktár oldal újrarendelési javaslatot 
         "title": "Alkatrész-raktár (ERP: cikkek, mozgatás, munkalap, beszerzés, leltár)",
         "keywords": "alkatrész cikk cikkszám AUTO automatikus bevételezés mozgatás helykód szkennelés címke átlagár készletérték min max autó feltöltőlista kérés kiadás vételezés beszállító rendelés beérkeztetés visszáru szett kit leltár vak leltár ABC riport garancia sorozatszám szabad szavas",
         "body": """## Cikkek
-Alkatrészek → cikk: cikkszám (üresen automatikus AUTO-0001), név, egység, min. készlet, ár/költség, garancia (hónap), kompatibilis típusok, helyettesítők, csomagolási egység. A bevételezés/mozgatás ablakban a cikk-mező szabad szavas: gépelésre szűr, ha nincs találat, „+ Új alkatrész” hozza létre azonnal.
+Alkatrészek → cikk: cikkszám (üresen automatikus AUTO-0001), vonalkód (opcionális EAN / saját címke — szkennelésnél és keresésnél ez is találat), név, egység, min. készlet, ár/költség, garancia (hónap), kompatibilis típusok, helyettesítők, csomagolási egység. A bevételezés/mozgatás ablakban a cikk-mező szabad szavas: gépelésre szűr, ha nincs találat, „+ Új alkatrész” hozza létre azonnal.
 
 ## Mozgások
 1. Bevételezés: raktár + helykód (A-1), mennyiség, egységköltség (mozgó átlagár frissül), bizonylatszám.

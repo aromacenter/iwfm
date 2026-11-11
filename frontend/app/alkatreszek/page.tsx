@@ -17,7 +17,7 @@ interface Warehouse {
   columns: string[]; rows: number; notes: string | null; is_active: boolean; managers: string[]; part_count: number; total_qty: number;
 }
 interface Part {
-  id: string; sku: string; name: string; manufacturer_code: string | null; unit: string; min_stock: number;
+  id: string; sku: string; name: string; manufacturer_code: string | null; barcode?: string | null; unit: string; min_stock: number;
   price_net: number | null; cost_net: number | null; supplier: string | null; notes: string | null; is_active: boolean;
   total_qty: number; low: boolean;
   warranty_months: number | null; supplier_id: string | null; reorder_qty: number | null; avg_cost: number | null;
@@ -48,7 +48,7 @@ const REQ_CHIP: Record<PartsReq["status"], string> = {
 type Tab = "stock" | "parts" | "warehouses" | "movements" | "requests" | "stocktake";
 type MoveKind = "receipt" | "transfer" | "adjust";
 
-const emptyPart = { sku: "", name: "", manufacturer_code: "", unit: "db", min_stock: "0", price_net: "", cost_net: "", supplier: "", notes: "", is_active: true, warranty_months: "", supplier_id: "", reorder_qty: "", pack_unit: "", pack_qty: "", compatible_models: "", substitutes: [] as string[] };
+const emptyPart = { sku: "", name: "", manufacturer_code: "", barcode: "", unit: "db", min_stock: "0", price_net: "", cost_net: "", supplier: "", notes: "", is_active: true, warranty_months: "", supplier_id: "", reorder_qty: "", pack_unit: "", pack_qty: "", compatible_models: "", substitutes: [] as string[] };
 const emptyWh = { name: "", kind: "central" as "central" | "vehicle" | "quarantine", owner_user_id: "", columns: "A, B, C", rows: "10", notes: "", is_active: true, managers: [] as string[] };
 const REASONS = ["count_error", "damage", "theft", "expired", "other"] as const;
 
@@ -104,7 +104,7 @@ export default function AlkatreszekPage() {
   const filteredParts = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return parts;
-    return parts.filter((p) => [p.name, p.sku, p.manufacturer_code ?? "", p.supplier ?? ""].some((x) => x.toLowerCase().includes(s)));
+    return parts.filter((p) => [p.name, p.sku, p.manufacturer_code ?? "", p.barcode ?? "", p.supplier ?? ""].some((x) => x.toLowerCase().includes(s)));
   }, [parts, q]);
 
   /** Szabad szavas létrehozás a mozgatás-ablakból (dcdae1bc): csak név, a
@@ -136,6 +136,7 @@ export default function AlkatreszekPage() {
           sku: idx("sku") >= 0 ? c[idx("sku")] || null : null,
           name: idx("name") >= 0 ? c[idx("name")] : c[0],
           manufacturer_code: idx("manufacturer_code") >= 0 ? c[idx("manufacturer_code")] || null : null,
+          barcode: idx("barcode") >= 0 ? c[idx("barcode")] || null : null,
           cost_net: idx("cost_net") >= 0 ? num(c[idx("cost_net")]) : null,
           price_net: idx("price_net") >= 0 ? num(c[idx("price_net")]) : null,
           min_stock: idx("min_stock") >= 0 ? num(c[idx("min_stock")]) : null,
@@ -151,7 +152,7 @@ export default function AlkatreszekPage() {
     }
   }
 
-  const partItems = useMemo(() => parts.filter((p) => p.is_active).map((p) => ({ id: p.id, label: p.name, badge: p.sku, sublabel: `${p.total_qty} ${p.unit}`, keywords: p.manufacturer_code })), [parts]);
+  const partItems = useMemo(() => parts.filter((p) => p.is_active).map((p) => ({ id: p.id, label: p.name, badge: p.sku, sublabel: `${p.total_qty} ${p.unit}`, keywords: [p.manufacturer_code, p.barcode].filter(Boolean).join(" ") })), [parts]);
   const whItems = useMemo(() => warehouses.filter((w) => w.is_active).map((w) => ({ id: w.id, label: w.name, badge: w.kind === "vehicle" ? "🚚" : w.kind === "quarantine" ? "🚧" : "🏬" })), [warehouses]);
 
   // ── cikktörzs ─────────────────────────────────────────────────────────────
@@ -162,6 +163,7 @@ export default function AlkatreszekPage() {
     try {
       const body = {
         sku: partForm.sku, name: partForm.name, manufacturer_code: partForm.manufacturer_code || null, unit: partForm.unit || "db",
+        barcode: partForm.barcode || null,
         min_stock: num(partForm.min_stock) ?? 0, price_net: num(partForm.price_net), cost_net: num(partForm.cost_net),
         supplier: partForm.supplier || null, notes: partForm.notes || null, is_active: partForm.is_active,
         warranty_months: num(partForm.warranty_months), supplier_id: partForm.supplier_id || null, reorder_qty: num(partForm.reorder_qty),
@@ -442,7 +444,7 @@ export default function AlkatreszekPage() {
             {filteredParts.length === 0 ? <p className="p-8 text-center text-sm text-slate-400">{t("parts.emptyParts")}</p> : (
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">{t("parts.sku")}</th><th className="px-3 py-2">{t("parts.name")}</th><th className="px-3 py-2">{t("parts.manufacturerCode")}</th><th className="px-3 py-2 text-right">{t("parts.total")}</th><th className="px-3 py-2 text-right">{t("parts.minStock")}</th><th className="px-3 py-2 text-right">{t("parts.priceNet")}</th><th className="px-3 py-2"></th>
+                  <th className="px-3 py-2">{t("parts.sku")}</th><th className="px-3 py-2">{t("parts.name")}</th><th className="px-3 py-2">{t("parts.manufacturerCode")}</th><th className="px-3 py-2">{t("parts.barcode")}</th><th className="px-3 py-2 text-right">{t("parts.total")}</th><th className="px-3 py-2 text-right">{t("parts.minStock")}</th><th className="px-3 py-2 text-right">{t("parts.priceNet")}</th><th className="px-3 py-2"></th>
                 </tr></thead>
                 <tbody>
                   {filteredParts.map((p) => (
@@ -450,12 +452,13 @@ export default function AlkatreszekPage() {
                       <td className="px-3 py-2 font-mono text-xs">{p.sku}</td>
                       <td className="px-3 py-2 font-medium">{p.name}{p.low && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">{t("parts.low")}</span>}</td>
                       <td className="px-3 py-2 text-xs text-slate-500">{p.manufacturer_code ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-500">{p.barcode ?? "—"}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{p.total_qty} {p.unit}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-500">{p.min_stock}{p.abc_class && <span className={`ml-1 rounded px-1 text-[10px] font-bold ${p.abc_class === "A" ? "bg-emerald-100 text-emerald-800" : p.abc_class === "B" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{p.abc_class}</span>}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{ft(p.price_net)}</td>
                       <td className="px-3 py-2 text-right">
                         <button onClick={() => openMove("receipt", { part_id: p.id })} className="mr-1 rounded-lg border border-emerald-300 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50">📥</button>
-                        <button onClick={() => setPartForm({ id: p.id, sku: p.sku, name: p.name, manufacturer_code: p.manufacturer_code ?? "", unit: p.unit, min_stock: String(p.min_stock), price_net: p.price_net == null ? "" : String(p.price_net), cost_net: p.cost_net == null ? "" : String(p.cost_net), supplier: p.supplier ?? "", notes: p.notes ?? "", is_active: p.is_active, warranty_months: p.warranty_months == null ? "" : String(p.warranty_months), supplier_id: p.supplier_id ?? "", reorder_qty: p.reorder_qty == null ? "" : String(p.reorder_qty), pack_unit: p.pack_unit ?? "", pack_qty: p.pack_qty == null ? "" : String(p.pack_qty), compatible_models: (p.compatible_models ?? []).join(", "), substitutes: p.substitutes ?? [] })} className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">✏️</button>
+                        <button onClick={() => setPartForm({ id: p.id, sku: p.sku, name: p.name, manufacturer_code: p.manufacturer_code ?? "", barcode: p.barcode ?? "", unit: p.unit, min_stock: String(p.min_stock), price_net: p.price_net == null ? "" : String(p.price_net), cost_net: p.cost_net == null ? "" : String(p.cost_net), supplier: p.supplier ?? "", notes: p.notes ?? "", is_active: p.is_active, warranty_months: p.warranty_months == null ? "" : String(p.warranty_months), supplier_id: p.supplier_id ?? "", reorder_qty: p.reorder_qty == null ? "" : String(p.reorder_qty), pack_unit: p.pack_unit ?? "", pack_qty: p.pack_qty == null ? "" : String(p.pack_qty), compatible_models: (p.compatible_models ?? []).join(", "), substitutes: p.substitutes ?? [] })} className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">✏️</button>
                       </td>
                     </tr>
                   ))}
@@ -728,6 +731,7 @@ export default function AlkatreszekPage() {
             <label className="block text-sm">{t("parts.name")} *<input required value={partForm.name} onChange={(e) => setPartForm({ ...partForm, name: e.target.value })} className={input} /></label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm">{t("parts.manufacturerCode")}<input value={partForm.manufacturer_code} onChange={(e) => setPartForm({ ...partForm, manufacturer_code: e.target.value })} className={input} /></label>
+              <label className="block text-sm">{t("parts.barcode")} <span className="text-xs text-slate-400">{t("parts.barcodeHint")}</span><input value={partForm.barcode ?? ""} onChange={(e) => setPartForm({ ...partForm, barcode: e.target.value })} placeholder="EAN / címke-kód" className={input} /></label>
               <label className="block text-sm">{t("parts.supplier")}<input value={partForm.supplier} onChange={(e) => setPartForm({ ...partForm, supplier: e.target.value })} className={input} /></label>
             </div>
             <div className="grid grid-cols-3 gap-3">

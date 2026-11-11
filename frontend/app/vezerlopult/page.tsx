@@ -28,6 +28,10 @@ interface CarryOver {
   employees: { employee_id: string; employee_name: string; open_carried: number; open_days_total: number; carried_recent: number; oldest_original: string | null }[];
 }
 
+// 154. kör: csapat és egyén — munkák és visszatérő / garanciális javítások
+interface ReworkRow { id: string; name: string; members: string[]; tasks: number; rework: number; rework_pct: number }
+interface ReworkStats { days: number; people: ReworkRow[]; teams: ReworkRow[]; rework_total: number; tasks_total: number }
+
 interface DashboardData {
   todays_tasks: { id: string; title: string; employee_name: string; status: string }[];
   pending_time_off: {
@@ -110,9 +114,11 @@ export default function VezerlopultPage() {
   const { toast } = useUI();
 
   const [carry, setCarry] = useState<CarryOver | null>(null);
+  const [rework, setRework] = useState<ReworkStats | null>(null);
   const load = useCallback(() => {
     api.get<DashboardData>("/api/dashboard").then(setData).catch(() => {});
     api.get<CarryOver>("/api/dashboard/carry-over").then(setCarry).catch(() => {});
+    api.get<ReworkStats>("/api/dashboard/rework-stats").then(setRework).catch(() => {});
     api.get<ConsStats>("/api/dashboard/consignment-stats").then(setStats).catch(() => {});
     api.get<PartnerPerformance>("/api/dashboard/partner-performance").then(setPerformance).catch(() => {});
     api.get<CoverageRow[]>("/api/dashboard/coverage").then(setCoverage).catch(() => {});
@@ -313,6 +319,47 @@ export default function VezerlopultPage() {
             </table>
           </div>
           <Link href="/feladatok" className="mt-2 inline-block text-xs font-medium text-indigo-700 underline">{t("dash.carryLink")}</Link>
+        </section>
+        )}
+
+        {/* 154. kör: csapat / egyén — visszatérő javítások */}
+        {rework && rework.tasks_total > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <h2 className="mb-1 text-lg font-semibold">↩ {t("dash.reworkTitle")}</h2>
+          <p className="mb-3 text-xs text-slate-500">{t("dash.reworkHint", { days: rework.days, total: rework.tasks_total, rework: rework.rework_total })}</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            {([["people", rework.people], ["teams", rework.teams]] as const).map(([key, rows]) => (
+              <div key={key}>
+                <h3 className="mb-1 text-sm font-semibold text-slate-700">{key === "people" ? t("dash.reworkPeople") : t("dash.reworkTeams")}</h3>
+                {rows.length === 0 ? (
+                  <p className="text-xs text-slate-400">{t("dash.reworkNone")}</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="py-1 pr-2">{key === "people" ? t("dash.reworkEmployee") : t("dash.reworkTeam")}</th>
+                        <th className="py-1 pr-2 text-right">{t("dash.reworkTasks")}</th>
+                        <th className="py-1 pr-2 text-right">{t("dash.reworkCount")}</th>
+                        <th className="py-1 text-right">%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.slice(0, 12).map((r) => (
+                        <tr key={r.id} className="border-t border-slate-100">
+                          <td className="py-1 pr-2">{r.name}</td>
+                          <td className="py-1 pr-2 text-right tabular-nums">{r.tasks}</td>
+                          <td className="py-1 pr-2 text-right tabular-nums">
+                            {r.rework > 0 ? <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">{r.rework}</span> : "0"}
+                          </td>
+                          <td className="py-1 text-right tabular-nums text-slate-500">{r.rework_pct}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ))}
+          </div>
         </section>
         )}
 

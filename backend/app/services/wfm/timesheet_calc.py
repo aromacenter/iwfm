@@ -308,7 +308,12 @@ def build_month_sheet(
 
         # --- tényleges munkaidő ---
         spans: list[tuple[datetime, datetime]] = []  # az éjszakai / műszak sávhoz
-        if schedule_based:
+        day_entries = sorted(entries_by_day.get(d, []), key=lambda e: e.clock_in)
+        # 154. kör (8fba1fe9): a forrás az elsődleges, de ha arra a napra nincs
+        # adat, a másik forrás tölti a sort — a könyvelő minden napnál lássa a
+        # kezdést, a befejezést és az órákat
+        use_schedule = (schedule_based and bool(day_shifts)) or (not schedule_based and not day_entries and bool(day_shifts))
+        if use_schedule:
             row.work_start, row.work_end = row.sched_start, row.sched_end
             row.work_minutes = row.sched_minutes
             for sh in day_shifts:
@@ -318,7 +323,6 @@ def build_month_sheet(
                     en += timedelta(days=1)
                 spans.append((st, en))
         else:
-            day_entries = sorted(entries_by_day.get(d, []), key=lambda e: e.clock_in)
             if day_entries:
                 row.work_start = day_entries[0].clock_in.astimezone(TZ).time().replace(second=0, microsecond=0)
                 row.work_end = day_entries[-1].clock_out.astimezone(TZ).time().replace(second=0, microsecond=0)

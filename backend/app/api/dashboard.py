@@ -303,6 +303,67 @@ async def carry_over_stats(
     return {"days": days, "employees": out, "open_total": sum(e["open_carried"] for e in out)}
 
 
+@router.get("/rework-stats")
+async def rework_stats(
+    days: int = 90,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("dashboard")),
+):
+    """154. kör (Senzortech 481ab7f4): kinek és melyik csapatnak hány munkája volt az
+    elmúlt N napban, és ebből mennyi a visszatérő / garanciális javítás. A csapat
+    = a felelős + a segítők együtt (név szerint, ábécérendben)."""
+    from app.models import Task, TaskHelper
+
+    days = max(7, min(int(days), 730))
+    since = date.today() - timedelta(days=days)
+    tasks = (
+        await db.execute(
+            select(Task, Employee.last_name, Employee.first_name)
+            .join(Employee, Employee.id == Task.employee_id)
+            .where(Task.due_date >= since)
+        )
+    ).all()
+    helpers = (
+        await db.execute(
+            select(TaskHelper.task_id, TaskHelper.employee_id, Employee.last_name, Employee.first_name)
+            .join(Employee, Employee.id == TaskHelper.employee_id)
+        )
+    ).all()
+    helpers_by_task: dict = {}
+    for tid, eid, ln, fn in helpers:
+        helpers_by_task.setdefault(tid, []).append((str(eid), f"{ln} {fn}"))
+
+    people: dict = {}
+    teams: dict = {}
+
+    def bump(bucket: dict, key: str, name: str, members: list[str], rework: bool) -> None:
+        e = bucket.setdefault(key, {"id": key, "name": name, "members": members, "tasks": 0, "rework": 0})
+        e["tasks"] += 1
+        if rework:
+            e["rework"] += 1
+
+    for t, ln, fn in tasks:
+        crew = [(str(t.employee_id), f"{ln} {fn}")] + helpers_by_task.get(t.id, [])
+        for eid, name in crew:
+            bump(people, eid, name, [], bool(t.rework))
+        if len(crew) > 1:
+            names = sorted(n for _, n in crew)
+            bump(teams, "|".join(sorted(e for e, _ in crew)), " + ".join(names), names, bool(t.rework))
+
+    def finish(rows: list) -> list:
+        for r in rows:
+            r["rework_pct"] = round(100 * r["rework"] / r["tasks"]) if r["tasks"] else 0
+        return sorted(rows, key=lambda r: (-r["rework"], -r["rework_pct"], -r["tasks"], r["name"]))
+
+    return {
+        "days": days,
+        "people": finish(list(people.values())),
+        "teams": finish(list(teams.values())),
+        "rework_total": sum(1 for t, _, _ in tasks if t.rework),
+        "tasks_total": len(tasks),
+    }
+
+
 @router.get("")
 async def dashboard(
     db: AsyncSession = Depends(get_db),
