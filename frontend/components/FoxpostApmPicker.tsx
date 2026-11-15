@@ -71,9 +71,31 @@ export default function FoxpostApmPicker({
     if (!L) return;
     if (!mapRef.current) {
       mapRef.current = L.map(divRef.current, { zoomControl: true }).setView([47.3, 19.3], 7);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19, attribution: "&copy; OpenStreetMap",
-      }).addTo(mapRef.current);
+      // Az OSM fő szervere blokkolja az appot (tile usage policy, 7836fee3) —
+      // a német OSM-tükör az elsődleges, az Esri utcatérkép a tartalék (mint a Térkép oldalon).
+      const TILE_SOURCES = [
+        { url: "https://tile.openstreetmap.de/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+        { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", attribution: "&copy; Esri, OpenStreetMap contributors" },
+      ];
+      let tileIdx = 0;
+      let errCount = 0;
+      const addTiles = () => {
+        const map = mapRef.current;
+        if (!map) return;
+        const src = TILE_SOURCES[tileIdx];
+        const tiles = L.tileLayer(src.url, { maxZoom: 19, attribution: src.attribution });
+        tiles.on("tileerror", () => {
+          errCount += 1;
+          if (errCount >= 3 && tileIdx + 1 < TILE_SOURCES.length) {
+            tileIdx += 1;
+            errCount = 0;
+            tiles.remove();
+            addTiles();
+          }
+        });
+        tiles.addTo(map);
+      };
+      addTiles();
       layerRef.current = L.layerGroup().addTo(mapRef.current);
     }
     const layer = layerRef.current;
