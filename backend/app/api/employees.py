@@ -15,7 +15,7 @@ import re
 import re as _re
 import secrets
 import uuid
-from datetime import date
+from datetime import date, time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -110,6 +110,10 @@ class EmployeeBase(BaseModel):
     # egyedi szünet-szabály ({minutes, per_hours, paid}; None = céges).
     site: str | None = Field(default=None, max_length=128)
     sunday_bonus: bool | None = None
+    # 155. kör (8fba1fe9): havi béres dolgozó rögzített munkaideje (kezdés–befejezés);
+    # ha mindkettő ki van töltve, a munkaidő-nyilvántartás PDF minden munkanapra ezt mutatja
+    fixed_work_start: time | None = None
+    fixed_work_end: time | None = None
     shift_bonus: bool = False
     bonus_in_base_salary: bool = False
     break_rule: dict | None = None
@@ -277,6 +281,8 @@ class EmployeeUpdate(BaseModel):
         return v
     site: str | None = Field(default=None, max_length=128)
     sunday_bonus: bool | None = None
+    fixed_work_start: time | None = None
+    fixed_work_end: time | None = None
     shift_bonus: bool | None = None
     bonus_in_base_salary: bool | None = None
     break_rule: dict | None = None
@@ -437,6 +443,8 @@ def _employee_out(
         payroll_source=emp.payroll_source or "attendance",
         site=emp.site,
         sunday_bonus=emp.sunday_bonus,
+        fixed_work_start=emp.fixed_work_start,
+        fixed_work_end=emp.fixed_work_end,
         shift_bonus=bool(emp.shift_bonus),
         bonus_in_base_salary=bool(emp.bonus_in_base_salary),
         break_rule=emp.break_rule,

@@ -46,6 +46,9 @@ export interface EmployeeOut {
   company_tax_number: string | null;
   // Bérszámfejtés alapja: blokkolás (attendance) vagy beosztás (schedule)
   payroll_source: "attendance" | "schedule";
+  // 155. kör: havi béres dolgozó rögzített munkaideje (HH:MM:SS) — a munkaidő-PDF ezt mutatja
+  fixed_work_start?: string | null;
+  fixed_work_end?: string | null;
   // Munkaidő-nyilvántartás (117. kör): telephely, pótlék-jogosultságok, egyedi szünet-szabály
   site?: string | null;
   sunday_bonus?: boolean | null;

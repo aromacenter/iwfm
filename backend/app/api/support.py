@@ -39,6 +39,7 @@ from app.models import (
     ServiceTicket,
     SupportSettings,
     TicketAttachment,
+    WorksheetSettings,
     User,
 )
 
@@ -88,6 +89,12 @@ async def _label_items(db: AsyncSession, assets: list[Asset]) -> list[dict]:
                 )
             ).all()
         }
+    # 155. kör (c066dc6d): a címkén a gyári szám helyett az ügyeleti telefonszám,
+    # ha a Beállításokban meg van adva
+    ws_row = (
+        await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+    ).scalar_one_or_none()
+    label_phone = ((ws_row.label_phone if ws_row else None) or "").strip() or None
     items = []
     for a in assets:
         if not a.qr_token:
@@ -98,6 +105,7 @@ async def _label_items(db: AsyncSession, assets: list[Asset]) -> list[dict]:
                 "name": a.name,
                 "barcode": a.barcode,
                 "serial_number": a.serial_number,
+                "phone": label_phone,
                 "partner_name": partner_names.get(a.partner_id) if a.partner_id else None,
                 # Ügyfél behozott gépe: a címkére NEM kerül tulajdon-felirat
                 "customer_owned": a.customer_owned,

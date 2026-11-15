@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
+import FoxpostApmPicker, { type FoxpostApm } from "@/components/FoxpostApmPicker";
 import SearchSelect from "@/components/SearchSelect";
 import { api, errorMessage, printFile } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -101,6 +102,9 @@ export default function CsomagokPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // FoxPost automata térképes választása (155. kör, aaee410b)
+  const [apmPicker, setApmPicker] = useState(false);
+  const [apmName, setApmName] = useState<string | null>(null);
 
   const loadParcels = useCallback(() => {
     api.get<Parcel[]>("/api/gls").then(setParcels).catch(() => {});
@@ -356,10 +360,22 @@ export default function CsomagokPage() {
             )}
           </div>
           {form.carrier === "foxpost" && (
-            <label className="block text-sm">
+            <div className="block text-sm">
               {t("gls.apmId")}
-              <input value={form.apm_id} onChange={(e) => setForm({ ...form, apm_id: e.target.value })} placeholder={t("gls.apmPh")} className={inputCls} />
-            </label>
+              <div className="mt-1 flex items-center gap-2">
+                <input value={form.apm_id} onChange={(e) => { setForm({ ...form, apm_id: e.target.value }); setApmName(null); }} placeholder={t("gls.apmPh")} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                <button type="button" onClick={() => setApmPicker(true)} className="shrink-0 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100">
+                  🗺 {t("gls.apmPick")}
+                </button>
+              </div>
+              {apmName && <span className="mt-1 block text-xs text-emerald-700">✓ {apmName}</span>}
+              <FoxpostApmPicker
+                open={apmPicker}
+                onClose={() => setApmPicker(false)}
+                initialQuery={form.recipient_city || form.recipient_zip || ""}
+                onPick={(a: FoxpostApm) => { setForm({ ...form, apm_id: a.id }); setApmName(`${a.name} — ${a.address}`); setApmPicker(false); }}
+              />
+            </div>
           )}
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
             <label className="flex items-center gap-2 text-sm font-medium">

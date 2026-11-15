@@ -47,6 +47,8 @@ const EMPTY_FORM = {
   wage_type: "monthly",
   annual_leave_days: 20,
   payroll_source: "attendance" as "attendance" | "schedule",
+  fixed_work_start: "",
+  fixed_work_end: "",
   site: "",
   sunday_bonus: "" as "" | "yes" | "no",
   shift_bonus: false,
@@ -193,6 +195,8 @@ export default function DolgozokPage() {
       wage_type: emp.wage_type,
       annual_leave_days: emp.annual_leave_days,
       payroll_source: emp.payroll_source ?? "attendance",
+      fixed_work_start: (emp.fixed_work_start ?? "").slice(0, 5),
+      fixed_work_end: (emp.fixed_work_end ?? "").slice(0, 5),
       site: emp.site ?? "",
       sunday_bonus: emp.sunday_bonus == null ? "" : emp.sunday_bonus ? "yes" : "no",
       shift_bonus: emp.shift_bonus ?? false,
@@ -248,6 +252,8 @@ export default function DolgozokPage() {
           wage_type: form.wage_type,
           annual_leave_days: form.annual_leave_days,
           payroll_source: form.payroll_source,
+          fixed_work_start: form.fixed_work_start ? `${form.fixed_work_start}:00` : null,
+          fixed_work_end: form.fixed_work_end ? `${form.fixed_work_end}:00` : null,
           site: clean(form.site) ?? null,
           sunday_bonus: form.sunday_bonus === "" ? null : form.sunday_bonus === "yes",
           shift_bonus: form.shift_bonus,
@@ -786,6 +792,16 @@ export default function DolgozokPage() {
                 </select>
                 <span className="mt-1 block text-xs text-slate-400">{t("emp.payrollSourceHint")}</span>
               </Field>
+              {form.wage_type === "monthly" && (
+                <Field label={t("emp.fixedHours")}>
+                  <div className="flex items-center gap-2">
+                    <input type="time" value={form.fixed_work_start} onChange={(e) => set("fixed_work_start", e.target.value)} className={inputCls} />
+                    <span className="text-slate-400">–</span>
+                    <input type="time" value={form.fixed_work_end} onChange={(e) => set("fixed_work_end", e.target.value)} className={inputCls} />
+                  </div>
+                  <span className="mt-1 block text-xs text-slate-400">{t("emp.fixedHoursHint")}</span>
+                </Field>
+              )}
               <Field label={t("emp.site")}>
                 <input value={form.site} onChange={(e) => set("site", e.target.value)} placeholder={t("emp.sitePlaceholder")} className={inputCls} />
                 <span className="mt-1 block text-xs text-slate-400">{t("emp.siteHint")}</span>

@@ -46,6 +46,8 @@ interface WorksheetSettings {
   intake_footer_default: string;
   survey_fee: number | null;
   survey_fee_default: number;
+  pickup_phone: string | null;
+  label_phone: string | null;
   accent_color: string;
   show_materials: boolean;
   show_hours: boolean;
@@ -654,6 +656,8 @@ export default function BeallitasokPage() {
     customer_footer_text: "",
     intake_footer_text: "",
     survey_fee: "",
+    pickup_phone: "",
+    label_phone: "",
     accent_color: "#1e40af",
     show_materials: true,
     show_hours: true,
@@ -785,6 +789,8 @@ export default function BeallitasokPage() {
           customer_footer_text: s.customer_footer_text ?? "",
           intake_footer_text: s.intake_footer_text ?? "",
           survey_fee: s.survey_fee != null ? String(s.survey_fee) : "",
+          pickup_phone: s.pickup_phone ?? "",
+          label_phone: s.label_phone ?? "",
           accent_color: s.accent_color,
           show_materials: s.show_materials,
           show_hours: s.show_hours,
@@ -1327,6 +1333,8 @@ export default function BeallitasokPage() {
         customer_footer_text: ws.customer_footer_text || null,
         intake_footer_text: ws.intake_footer_text || null,
         survey_fee: ws.survey_fee ? Number(ws.survey_fee) : null,
+        pickup_phone: ws.pickup_phone || null,
+        label_phone: ws.label_phone || null,
         accent_color: ws.accent_color,
         show_materials: ws.show_materials,
         show_hours: ws.show_hours,
@@ -1478,6 +1486,16 @@ export default function BeallitasokPage() {
               className="ml-2 w-32 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
             /> Ft
             <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsSurveyFeeHint")}</span>
+          </label>
+          <label className="block text-sm">
+            {t("settings.wsPickupPhone")}
+            <input value={ws.pickup_phone} onChange={(e) => setWs({ ...ws, pickup_phone: e.target.value })} placeholder="+36 70 123 4567" className={inputCls} />
+            <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsPickupPhoneHint")}</span>
+          </label>
+          <label className="block text-sm">
+            {t("settings.wsLabelPhone")}
+            <input value={ws.label_phone} onChange={(e) => setWs({ ...ws, label_phone: e.target.value })} placeholder="+36 1 700 4042" className={inputCls} />
+            <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsLabelPhoneHint")}</span>
           </label>
           <div className="flex items-center gap-3">
             <span className="text-sm">{t("settings.wsAccent")}</span>

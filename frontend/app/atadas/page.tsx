@@ -124,6 +124,12 @@ export default function AtadasPage() {
           {doneInfo.discount
             ? t("handover.doneDiscount", { serial: doneInfo.serial })
             : t("handover.doneInvoiced", { serial: doneInfo.serial })}
+          <div className="mt-2">
+            <a href={`/api/tasks/${doneInfo.task_id}/handover/receipt.pdf`} target="_blank" rel="noopener"
+               className="inline-block rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100">
+              🖨 {t("handover.printReceipt")}
+            </a>
+          </div>
           {doneInfo.document_id && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
@@ -179,9 +185,15 @@ export default function AtadasPage() {
 
       {selected && (
         <div className="max-w-lg space-y-3">
-          <button onClick={() => setSelected(null)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
-            ← {t("handover.back")}
-          </button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button onClick={() => setSelected(null)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
+              ← {t("handover.back")}
+            </button>
+            <a href={`/api/tasks/${selected.task_id}/handover/receipt.pdf`} target="_blank" rel="noopener"
+               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+              🖨 {t("handover.printReceipt")}
+            </a>
+          </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-400">{selected.serial}</p>
             <h2 className="mt-1 text-lg font-semibold">☕ {selected.machine ?? selected.title}</h2>

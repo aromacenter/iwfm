@@ -61,7 +61,9 @@ def _draw_label(c: pdf_canvas.Canvas, item: dict, x: float, y: float) -> None:
     text_y -= 6 * mm
     c.drawString(text_x, text_y, f"Kód: {item.get('barcode') or '—'}")
     text_y -= 5 * mm
-    if item.get("serial_number"):
+    if item.get("phone"):
+        c.drawString(text_x, text_y, f"Ügyelet: {str(item['phone'])[:20]}")
+    elif item.get("serial_number"):
         c.drawString(text_x, text_y, f"Gyári szám: {str(item['serial_number'])[:20]}")
         text_y -= 5 * mm
     if not item.get("customer_owned") and not item.get("rented"):
@@ -100,7 +102,9 @@ def _draw_small_label(c: pdf_canvas.Canvas, item: dict) -> None:
     c.drawString(text_x, SMALL_H - pad - 3 * mm, name)
     c.setFont(FONT, 7)
     c.drawString(text_x, SMALL_H - pad - 6.8 * mm, f"Kód: {item.get('barcode') or '—'}")
-    if item.get("serial_number"):
+    if item.get("phone"):
+        c.drawString(text_x, SMALL_H - pad - 10.2 * mm, f"Ügyelet: {str(item['phone'])[:16]}")
+    elif item.get("serial_number"):
         c.drawString(text_x, SMALL_H - pad - 10.2 * mm, f"Gy.sz.: {str(item['serial_number'])[:16]}")
     c.setFont(FONT, 6.5)
     c.setFillColorRGB(0.3, 0.35, 0.45)
@@ -152,6 +156,8 @@ def build_qr_labels_ezpl(items: list[dict]) -> bytes:
         name = _ascii(str(item.get("name") or ""))[:MAX_CHARS]
         barcode = str(item.get("barcode") or "")
         serial = _ascii(str(item.get("serial_number") or ""))
+        # 155. kör (c066dc6d): ügyeleti telefonszám a gyári szám helyett
+        phone = _ascii(str(item.get("phone") or "")).replace(" ", "")
         out += [
             "^Q25,3",   # címkemagasság 25 mm, rés 3 mm
             "^W51",     # címkeszélesség 51 mm
@@ -172,7 +178,9 @@ def build_qr_labels_ezpl(items: list[dict]) -> bytes:
             url,
         ]
         texts = [name, f"Kod: {barcode}"[:MAX_CHARS]]
-        if serial:
+        if phone:
+            texts.append(f"Tel: {phone}"[:MAX_CHARS])
+        elif serial:
             texts.append(f"Gy.sz: {serial}"[:MAX_CHARS])
         if not item.get("customer_owned") and not item.get("rented"):
             texts += ["X-Presso Coffee", "Kft tulajdona"]
@@ -325,7 +333,9 @@ def build_qr_label_ezpx(item: dict) -> bytes:
     """GoLabel projekt (.ezpx) EGY géphez — a felhasználó saját VOID-címke
     sablonjának pontos mása, a vonalkódban a gép gyári számával (ennek
     híján a gép kódjával)."""
-    code = str(item.get("serial_number") or item.get("barcode") or "")
+    # 155. kör (c066dc6d): ha van ügyeleti telefonszám, az kerül a címkére a
+    # gyári szám helyett
+    code = str(item.get("phone") or item.get("serial_number") or item.get("barcode") or "")
     xml = _EZPX_TEMPLATE.format(
         nil10='      <string xsi:nil="true" />\n' * 10,
         nil30='      <string xsi:nil="true" />\n' * 30,

@@ -164,6 +164,10 @@ class Employee(Base):
     site: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # Vasárnapi pótlék (Mt. 140. §) jár-e: None = a céges alapértelmezés.
     sunday_bonus: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # 155. kör (8fba1fe9): havi béres dolgozó rögzített munkaideje — a munkaidő-
+    # nyilvántartás PDF ezt mutatja minden munkanapra (blokkolás / beosztás helyett)
+    fixed_work_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    fixed_work_end: Mapped[time | None] = mapped_column(Time, nullable=True)
     # Műszakpótlékra jogosult (Mt. 141. §) — a lapon külön oszlop csak kérésre.
     shift_bonus: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
@@ -818,6 +822,10 @@ class WorksheetSettings(Base):
     # Felmérési díj (nettó Ft) — az árajánlat "nem kérem a javítást"
     # opciójához; None = beépített alapérték (5000).
     survey_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 155. kör: az elkészült-gép értesítő időpont-egyeztető telefonszáma (c15e4a82)
+    # és a Godex-címke ügyeleti száma a gyári szám helyett (c066dc6d)
+    pickup_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    label_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

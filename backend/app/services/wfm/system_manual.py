@@ -215,7 +215,8 @@ A gépeknél beállítható karbantartási ciklus; az esedékesek a Szerviz olda
 2. A sor megnyitása (QR-ről is: ?task=…): fizetési mód: készpénz / kártya / átutalás. Átutalásnál fizetési határidő, alapból 8 nap (átírható).
 3. Kedvezmény pipa: NEM készül számla (és semmilyen megjegyzés nem kerül mellé).
 4. Átadás gomb: számla készül a partner számlázó cégével (Billingó/Számlázz.hu), a gép „átadott” státuszba kerül, a feladat lezárul.
-5. Kassza: csak a KÉSZPÉNZES átadás bruttó összege kerül az átadó kasszájába; kártya/átutalás nem; saját tárgyi gépnél mindig 0 Ft.""",
+5. Kassza: csak a KÉSZPÉNZES átadás bruttó összege kerül az átadó kasszájába; kártya/átutalás nem; saját tárgyi gépnél mindig 0 Ft.
+6. Átadás-átvételi elismervény: a sor megnyitásánál és az átadás után is „🖨 Átadás-átvételi elismervény (PDF)” gomb — kinyomtatva az ügyfél aláírja (átadó / átvevő aláírás-vonal), egy példány az ügyfélé, egy a szervizé.""",
     },
     {
         "key": "szerelo_atadas",
@@ -248,7 +249,7 @@ A nyilvános űrlapról érkező ajánlatkérésből partner készíthető egy k
         "keywords": "gép vonalkód QR címke Godex nyomtatás telepítés partnerhez számláló norma több számláló tárgyi eszköz ügyfél gépe bérelt gép történet beépített alkatrész",
         "body": """## Gép felvétele
 1. Gépek → „+ Új gép”: vonalkód (generálható), típus, gyártó, cikkszám, gyári szám, számlálók száma és normák (g/adag), alap termék, jelleg: saját tárgyi eszköz / ügyfél gépe / bérelt.
-2. Mentés után a rendszer felajánlja a vonalkód-címkét a Godex nyomtatási sorba (az üzleti PC-n futó nyomtató-ügynök küldi ki).
+2. Mentés után a rendszer felajánlja a vonalkód-címkét a Godex nyomtatási sorba (az üzleti PC-n futó nyomtató-ügynök küldi ki). Ha a Beállítások → Munkalap/arculat kártyán ki van töltve a „Gépcímke: ügyeleti telefonszám”, a címkén a gyári szám helyett ez a szám szerepel.
 3. Telepítés partnerhez: „Telepítés” → partner; innen a gép az elszámolásban számlálóval szerepel.
 
 ## Gép-történet
@@ -374,6 +375,7 @@ A dolgozó kérelmez, a vezető jóváhagy (éves keret ellenőrzéssel). Vezet�
 1. Dolgozók → „+ Új dolgozó”: név, elérhetőség, belépési azonosító (e-mail VAGY felhasználónév), kezdő jelszó (vagy generált), szerepkör (beépített vagy saját), skillek.
 2. Mentés után a dolgozó beléphet; jelszót a saját profiljában változtat, az admin visszaállító linket küldhet.
 3. Inaktiválás: a fiók nem léphet be, az adatok megmaradnak.
+4. Rögzített munkaidő (havi béres dolgozónál): a kartonon kezdés–befejezés időpont; ha ki van töltve, a munkaidő-nyilvántartás PDF minden munkanapra ezt mutatja a blokkolás / beosztás helyett (órabéresnél nem érvényes).
 
 ## Szerepkör módosítása
 A dolgozó szerkesztésénél a szerepkör átírható; a jogok a Beállítások → Jogosultságok mátrixból jönnek, a változás a következő oldalbetöltéskor él.""",
@@ -401,7 +403,8 @@ Promóciós képek/videó slotokba (a gyári képek backupba kerülnek, visszaá
         "keywords": "csomag GLS feladás címke utánvét nyomkövetés elszámolás feltöltés csomagként",
         "body": """## GLS-feladás
 1. Csomagok → „+ Új csomag” vagy az Elszámolás/Feltöltés „GLS” pipájával előtöltve érkezik (partner, tartalom, utánvét-összeg).
-2. Címke nyomtatása, csomagszám; státusz-követés a listában.""",
+2. Címke nyomtatása, csomagszám; státusz-követés a listában.
+3. FoxPost automata: a kód beírható, vagy a „Választás térképen” gombbal kereshető város / irányítószám / név szerint, és a térképen kattintva kerül az űrlapba.""",
     },
     {
         "key": "beallitasok",
@@ -411,7 +414,7 @@ Promóciós képek/videó slotokba (a gyári képek backupba kerülnek, visszaá
 - Számlázó: Billingó (két fiók: X-Presso és Premium Caffe) vagy Számlázz.hu Agent; teszt-mód (proforma).
 - E-mail (SMTP) a bizonylatokhoz, ajánlatokhoz, napi összefoglalóhoz.
 - Értesítések: Telegram/WhatsApp események (rendelés, alkatrész-hiány, kérés…), automatikus bizonylat-küldés aláírás után, heti mentés.
-- Munkalap/arculat: logó, cégnév, cím, lábléc, színek, átvételi záradék szövege.
+- Munkalap/arculat: logó, cégnév, cím, lábléc, színek, átvételi záradék szövege; az elkészült-gép értesítő időpont-egyeztető telefonszáma (üresen a mondat elmarad) és a gépcímke ügyeleti telefonszáma (a gyári szám helyett).
 - AI: szolgáltató és kulcs (Anthropic/Gemini), kiosztási prompt.
 - Jogosultságok: szerepkörök és mátrix.
 - Automatizálások: eseményekre (trigger) futó akciók.

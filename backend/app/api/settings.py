@@ -327,6 +327,9 @@ class WorksheetSettingsBody(BaseModel):
     intake_footer_text: str | None = Field(default=None, max_length=2000)
     # Felmérési díj (nettó Ft) — az árajánlat "nem kérem a javítást" opciója.
     survey_fee: float | None = Field(default=None, ge=0, le=10_000_000)
+    # 155. kör: elkészült-gép értesítő telefonszáma; Godex-címke ügyeleti száma
+    pickup_phone: str | None = Field(default=None, max_length=32)
+    label_phone: str | None = Field(default=None, max_length=32)
     accent_color: str = Field(default="#1e40af")
     show_materials: bool = True
     show_hours: bool = True
@@ -365,6 +368,8 @@ class WorksheetSettingsOut(BaseModel):
     intake_footer_default: str
     survey_fee: float | None
     survey_fee_default: float
+    pickup_phone: str | None
+    label_phone: str | None
     accent_color: str
     show_materials: bool
     show_hours: bool
@@ -407,6 +412,8 @@ def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
         intake_footer_default=DEFAULT_INTAKE_FOOTER,
         survey_fee=row.survey_fee,
         survey_fee_default=DEFAULT_SURVEY_FEE,
+        pickup_phone=row.pickup_phone,
+        label_phone=row.label_phone,
         accent_color=row.accent_color,
         show_materials=row.show_materials,
         show_hours=row.show_hours,
@@ -571,6 +578,8 @@ async def update_worksheet_settings(
     row.customer_footer_text = (body.customer_footer_text or "").strip() or None
     row.intake_footer_text = (body.intake_footer_text or "").strip() or None
     row.survey_fee = body.survey_fee
+    row.pickup_phone = (body.pickup_phone or "").strip() or None
+    row.label_phone = (body.label_phone or "").strip() or None
     row.accent_color = body.accent_color
     row.show_materials = body.show_materials
     row.show_hours = body.show_hours

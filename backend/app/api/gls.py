@@ -20,6 +20,42 @@ from app.services.wfm.license import effective_modules, get_license_row
 
 router = APIRouter()
 
+# FoxPost automata-lista (publikus CDN) — 24 órás gyorsítótár a folyamatban
+_APM_CACHE: dict = {"at": 0.0, "rows": []}
+FOXPOST_APM_URL = "https://cdn.foxpost.hu/foxplus.json"
+
+
+@router.get("/foxpost/apms")
+async def foxpost_apms(_: User = Depends(require_perm("settlements"))):
+    """155. kör (aaee410b): a FoxPost automaták listája (kód, név, cím, koordináta)
+    a csomagfeladás térképes automata-választójához."""
+    import time as _time
+
+    import httpx
+
+    if _time.time() - _APM_CACHE["at"] > 86400 or not _APM_CACHE["rows"]:
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                res = await client.get(FOXPOST_APM_URL)
+            res.raise_for_status()
+            raw = res.json()
+        except Exception as exc:  # hálózati / formátum-hiba: nincs lista
+            if _APM_CACHE["rows"]:
+                return _APM_CACHE["rows"]
+            raise HTTPException(status_code=502, detail={"code": "foxpost.apm_list_unavailable"}) from exc
+        rows = []
+        for a in raw if isinstance(raw, list) else []:
+            if not isinstance(a, dict) or (a.get("country") or "hu") != "hu" or not a.get("operator_id"):
+                continue
+            rows.append({
+                "id": str(a.get("operator_id")), "name": a.get("name") or "", "address": a.get("address") or "",
+                "zip": str(a.get("zip") or ""), "city": a.get("city") or "",
+                "lat": a.get("geolat"), "lng": a.get("geolng"),
+                "outdoor": bool(a.get("isOutdoor")), "type": a.get("apmType") or "",
+            })
+        _APM_CACHE.update(at=_time.time(), rows=rows)
+    return _APM_CACHE["rows"]
+
 
 async def _require_carrier(db: AsyncSession, carrier: str) -> None:
     """403, ha a futár modulja nincs bekapcsolva ezen a példányon."""

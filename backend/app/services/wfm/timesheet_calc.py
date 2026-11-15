@@ -232,6 +232,14 @@ def build_month_sheet(
     daily_minutes = int(round(getattr(employee, "weekly_hours", 40) * 60 / 5))
     schedule_based = getattr(employee, "payroll_source", "attendance") == "schedule"
     break_rule = _employee_break_rule(employee, company)
+    # 155. kör (8fba1fe9): havi béres dolgozónál a kartonon rögzített munkaidő adja
+    # a napi sort minden munkanapra (a blokkolás / beosztás helyett)
+    fixed_start = getattr(employee, "fixed_work_start", None)
+    fixed_end = getattr(employee, "fixed_work_end", None)
+    fixed_hours = (
+        getattr(employee, "wage_type", "monthly") == "monthly"
+        and fixed_start is not None and fixed_end is not None
+    )
     sunday_bonus = _sunday_bonus(employee, company)
     hire = getattr(employee, "hire_date", None) or first
     term = getattr(employee, "termination_date", None)
@@ -313,7 +321,17 @@ def build_month_sheet(
         # adat, a másik forrás tölti a sort — a könyvelő minden napnál lássa a
         # kezdést, a befejezést és az órákat
         use_schedule = (schedule_based and bool(day_shifts)) or (not schedule_based and not day_entries and bool(day_shifts))
-        if use_schedule:
+        if fixed_hours and row.workday:
+            row.work_start, row.work_end = fixed_start, fixed_end
+            raw = _span_minutes(fixed_start, fixed_end)
+            deduct = 0 if break_rule.paid else break_rule.deduction(raw, rules)
+            row.work_minutes = max(raw - deduct, 0)
+            st = datetime.combine(d, fixed_start, tzinfo=TZ)
+            en = datetime.combine(d, fixed_end, tzinfo=TZ)
+            if en <= st:
+                en += timedelta(days=1)
+            spans.append((st, en))
+        elif use_schedule:
             row.work_start, row.work_end = row.sched_start, row.sched_end
             row.work_minutes = row.sched_minutes
             for sh in day_shifts:

@@ -3265,9 +3265,7 @@ async def worksheet_picked_up(
         "",
         "A gép átvehető üzletünkben, nyitvatartási időben.",
         "",
-        "Kérjük a +36 30 190 9071-es telefonszámon egyeztessen időpontot",
-        "kollégánkkal, hogy mikor tudjuk átadni az elkészült készüléket.",
-        "",
+    ] + _pickup_phone_lines(row) + [
         "Üdvözlettel,",
         company,
     ]
@@ -3332,6 +3330,20 @@ def _handover_items(ws: Worksheet) -> list[dict]:
     if (ws.maintenance_fee or 0) > 0 and not ws.fee_discount:
         items.append({"name": "Karbantartási díj", "amount_net": float(ws.maintenance_fee)})
     return items
+
+
+def _pickup_phone_lines(row) -> list[str]:
+    """Az elkészült-gép értesítő időpont-egyeztető mondata (155. kör, c15e4a82):
+    a telefonszám a Beállítások → munkalap „értesítő telefonszám” mezőjéből;
+    üresen a mondat elmarad (nincs beégetett szám)."""
+    phone = ((getattr(row, "pickup_phone", None) or "") if row is not None else "").strip()
+    if not phone:
+        return []
+    return [
+        f"Kérjük, időpont-egyeztetéshez hívja kollégánkat a {phone} telefonszámon,",
+        "hogy mikor tudjuk átadni az elkészült készüléket.",
+        "",
+    ]
 
 
 async def _handover_row(db: AsyncSession, task: Task, ws: Worksheet) -> dict:
@@ -3541,18 +3553,18 @@ async def service_handover_pickup(
         fees_by_emp[str(task.employee_id)] = fees_by_emp.get(str(task.employee_id), 0.0) + fee
         if smtp is not None and ws.quote_email:
             try:
+                ws_row = (
+                    await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))
+                ).scalar_one_or_none()
                 body_lines = [
                     "Tisztelt Ügyfelünk!",
                     "",
                     f"A(z) {ws.serial} munkalapon szereplő készülék javítása"
                     " elkészült, a gép átvehető üzletünkben.",
                     "",
-                    "Kérjük a +36 30 190 9071-es telefonszámon egyeztessen"
-                    " időpontot kollégánkkal, hogy mikor tudjuk átadni az"
-                    " elkészült készüléket.",
-                    "",
+                ] + _pickup_phone_lines(ws_row) + [
                     "Üdvözlettel,",
-                    "X-Presso szerviz",
+                    (ws_row.company_name if ws_row else None) or "Szerviz",
                 ]
                 await send_email(
                     smtp, ws.quote_email,
@@ -3946,6 +3958,40 @@ async def do_handover(
         pass
     return {"ok": True, "document_id": document_id, "total_net": total,
             "discount": body.discount, "invoice_sent_to": invoice_sent_to}
+
+
+@router.get("/{task_id}/handover/receipt.pdf", dependencies=[Depends(require_module("handover"))])
+async def handover_receipt_pdf(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("invoicing")),
+):
+    """Átadás-átvételi elismervény (155. kör, bbbede05): a megjavított gép
+    ügyfélnek átadásáról nyomtatható, aláírandó lap — átadás előtt és után is."""
+    from zoneinfo import ZoneInfo
+
+    from app.services.wfm.handover_receipt_pdf import build_handover_receipt_pdf
+
+    task = await _get_task_or_404(db, task_id)
+    ws = await _get_worksheet(db, task.id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
+    row = await _handover_row(db, task, ws)
+    settings = await _worksheet_pdf_settings(db) or {}
+    when = ws.handed_over_at or datetime.now(UTC)
+    pdf = build_handover_receipt_pdf(
+        {
+            **row,
+            "created_at": when.astimezone(ZoneInfo("Europe/Budapest")).strftime("%Y-%m-%d %H:%M"),
+            "pay_label": PAY_LABEL.get(ws.handover_payment_method or "", None),
+            "handed_over": ws.handed_over_at is not None,
+        },
+        settings,
+    )
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="atadas-{ws.serial}.pdf"'},
+    )
 
 
 @router.get("/{task_id}/handover/invoice-link", dependencies=[Depends(require_module("handover"))])
