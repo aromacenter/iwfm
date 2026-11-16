@@ -81,6 +81,7 @@ def _send_sync(
     subject: str,
     body: str,
     attachments: list[Attachment] | None = None,
+    html: str | None = None,
 ) -> None:
     msg = EmailMessage()
     msg["From"] = config.from_address
@@ -88,6 +89,8 @@ def _send_sync(
     msg["To"] = ", ".join(split_addresses(to)) or to
     msg["Subject"] = subject
     msg.set_content(body)
+    if html:  # 159. kör: formázott levél — a sima szöveg a tartalék (text/plain + text/html)
+        msg.add_alternative(html, subtype="html")
     for filename, data, maintype, subtype in attachments or []:
         msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
 
@@ -111,10 +114,11 @@ async def send_email(
     subject: str,
     body: str,
     attachments: list[Attachment] | None = None,
+    html: str | None = None,
 ) -> bool:
-    """Egy email elküldése (opcionális csatolmányokkal). False hibánál (logolva)."""
+    """Egy email elküldése (opcionális csatolmányokkal, HTML-változattal). False hibánál (logolva)."""
     try:
-        await asyncio.to_thread(_send_sync, config, to, subject, body, attachments)
+        await asyncio.to_thread(_send_sync, config, to, subject, body, attachments, html)
         return True
     except Exception:
         # A címzett e-mail címe személyes adat: a naplóba csak a domain kerül.

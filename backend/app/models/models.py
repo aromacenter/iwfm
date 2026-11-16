@@ -3537,6 +3537,9 @@ class MailCampaign(Base):
     failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed: Mapped[list | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="running")  # running | done
+    # 159. kör: formázott (HTML) levél és csatolmány-nevek
+    is_html: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    attachment_names: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     created_by_name: Mapped[str] = mapped_column(String(256), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(

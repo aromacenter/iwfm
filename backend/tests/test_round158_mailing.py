@@ -10,8 +10,8 @@ def _fake_smtp(monkeypatch, sent: list, fail: set[str] = frozenset()):
     async def load(db):
         return SmtpConfig(host="smtp.example.com", port=587, username=None, password=None, from_address="noreply@example.com", use_tls=True)
 
-    async def send(config, to, subject, body, attachments=None):
-        sent.append((to, subject, body))
+    async def send(config, to, subject, body, attachments=None, html=None):
+        sent.append((to, subject, body, attachments, html))
         return to not in fail
 
     monkeypatch.setattr(email_service, "load_smtp_config", load)
@@ -62,6 +62,34 @@ async def test_recipients_and_campaigns(client, admin, manager, monkeypatch):
     res = await client.post("/api/mailing/test", json={"mode": "single", "subject": "Szia", "body": "Teszt"}, headers=adm)
     assert res.status_code == 200, res.text
     assert sent[-1][1] == "[PRÓBA] Szia"
+
+
+async def test_html_and_attachments(client, admin, monkeypatch):
+    import base64
+
+    from app.api.mailing import _html_to_text
+
+    assert _html_to_text("<p>Szia <b>Pali</b>!</p><ul><li>egy</li><li>kett&ouml;</li></ul>") == "Szia Pali!\n• egy\n• kettö"
+    _, adm = admin
+    sent: list = []
+    _fake_smtp(monkeypatch, sent)
+    pdf = base64.b64encode(b"%PDF-1.4 teszt").decode()
+    res = await client.post("/api/mailing/send", json={
+        "mode": "single", "to": "a@example.com", "subject": "Ajánlat", "html": True,
+        "body": "<p>Kedves <b>Partnerünk</b>!</p><p>Mellékelve az ajánlat.</p>",
+        "attachments": [{"name": "ajanlat.pdf", "mime": "application/pdf", "data": "data:application/pdf;base64," + pdf}],
+    }, headers=adm)
+    assert res.status_code == 201, res.text
+    c = res.json()
+    assert c["is_html"] is True and c["attachment_names"] == ["ajanlat.pdf"] and c["sent_count"] == 1
+    to, subject, text, attachments, html = sent[-1]
+    assert text.startswith("Kedves Partnerünk!\nMellékelve az ajánlat.") and "<b>Partnerünk</b>" in html and html.startswith("<!doctype html>")
+    assert attachments == [("ajanlat.pdf", b"%PDF-1.4 teszt", "application", "pdf")]
+    # túl nagy csatolmány
+    big = base64.b64encode(b"x" * (9 * 1024 * 1024)).decode()
+    res = await client.post("/api/mailing/send", json={"mode": "single", "to": "a@example.com", "subject": "x", "body": "y",
+                                                       "attachments": [{"name": "nagy.bin", "mime": "application/octet-stream", "data": big}]}, headers=adm)
+    assert res.status_code == 422 and res.json()["detail"]["code"] == "mailing.attachments_too_big"
 
 
 async def test_mailing_requires_smtp(client, admin, monkeypatch):
