@@ -244,6 +244,9 @@ def create_app() -> FastAPI:
     app.include_router(consignment.products_router, prefix="/api/products", tags=["products"], dependencies=[Depends(_mod("products"))])
     app.include_router(consignment.stock_router, prefix="/api/partners", tags=["partner-stock"], dependencies=[Depends(_mod("settlements"))])
     app.include_router(consignment.settlements_router, prefix="/api/settlements", tags=["settlements"], dependencies=[Depends(_mod("settlements"))])
+    from app.api import settlement_backfill as settlement_backfill_api
+
+    app.include_router(settlement_backfill_api.router, prefix="/api/settlements-backfill", tags=["settlements"])
     app.include_router(service.router, prefix="/api/service", tags=["service"], dependencies=[Depends(_mod("service"))])
     app.include_router(intake_api.router, prefix="/api/intakes", tags=["intakes"], dependencies=[Depends(_mod("intake"))])
     app.include_router(audit.router, prefix="/api/audit", tags=["audit"], dependencies=[Depends(_mod("audit"))])
