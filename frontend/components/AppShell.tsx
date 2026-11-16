@@ -17,7 +17,7 @@ import { usePerms } from "@/lib/perms";
 import type { AuthUser } from "@/lib/types";
 import {
   ArrowLeftRight, BookMarked, BookOpen, BookText, Boxes, Briefcase, Bug, CalendarCheck, CalendarDays, CalendarOff, CalendarRange, ClipboardList, Clock, Coffee, Cog, GraduationCap, Hammer, Handshake, History, Inbox, LayoutDashboard, ListChecks, ListTodo, MailQuestion, Package, PackageCheck, PieChart, RadioTower, Receipt, RefreshCw, ScrollText, Settings, ShoppingCart, Smartphone, Timer, TrendingUp, Truck, Users, Wallet, Warehouse, Wrench, Zap,
-  Image as ImageIcon, Map as MapIcon, type LucideIcon,
+  Image as ImageIcon, Mail, Map as MapIcon, type LucideIcon,
 } from "lucide-react";
 
 interface NavItem {
@@ -78,6 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/partnerek", key: "nav.partners", perm: "partners", icon: Handshake, module: "partners" },
       { href: "/szerzodesek", key: "nav.contracts", perm: "partners", icon: ScrollText, module: "contracts" },
       { href: "/ajanlatkeresek", key: "nav.quotes", perm: "partners", icon: MailQuestion, module: "quotes" },
+      { href: "/levelek", key: "nav.mailing", perm: "admin-only", icon: Mail, module: "mailing" },
       { href: "/gepek", key: "nav.inventory", perm: "machines", icon: Coffee, module: "machines" },
       { href: "/termekek", key: "nav.products", perm: "products", icon: Package, module: "products" },
       { href: "/raktar", key: "nav.warehouse", perm: "settlements", icon: Warehouse, module: "warehouse" },

@@ -29,6 +29,7 @@ MODULES = (
     "worktime",  # munkaidő-mérés munkalaponként (timer + vezetői statisztika) — alapból KI
     "tools",  # szerszám-nyilvántartás: kinél mi van, ellenőrzés/kalibrálás esedékesség (137. kör)
     "learning",  # X-Learning: oktatóanyagok, teszt, oklevél — külön felület a dolgozónak (142. kör)
+    "mailing",  # Levélküldés: egyedi e-mail egy címre vagy minden e-mailes partnernek (158. kör)
     # 116. kör: MINDEN menüpont kapcsolható (többféle raktár-/szerviz-profil).
     # A vezérlőpult, a beállítások, a kézikönyv és a roadmap az alap — nem kapcsolható.
     "calendar", "tasks", "service", "intake", "handover", "pickup", "quotes",

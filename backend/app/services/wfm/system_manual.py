@@ -432,6 +432,22 @@ A jobb alsó piros bogár gombbal: leírás + automatikus képernyőkép és old
 Rendszer → Napló: minden fontos művelet (ki, mikor, mit), szűrhető akcióra és felhasználóra; a jogosultság-tiltások („auth.denied”) is itt látszanak.""",
     },
     {
+        "key": "levelek",
+        "title": "Levélküldés (egyedi e-mail egy címre vagy minden partnernek)",
+        "keywords": "levél e-mail email hírlevél körlevél küldés partnerek ügyfelek tömeges próbalevél kampány napló SMTP",
+        "body": """## Mire való
+Egyedi szöveges e-mail küldése a cég SMTP-jével: EGY címre (vagy több, vesszővel), vagy MINDEN aktív partnernek, akinél e-mail cím van rögzítve (több cím egy partnernél = mind megkapja; minden cím egyszer). Csak admin használhatja.
+
+## Folyamat
+1. Levélküldés menü → címzett-mód: „Egy cím” vagy „Minden partner (N)”. A partner-listát a „lista” gombbal lehet megnézni.
+2. Tárgy és szöveg (sima szöveg; a végére a cégnév kerül aláírásként).
+3. „Próbalevél magamnak”: a saját címre megy [PRÓBA] jelöléssel — érdemes előbb ezt.
+4. Küldés: megerősítő kérdés a címzettszámmal; a partner-kör háttérben megy, címzettenként külön levélben (a címek nem látják egymást). A napló mutatja: hány címzett, hány ment el, kik buktak.
+
+## Feltétel
+Beállítások → E-mail (SMTP) bekapcsolva; nélküle a gomb inaktív.""",
+    },
+    {
         "key": "ai_asszisztens",
         "title": "AI-asszisztens (mit tud, hogyan kérdezz)",
         "keywords": "AI asszisztens chat kérdés hogyan csináljam kézikönyv partner keresés gép történet jegy nyitás számláló feltöltés munkalap elszámolás napi összefoglaló navigálás",

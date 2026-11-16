@@ -3520,6 +3520,31 @@ class QuoteSettings(Base):
     )
 
 
+class MailCampaign(Base):
+    """Levélküldés-napló (158. kör): egy küldés (egy címre vagy minden partnernek)
+    címzettszámmal, elküldött/bukott darabszámmal és a bukott címekkel."""
+
+    __tablename__ = "mail_campaigns"
+    __table_args__ = (Index("ix_mail_campaigns_created", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)  # single | partners
+    to_address: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    recipient_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sent_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="running")  # running | done
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_by_name: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AgentExpense(Base):
     """Képviselői költség — a helyszíni munkával járó kiadás (üzemanyag,
     parkolás, kellék), amely az üzletkötő-elszámolásban a kasszájából
