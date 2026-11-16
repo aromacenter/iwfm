@@ -4,10 +4,10 @@ visszajelzés, online-állapot."""
 from __future__ import annotations
 
 
-async def _make_asset(client, mgr, barcode="PRN-1"):
+async def _make_asset(client, mgr, barcode="PRN-1", **kw):
     res = await client.post(
         "/api/assets",
-        json={"barcode": barcode, "name": "Nyomtatós Gép", "manufacturer": "Saeco"},
+        json={"barcode": barcode, "name": "Nyomtatós Gép", "manufacturer": "Saeco", **kw},
         headers=mgr,
     )
     assert res.status_code in (200, 201), res.text
@@ -128,7 +128,7 @@ async def test_pdf_print_jobs_and_qr_lookup(client, admin, manager):
     _, mgr = manager
 
     # elismerveny sorba allitasa
-    asset = await _make_asset(client, mgr, "PRN-PDF")
+    asset = await _make_asset(client, mgr, "PRN-PDF", customer_owned=True)  # ügyfél gépe → 2 példány
     intake = (
         await client.post(
             "/api/intakes",

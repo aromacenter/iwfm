@@ -2318,6 +2318,8 @@
     "wsPickupPhoneHint": "Shown in the “machine ready for pickup” e-mail; leave empty to omit the phone sentence.",
     "wsLabelPhone": "Machine label: on-call phone",
     "wsLabelPhoneHint": "If set, the Godex label (and PDF labels) show this number instead of the serial number.",
+    "wsInvoiceNote": "Invoice payment instructions (top of the comment)",
+    "wsInvoiceNoteHint": "Placed at the TOP of every outgoing invoice / proforma comment (Billingó and Számlázz.hu). Empty = built-in text; enter “-” to disable.",
     "printerTitle": "Label printer (Godex)",
     "printerHint": "The “Print on Godex” button on the Machines page queues labels here; the print agent running on the shop PC delivers them to the printer. The agent installer is in the app's “agent” folder (OLVASS-EL.txt).",
     "printerOnline": "Agent online",

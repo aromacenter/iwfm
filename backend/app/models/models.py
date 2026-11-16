@@ -826,6 +826,9 @@ class WorksheetSettings(Base):
     # és a Godex-címke ügyeleti száma a gyári szám helyett (c066dc6d)
     pickup_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     label_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 157. kör (ef1cea75): fizetési útmutató minden számla megjegyzésének elejére
+    # (üres = beépített szöveg; „-” = kikapcsolva)
+    invoice_payment_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

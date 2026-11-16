@@ -46,6 +46,8 @@ PORTION_LINE_NAME = (
 # 144. kör (d5d54ecf): szerződés-kapcsolóval a kávésorok egy havi tételben
 MONTHLY_RENT_LINE_NAME = "Kávéfőző gép bérleti díj"
 # A nem elektronikus bizonylatokra kerülő megjegyzés.
+from app.services.wfm.invoice_note import payment_note, with_note  # noqa: E402
+
 INVOICE_COMMENT = "A bizonylat aláírás és bélyegző nélkül is érvényes!"
 
 
@@ -303,7 +305,9 @@ async def settlement_invoice_comment(
     sorszámmal), vesszővel elválasztva — nem külön tétel-sorokban."""
     from app.models import SettlementMachine
 
-    parts = [INVOICE_COMMENT]
+    # 157. kör (ef1cea75): a fizetési útmutató MINDEN bizonylat elejére
+    note = await payment_note(db)
+    parts = [note, INVOICE_COMMENT] if note else [INVOICE_COMMENT]
     # 144. kör (94970648): a szerződés egyedi számla-referenciája (pl. Strabag kód)
     if partner is not None:
         from app.services.wfm.contracts import active_contract
@@ -519,6 +523,7 @@ async def create_maintenance_invoice(
         "language": "hu",
         "currency": "HUF",
         "electronic": False,
+        **({"comment": _note[:4000]} if (_note := await payment_note(db)) else {}),
         "items": [{
             "name": f"Karbantartási díj — {asset_label} ({serial})",
             "unit_price": amount_net,
@@ -548,6 +553,7 @@ async def create_handover_invoice(
     Visszatérés: (document_id, mode).
     ValueError('billingo_not_configured'), ha nincs kulcs/blokk."""
     settings = await get_or_create_settings(db)
+    full_comment = with_note(await payment_note(db), comment)  # 157. kör: fizetési útmutató elöl
     api_key, block_id, test_mode = _account(settings, partner.invoicing_company)
     if not settings.enabled or not api_key or not block_id:
         raise ValueError("billingo_not_configured")
@@ -565,7 +571,7 @@ async def create_handover_invoice(
         "language": "hu",
         "currency": "HUF",
         "electronic": False,
-        **({"comment": comment[:4000]} if comment else {}),
+        **({"comment": full_comment[:4000]} if full_comment else {}),
         "items": [
             {
                 "name": (it["name"] if serial in str(it["name"]) else f"{it['name']} ({serial})")[:255],

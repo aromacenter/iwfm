@@ -219,7 +219,8 @@ export default function AtvetelPage() {
   const [newPartner, setNewPartner] = useState(EMPTY_PARTNER);
   // Saját tárgyi gép (nem az ügyfélé): nincs kinek szólni → az elérhetőség nem kötelező (dc134f9f)
   const selectedAsset = assets.find((a) => a.id === form.asset_id);
-  const ownMachine = !newAssetMode && !!selectedAsset && !!selectedAsset.tangible && !selectedAsset.customer_owned;
+  // 157. kör (1b978d56): saját gép = nem az ügyfélé (a tárgyi jelölés nem számít)
+  const ownMachine = !newAssetMode && !!selectedAsset && !selectedAsset.customer_owned;
 
   const load = useCallback(() => {
     api.get<Intake[]>("/api/intakes").then(setIntakes).catch(() => {});

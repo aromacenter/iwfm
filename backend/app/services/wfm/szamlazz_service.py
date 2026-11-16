@@ -109,6 +109,9 @@ def _tetel_xml(name: str, qty: float, unit: str, unit_price_net: float, vat_perc
     )
 
 
+from app.services.wfm.invoice_note import payment_note, with_note  # noqa: E402
+
+
 def _invoice_xml(
     agent_key: str,
     prefix: str | None,
@@ -231,6 +234,7 @@ async def create_maintenance_invoice(
     xml = _invoice_xml(
         agent_key, prefix, test_mode=test_mode,
         payment_method="transfer", due=due,
+        comment=with_note(await payment_note(db), None),  # 157. kör
         vevo=_vevo_xml(partner),
         tetelek=[_tetel_xml(
             f"Karbantartási díj — {asset_label} ({serial})",
@@ -254,7 +258,7 @@ async def create_handover_invoice(
     payment_method: str,  # "cash" | "card" | "transfer"
     due_days: int | None = None,
     vat_percent: int = 27,
-    comment: str | None = None,  # 145. kör: csak a Billingó-ágon használt
+    comment: str | None = None,  # 145. kör: munkalap-hivatkozás; 157. kör: itt is megy, az útmutató elé
 ) -> tuple[str, str]:
     """Szerviz-átadás számlázása a helyszínen (azonnali teljesítés/fizetés)."""
     settings = await _get_settings(db)
@@ -265,6 +269,7 @@ async def create_handover_invoice(
     xml = _invoice_xml(
         agent_key, prefix, test_mode=test_mode,
         payment_method=payment_method, due=today + timedelta(days=due_days or 0),
+        comment=with_note(await payment_note(db), comment),  # 157. kör
         vevo=_vevo_xml(partner),
         tetelek=[
             _tetel_xml(f"{it['name']} ({serial})", 1, "db", it["amount_net"], vat_percent)

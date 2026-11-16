@@ -414,7 +414,7 @@ Promóciós képek/videó slotokba (a gyári képek backupba kerülnek, visszaá
 - Számlázó: Billingó (két fiók: X-Presso és Premium Caffe) vagy Számlázz.hu Agent; teszt-mód (proforma).
 - E-mail (SMTP) a bizonylatokhoz, ajánlatokhoz, napi összefoglalóhoz.
 - Értesítések: Telegram/WhatsApp események (rendelés, alkatrész-hiány, kérés…), automatikus bizonylat-küldés aláírás után, heti mentés.
-- Munkalap/arculat: logó, cégnév, cím, lábléc, színek, átvételi záradék szövege; az elkészült-gép értesítő időpont-egyeztető telefonszáma (üresen a mondat elmarad) és a gépcímke ügyeleti telefonszáma (a gyári szám helyett).
+- Munkalap/arculat: logó, cégnév, cím, lábléc, színek, átvételi záradék szövege; az elkészült-gép értesítő időpont-egyeztető telefonszáma (üresen a mondat elmarad), a gépcímke ügyeleti telefonszáma (a gyári szám helyett) és a számlák fizetési útmutatója (minden kimenő bizonylat megjegyzésének elejére kerül; üresen a beépített szöveg, „-” kikapcsolja).
 - AI: szolgáltató és kulcs (Anthropic/Gemini), kiosztási prompt.
 - Jogosultságok: szerepkörök és mátrix.
 - Automatizálások: eseményekre (trigger) futó akciók.

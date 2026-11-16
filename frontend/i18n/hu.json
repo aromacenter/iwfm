@@ -2318,6 +2318,8 @@
     "wsPickupPhoneHint": "Az ügyfélnek küldött „a gép átvehető” e-mailben ez a szám szerepel; üresen a telefonos mondat elmarad.",
     "wsLabelPhone": "Gépcímke: ügyeleti telefonszám",
     "wsLabelPhoneHint": "Ha kitöltöd, a Godex-címkére (és a PDF-címkékre) a gyári szám helyett ez a szám kerül.",
+    "wsInvoiceNote": "Számlák fizetési útmutatója (a megjegyzés elejére)",
+    "wsInvoiceNoteHint": "Minden kimenő számla és díjbekérő megjegyzésének ELEJÉRE kerül (Billingó és Számlázz.hu). Üresen a beépített szöveg megy; „-” beírásával kikapcsolható.",
     "printerTitle": "Címkenyomtató (Godex)",
     "printerHint": "A Gépek oldal „Godex nyomtatás” gombja ide, a nyomtatási sorba küldi a címkéket; az üzleti PC-n futó nyomtató-ügynök viszi ki őket a nyomtatóra. Az ügynök telepítője a program „agent” mappájában van (OLVASS-EL.txt).",
     "printerOnline": "Ügynök online",

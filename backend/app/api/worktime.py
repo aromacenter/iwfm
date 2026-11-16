@@ -292,12 +292,16 @@ async def close_stale_timers(db: AsyncSession, now: datetime | None = None) -> i
     régebbi, a plafonnál zárul „auto” jelöléssel. Visszatér a zárt darabszámmal."""
     now = now or datetime.now(UTC)
     threshold = now - timedelta(seconds=wt.MAX_OPEN_SESSION_SECONDS)
+    # 157. kör (6be54dff): az ÚJRAINDÍTOTT munkamenetet is el kell kapni — annál a
+    # first_started_at régi, a last_ended_at az előző (lezárt) menet vége, ezért a
+    # korábbi „first_started_at < plafon” szűrő sosem találta meg. A jelölt: minden
+    # elindított timer, amelynek utolsó zárása hiányzik vagy a plafonnál régebbi;
+    # a tényleges nyitott-e / plafon fölött-e döntést a munkamenet-lista adja.
     rows = (
         await db.execute(
             select(WorksheetTimer).where(
-                WorksheetTimer.last_ended_at.is_(None) | (WorksheetTimer.last_ended_at < WorksheetTimer.first_started_at),
                 WorksheetTimer.first_started_at.is_not(None),
-                WorksheetTimer.first_started_at < threshold,
+                WorksheetTimer.last_ended_at.is_(None) | (WorksheetTimer.last_ended_at < threshold),
             )
         )
     ).scalars().all()

@@ -330,6 +330,8 @@ class WorksheetSettingsBody(BaseModel):
     # 155. kör: elkészült-gép értesítő telefonszáma; Godex-címke ügyeleti száma
     pickup_phone: str | None = Field(default=None, max_length=32)
     label_phone: str | None = Field(default=None, max_length=32)
+    # 157. kör: fizetési útmutató a számlák megjegyzésének elejére („-” = ki)
+    invoice_payment_note: str | None = Field(default=None, max_length=1000)
     accent_color: str = Field(default="#1e40af")
     show_materials: bool = True
     show_hours: bool = True
@@ -370,6 +372,8 @@ class WorksheetSettingsOut(BaseModel):
     survey_fee_default: float
     pickup_phone: str | None
     label_phone: str | None
+    invoice_payment_note: str | None
+    invoice_payment_note_default: str
     accent_color: str
     show_materials: bool
     show_hours: bool
@@ -402,6 +406,8 @@ def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
         DEFAULT_SURVEY_FEE,
     )
 
+    from app.services.wfm.invoice_note import DEFAULT_PAYMENT_NOTE
+
     return WorksheetSettingsOut(
         company_name=row.company_name,
         company_address=row.company_address,
@@ -414,6 +420,8 @@ def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
         survey_fee_default=DEFAULT_SURVEY_FEE,
         pickup_phone=row.pickup_phone,
         label_phone=row.label_phone,
+        invoice_payment_note=row.invoice_payment_note,
+        invoice_payment_note_default=DEFAULT_PAYMENT_NOTE,
         accent_color=row.accent_color,
         show_materials=row.show_materials,
         show_hours=row.show_hours,
@@ -580,6 +588,7 @@ async def update_worksheet_settings(
     row.survey_fee = body.survey_fee
     row.pickup_phone = (body.pickup_phone or "").strip() or None
     row.label_phone = (body.label_phone or "").strip() or None
+    row.invoice_payment_note = (body.invoice_payment_note or "").strip() or None
     row.accent_color = body.accent_color
     row.show_materials = body.show_materials
     row.show_hours = body.show_hours

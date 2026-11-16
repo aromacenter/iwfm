@@ -44,6 +44,8 @@ interface WorksheetSettings {
   intake_footer_text: string | null;
   customer_footer_default: string;
   intake_footer_default: string;
+  invoice_payment_note: string | null;
+  invoice_payment_note_default: string;
   survey_fee: number | null;
   survey_fee_default: number;
   pickup_phone: string | null;
@@ -658,6 +660,7 @@ export default function BeallitasokPage() {
     survey_fee: "",
     pickup_phone: "",
     label_phone: "",
+    invoice_payment_note: "",
     accent_color: "#1e40af",
     show_materials: true,
     show_hours: true,
@@ -675,7 +678,7 @@ export default function BeallitasokPage() {
   const [wsHasStamp, setWsHasStamp] = useState(false);
   const [wsStamp, setWsStamp] = useState<string | null>(null);
   const [wsRemoveStamp, setWsRemoveStamp] = useState(false);
-  const [wsDefaults, setWsDefaults] = useState({ customer: "", intake: "" });
+  const [wsDefaults, setWsDefaults] = useState({ customer: "", intake: "", invoiceNote: "" });
   const [wsSurveyDefault, setWsSurveyDefault] = useState(5000);
   const [wsHasLogo, setWsHasLogo] = useState(false);
   const [wsLogo, setWsLogo] = useState<string | null>(null); // újonnan feltöltött data URL
@@ -791,6 +794,7 @@ export default function BeallitasokPage() {
           survey_fee: s.survey_fee != null ? String(s.survey_fee) : "",
           pickup_phone: s.pickup_phone ?? "",
           label_phone: s.label_phone ?? "",
+          invoice_payment_note: s.invoice_payment_note ?? "",
           accent_color: s.accent_color,
           show_materials: s.show_materials,
           show_hours: s.show_hours,
@@ -807,7 +811,7 @@ export default function BeallitasokPage() {
         setWsHasStamp(!!s.has_stamp);
         setWsStamp(null);
         setWsRemoveStamp(false);
-        setWsDefaults({ customer: s.customer_footer_default, intake: s.intake_footer_default });
+        setWsDefaults({ customer: s.customer_footer_default, intake: s.intake_footer_default, invoiceNote: s.invoice_payment_note_default });
         setWsSurveyDefault(s.survey_fee_default);
         setWsHasLogo(s.has_logo);
         setWsLogo(null);
@@ -1335,6 +1339,7 @@ export default function BeallitasokPage() {
         survey_fee: ws.survey_fee ? Number(ws.survey_fee) : null,
         pickup_phone: ws.pickup_phone || null,
         label_phone: ws.label_phone || null,
+        invoice_payment_note: ws.invoice_payment_note || null,
         accent_color: ws.accent_color,
         show_materials: ws.show_materials,
         show_hours: ws.show_hours,
@@ -1496,6 +1501,17 @@ export default function BeallitasokPage() {
             {t("settings.wsLabelPhone")}
             <input value={ws.label_phone} onChange={(e) => setWs({ ...ws, label_phone: e.target.value })} placeholder="+36 1 700 4042" className={inputCls} />
             <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsLabelPhoneHint")}</span>
+          </label>
+          <label className="block text-sm">
+            {t("settings.wsInvoiceNote")}
+            <textarea
+              value={ws.invoice_payment_note}
+              onChange={(e) => setWs({ ...ws, invoice_payment_note: e.target.value })}
+              rows={3}
+              placeholder={wsDefaults.invoiceNote}
+              className={inputCls}
+            />
+            <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsInvoiceNoteHint")}</span>
           </label>
           <div className="flex items-center gap-3">
             <span className="text-sm">{t("settings.wsAccent")}</span>

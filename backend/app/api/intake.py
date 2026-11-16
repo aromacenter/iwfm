@@ -280,7 +280,8 @@ async def create_intake(
     # Elérhetőség KÖTELEZŐ: telefonszám és e-mail nélkül nem vehető át gép —
     # ezek nélkül nem tudjuk értesíteni az ügyfelet (ajánlat, kész gép).
     # Saját tárgyi gépnél (nem ügyfélé) nincs ügyfél-elérhetőség — nem kötelező (dc134f9f).
-    own_machine = bool(asset.tangible and not asset.customer_owned)
+    # 157. kör (1b978d56): a saját gép = nem ügyfélé (akár még nem tárgyi, eladásra váró)
+    own_machine = not asset.customer_owned
     if not own_machine and (not (body.client_phone or "").strip() or not (body.client_email or "").strip()):
         raise HTTPException(status_code=422, detail={"code": "intake.contact_required"})
     # Helyszíni átvétel: ügyfél-aláírás + név kötelező, átvevő-aláírás opcionális
@@ -518,9 +519,11 @@ async def intake_print(
 
     row = await _get_intake_or_404(db, intake_id)
     pdf = await _build_intake_pdf(db, row)
-    # Példányszám (17966bd9): saját tárgyi gép 1, ügyfél gépe 2 (egy az ügyfélé, egy marad)
+    # Példányszám (17966bd9, pontosítva 157. kör / 1b978d56): a TULAJDONOS dönt, nem a
+    # tárgyi-eszköz jelölés — ügyfél (külsős) gépe 2 példány (egy az ügyfélé, egy
+    # marad), saját (a cég tulajdonú, akár még nem tárgyi, eladásra váró) gép 1.
     _asset = (await db.execute(select(Asset).where(Asset.id == row.asset_id))).scalar_one_or_none()
-    copies = 1 if (_asset is not None and _asset.tangible and not _asset.customer_owned) else 2
+    copies = 2 if (_asset is None or _asset.customer_owned) else 1
     job = None
     for i in range(copies):
         job = PrintJob(
