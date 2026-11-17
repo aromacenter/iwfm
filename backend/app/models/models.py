@@ -307,6 +307,18 @@ class TimeEntry(Base):
     )
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="self")
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # 160. kör (8fba1fe9): a dolgozó aláírása be- és kiblokkoláskor (PNG data URL) —
+    # a munkaügyi ellenőrzés napi aláírt jelenlétet kér
+    sign_in_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sign_out_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 160. kör (8fba1fe9): a dolgozó aláírása be- és kiblokkoláskor (PNG data URL) —
+    # a munkaügyi ellenőrzés napi aláírt jelenlétet kér
+    sign_in_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sign_out_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 160. kör (8fba1fe9): a dolgozó aláírása be- és kiblokkoláskor (PNG data URL) —
+    # a munkaügyi ellenőrzés napi aláírt jelenlétet kér
+    sign_in_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sign_out_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -3627,6 +3639,21 @@ class WorkRulesSettings(Base):
     group_by_site: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="1"
     )
+    # 160. kör: céges alapértelmezett munkaidő (havi béres dolgozónál minden munkanapra,
+    # ha a kartonon nincs rögzített idő) és kötelező aláírás a kioszkon
+    default_work_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    default_work_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+    kiosk_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    # 160. kör: céges alapértelmezett munkaidő (havi béres dolgozónál minden munkanapra,
+    # ha a kartonon nincs rögzített idő) és kötelező aláírás a kioszkon
+    default_work_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    default_work_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+    kiosk_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    # 160. kör: céges alapértelmezett munkaidő (havi béres dolgozónál minden munkanapra,
+    # ha a kartonon nincs rögzített idő) és kötelező aláírás a kioszkon
+    default_work_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    default_work_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+    kiosk_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     # Távollét-kódok: {"annual": {"code": "SZ", "paid": true, "hours": true}, …}
     absence_codes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # 139. kör: jogcím-kódok a bérprogram CSV-hez {"worked_hours": "MUNKAORA", …}

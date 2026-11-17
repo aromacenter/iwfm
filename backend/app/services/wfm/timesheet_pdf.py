@@ -35,14 +35,33 @@ COLUMNS = (
     ("Munkaidő", "Kezdet", 31, "C"),
     ("", "Vég", 31, "C"),
     ("", "NYI", 33, "C"),
-    ("RM", "100%", 32, "C"),
-    ("RM", "50%", 32, "C"),
-    ("VP", "50%", 32, "C"),
-    ("ÜP", "100%", 32, "C"),   # munkaszüneti napi pótlék (könyvelő: külön jelölendő)
-    ("ÉP", "15%", 32, "C"),    # éjszakai pótlék
-    ("MP", "30%", 32, "C"),    # műszakpótlék
+    ("RM", "100%", 28, "C"),
+    ("RM", "50%", 28, "C"),
+    ("VP", "50%", 28, "C"),
+    ("ÜP", "100%", 28, "C"),   # munkaszüneti napi pótlék (könyvelő: külön jelölendő)
+    ("ÉP", "15%", 28, "C"),    # éjszakai pótlék
+    ("MP", "30%", 28, "C"),    # műszakpótlék
+    # 160. kör: a dolgozó napi aláírása a blokkolásról (érkezés / távozás)
+    ("Aláírás", "érk.", 38, "C"),
+    ("", "táv.", 38, "C"),
 )
+SIGN_COLS = (14, 15)
 ROW_H = 11.25
+
+
+def _signature_image(data_url: str | None):
+    """PNG data URL → ImageReader (None, ha nincs / hibás)."""
+    if not data_url or not data_url.startswith("data:image"):
+        return None
+    try:
+        import base64
+
+        from reportlab.lib.utils import ImageReader
+
+        raw = base64.b64decode(data_url.split(",", 1)[1])
+        return ImageReader(io.BytesIO(raw))
+    except Exception:
+        return None
 
 
 def _draw_text(c, x: float, y: float, text: str, size: float = 7, bold: bool = False, align: str = "L", color=INK):
@@ -143,6 +162,7 @@ def _draw_sheet(c, sheet: MonthSheet, *, company: str, page_no: int, generated: 
     _draw_text(c, (xs[5] + xs[8]) / 2, y, "Munkaidő", 7, bold=True, align="C")
     for idx in (8, 9, 10, 11, 12, 13):
         _draw_text(c, xs[idx] + COLUMNS[idx][2] / 2, y, COLUMNS[idx][0], 7, bold=True, align="C")
+    _draw_text(c, (xs[14] + xs[15] + COLUMNS[15][2]) / 2, y, "Aláírás", 7, bold=True, align="C")
     y -= 9
     for idx, (_h1, h2, w, _a) in enumerate(COLUMNS):
         if h2:
@@ -183,6 +203,14 @@ def _draw_sheet(c, sheet: MonthSheet, *, company: str, page_no: int, generated: 
             for i, val in enumerate(vals, start=2):
                 if val:
                     _draw_text(c, xs[i] + COLUMNS[i][2] / 2, y, val, 7, align="C", bold=(i == 5 and bool(row.code)))
+            for idx, data in zip(SIGN_COLS, (getattr(row, "sign_in", None), getattr(row, "sign_out", None))):
+                img = _signature_image(data)
+                if img is not None:
+                    try:
+                        c.drawImage(img, xs[idx] + 2, y - 3, width=COLUMNS[idx][2] - 4, height=ROW_H - 2,
+                                    preserveAspectRatio=True, anchor="c", mask="auto")
+                    except Exception:  # pragma: no cover — sérült kép: a sor üres marad
+                        pass
         c.setStrokeColor(LIGHT)
         c.setLineWidth(0.3)
         c.line(LEFT, y - 3.5, table_right, y - 3.5)

@@ -2221,6 +2221,10 @@
     "wrSundayDefault": "Sunday supplement (50%) due by default",
     "wrSundayHint": "Labour Code §140: due to every employee on a regular schedule, regardless of job. Exception: employees on a working-time frame who can be scheduled on rest days — switch it off on the employee card.",
     "wrGroupBySite": "Group the monthly PDF by site",
+    "wrDefaultHours": "Company default working hours (start – end)",
+    "wrDefaultHoursHint": "For monthly-wage employees every working day gets this start and end in the timesheet PDF unless the card has fixed hours. Hourly employees use actual clock-ins / schedule.",
+    "wrKioskSignature": "Signature on the kiosk at clock-in and clock-out",
+    "wrKioskSignatureHint": "Labour inspections require a daily signed attendance: when enabled, employees sign on the terminal on arrival and departure; the signatures appear in the monthly PDF day rows.",
     "wrCodes": "Absence codes on the record",
     "wrCodesHint": "Paid: the daily frame counts into recorded time. Hours column: shown in hours in the summary as well. Defaults: SZ annual leave, BSZ sick leave (sick pay is computed by payroll, no separate code), TVL justified absence, FN unpaid leave. A company may add its own code for business-trip days (KN).",
     "wrCodeType": "Type",
@@ -2360,7 +2364,13 @@
     "unknownCode": "Unknown employee ID — try again.",
     "processing": "Processing…",
     "clear": "Clear",
-    "adminLink": "Admin sign-in →"
+    "adminLink": "Admin sign-in →",
+    "signIn": "Signature — arrival",
+    "signOut": "Signature — departure",
+    "signHint": "Sign with your finger or a stylus, then press Save.",
+    "signSend": "Save",
+    "signCancel": "Cancel",
+    "signMissing": "A signature is required to clock in/out."
   },
   "violations": {
     "MAX_DAILY": "{date}: daily working time is {hours} hours — the maximum allowed is 12 hours (Labour Code 99.§).",

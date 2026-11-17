@@ -5,6 +5,7 @@
  * beblokkolás és kiblokkolás között. Falra szerelt tabletre / pultgépre való. */
 
 import { useCallback, useEffect, useState } from "react";
+import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, errorMessage, ApiError } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 
@@ -15,19 +16,39 @@ interface KioskResult {
   worked_minutes: number | null;
 }
 
+interface KioskPreview {
+  action: "in" | "out";
+  employee_name: string;
+  signature_required: boolean;
+}
+
 export default function OraPage() {
   const [code, setCode] = useState("");
   const [result, setResult] = useState<KioskResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 160. kör: aláírás-lépés (ha a cég kéri) — a kód után, a blokkolás előtt
+  const [pending, setPending] = useState<{ code: string; preview: KioskPreview } | null>(null);
+  const [signature, setSignature] = useState<string | null>(null);
   const { t, lang } = useT();
 
   const submit = useCallback(
-    async (fullCode: string) => {
+    async (fullCode: string, sig?: string | null) => {
       setBusy(true);
       setError(null);
       try {
-        const res = await api.post<KioskResult>("/api/kiosk/clock", { code: fullCode });
+        if (sig === undefined) {
+          const preview = await api.post<KioskPreview>("/api/kiosk/preview", { code: fullCode });
+          if (preview.signature_required) {
+            setPending({ code: fullCode, preview });
+            setSignature(null);
+            setCode("");
+            return;
+          }
+        }
+        const res = await api.post<KioskResult>("/api/kiosk/clock", { code: fullCode, signature: sig ?? null });
+        setPending(null);
+        setSignature(null);
         setResult(res);
         setCode("");
         // 6 mp után tűnjön el az üdvözlés — jöhet a következő dolgozó
@@ -50,13 +71,13 @@ export default function OraPage() {
 
   const press = useCallback(
     (digit: string) => {
-      if (busy) return;
+      if (busy || pending) return;
       setResult(null);
       const next = (code + digit).slice(0, 6);
       setCode(next);
       if (next.length === 6) void submit(next);
     },
-    [busy, code, submit]
+    [busy, pending, code, submit]
   );
 
   // Fizikai billentyűzet támogatása (USB numpad a terminálon)
@@ -79,6 +100,27 @@ export default function OraPage() {
       <img src="/logo.svg" alt="iwfm" className="mb-2 h-16 w-auto rounded-xl bg-white/95 px-3 py-1" />
       <h1 className="mb-1 text-xl font-bold text-indigo-300">{t("kiosk.title")}</h1>
       <p className="mb-6 text-sm text-slate-400">{t("kiosk.subtitle")}</p>
+
+      {pending && (
+        <div className="mb-6 w-full max-w-md rounded-2xl bg-white p-4 text-slate-900">
+          <p className="text-lg font-semibold">{pending.preview.employee_name}</p>
+          <p className="mb-2 text-sm text-slate-600">{pending.preview.action === "in" ? t("kiosk.signIn") : t("kiosk.signOut")}</p>
+          <SignatureCanvas label={t("kiosk.signHint")} onChange={setSignature} />
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={busy || !signature}
+              onClick={() => { if (!signature) { setError(t("kiosk.signMissing")); return; } void submit(pending.code, signature); }}
+              className="flex-1 rounded-xl bg-emerald-600 py-3 font-semibold text-white disabled:opacity-50"
+            >
+              {t("kiosk.signSend")}
+            </button>
+            <button type="button" onClick={() => { setPending(null); setSignature(null); }} className="rounded-xl border border-slate-300 px-4 py-3 text-slate-700">
+              {t("kiosk.signCancel")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Kód kijelző */}
       <div className="mb-5 flex gap-2">

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import time
+
 import base64
 
 import httpx
@@ -2147,6 +2149,10 @@ async def test_billingo(
 # itt csak a cég saját szigorításai; a törvényi minimum alá nem mehet.
 
 class WorkRulesBody(BaseModel):
+    # 160. kör: céges alapértelmezett munkaidő + kötelező aláírás a kioszkon
+    default_work_start: time | None = None
+    default_work_end: time | None = None
+    kiosk_signature: bool = False
     break_minutes: int | None = Field(default=None, ge=0, le=240)
     break_per_hours: int | None = Field(default=None, ge=1, le=12)
     break_paid: bool = False
@@ -2203,6 +2209,9 @@ async def _work_rules_out(db: AsyncSession, row: WorkRulesSettings) -> dict:
         "break_paid": bool(row.break_paid),
         "sunday_bonus_default": bool(row.sunday_bonus_default),
         "group_by_site": bool(row.group_by_site),
+        "default_work_start": row.default_work_start.strftime("%H:%M") if row.default_work_start else None,
+        "default_work_end": row.default_work_end.strftime("%H:%M") if row.default_work_end else None,
+        "kiosk_signature": bool(row.kiosk_signature),
         "absence_codes": company_rules_from_row(row).absence_codes,
         "absence_codes_default": DEFAULT_ABSENCE_CODES,
         "paycodes": row.paycodes or {},
@@ -2253,13 +2262,16 @@ async def put_work_rules(
     row.break_paid = body.break_paid
     row.sunday_bonus_default = body.sunday_bonus_default
     row.group_by_site = body.group_by_site
+    row.default_work_start = body.default_work_start
+    row.default_work_end = body.default_work_end
+    row.kiosk_signature = body.kiosk_signature
     row.absence_codes = body.absence_codes
     row.paycodes = {
         str(k)[:32]: str(v).strip()[:16] for k, v in (body.paycodes or {}).items() if str(v).strip()
     } or None
     await record_audit(
         db, actor=actor, action="settings.work_rules", entity_type="settings",
-        entity_id="work_rules", detail=body.model_dump(), request=request,
+        entity_id="work_rules", detail=body.model_dump(mode="json"), request=request,
     )
     out = await _work_rules_out(db, row)
     await db.commit()

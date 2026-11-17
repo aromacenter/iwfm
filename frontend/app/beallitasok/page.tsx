@@ -209,6 +209,9 @@ export default function BeallitasokPage() {
     break_paid: false,
     sunday_bonus_default: false,
     group_by_site: true,
+    default_work_start: "",
+    default_work_end: "",
+    kiosk_signature: false,
     absence_codes: {} as Record<string, AbsenceCfg>,
     paycodes: {} as Record<string, string>,
   });
@@ -220,6 +223,7 @@ export default function BeallitasokPage() {
       .get<{
         break_minutes: number | null; break_per_hours: number | null; break_paid: boolean;
         sunday_bonus_default: boolean; group_by_site: boolean; absence_codes: Record<string, AbsenceCfg>;
+        default_work_start: string | null; default_work_end: string | null; kiosk_signature: boolean;
         paycodes: Record<string, string>; paycodes_defs: { key: string; code: string; name: string; unit: string }[];
         law: Record<string, unknown>; law_versions: string[]; law_override_count: number;
       }>("/api/settings/work-rules")
@@ -230,6 +234,9 @@ export default function BeallitasokPage() {
           break_paid: r.break_paid,
           sunday_bonus_default: r.sunday_bonus_default,
           group_by_site: r.group_by_site,
+          default_work_start: r.default_work_start ?? "",
+          default_work_end: r.default_work_end ?? "",
+          kiosk_signature: r.kiosk_signature ?? false,
           absence_codes: r.absence_codes,
           paycodes: r.paycodes ?? {},
         });
@@ -249,6 +256,9 @@ export default function BeallitasokPage() {
         break_paid: wr.break_paid,
         sunday_bonus_default: wr.sunday_bonus_default,
         group_by_site: wr.group_by_site,
+        default_work_start: wr.default_work_start ? `${wr.default_work_start}:00` : null,
+        default_work_end: wr.default_work_end ? `${wr.default_work_end}:00` : null,
+        kiosk_signature: wr.kiosk_signature,
         absence_codes: wr.absence_codes,
         paycodes: wr.paycodes,
       });
@@ -2394,6 +2404,20 @@ export default function BeallitasokPage() {
                 <input type="checkbox" checked={wr.group_by_site} onChange={(e) => setWr({ ...wr, group_by_site: e.target.checked })} className="h-4 w-4" />
                 {t("settings.wrGroupBySite")}
               </label>
+              <div className="pt-2 text-sm">
+                <span className="block font-medium">{t("settings.wrDefaultHours")}</span>
+                <div className="mt-1 flex items-center gap-2">
+                  <input type="time" value={wr.default_work_start} onChange={(e) => setWr({ ...wr, default_work_start: e.target.value })} className="rounded-lg border border-slate-300 px-2 py-1 text-sm" />
+                  <span className="text-slate-400">–</span>
+                  <input type="time" value={wr.default_work_end} onChange={(e) => setWr({ ...wr, default_work_end: e.target.value })} className="rounded-lg border border-slate-300 px-2 py-1 text-sm" />
+                </div>
+                <span className="mt-1 block text-xs text-slate-500">{t("settings.wrDefaultHoursHint")}</span>
+              </div>
+              <label className="flex items-center gap-2 pt-2 text-sm">
+                <input type="checkbox" checked={wr.kiosk_signature} onChange={(e) => setWr({ ...wr, kiosk_signature: e.target.checked })} className="h-4 w-4" />
+                {t("settings.wrKioskSignature")}
+              </label>
+              <span className="block text-xs text-slate-500">{t("settings.wrKioskSignatureHint")}</span>
             </div>
           </div>
 

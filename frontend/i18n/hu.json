@@ -2221,6 +2221,10 @@
     "wrSundayDefault": "Vasárnapi pótlék (50%) alapból jár",
     "wrSundayHint": "Mt. 140. §: minden normál munkarendű dolgozónak jár, munkakörtől függetlenül. Kivétel a munkaidőkeretben dolgozó, pihenőnapra is beosztható dolgozó — nála a dolgozó-kartonon kapcsold ki.",
     "wrGroupBySite": "A havi PDF telephelyenként csoportosítva készüljön",
+    "wrDefaultHours": "Céges alapértelmezett munkaidő (kezdés – befejezés)",
+    "wrDefaultHoursHint": "Havi béres dolgozónál minden munkanapra ez a kezdés és befejezés kerül a munkaidő-nyilvántartás PDF-be, ha a kartonján nincs rögzített munkaidő. Órabéresnél a tényleges blokkolás / beosztás számít.",
+    "wrKioskSignature": "Aláírás a kioszkon be- és kiblokkoláskor",
+    "wrKioskSignatureHint": "A munkaügyi ellenőrzés napi aláírt jelenlétet kér: bekapcsolva a dolgozó a terminálon aláír érkezéskor és távozáskor, az aláírások a havi PDF napi soraiban látszanak.",
     "wrCodes": "Távollét-kódok a nyilvántartáson",
     "wrCodesHint": "Fizetett: a napi keretóra beleszámít a nyilvántartott időbe. Óra-oszlop: az összesítőben órában is látszik. Alap: SZ szabadság, BSZ betegszabadság (a táppénzt a bérprogram számolja, nem kell külön kód), TVL igazolt távollét, FN fizetés nélküli. Kiküldetési naphoz (KN) a cég saját kódot adhat.",
     "wrCodeType": "Típus",
@@ -2360,7 +2364,13 @@
     "unknownCode": "Ismeretlen törzsszám — próbáld újra.",
     "processing": "Feldolgozás…",
     "clear": "Töröl",
-    "adminLink": "Admin belépés →"
+    "adminLink": "Admin belépés →",
+    "signIn": "Aláírás — érkezés",
+    "signOut": "Aláírás — távozás",
+    "signHint": "Írd alá ujjal vagy tollal, majd nyomd meg a Rögzítés gombot.",
+    "signSend": "Rögzítés",
+    "signCancel": "Mégse",
+    "signMissing": "Az aláírás kötelező a blokkoláshoz."
   },
   "violations": {
     "MAX_DAILY": "{date}: a napi munkaidő {hours} óra — a megengedett legfeljebb 12 óra (Mt. 99.§).",

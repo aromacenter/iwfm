@@ -80,6 +80,9 @@ class CompanyWorkRules:
     sunday_bonus_default: bool = True
     group_by_site: bool = True
     absence_codes: dict[str, dict] = field(default_factory=lambda: dict(DEFAULT_ABSENCE_CODES))
+    # 160. kör: céges alapértelmezett munkaidő (havi béres dolgozó, karton-idő híján)
+    default_work_start: time | None = None
+    default_work_end: time | None = None
 
 
 @dataclass
@@ -102,6 +105,9 @@ class DayRow:
     up100: int = 0                # munkaszüneti napi pótlék (140. § (2)) — ünnepnapi munka
     ep15: int = 0                 # éjszakai pótlék (142. §): 22–06 óra, ha > 1 óra és nem műszakpótlékos
     mp30: int = 0                 # műszakpótlék (141. §): 18–06 óra, műszakpótlékra jogosultnál
+    # 160. kör: a dolgozó napi aláírása (érkezés / távozás, PNG data URL) a blokkolásból
+    sign_in: str | None = None
+    sign_out: str | None = None
 
     @property
     def label(self) -> str:
@@ -236,6 +242,9 @@ def build_month_sheet(
     # a napi sort minden munkanapra (a blokkolás / beosztás helyett)
     fixed_start = getattr(employee, "fixed_work_start", None)
     fixed_end = getattr(employee, "fixed_work_end", None)
+    if fixed_start is None or fixed_end is None:
+        # 160. kör: karton-idő híján a céges alapértelmezett munkaidő
+        fixed_start, fixed_end = company.default_work_start, company.default_work_end
     fixed_hours = (
         getattr(employee, "wage_type", "monthly") == "monthly"
         and fixed_start is not None and fixed_end is not None
@@ -317,6 +326,12 @@ def build_month_sheet(
         # --- tényleges munkaidő ---
         spans: list[tuple[datetime, datetime]] = []  # az éjszakai / műszak sávhoz
         day_entries = sorted(entries_by_day.get(d, []), key=lambda e: e.clock_in)
+        # 160. kör: napi aláírások a blokkolásból (első érkezés, utolsó távozás)
+        for e in day_entries:
+            if getattr(e, "sign_in_data", None) and not row.sign_in:
+                row.sign_in = e.sign_in_data
+            if getattr(e, "sign_out_data", None):
+                row.sign_out = e.sign_out_data
         # 154. kör (8fba1fe9): a forrás az elsődleges, de ha arra a napra nincs
         # adat, a másik forrás tölti a sort — a könyvelő minden napnál lássa a
         # kezdést, a befejezést és az órákat
@@ -444,4 +459,6 @@ def company_rules_from_row(row) -> CompanyWorkRules:
         sunday_bonus_default=bool(row.sunday_bonus_default) if row.sunday_bonus_default is not None else True,
         group_by_site=bool(row.group_by_site if row.group_by_site is not None else True),
         absence_codes=codes,
+        default_work_start=getattr(row, "default_work_start", None),
+        default_work_end=getattr(row, "default_work_end", None),
     )

@@ -416,6 +416,7 @@ Promóciós képek/videó slotokba (a gyári képek backupba kerülnek, visszaá
 - Értesítések: Telegram/WhatsApp események (rendelés, alkatrész-hiány, kérés…), automatikus bizonylat-küldés aláírás után, heti mentés.
 - Munkalap/arculat: logó, cégnév, cím, lábléc, színek, átvételi záradék szövege; az elkészült-gép értesítő időpont-egyeztető telefonszáma (üresen a mondat elmarad), a gépcímke ügyeleti telefonszáma (a gyári szám helyett) és a számlák fizetési útmutatója (minden kimenő bizonylat megjegyzésének elejére kerül; üresen a beépített szöveg, „-” kikapcsolja).
 - AI: szolgáltató és kulcs (Anthropic/Gemini), kiosztási prompt.
+- Munkaidő-szabályok: szünet, pótlékok, távollét-kódok; céges alapértelmezett munkaidő (havi béres dolgozónál minden munkanapra a PDF-be kerül, ha a kartonon nincs rögzített idő); „Aláírás a kioszkon” — bekapcsolva a dolgozó be- és kiblokkoláskor aláír a terminálon, az aláírások a munkaidő-nyilvántartás PDF napi soraiban látszanak (munkaügyi ellenőrzéshez).
 - Jogosultságok: szerepkörök és mátrix.
 - Automatizálások: eseményekre (trigger) futó akciók.
 - Import/Export: partnerek, gépek, termékek tömegesen; teljes mentés.
