@@ -442,11 +442,11 @@ export default function WarehouseLocations({
             </label>
             {op.kind === "place" && (() => { const s = stock.find((x) => x.product_id === op.product_id); return s ? <p className="text-xs text-amber-700">{t("wh.locUnplacedAvail", { qty: fmt(s.unplaced), unit: s.unit })}</p> : null; })()}
             <label className="block text-sm">{op.kind === "relocate" ? t("wh.locFrom") : t("wh.locLocation")} *
-              <SearchSelect required items={locItems} value={op.location_id} onChange={(id) => setOp({ ...op, location_id: id })} className="mt-1" />
+              <SearchSelect required placeholder={t("wh.locPickPlaceholder")} items={locItems} value={op.location_id} onChange={(id) => setOp({ ...op, location_id: id })} className="mt-1" />
             </label>
             {op.kind === "relocate" && (
               <label className="block text-sm">{t("wh.locTo")} *
-                <SearchSelect required items={locItems.filter((l) => l.id !== op.location_id)} value={op.to_location_id} onChange={(id) => setOp({ ...op, to_location_id: id })} className="mt-1" />
+                <SearchSelect required placeholder={t("wh.locPickPlaceholder")} items={locItems.filter((l) => l.id !== op.location_id)} value={op.to_location_id} onChange={(id) => setOp({ ...op, to_location_id: id })} className="mt-1" />
               </label>
             )}
             <label className="block text-sm">{t("wh.quantity")} *

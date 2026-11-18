@@ -3228,7 +3228,8 @@
     "locFindNone": "Not on any location.",
     "locLabels": "Labels (QR)",
     "locEmpty": "No locations yet. Generate a row ({scheme}) with “Generate row”.",
-    "locFindPlaceholder": "Product name…"
+    "locFindPlaceholder": "Product name…",
+    "locPickPlaceholder": "Location code (e.g. A-03-2)…"
   },
   "po": {
     "title": "Purchase orders",

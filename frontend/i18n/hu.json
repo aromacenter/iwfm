@@ -3228,7 +3228,8 @@
     "locFindNone": "Nincs tárhelyen.",
     "locLabels": "Címkék (QR)",
     "locEmpty": "Még nincs tárhely. Generálj egy sort ({scheme}) a „Sor generálása” gombbal.",
-    "locFindPlaceholder": "Termék neve…"
+    "locFindPlaceholder": "Termék neve…",
+    "locPickPlaceholder": "Tárhely-kód (pl. A-03-2)…"
   },
   "po": {
     "title": "Beszerzési rendelések",

@@ -1001,6 +1001,7 @@ export default function RaktarPage() {
                   value={action.location_id}
                   onChange={(id) => setAction({ ...action, location_id: id })}
                   allowEmpty
+                  placeholder={t("wh.locPickPlaceholder")}
                   className="mt-1"
                 />
               </label>
