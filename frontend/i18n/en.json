@@ -903,6 +903,16 @@
         "source": "Assigned",
         "unassign": "unassign",
         "unassignConfirm": "Unassign {name}? Their results are deleted too."
+      },
+      "library": {
+        "title": "Built-in lessons",
+        "hint": "Illustrated lessons about the system — install with one click, then edit and assign.",
+        "install": "Install",
+        "reinstall": "Reinstall",
+        "installed": "installed",
+        "meta": "{images} images · {questions} questions",
+        "confirmReplace": "“{title}” already exists. Reinstalling deletes the existing material (with its assignments and results) and installs the stock version. Continue?",
+        "done": "Installed: {title}"
       }
     }
   },
@@ -2718,7 +2728,9 @@
     "warehouse.bad_offset": "The offset cannot be 0.",
     "warehouse.shift_out_of_range": "The shift would move a location below 1 or above the maximum.",
     "warehouse.too_many_locations": "Too many locations (max. {max} per warehouse).",
-    "warehouse.no_locations": "No printable locations."
+    "warehouse.no_locations": "No printable locations.",
+    "learning.package_exists": "This lesson is already installed — use Reinstall to replace it.",
+    "learning.package_not_found": "No such built-in lesson."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",

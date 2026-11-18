@@ -9,8 +9,11 @@ from __future__ import annotations
 import base64
 import csv
 import io
+import json as _json
 import random
+import re as _re
 import uuid
+from pathlib import Path as _Path
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -849,3 +852,102 @@ async def run_learning_reminders(db: AsyncSession, today: date | None = None) ->
         a.reminded_on = today
     await db.commit()
     return sent
+
+
+# ─── Beépített tananyag-könyvtár (162. kör) ─────────────────────────────────
+# A backend `app/learning_library/<kulcs>/lesson.json` + `img/*.png` csomagjai
+# egy kattintással telepíthetők: anyag + képmellékletek + kérdésbank. A szöveg
+# `{{img:név|felirat}}` jelölői a feltöltött melléklet `att:` hivatkozásává
+# válnak. A borító (cover) kerül fel elsőként → a csempés nézet azt mutatja.
+
+
+LIBRARY_DIR = _Path(__file__).resolve().parents[1] / "learning_library"
+_IMG_RE = _re.compile(r"\{\{img:([A-Za-z0-9_]+)(?:\|([^}]*))?\}\}")
+
+
+def _library_packages() -> list[dict]:
+    out = []
+    if not LIBRARY_DIR.is_dir():
+        return out
+    for d in sorted(LIBRARY_DIR.iterdir()):
+        f = d / "lesson.json"
+        if d.is_dir() and f.is_file():
+            try:
+                pkg = _json.loads(f.read_text(encoding="utf-8"))
+            except ValueError:
+                continue
+            pkg["key"] = d.name
+            out.append(pkg)
+    return out
+
+
+@router.get("/library")
+async def learning_library(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("learning")),
+):
+    """A beépített tananyag-csomagok listája, és hogy melyik van már telepítve
+    (cím szerint)."""
+    titles = {t for (t,) in (await db.execute(select(LearningMaterial.title))).all()}
+    return [
+        {
+            "key": p["key"], "title": p["title"], "category": p.get("category"),
+            "description": p.get("description"), "images": len(p.get("images") or []),
+            "questions": len(p.get("questions") or []), "installed": p["title"] in titles,
+        }
+        for p in _library_packages()
+    ]
+
+
+class LibraryInstallBody(BaseModel):
+    replace: bool = False  # True: a meglévő azonos című anyag törlése és újratelepítés
+
+
+@router.post("/library/{key}/install", status_code=201)
+async def install_library_package(
+    key: str,
+    body: LibraryInstallBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("learning")),
+):
+    """Csomag telepítése: anyag, képek, kérdések. 409, ha már van ilyen című
+    anyag és nincs `replace`."""
+    pkg = next((p for p in _library_packages() if p["key"] == key), None)
+    if pkg is None:
+        raise HTTPException(status_code=404, detail={"code": "learning.package_not_found"})
+    existing = (await db.execute(select(LearningMaterial).where(LearningMaterial.title == pkg["title"]))).scalars().all()
+    if existing and not body.replace:
+        raise HTTPException(status_code=409, detail={"code": "learning.package_exists"})
+    for old in existing:
+        await db.delete(old)
+    await db.flush()
+    m = LearningMaterial(
+        title=pkg["title"], category=pkg.get("category"), body="", validity_months=pkg.get("validity_months"),
+        default_due_days=pkg.get("default_due_days"), is_active=True, created_by_name=actor.display_name,
+    )
+    db.add(m)
+    await db.flush()
+    names = list(pkg.get("images") or [])
+    cover = pkg.get("cover")
+    if cover and cover in names:
+        names = [cover] + [n for n in names if n != cover]
+    ids: dict[str, str] = {}
+    img_dir = LIBRARY_DIR / key / "img"
+    for name in names:
+        f = img_dir / f"{name}.png"
+        if not f.is_file():
+            continue
+        raw = f.read_bytes()
+        att = LearningAttachment(material_id=m.id, filename=f"{name}.png", mime="image/png", data=raw, size=len(raw))
+        db.add(att)
+        await db.flush()
+        ids[name] = str(att.id)
+    m.body = _IMG_RE.sub(lambda mo: f"![{mo.group(2) or ''}](att:{ids[mo.group(1)]})" if mo.group(1) in ids else "", pkg.get("body") or "")
+    for i, q in enumerate(pkg.get("questions") or []):
+        db.add(LearningQuestion(material_id=m.id, text=q["text"], options=[{"text": o["text"], "correct": bool(o.get("correct"))} for o in q["options"]], sort=i))
+    await record_audit(db, actor=actor, action="learning.library_install", entity_type="learning_material",
+                       entity_id=str(m.id), detail={"key": key, "title": m.title, "images": len(ids), "replaced": len(existing)}, request=request)
+    await db.commit()
+    await db.refresh(m)
+    return _material_out(m, questions=len(pkg.get("questions") or []))

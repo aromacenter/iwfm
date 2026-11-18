@@ -101,6 +101,8 @@ export default function LearningAdminPage() {
   const router = useRouter();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
+  // 162. kör: beépített tananyag-csomagok (képes anyagok a rendszerről, egy kattintással)
+  const [library, setLibrary] = useState<{ key: string; title: string; category: string | null; description: string | null; images: number; questions: number; installed: boolean }[]>([]);
   const [selected, setSelected] = useState<string | "new" | null>(null);
   const [tab, setTab] = useState<Tab>("edit");
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -129,8 +131,25 @@ export default function LearningAdminPage() {
         else toast(errorMessage(err), "error");
       });
     api.get<Overview>("/api/learning/overview").then(setOverview).catch(() => {});
+    api.get<typeof library>("/api/learning/library").then(setLibrary).catch(() => {});
   }, [router, toast]);
   useEffect(load, [load]);
+
+  async function installPackage(p: (typeof library)[number]) {
+    if (p.installed && !(await confirm(t("learning.admin.library.confirmReplace", { title: p.title })))) return;
+    setBusy(true);
+    try {
+      const m = await api.post<Material>(`/api/learning/library/${p.key}/install`, { replace: p.installed });
+      toast(t("learning.admin.library.done", { title: m.title }), "success");
+      load();
+      setSelected(m.id);
+      setTab("edit");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
   useEffect(() => {
     api
       .get<EmployeeLite[]>("/api/employees")
@@ -346,6 +365,26 @@ export default function LearningAdminPage() {
               </div>
             </button>
           ))}
+          {library.length > 0 && (
+            <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+              <div className="text-sm font-semibold">📚 {t("learning.admin.library.title")}</div>
+              <p className="mb-2 text-[11px] text-slate-500">{t("learning.admin.library.hint")}</p>
+              <div className="space-y-2">
+                {library.map((p) => (
+                  <div key={p.key} className="rounded-lg border border-slate-200 bg-white p-2 text-xs">
+                    <div className="font-medium leading-snug">{p.title}</div>
+                    <div className="mt-0.5 text-slate-500">
+                      {t("learning.admin.library.meta", { images: p.images, questions: p.questions })}
+                      {p.installed && <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-800">✓ {t("learning.admin.library.installed")}</span>}
+                    </div>
+                    <button type="button" disabled={busy} onClick={() => installPackage(p)} className={`mt-1.5 rounded-md px-2 py-1 text-[11px] font-medium ${p.installed ? "border border-slate-300 hover:bg-slate-100" : "bg-indigo-600 text-white hover:bg-indigo-700"} disabled:opacity-50`}>
+                      {p.installed ? t("learning.admin.library.reinstall") : `⬇ ${t("learning.admin.library.install")}`}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </aside>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

@@ -903,6 +903,16 @@
         "source": "Kiosztás",
         "unassign": "visszavonás",
         "unassignConfirm": "Visszavonod a kiosztást: {name}? Az eredményei is törlődnek."
+      },
+      "library": {
+        "title": "Beépített tananyagok",
+        "hint": "Képes oktatóanyagok a rendszerről — egy kattintással telepíthetők, utána szerkeszthetők és kioszthatók.",
+        "install": "Telepítés",
+        "reinstall": "Újratelepítés",
+        "installed": "telepítve",
+        "meta": "{images} kép · {questions} kérdés",
+        "confirmReplace": "„{title}” már létezik. Újratelepítéskor a meglévő anyag (kiosztásokkal és eredményekkel együtt) törlődik, és a gyári változat kerül a helyére. Folytatod?",
+        "done": "Telepítve: {title}"
       }
     }
   },
@@ -2718,7 +2728,9 @@
     "warehouse.bad_offset": "Az eltolás nem lehet 0.",
     "warehouse.shift_out_of_range": "Az eltolással valamelyik tárhely 1 alá vagy a maximum fölé kerülne.",
     "warehouse.too_many_locations": "Túl sok tárhely (max. {max} raktáranként).",
-    "warehouse.no_locations": "Nincs nyomtatható tárhely."
+    "warehouse.no_locations": "Nincs nyomtatható tárhely.",
+    "learning.package_exists": "Ez a tananyag már telepítve van — az Újratelepítés gombbal cserélhető.",
+    "learning.package_not_found": "Nincs ilyen beépített tananyag."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
