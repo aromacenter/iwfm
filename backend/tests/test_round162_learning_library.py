@@ -10,7 +10,7 @@ async def test_library_install_and_cover(client, admin, manager):
     lib = (await client.get("/api/learning/library", headers=mgr)).json()
     keys = {p["key"]: p for p in lib}
     assert {"raktar_keszlet", "raktar_tarhely"} <= set(keys)
-    assert keys["raktar_tarhely"]["questions"] == 15 and keys["raktar_tarhely"]["images"] == 18 and keys["raktar_tarhely"]["installed"] is False
+    assert keys["raktar_tarhely"]["questions"] == 15 and keys["raktar_tarhely"]["images"] == 18  # + külön borító and keys["raktar_tarhely"]["installed"] is False
     # telepítés
     res = await client.post("/api/learning/library/raktar_tarhely/install", json={}, headers=mgr)
     assert res.status_code == 201, res.text
@@ -18,7 +18,7 @@ async def test_library_install_and_cover(client, admin, manager):
     assert m["title"].startswith("Raktárkezelés 2.") and m["question_count"] == 15
     body = (await client.get("/api/learning/materials", headers=mgr)).json()
     mat = next(x for x in body if x["id"] == m["id"])
-    assert len(mat["attachments"]) == 18 and all(a["mime"] == "image/png" for a in mat["attachments"])
+    assert len(mat["attachments"]) == 19 and all(a["mime"] == "image/png" for a in mat["attachments"])
     # a szövegben minden kép att:-hivatkozás, jelölő nem maradt
     detail_body = mat.get("body") or ""
     assert "{{img:" not in detail_body and detail_body.count("](att:") == 18
@@ -41,4 +41,4 @@ async def test_library_install_and_cover(client, admin, manager):
     item = my["items"][0]
     assert item["cover_id"] and item["has_test"] is True
     mat = next(x for x in (await client.get("/api/learning/materials", headers=mgr)).json() if x["id"] == mid)
-    assert next(a for a in mat["attachments"] if a["id"] == item["cover_id"])["filename"] == "t04_racs_A_sor.png"
+    assert next(a for a in mat["attachments"] if a["id"] == item["cover_id"])["filename"] == "cover.png"

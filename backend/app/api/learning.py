@@ -930,7 +930,7 @@ async def install_library_package(
     await db.flush()
     names = list(pkg.get("images") or [])
     cover = pkg.get("cover")
-    if cover and cover in names:
+    if cover:  # a borító az első melléklet (a csempés nézet azt mutatja); a szövegben nem kell szerepelnie
         names = [cover] + [n for n in names if n != cover]
     ids: dict[str, str] = {}
     img_dir = LIBRARY_DIR / key / "img"
