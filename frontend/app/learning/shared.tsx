@@ -19,6 +19,7 @@ export interface MyItem {
   attempts: number;
   last_score: number | null;
   source: "manual" | "role";
+  cover_id?: string | null;  // 162. kör: borítókép (első képmelléklet) a csempés nézethez
 }
 
 export const STATUS_CLS: Record<MyItem["status"], string> = {

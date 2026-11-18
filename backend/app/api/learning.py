@@ -318,11 +318,20 @@ async def my_learning(
             select(LearningQuestion.material_id, sa_func.count()).group_by(LearningQuestion.material_id)
         )).all()
     }
+    # borítókép a csempés nézethez: az anyag első képmelléklete (162. kör)
+    cover: dict = {}
+    for mid, aid_ in (await db.execute(
+        select(LearningAttachment.material_id, LearningAttachment.id)
+        .where(LearningAttachment.mime.like("image/%"))
+        .order_by(LearningAttachment.material_id, LearningAttachment.created_at)
+    )).all():
+        cover.setdefault(mid, aid_)
     out = []
     for a, m in rows:
         cnt, best = att.get(a.id, (0, None))
         o = _assignment_out(a, m, today, cnt, best)
         o["has_test"] = qcount.get(m.id, 0) > 0
+        o["cover_id"] = str(cover[m.id]) if m.id in cover else None
         out.append(o)
     return {"employee_name": f"{emp.last_name} {emp.first_name}", "items": out}
 

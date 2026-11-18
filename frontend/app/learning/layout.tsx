@@ -96,7 +96,7 @@ export default function LearningLayout({ children }: { children: React.ReactNode
       </header>
       <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
       <footer className="mx-auto max-w-5xl px-4 pb-6 text-center text-[11px] text-slate-400">
-        X-Learning · X-admin
+        X-Learning · part of X-systems
       </footer>
     </div>
   );
