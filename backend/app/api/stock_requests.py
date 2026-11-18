@@ -295,6 +295,9 @@ async def approve_request(
     # Azonnali átadás: a transfer rögtön elfogadott állapotú, a cél-raktár
     # jóváíródik — az igénylő kérte, nem kell külön elfogadnia (e2a7fb7a).
     src_stock.quantity -= req.quantity
+    from app.services.wfm.warehouse_locations import trim_located
+
+    await trim_located(db, src.id, req.product_id)  # 161. kör
     transfer = WarehouseTransfer(
         from_warehouse_id=src.id, to_warehouse_id=dst.id,
         product_id=req.product_id, quantity=req.quantity,

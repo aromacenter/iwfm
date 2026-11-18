@@ -296,6 +296,9 @@ def create_app() -> FastAPI:
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"], dependencies=[Depends(_mod("import_export"))])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"], dependencies=[Depends(_mod("map"))])
     app.include_router(warehouse.router, prefix="/api/warehouses", tags=["warehouses"])
+    from app.api import warehouse_locations as warehouse_locations_api
+
+    app.include_router(warehouse_locations_api.router, prefix="/api/warehouses", tags=["warehouse-locations"])
     from app.api import stocktakes as stocktakes_api
 
     app.include_router(stocktakes_api.router, prefix="/api/stocktakes", tags=["stocktakes"])

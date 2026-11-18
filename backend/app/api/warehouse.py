@@ -30,6 +30,7 @@ from app.models import (
     WarehouseTransfer,
 )
 from app.services.wfm.automation import fire_event
+from app.services.wfm.warehouse_locations import is_located, located_add, trim_located
 
 from app.services.wfm.license import require_module
 
@@ -177,6 +178,7 @@ async def warehouse_issue(
             detail={"code": "warehouse.insufficient_stock", "available": stock.quantity},
         )
     stock.quantity -= quantity
+    await trim_located(db, warehouse_id, product.id)  # 161. kör: a tárhely-bontás kövesse
     db.add(WarehouseMovement(
         warehouse_id=warehouse_id, product_id=product.id, action="issue",
         quantity_delta=-quantity, ref_id=partner_id, actor_user_id=actor_id,
@@ -262,6 +264,8 @@ class WarehouseOut(BaseModel):
     total_quantity: float
     allowed_user_ids: list[str] = []
     allowed_user_names: list[str] = []
+    layout: str = "simple"  # 161. kör: simple | located
+    row_scheme: str = "letters"
 
 
 async def _warehouse_out(db: AsyncSession, wh: Warehouse) -> WarehouseOut:
@@ -293,6 +297,7 @@ async def _warehouse_out(db: AsyncSession, wh: Warehouse) -> WarehouseOut:
         product_count=len(nonzero),
         total_quantity=round(sum(r.quantity for r in rows), 2),
         allowed_user_ids=allowed, allowed_user_names=sorted(names),
+        layout=wh.layout or "simple", row_scheme=wh.row_scheme or "letters",
     )
 
 
@@ -524,6 +529,8 @@ class MovementOut(BaseModel):
     actor_name: str | None
     counterparty: str | None  # partner (kiadás), másik raktár (áthelyezés), PO
     note: str | None
+    location: str | None = None  # 161. kör: tárhely-kód (bevét/berakás/áthelyezés forrása)
+    ref_location: str | None = None  # áthelyezés célja
 
 
 @router.get("/{warehouse_id}/movements", response_model=list[MovementOut])
@@ -577,6 +584,14 @@ async def warehouse_movements(
         ).scalars():
             counterparties[po.id] = po.order_no
 
+    loc_ids = {x for m, _p in rows for x in (m.location_id, m.ref_location_id) if x}
+    loc_codes: dict = {}
+    if loc_ids:
+        from app.models import WarehouseLocation
+
+        for lc in (await db.execute(select(WarehouseLocation).where(WarehouseLocation.id.in_(loc_ids)))).scalars():
+            loc_codes[lc.id] = lc.code
+
     return [
         MovementOut(
             id=str(m.id), created_at=m.created_at, action=m.action,
@@ -585,6 +600,7 @@ async def warehouse_movements(
             actor_name=actors.get(m.actor_user_id),
             counterparty=counterparties.get(m.ref_id),
             note=m.note,
+            location=loc_codes.get(m.location_id), ref_location=loc_codes.get(m.ref_location_id),
         )
         for m, p in rows
     ]
@@ -620,6 +636,7 @@ class ReceiveBody(BaseModel):
     quantity: float = Field(gt=0, le=100_000)
     unit_cost: float | None = Field(default=None, ge=0)  # Ft/egység, nettó
     note: str | None = Field(default=None, max_length=512)
+    location_id: str | None = None  # 161. kör: tárhelyezett raktárban hova kerül
 
 
 @router.post("/{warehouse_id}/receive", response_model=WarehouseStockOut)
@@ -635,10 +652,19 @@ async def receive_stock(
     product = await _get_product_or_404(db, body.product_id)
     stock = await _stock_row(db, wh.id, product.id)
     stock.quantity += body.quantity
+    loc_id = None
+    if body.location_id and is_located(wh):
+        from app.services.wfm.warehouse_locations import get_location_or_404
+
+        loc = await get_location_or_404(db, wh.id, body.location_id)
+        if not loc.is_active:
+            raise HTTPException(status_code=422, detail={"code": "warehouse.location_inactive"})
+        await located_add(db, wh.id, product.id, loc.id, body.quantity)
+        loc_id = loc.id
     db.add(WarehouseMovement(
         warehouse_id=wh.id, product_id=product.id, action="receive",
         quantity_delta=body.quantity, unit_cost=body.unit_cost,
-        note=body.note, actor_user_id=actor.id,
+        note=body.note, actor_user_id=actor.id, location_id=loc_id,
     ))
     if body.unit_cost is not None:
         product.purchase_price = body.unit_cost
@@ -698,6 +724,7 @@ async def transfer_stock(
     # A forrásról már most lekerül a mennyiség (úton van).
     if src.kind == "van" or dst.kind == "van":
         src_stock.quantity -= body.quantity
+        await trim_located(db, src.id, product.id)
         transfer = WarehouseTransfer(
             from_warehouse_id=src.id, to_warehouse_id=dst.id,
             product_id=product.id, quantity=body.quantity, note=body.note,
@@ -733,6 +760,7 @@ async def transfer_stock(
     dst_stock = await _stock_row(db, dst.id, product.id)
     src_stock.quantity -= body.quantity
     dst_stock.quantity += body.quantity
+    await trim_located(db, src.id, product.id)
     db.add(WarehouseMovement(
         warehouse_id=src.id, product_id=product.id, action="transfer_out",
         quantity_delta=-body.quantity, ref_id=dst.id, note=body.note,
@@ -1021,6 +1049,7 @@ async def adjust_stock(
     stock = await _stock_row(db, wh.id, product.id)
     delta = body.counted_qty - stock.quantity
     stock.quantity = body.counted_qty
+    await trim_located(db, wh.id, product.id)
     if body.min_quantity is not None:
         stock.min_quantity = body.min_quantity
     if abs(delta) > 1e-9:

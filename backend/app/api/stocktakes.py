@@ -279,6 +279,9 @@ async def close_stocktake(
             db.add(srow)
             stock_rows[ln.product_id] = srow
         srow.quantity = ln.counted_qty
+        from app.services.wfm.warehouse_locations import trim_located
+
+        await trim_located(db, st.warehouse_id, ln.product_id)  # 161. kör
         db.add(WarehouseMovement(
             warehouse_id=st.warehouse_id, product_id=ln.product_id, action="adjust",
             quantity_delta=delta,

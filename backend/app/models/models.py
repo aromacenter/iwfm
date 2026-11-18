@@ -3161,9 +3161,69 @@ class Warehouse(Base):
     allowed_user_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # 161. kör: simple = csak készlet | located = tárhelyezett (sor/állás/szint/fakk)
+    layout: Mapped[str] = mapped_column(String(8), nullable=False, default="simple", server_default="simple")
+    # A sorok jelölése: letters (A, B, …) vagy numbers (1, 2, …)
+    row_scheme: Mapped[str] = mapped_column(String(8), nullable=False, default="letters", server_default="letters")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class WarehouseLocation(Base):
+    """Tárhely egy tárhelyezett raktárban (161. kör): sor → állás (két regál-láb
+    közti rész) → szint (alulról 1) → fakk (0 = nincs rekesz). A kód a
+    koordinátákból generált (A-03-2-1); a készlet az id-hez kötődik, ezért
+    átrendezéskor a koordináták szabadon átírhatók."""
+
+    __tablename__ = "warehouse_locations"
+    __table_args__ = (
+        UniqueConstraint("warehouse_id", "row_code", "bay", "level", "slot", name="uq_warehouse_locations_pos"),
+        UniqueConstraint("warehouse_id", "code", name="uq_warehouse_locations_code"),
+        Index("ix_warehouse_locations_wh", "warehouse_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("warehouses.id", ondelete="CASCADE"), nullable=False
+    )
+    row_code: Mapped[str] = mapped_column(String(4), nullable=False)
+    bay: Mapped[int] = mapped_column(Integer, nullable=False)
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    code: Mapped[str] = mapped_column(String(24), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WarehouseStockLocation(Base):
+    """Készlet-bontás tárhelyenként (161. kör). A termék raktári ÖSSZESE a
+    warehouse_stock sorban marad; itt az van, hogy abból mennyi melyik
+    tárhelyen — ami nincs itt, az „nem tárhelyezett”."""
+
+    __tablename__ = "warehouse_stock_locations"
+    __table_args__ = (
+        UniqueConstraint("warehouse_id", "product_id", "location_id", name="uq_warehouse_stock_locations"),
+        Index("ix_warehouse_stock_locations_wh", "warehouse_id", "product_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("warehouses.id", ondelete="CASCADE"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
+    location_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("warehouse_locations.id", ondelete="CASCADE"), nullable=False
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -3265,6 +3325,9 @@ class WarehouseMovement(Base):
     ref_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    # 161. kör: tárhely (bevét/berakás/áthelyezés), áthelyezésnél a cél-tárhely
+    location_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    ref_location_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

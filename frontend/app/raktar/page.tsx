@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import IconLegend from "@/components/IconLegend";
 import SearchSelect from "@/components/SearchSelect";
+import WarehouseLocations, { type Loc } from "@/components/WarehouseLocations";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePerms } from "@/lib/perms";
@@ -25,6 +26,8 @@ interface Warehouse {
   total_quantity: number;
   allowed_user_ids?: string[];
   allowed_user_names?: string[];
+  layout: "simple" | "located";  // 161. kör: csak készlet | tárhelyezett
+  row_scheme: "letters" | "numbers";
 }
 
 interface WhStock {
@@ -91,7 +94,7 @@ interface Suggestion {
 interface Movement {
   id: string;
   created_at: string;
-  action: "receive" | "transfer_in" | "transfer_out" | "issue" | "adjust";
+  action: "receive" | "transfer_in" | "transfer_out" | "issue" | "adjust" | "place" | "unplace" | "relocate";
   product_name: string;
   unit: string;
   quantity_delta: number;
@@ -99,6 +102,8 @@ interface Movement {
   actor_name: string | null;
   counterparty: string | null;
   note: string | null;
+  location?: string | null;  // 161. kör: tárhely-kód
+  ref_location?: string | null;
 }
 
 interface AssignableUser {
@@ -147,8 +152,14 @@ export default function RaktarPage() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [movFilter, setMovFilter] = useState<"" | Movement["action"]>("");
   const [assignUsers, setAssignUsers] = useState<AssignableUser[]>([]);
+  // 161. kör: a Tárhelyek modul kapcsolója (null = minden modul)
+  const [modules, setModules] = useState<string[] | null | undefined>(undefined);
+  const locOn = modules === undefined || modules === null || modules.includes("warehouse_locations");
+  const [locs, setLocs] = useState<Loc[]>([]);
+  const [locTick, setLocTick] = useState(0);
 
   const selected = warehouses.find((w) => w.id === selectedId) ?? null;
+  const isLocated = !!selected && selected.layout === "located" && locOn;
 
   const load = useCallback(() => {
     api.get<Warehouse[]>("/api/warehouses").then((rows) => {
@@ -161,8 +172,13 @@ export default function RaktarPage() {
     api.get<Suggestion[]>("/api/warehouses/reorder-suggestions").then(setSuggestions).catch(() => {});
     api.get<AssignableUser[]>("/api/warehouses/assignable-users").then(setAssignUsers).catch(() => {});
     api.get<{ role?: string }>("/api/auth/me").then((m) => setMeRole(m.role ?? null)).catch(() => {});
+    api.get<{ modules: string[] | null }>("/api/settings/license/status").then((l) => setModules(l.modules)).catch(() => setModules(null));
   }, []);
   useEffect(load, [load]);
+  useEffect(() => {
+    if (!isLocated || !selectedId) return;
+    api.get<{ locations: Loc[] }>(`/api/warehouses/${selectedId}/locations`).then((d) => setLocs(d.locations)).catch(() => setLocs([]));
+  }, [isLocated, selectedId, locTick]);
 
   // ── Függő átadások (telephely↔autó, jóváhagyással) ──
   const [transfers, setTransfers] = useState<PendingTransfer[]>([]);
@@ -201,7 +217,7 @@ export default function RaktarPage() {
   );
 
   // ── Raktár űrlap ──
-  const [whForm, setWhForm] = useState<{ id: string; name: string; kind: "site" | "van"; user_id: string; notes: string; is_active: boolean; allowed_user_ids: string[] } | null>(null);
+  const [whForm, setWhForm] = useState<{ id: string; name: string; kind: "site" | "van"; user_id: string; notes: string; is_active: boolean; allowed_user_ids: string[]; layout: "simple" | "located"; row_scheme: "letters" | "numbers" } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -217,8 +233,15 @@ export default function RaktarPage() {
         notes: whForm.notes || null, is_active: whForm.is_active,
         allowed_user_ids: whForm.allowed_user_ids,
       };
+      let id = whForm.id;
       if (whForm.id) await api.patch(`/api/warehouses/${whForm.id}`, body);
-      else await api.post("/api/warehouses", body);
+      else id = (await api.post<{ id: string }>("/api/warehouses", body)).id;
+      // 161. kör: raktár-típus (csak készlet / tárhelyezett) külön végponton
+      const cur = warehouses.find((w) => w.id === id);
+      const wantLayout = whForm.kind === "van" ? "simple" : whForm.layout;
+      if (locOn && (!cur || cur.layout !== wantLayout || cur.row_scheme !== whForm.row_scheme)) {
+        await api.put(`/api/warehouses/${id}/layout`, { layout: wantLayout, row_scheme: whForm.row_scheme });
+      }
       setWhForm(null);
       load();
     } catch (err) {
@@ -242,7 +265,7 @@ export default function RaktarPage() {
 
   // ── Készlet-műveletek ──
   type StockAction = "receive" | "transfer" | "adjust";
-  const [action, setAction] = useState<{ kind: StockAction; product_id: string; qty: string; unit_cost: string; to_id: string; min_qty: string; note: string } | null>(null);
+  const [action, setAction] = useState<{ kind: StockAction; product_id: string; qty: string; unit_cost: string; to_id: string; min_qty: string; note: string; location_id: string } | null>(null);
 
   function openAction(kind: StockAction, productId?: string) {
     const row = productId ? stock.find((s) => s.product_id === productId) : null;
@@ -255,6 +278,7 @@ export default function RaktarPage() {
       to_id: warehouses.find((w) => w.id !== selectedId)?.id ?? "",
       min_qty: row?.min_quantity?.toString() ?? "",
       note: "",
+      location_id: "",
     });
   }
 
@@ -270,7 +294,9 @@ export default function RaktarPage() {
           quantity: Number(action.qty),
           unit_cost: action.unit_cost ? Number(action.unit_cost) : null,
           note: action.note || null,
+          location_id: isLocated && action.location_id ? action.location_id : null,
         });
+        setLocTick((x) => x + 1);
       } else if (action.kind === "transfer") {
         const res = await api.post<{ pending?: boolean }>("/api/warehouses/transfer", {
           from_warehouse_id: selectedId,
@@ -437,7 +463,7 @@ export default function RaktarPage() {
         <h1 className="text-xl font-bold">{t("wh.title")}</h1>
         {isMgr && (
           <button
-            onClick={() => { setError(null); setWhForm({ id: "", name: "", kind: "site", user_id: "", notes: "", is_active: true, allowed_user_ids: [] }); }}
+            onClick={() => { setError(null); setWhForm({ id: "", name: "", kind: "site", user_id: "", notes: "", is_active: true, allowed_user_ids: [], layout: "simple", row_scheme: "letters" }); }}
             className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
           >
             {t("wh.new")}
@@ -548,7 +574,7 @@ export default function RaktarPage() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setError(null);
-                    setWhForm({ id: w.id, name: w.name, kind: w.kind, user_id: w.user_id ?? "", notes: w.notes ?? "", is_active: w.is_active, allowed_user_ids: w.allowed_user_ids ?? [] });
+                    setWhForm({ id: w.id, name: w.name, kind: w.kind, user_id: w.user_id ?? "", notes: w.notes ?? "", is_active: w.is_active, allowed_user_ids: w.allowed_user_ids ?? [], layout: w.layout ?? "simple", row_scheme: w.row_scheme ?? "letters" });
                   }}
                   title={t("common.edit")}
                   className="cursor-pointer rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-100"
@@ -568,7 +594,7 @@ export default function RaktarPage() {
               </span>
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              {t(w.kind === "van" ? "wh.kindVan" : "wh.kindSite")}{(w.allowed_user_names?.length ?? 0) > 0 && ` · 👁 ${t("wh.visibleTo", { names: w.allowed_user_names!.join(", ") })}`}
+              {t(w.kind === "van" ? "wh.kindVan" : "wh.kindSite")}{w.layout === "located" && locOn && ` · 🗄 ${t("wh.layoutLocated")}`}{(w.allowed_user_names?.length ?? 0) > 0 && ` · 👁 ${t("wh.visibleTo", { names: w.allowed_user_names!.join(", ") })}`}
               {!w.is_active && ` · ${t("partners.inactive")}`}
             </div>
             <div className="mt-2 text-sm text-slate-700">
@@ -652,11 +678,22 @@ export default function RaktarPage() {
               </tbody>
             </table>
           </div>
+          {isLocated && (
+            <WarehouseLocations
+              key={`${selected.id}-${locTick}`}
+              warehouseId={selected.id}
+              warehouseName={selected.name}
+              rowScheme={selected.row_scheme}
+              products={activeProducts}
+              isMgr={isMgr}
+              onChanged={() => { loadStock(); load(); }}
+            />
+          )}
           <div className="border-t border-slate-200">
             <div className="flex flex-wrap items-center gap-2 px-4 py-3">
               <h3 className="text-sm font-semibold">{t("wh.movements")}</h3>
               <div className="ml-auto flex flex-wrap gap-1">
-                {([["", "wh.movAll"], ["receive", "wh.mov_receive"], ["transfer_in", "wh.mov_transfer_in"], ["transfer_out", "wh.mov_transfer_out"], ["issue", "wh.mov_issue"], ["adjust", "wh.mov_adjust"]] as const).map(([val, key]) => (
+                {([["", "wh.movAll"], ["receive", "wh.mov_receive"], ["transfer_in", "wh.mov_transfer_in"], ["transfer_out", "wh.mov_transfer_out"], ["issue", "wh.mov_issue"], ["adjust", "wh.mov_adjust"], ...(isLocated ? [["relocate", "wh.mov_relocate"]] as const : [])] as const).map(([val, key]) => (
                   <button
                     key={val}
                     onClick={() => setMovFilter(val as typeof movFilter)}
@@ -698,7 +735,7 @@ export default function RaktarPage() {
                         </td>
                         <td className="px-4 py-1.5 text-slate-600">{m.actor_name ?? "—"}</td>
                         <td className="px-4 py-1.5 text-slate-600">
-                          {m.counterparty ?? m.note ?? "—"}
+                          {m.location ? <span className="font-mono">{m.location}{m.ref_location ? ` → ${m.ref_location}` : ""}</span> : (m.counterparty ?? m.note ?? "—")}
                         </td>
                       </tr>
                     ))}
@@ -809,6 +846,27 @@ export default function RaktarPage() {
                 <option value="van">{t("wh.kindVan")}</option>
               </select>
             </label>
+            {whForm.kind === "site" && locOn && (
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-sm">
+                  {t("wh.layout")}
+                  <select value={whForm.layout} onChange={(e) => setWhForm({ ...whForm, layout: e.target.value as "simple" | "located" })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
+                    <option value="simple">{t("wh.layoutSimple")}</option>
+                    <option value="located">{t("wh.layoutLocated")}</option>
+                  </select>
+                </label>
+                {whForm.layout === "located" && (
+                  <label className="block text-sm">
+                    {t("wh.rowScheme")}
+                    <select value={whForm.row_scheme} onChange={(e) => setWhForm({ ...whForm, row_scheme: e.target.value as "letters" | "numbers" })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
+                      <option value="letters">{t("wh.rowSchemeLetters")}</option>
+                      <option value="numbers">{t("wh.rowSchemeNumbers")}</option>
+                    </select>
+                  </label>
+                )}
+                <p className="col-span-2 text-xs text-slate-500">{t("wh.layoutHint")}</p>
+              </div>
+            )}
             {whForm.kind === "van" && (
               <label className="block text-sm">
                 {t("wh.assignedUser")}
@@ -935,6 +993,18 @@ export default function RaktarPage() {
               {action.kind === "adjust" ? t("wh.countedQty") : t("wh.quantity")} *
               <input required type="number" min={action.kind === "adjust" ? 0 : 0.001} step="0.001" value={action.qty} onChange={(e) => setAction({ ...action, qty: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
+            {action.kind === "receive" && isLocated && (
+              <label className="block text-sm">
+                {t("wh.locLocation")} <span className="text-xs text-slate-400">({t("wh.locReceiveHint")})</span>
+                <SearchSelect
+                  items={locs.filter((l) => l.is_active).map((l) => ({ id: l.id, label: l.code, sublabel: l.label ?? undefined }))}
+                  value={action.location_id}
+                  onChange={(id) => setAction({ ...action, location_id: id })}
+                  allowEmpty
+                  className="mt-1"
+                />
+              </label>
+            )}
             {action.kind === "receive" && (
               <label className="block text-sm">
                 {t("cons.purchasePrice")}

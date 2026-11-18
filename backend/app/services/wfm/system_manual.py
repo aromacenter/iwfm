@@ -281,9 +281,12 @@ Azonnali eladás nem bizományi tételekre bruttó árral. Hálózat nélkül az
     {
         "key": "raktar",
         "title": "Raktár (telephely, autók, mozgások, láthatóság)",
-        "keywords": "raktár telephely autó van bevételezés átadás autók között átvétel igazolás készlet minimum újrarendelés beszerzési rendelés láthatóság ki láthatja csak admin manager hozhat létre",
+        "keywords": "raktár telephely autó van bevételezés átadás autók között átvétel igazolás készlet minimum újrarendelés beszerzési rendelés láthatóság ki láthatja csak admin manager hozhat létre tárhely tárhelyezett sor állás szint fakk regál polc berakás áthelyezés hol van címke",
         "body": """## Raktárak
 Telephely (site) és üzletkötőnként egy autó (van). Raktárat csak admin/manager hozhat létre, módosíthat, törölhet. Láthatóság: admin és manager mindent lát; mindenki más a saját autóját és azokat a raktárakat, amiket az admin a raktár szerkesztőjében („Ki láthatja még”) bepipált neki.
+
+## Tárhelyezett raktár (Tárhelyek modul)
+A raktár szerkesztőjében a telephelyi raktár „Tárhelyezett”-re állítható. A tárhely: sor (betű vagy szám) → állás (két regál-láb közti rész) → szint (alulról 1) → fakk (ha rekeszes); a kód ebből áll össze (A-03-2-1). A sorokat a „Tárhelyek” fülön generálod (állás × szint × fakk), bővíteni ugyanott lehet. A készlet a tárhely azonosítójához kötődik, ezért átrendezéskor (regál mozgatása) a koordináták átírhatók, a sor átnevezhető, az állások/szintek eltolhatók — a készlet a tárhellyel megy. Bevételezéskor választasz tárhelyet; ami tárhely nélkül jön be, az „nem tárhelyezett”, és a Berakás gombbal kerül helyre. Tárhelyek között az Áthelyezés mozgat. A „Hol van?” kereső termékre mutatja a tárhelyeket; a QR-címkék A4-es lapon nyomtathatók. Autó-raktár nem tárhelyezhető.
 
 ## Mozgások
 1. Bevételezés: termék + mennyiség a telephelyre (vagy autóra).
