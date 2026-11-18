@@ -95,10 +95,10 @@
     "done": "Deleted: {count} records."
   },
   "assistant": {
-    "title": "Iwfm assistant",
-    "open": "Open AI assistant",
+    "title": "Léna",
+    "open": "Open Léna, the AI assistant",
     "clear": "Clear conversation",
-    "hello": "Hi! How can I help?",
+    "hello": "Hi, I’m Léna! How can I help?",
     "examples": "For example, you can say (typed or dictated):",
     "ex1": "\"Create a service ticket for machine 36253288327: no coffee dispensed\"",
     "ex2": "\"How much stock does Gödöllő cukrászda have?\"",

@@ -95,10 +95,10 @@
     "done": "Törölve: {count} rekord."
   },
   "assistant": {
-    "title": "Iwfm asszisztens",
-    "open": "AI-asszisztens megnyitása",
+    "title": "Léna",
+    "open": "Léna, az AI-asszisztens megnyitása",
     "clear": "Beszélgetés törlése",
-    "hello": "Szia! Miben segíthetek?",
+    "hello": "Szia, Léna vagyok! Miben segíthetek?",
     "examples": "Például mondhatod (gépelve vagy diktálva):",
     "ex1": "„Vegyél fel szervizjegyet a 36253288327 géphez: nem ad ki kávét”",
     "ex2": "„Mennyi készlet van a Gödöllő cukrászdánál?”",

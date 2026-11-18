@@ -1128,8 +1128,8 @@ def _system_prompt(actor: User, context: dict | None = None) -> str:
         if parts:
             ctx_lines = "\nAktuális képernyő-kontextus:\n- " + "\n- ".join(parts) + "\n"
     return (
-        "Az Iwfm (kávégép-bizomány és munkaerő-kezelő rendszer) beépített "
-        "asszisztense vagy. A felhasználó admin felületen vagy telefonon, "
+        "Léna vagy, az X-admin (kávégép-bizomány és munkaerő-kezelő rendszer) beépített "
+        "asszisztense — ha a nevedet kérdezik, Léna. A felhasználó admin felületen vagy telefonon, "
         "gyakran diktálva ír — a szöveg lehet pontatlan, ékezet nélküli.\n"
         f"A felhasználó szerepköre: {actor.role}. "
         f"Mai dátum: {datetime.now(UTC):%Y-%m-%d}.\n"

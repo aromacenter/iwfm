@@ -453,10 +453,10 @@ Beállítások → E-mail (SMTP) bekapcsolva; nélküle a gomb inaktív.""",
     },
     {
         "key": "ai_asszisztens",
-        "title": "AI-asszisztens (mit tud, hogyan kérdezz)",
-        "keywords": "AI asszisztens chat kérdés hogyan csináljam kézikönyv partner keresés gép történet jegy nyitás számláló feltöltés munkalap elszámolás napi összefoglaló navigálás",
+        "title": "Léna, az AI-asszisztens (mit tud, hogyan kérdezz)",
+        "keywords": "Léna AI asszisztens chat kérdés hogyan csináljam kézikönyv partner keresés gép történet jegy nyitás számláló feltöltés munkalap elszámolás napi összefoglaló navigálás",
         "body": """## Mire használd?
-A jobb alsó ✨ gomb. Beszélgetve (diktálva is) tudsz: partnert/gépet keresni, gép-történetet kérni, szervizjegyet nyitni, számlálót jelenteni, készletet feltölteni, munkalapot kitölteni, elszámolást rögzíteni (megerősítés után), napi összefoglalót kérni, oldalt megnyitni.
+Az asszisztens neve Léna. A jobb alsó ✨ gomb. Beszélgetve (diktálva is) tudsz: partnert/gépet keresni, gép-történetet kérni, szervizjegyet nyitni, számlálót jelenteni, készletet feltölteni, munkalapot kitölteni, elszámolást rögzíteni (megerősítés után), napi összefoglalót kérni, oldalt megnyitni.
 
 ## Megerősítés az írási műveleteknél
 Ha az asszisztens adatot rögzítene (szervizjegy, számláló, készlet-feltöltés, jegyzet, feladat, munkalap, elszámolás), előbb megerősítő kártyát mutat: mit és milyen adatokkal hajtana végre. A művelet csak a „Végrehajtom” gombra fut le, a te jogosultságaiddal; a „Mégse” elveti. A kártya 10 percig érvényes. Így az asszisztens a te tudtod nélkül semmit nem ír a rendszerbe.
