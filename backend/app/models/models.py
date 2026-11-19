@@ -436,6 +436,10 @@ class LearningMaterial(Base):
     external_ok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     auto_roles: Mapped[list | None] = mapped_column(JSON, nullable=True)
     default_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 164. kör: rajzolt borító (ház-stílusú SVG) + halvány alapszín a csempéhez;
+    # üresen a rendszer a címből/kategóriából választ illusztrációt
+    cover_svg: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cover_color: Mapped[str | None] = mapped_column(String(16), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

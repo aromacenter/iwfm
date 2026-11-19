@@ -19,7 +19,9 @@ export interface MyItem {
   attempts: number;
   last_score: number | null;
   source: "manual" | "role";
-  cover_id?: string | null;  // 162. kör: borítókép (első képmelléklet) a csempés nézethez
+  cover_id?: string | null;  // 162. kör: első képmelléklet (már nem a csempe borítója)
+  cover_svg?: string | null;  // 164. kör: rajzolt borító (ház-stílusú SVG)
+  cover_color?: string | null;  // halvány alapszín
 }
 
 export const STATUS_CLS: Record<MyItem["status"], string> = {
@@ -34,6 +36,9 @@ export interface Material {
   title: string;
   category: string | null;
   body: string | null;
+  cover_svg?: string | null;  // 164. kör
+  cover_color?: string | null;
+  cover_custom?: boolean;
   video_url: string | null;
   video_id: string | null;
   validity_months: number | null;

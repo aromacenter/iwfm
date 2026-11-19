@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_own_employee, record_audit, require_perm
 from app.db import get_db
+from app.services.wfm.learning_cover import ai_prompt, art_keys, art_svg, pick_art, pick_color, sanitize_svg
 from app.models import (
     Employee,
     LearningAssignment,
@@ -128,9 +129,19 @@ def _youtube_id(url: str | None) -> str | None:
     return None
 
 
+def _cover(m: LearningMaterial) -> tuple[str, str, bool]:
+    """(svg, alapszín, kézi-e): a tárolt borító, vagy a címből/kategóriából
+    választott könyvtári rajz + determinisztikus pasztell szín."""
+    if m.cover_svg:
+        return m.cover_svg, m.cover_color or pick_color(str(m.id)), True
+    return art_svg(pick_art(m.title, m.category, m.body)) or "", m.cover_color or pick_color(str(m.id)), False
+
+
 def _material_out(m: LearningMaterial, questions: int = 0, attachments: list | None = None, stats: dict | None = None) -> dict:
+    svg, color, custom = _cover(m)
     return {
         "id": str(m.id), "title": m.title, "category": m.category, "body": m.body,
+        "cover_svg": svg, "cover_color": color, "cover_custom": custom,
         "video_url": m.video_url, "video_id": _youtube_id(m.video_url),
         "validity_months": m.validity_months, "random_count": m.random_count,
         "external_ok": bool(m.external_ok), "auto_roles": list(m.auto_roles or []),
@@ -335,6 +346,7 @@ async def my_learning(
         o = _assignment_out(a, m, today, cnt, best)
         o["has_test"] = qcount.get(m.id, 0) > 0
         o["cover_id"] = str(cover[m.id]) if m.id in cover else None
+        o["cover_svg"], o["cover_color"], _custom = _cover(m)
         out.append(o)
     return {"employee_name": f"{emp.last_name} {emp.first_name}", "items": out}
 
@@ -925,6 +937,7 @@ async def install_library_package(
     m = LearningMaterial(
         title=pkg["title"], category=pkg.get("category"), body="", validity_months=pkg.get("validity_months"),
         default_due_days=pkg.get("default_due_days"), is_active=True, created_by_name=actor.display_name,
+        cover_svg=art_svg(pkg.get("art") or "") or None,
     )
     db.add(m)
     await db.flush()
@@ -951,3 +964,89 @@ async def install_library_package(
     await db.commit()
     await db.refresh(m)
     return _material_out(m, questions=len(pkg.get("questions") or []))
+
+
+# ─── Borító: rajzolt illusztráció + alapszín (164. kör) ─────────────────────
+
+
+@router.get("/cover-art")
+async def cover_art_list(_: User = Depends(require_perm("learning"))):
+    """A ház-stílusú illusztráció-könyvtár (kézi választáshoz)."""
+    return [{"key": k, "svg": art_svg(k)} for k in art_keys()]
+
+
+class CoverGenerateBody(BaseModel):
+    mode: str = Field(default="auto", pattern="^(auto|ai|library|color)$")  # color: csak az alapszín
+    art: str | None = Field(default=None, max_length=64)  # library módban a rajz kulcsa
+    color: str | None = Field(default=None, pattern="^#[0-9a-fA-F]{6}$")
+
+
+@router.post("/materials/{material_id}/cover/generate")
+async def generate_cover(
+    material_id: str,
+    body: CoverGenerateBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("learning")),
+):
+    """Borító a tartalomból. auto: AI, ha be van állítva, különben könyvtár;
+    ai: csak AI (422, ha nincs beállítva vagy nem adott használható rajzot);
+    library: a megadott (vagy kulcsszó szerint választott) könyvtári rajz."""
+    m = await _material_or_404(db, material_id)
+    if body.mode == "color":
+        if not body.color:
+            raise HTTPException(status_code=422, detail={"code": "learning.color_required"})
+        m.cover_color = body.color
+        await db.commit()
+        await db.refresh(m)
+        out = _material_out(m)
+        out["cover_source"] = "color"
+        return out
+    source = "library"
+    svg: str | None = None
+    if body.mode in ("auto", "ai"):
+        from app.services.wfm import ai_service
+
+        try:
+            raw = await ai_service.generate(db, ai_prompt(m.title, m.category, m.body), max_tokens=3000)
+            svg = sanitize_svg(raw)
+            source = "ai" if svg else "library"
+        except ValueError:
+            if body.mode == "ai":
+                raise HTTPException(status_code=422, detail={"code": "settings.ai_not_configured"})
+        except Exception:  # szolgáltató-hiba: auto módban tartalék, ai módban hiba
+            if body.mode == "ai":
+                raise HTTPException(status_code=502, detail={"code": "learning.cover_ai_failed"})
+        if body.mode == "ai" and not svg:
+            raise HTTPException(status_code=422, detail={"code": "learning.cover_ai_unusable"})
+    if not svg:
+        key = body.art or pick_art(m.title, m.category, m.body)
+        svg = art_svg(key)
+        if not svg:
+            raise HTTPException(status_code=404, detail={"code": "learning.art_not_found"})
+    m.cover_svg = svg
+    m.cover_color = body.color or m.cover_color or pick_color(str(m.id))
+    await record_audit(db, actor=actor, action="learning.cover_generate", entity_type="learning_material",
+                       entity_id=str(m.id), detail={"source": source, "mode": body.mode, "art": body.art}, request=request)
+    await db.commit()
+    await db.refresh(m)
+    out = _material_out(m)
+    out["cover_source"] = source
+    return out
+
+
+@router.delete("/materials/{material_id}/cover")
+async def delete_cover(
+    material_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("learning")),
+):
+    """A kézi borító törlése — visszaáll az automatikus (kulcsszavas) rajz."""
+    m = await _material_or_404(db, material_id)
+    m.cover_svg = None
+    await record_audit(db, actor=actor, action="learning.cover_delete", entity_type="learning_material",
+                       entity_id=str(m.id), request=request)
+    await db.commit()
+    await db.refresh(m)
+    return _material_out(m)

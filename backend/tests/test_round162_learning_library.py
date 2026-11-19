@@ -18,7 +18,7 @@ async def test_library_install_and_cover(client, admin, manager):
     assert m["title"].startswith("Raktárkezelés 2.") and m["question_count"] == 15
     body = (await client.get("/api/learning/materials", headers=mgr)).json()
     mat = next(x for x in body if x["id"] == m["id"])
-    assert len(mat["attachments"]) == 19 and all(a["mime"] == "image/png" for a in mat["attachments"])
+    assert len(mat["attachments"]) == 18 and all(a["mime"] == "image/png" for a in mat["attachments"])
     # a szövegben minden kép att:-hivatkozás, jelölő nem maradt
     detail_body = mat.get("body") or ""
     assert "{{img:" not in detail_body and detail_body.count("](att:") == 18
@@ -40,5 +40,4 @@ async def test_library_install_and_cover(client, admin, manager):
     my = (await client.get("/api/learning/my")).json()
     item = my["items"][0]
     assert item["cover_id"] and item["has_test"] is True
-    mat = next(x for x in (await client.get("/api/learning/materials", headers=mgr)).json() if x["id"] == mid)
-    assert next(a for a in mat["attachments"] if a["id"] == item["cover_id"])["filename"] == "cover.png"
+    assert item["cover_svg"].startswith("<svg")  # 164. kör: rajzolt borító, nem képernyőkép

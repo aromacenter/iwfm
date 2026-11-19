@@ -914,6 +914,20 @@
         "meta": "{images} kép · {questions} kérdés",
         "confirmReplace": "„{title}” már létezik. Újratelepítéskor a meglévő anyag (kiosztásokkal és eredményekkel együtt) törlődik, és a gyári változat kerül a helyére. Folytatod?",
         "done": "Telepítve: {title}"
+      },
+      "cover": {
+        "title": "Borító (rajzolt illusztráció)",
+        "hint": "Minden tananyag halvány alapszínű csempét és egy témára utaló, egységes stílusú rajzot kap. Alapból a cím és a kategória alapján választ a rendszer; a gombbal a tartalomból generálhatsz újat.",
+        "generate": "Borító generálása a tartalomból",
+        "generating": "Rajzolás…",
+        "pick": "Választás a könyvtárból",
+        "reset": "Vissza az automatikusra",
+        "auto": "automatikus (cím/kategória szerint)",
+        "custom": "egyedi borító",
+        "sourceAi": "Kész — AI rajzolta a tartalomból.",
+        "sourceLibrary": "Kész — könyvtári rajz a tartalom alapján (AI nincs beállítva vagy nem adott használhatót).",
+        "color": "Alapszín",
+        "saveFirst": "Előbb mentsd el az anyagot, utána generálható borító."
       }
     }
   },
@@ -2731,7 +2745,10 @@
     "warehouse.too_many_locations": "Túl sok tárhely (max. {max} raktáranként).",
     "warehouse.no_locations": "Nincs nyomtatható tárhely.",
     "learning.package_exists": "Ez a tananyag már telepítve van — az Újratelepítés gombbal cserélhető.",
-    "learning.package_not_found": "Nincs ilyen beépített tananyag."
+    "learning.package_not_found": "Nincs ilyen beépített tananyag.",
+    "learning.cover_ai_failed": "Az AI-szolgáltató hibát adott a borító rajzolásakor — próbáld újra, vagy válassz a könyvtárból.",
+    "learning.cover_ai_unusable": "Az AI nem adott használható rajzot — próbáld újra, vagy válassz a könyvtárból.",
+    "learning.art_not_found": "Nincs ilyen illusztráció."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",

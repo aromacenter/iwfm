@@ -135,6 +135,34 @@ export default function LearningAdminPage() {
   }, [router, toast]);
   useEffect(load, [load]);
 
+  // 164. kör: rajzolt borító — generálás a tartalomból, könyvtári választás, visszaállítás
+  const [art, setArt] = useState<{ key: string; svg: string }[]>([]);
+  const [artOpen, setArtOpen] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const svgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  async function coverAction(body: { mode: "auto" | "library" | "color"; art?: string; color?: string } | "reset") {
+    if (!current) return;
+    setCoverBusy(true);
+    try {
+      const m = body === "reset"
+        ? await api.delete<Material>(`/api/learning/materials/${current.id}/cover`)
+        : await api.post<Material & { cover_source?: string }>(`/api/learning/materials/${current.id}/cover/generate`, body);
+      setMaterials((list) => list.map((x) => (x.id === m.id ? { ...x, ...m } : x)));
+      if (body !== "reset" && body.mode === "auto") toast(t((m as { cover_source?: string }).cover_source === "ai" ? "learning.admin.cover.sourceAi" : "learning.admin.cover.sourceLibrary"), "success");
+      setArtOpen(false);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setCoverBusy(false);
+    }
+  }
+  async function openArt() {
+    if (art.length === 0) {
+      try { setArt(await api.get<{ key: string; svg: string }[]>("/api/learning/cover-art")); } catch (err) { toast(errorMessage(err), "error"); return; }
+    }
+    setArtOpen((v) => !v);
+  }
+
   async function installPackage(p: (typeof library)[number]) {
     if (p.installed && !(await confirm(t("learning.admin.library.confirmReplace", { title: p.title })))) return;
     setBusy(true);
@@ -409,6 +437,45 @@ export default function LearningAdminPage() {
 
               {tab === "edit" && (
                 <form onSubmit={saveMaterial} className="space-y-3">
+                  <div className="flex flex-wrap gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="h-28 w-[150px] shrink-0 overflow-hidden rounded-lg border border-slate-200" style={{ backgroundColor: current?.cover_color || "#e2e8f0" }}>
+                      {current?.cover_svg ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={svgUrl(current.cover_svg)} alt="" className="h-full w-full object-contain p-2" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-xs text-slate-400">{t("learning.admin.cover.saveFirst")}</div>
+                      )}
+                    </div>
+                    <div className="min-w-[220px] flex-1 text-sm">
+                      <div className="font-semibold">🎨 {t("learning.admin.cover.title")} <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-normal text-slate-500">{current?.cover_custom ? t("learning.admin.cover.custom") : t("learning.admin.cover.auto")}</span></div>
+                      <p className="mb-2 text-xs text-slate-500">{t("learning.admin.cover.hint")}</p>
+                      {current ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button type="button" disabled={coverBusy} onClick={() => coverAction({ mode: "auto" })} className={btnP}>
+                            {coverBusy ? t("learning.admin.cover.generating") : `✨ ${t("learning.admin.cover.generate")}`}
+                          </button>
+                          <button type="button" disabled={coverBusy} onClick={openArt} className={btnG}>🖼 {t("learning.admin.cover.pick")}</button>
+                          {current.cover_custom && <button type="button" disabled={coverBusy} onClick={() => coverAction("reset")} className={btnG}>↩ {t("learning.admin.cover.reset")}</button>}
+                          <label className="flex items-center gap-1 text-xs text-slate-600">
+                            {t("learning.admin.cover.color")}
+                            <input type="color" value={current.cover_color || "#e2e8f0"} onChange={(e) => coverAction({ mode: "color", color: e.target.value })} className="h-7 w-10 cursor-pointer rounded border border-slate-300 bg-white" title={t("learning.admin.cover.color")} />
+                          </label>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500">{t("learning.admin.cover.saveFirst")}</p>
+                      )}
+                      {artOpen && art.length > 0 && (
+                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                          {art.map((a) => (
+                            <button key={a.key} type="button" disabled={coverBusy} onClick={() => coverAction({ mode: "library", art: a.key })} className="rounded-lg border border-slate-200 bg-white p-1 hover:border-indigo-400" title={a.key}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={svgUrl(a.svg)} alt={a.key} className="h-14 w-full object-contain" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block text-sm sm:col-span-2">
                       {t("learning.admin.fields.title")}

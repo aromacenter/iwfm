@@ -914,6 +914,20 @@
         "meta": "{images} images · {questions} questions",
         "confirmReplace": "“{title}” already exists. Reinstalling deletes the existing material (with its assignments and results) and installs the stock version. Continue?",
         "done": "Installed: {title}"
+      },
+      "cover": {
+        "title": "Cover (illustration)",
+        "hint": "Every lesson gets a pale tile colour and a topic illustration in one house style. By default the system picks from title and category; the button generates one from the content.",
+        "generate": "Generate cover from content",
+        "generating": "Drawing…",
+        "pick": "Pick from library",
+        "reset": "Back to automatic",
+        "auto": "automatic (by title/category)",
+        "custom": "custom cover",
+        "sourceAi": "Done — drawn by AI from the content.",
+        "sourceLibrary": "Done — library illustration matched to the content (AI not configured or gave nothing usable).",
+        "color": "Base colour",
+        "saveFirst": "Save the material first, then a cover can be generated."
       }
     }
   },
@@ -2731,7 +2745,10 @@
     "warehouse.too_many_locations": "Too many locations (max. {max} per warehouse).",
     "warehouse.no_locations": "No printable locations.",
     "learning.package_exists": "This lesson is already installed — use Reinstall to replace it.",
-    "learning.package_not_found": "No such built-in lesson."
+    "learning.package_not_found": "No such built-in lesson.",
+    "learning.cover_ai_failed": "The AI provider failed while drawing the cover — try again or pick from the library.",
+    "learning.cover_ai_unusable": "The AI returned no usable drawing — try again or pick from the library.",
+    "learning.art_not_found": "No such illustration."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
