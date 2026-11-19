@@ -429,6 +429,16 @@ Promóciós képek/videó slotokba (a gyári képek backupba kerülnek, visszaá
 - Licenc: a bekapcsolt modulok (a Flotta-pult állítja).""",
     },
     {
+        "key": "audit_naplo",
+        "title": "Audit napló (ki mit csinált, 3 hónap)",
+        "keywords": "audit napló ki mit csinált mikor esemény művelet részletek megőrzés 3 hónap 90 nap törlés magyar szöveg",
+        "body": """## Mit mutat?
+Csak admin látja (Rendszer → Audit napló). Minden sor egy művelet: mikor, ki, mit csinált — magyarul, érthető mondattal (pl. „Elszámolás rögzítve: Napfény Kávézó — 31 370 Ft”, „Belépett a rendszerbe”, „Tesztet töltött ki: … — 100% (sikeres)”). A mondat alatt halványan a technikai kód, a Részletek oszlopban a többi adat címkézve; az egérrel a részletek fölé állva a nyers adat is látszik. Szűrhető műveletre, személyre és dátumra.
+
+## Megőrzés
+A napló gördülő 3 hónapot (90 nap) tart meg: a régebbi sorok naponta automatikusan törlődnek. Kivétel az elszámoltathatóság miatt védett műveletek (adminisztrációs eszközök, dolgozó anonimizálása, a törlési futások naplója) — ezek megmaradnak. Más megőrzési idő a példány környezeti beállításával (WFM_RETENTION_AUDIT_DAYS) adható; 0 = nincs törlés.""",
+    },
+    {
         "key": "hibajelentes",
         "title": "Hibajelentés és napló",
         "keywords": "hibajelentés bogár gomb képernyőkép hibajegy státusz napló audit ki mit csinált tiltás",

@@ -1,0 +1,445 @@
+/** Audit-napló: a művelet-kódból és a részletekből olvasható mondat (165. kör).
+ *
+ *  Három réteg, hogy MINDEN sorhoz legyen értelmes szöveg:
+ *  1. célzott sablon a gyakori műveletekhez (`TEMPLATES`), a részletek mezőivel;
+ *  2. általános mondat: érintett típusa + a kód utótagjából képzett ige
+ *     (`create` → „létrehozva”, `delete` → „törölve”, …);
+ *  3. a részletek emberi címkével („Partner: …, Bruttó: 124 335 Ft”), a nyers
+ *     JSON csak tooltipben.
+ */
+
+export type Lang = "hu" | "en";
+
+interface AuditLike {
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  detail?: Record<string, unknown> | null;
+}
+
+type Dict = Record<string, string>;
+
+const ENTITY: Record<Lang, Dict> = {
+  hu: {
+    agent_expense: "üzletkötői költség", agent_release: "ügynök-kiadás", asset: "gép", asset_protocol: "gép-jegyzőkönyv",
+    automation_rule: "automatizálási szabály", backup: "mentés", bug: "hibajegy", delivery_note: "szállítólevél",
+    email_template: "e-mail sablon", employee: "dolgozó", gls_parcel: "GLS csomag", intake: "átvétel",
+    knowledge_entry: "tudásbázis-bejegyzés", learning_assignment: "tananyag-kiosztás", learning_material: "tananyag",
+    license: "licenc", mail_campaign: "levélküldés", part: "alkatrész", partner: "partner", partner_contract: "szerződés",
+    partner_price: "partner-ár", partner_stock: "partner-készlet", parts_kit: "alkatrész-készlet (kit)",
+    parts_po: "alkatrész-rendelés", parts_request: "alkatrész-kérés", parts_return: "alkatrész-visszáru",
+    parts_stocktake: "alkatrész-leltár", parts_supplier: "alkatrész-szállító", parts_warehouse: "alkatrész-raktár",
+    payment_order: "fizetési rendelés", payment_product: "fizetős termék", payroll: "bérexport", permission: "jogosultság",
+    print_job: "nyomtatási feladat", print_settings: "nyomtató-beállítás", product: "termék", product_order: "termékrendelés",
+    purchase_order: "beszerzési rendelés", quote_machine_type: "ajánlat géptípus", quote_request: "árajánlat",
+    quote_settings: "ajánlat-beállítás", retention: "adatmegőrzés", role: "szerepkör", schedule: "beosztás",
+    service_ticket: "szervizjegy", settings: "beállítás", settlement: "elszámolás", shift: "műszak", skill: "képesség",
+    stock_request: "áru-igénylés", stocktake: "leltár", task: "feladat", time_entry: "munkaidő-bejegyzés",
+    timeoff: "távollét", tool: "szerszám", user: "felhasználó", vending_machine: "vending gép", vending_promo: "vending promó",
+    vending_recipe: "vending recept", warehouse: "raktár", worksheet: "munkalap", worksheet_timer: "munkalap-időmérő",
+  },
+  en: {
+    agent_expense: "agent expense", agent_release: "agent release", asset: "machine", asset_protocol: "machine protocol",
+    automation_rule: "automation rule", backup: "backup", bug: "bug report", delivery_note: "delivery note",
+    email_template: "e-mail template", employee: "employee", gls_parcel: "GLS parcel", intake: "intake",
+    knowledge_entry: "knowledge entry", learning_assignment: "lesson assignment", learning_material: "lesson",
+    license: "license", mail_campaign: "mailing", part: "part", partner: "partner", partner_contract: "contract",
+    partner_price: "partner price", partner_stock: "partner stock", parts_kit: "parts kit", parts_po: "parts order",
+    parts_request: "parts request", parts_return: "parts return", parts_stocktake: "parts stocktake",
+    parts_supplier: "parts supplier", parts_warehouse: "parts warehouse", payment_order: "payment order",
+    payment_product: "paid product", payroll: "payroll export", permission: "permission", print_job: "print job",
+    print_settings: "printer settings", product: "product", product_order: "product order", purchase_order: "purchase order",
+    quote_machine_type: "quote machine type", quote_request: "quote", quote_settings: "quote settings", retention: "retention",
+    role: "role", schedule: "schedule", service_ticket: "service ticket", settings: "settings", settlement: "settlement",
+    shift: "shift", skill: "skill", stock_request: "stock request", stocktake: "stocktake", task: "task",
+    time_entry: "time entry", timeoff: "time off", tool: "tool", user: "user", vending_machine: "vending machine",
+    vending_promo: "vending promo", vending_recipe: "vending recipe", warehouse: "warehouse", worksheet: "worksheet",
+    worksheet_timer: "worksheet timer",
+  },
+};
+
+// A kód utótagja → ige (általános mondathoz)
+const VERB: Record<Lang, Dict> = {
+  hu: {
+    create: "létrehozva", created: "létrehozva", update: "módosítva", updated: "módosítva", delete: "törölve",
+    deleted: "törölve", bulk_delete: "tömegesen törölve", print: "nyomtatva", email: "e-mailben elküldve",
+    send: "elküldve", sent: "elküldve", cancel: "visszavonva", cancelled: "visszavonva", approve: "jóváhagyva",
+    approved: "jóváhagyva", decline: "elutasítva", declined: "elutasítva", receive: "beérkeztetve", received: "beérkeztetve",
+    order: "megrendelve", ordered: "megrendelve", open: "megnyitva", opened: "megnyitva", close: "lezárva", closed: "lezárva",
+    submit: "beküldve", submitted: "beküldve", sign: "aláírva", signed: "aláírva", export: "exportálva", import: "importálva",
+    restore: "visszaállítva", reopen: "újranyitva", regenerate: "újragenerálva", assign: "kiosztva", attempt: "teszt kitöltve",
+    comment: "megjegyzés írva", note: "jegyzet írva", generate: "legenerálva", publish: "közzétéve", check: "ellenőrizve",
+    handover: "átadva", adjust: "korrigálva", transfer: "áthelyezve", replenish: "feltöltve", return: "visszavéve",
+    deploy: "kihelyezve", swap: "cserélve", counter: "számláló rögzítve", pdf: "PDF készült", status: "státusz módosítva",
+    use: "felhasználva", unuse: "felhasználás visszavonva", issue: "kiadva", place: "tárhelyre rakva", unplace: "tárhelyről levéve",
+    relocate: "tárhelyek között áthelyezve", set: "beállítva", clear: "törölve", login: "belépés", logout: "kilépés",
+    paid: "kifizetve", failed: "sikertelen", enqueue: "sorba állítva", upload: "feltöltve", uploaded: "feltöltve",
+    reveal: "megtekintve", anonymize: "anonimizálva", wipe: "törölve (teljes)", backup: "mentés készült",
+  },
+  en: {
+    create: "created", created: "created", update: "updated", updated: "updated", delete: "deleted", deleted: "deleted",
+    bulk_delete: "bulk deleted", print: "printed", email: "e-mailed", send: "sent", sent: "sent", cancel: "cancelled",
+    cancelled: "cancelled", approve: "approved", approved: "approved", decline: "declined", declined: "declined",
+    receive: "received", received: "received", order: "ordered", ordered: "ordered", open: "opened", opened: "opened",
+    close: "closed", closed: "closed", submit: "submitted", submitted: "submitted", sign: "signed", signed: "signed",
+    export: "exported", import: "imported", restore: "restored", reopen: "reopened", regenerate: "regenerated",
+    assign: "assigned", attempt: "test attempted", comment: "commented", note: "note added", generate: "generated",
+    publish: "published", check: "checked", handover: "handed over", adjust: "adjusted", transfer: "transferred",
+    replenish: "replenished", return: "returned", deploy: "deployed", swap: "swapped", counter: "counter recorded",
+    pdf: "PDF created", status: "status changed", use: "used", unuse: "use reverted", issue: "issued", place: "put away",
+    unplace: "taken off location", relocate: "relocated", set: "set", clear: "cleared", login: "login", logout: "logout",
+    paid: "paid", failed: "failed", enqueue: "queued", upload: "uploaded", uploaded: "uploaded", reveal: "viewed",
+    anonymize: "anonymised", wipe: "wiped", backup: "backup created",
+  },
+};
+
+// A részletek mezőinek címkéi
+const FIELD: Record<Lang, Dict> = {
+  hu: {
+    partner: "Partner", gross: "Bruttó", net: "Nettó", total_gross: "Bruttó", score: "Eredmény", passed: "Sikeres",
+    material: "Tananyag", machine: "Gép", entries: "Bejegyzés", worksheet: "Munkalap", ai_assigned: "AI osztotta ki",
+    count: "Darab", qty: "Mennyiség", quantity: "Mennyiség", product: "Termék", unit_cost: "Egységár", name: "Név",
+    kind: "Típus", title: "Cím", twofa: "Kétlépcsős", channel: "Csatorna", feature: "Funkció", action: "Művelet",
+    path: "Oldal", email: "E-mail", role: "Szerepkör", reason: "Indok", status: "Státusz", from: "Honnan", to: "Hova",
+    location: "Tárhely", code: "Kód", key: "Kulcs", serial: "Sorszám", counter: "Számláló", delta: "Eltérés",
+    counted: "Számolt", note: "Megjegyzés", employee: "Dolgozó", date: "Dátum", start: "Kezdés", end: "Befejezés",
+    hours: "Óra", amount: "Összeg", method: "Mód", invoice: "Számla", number: "Szám", subject: "Tárgy",
+    recipients: "Címzettek", sent: "Elküldve", failed: "Sikertelen", mode: "Mód", source: "Forrás", art: "Rajz",
+    images: "Képek", replaced: "Lecserélve", bays: "Állás", levels: "Szint", slots: "Fakk", row: "Sor", created: "Létrehozva",
+    old: "Régi", new: "Új", value: "Érték", user: "Felhasználó", ticket: "Jegy", task: "Feladat", asset: "Gép",
+    barcode: "Vonalkód", portions: "Adag", price: "Ár", year: "Év", month: "Hónap", days: "Nap", horizon: "Horizont",
+    warehouse: "Raktár", supplier: "Szállító", order_no: "Rendelésszám", template: "Sablon", module: "Modul",
+    modules: "Modulok", plan: "Csomag", until: "Eddig", valid_until: "Érvényes", lang: "Nyelv", ip: "IP", via: "Forrás",
+    id: "Azonosító", type: "Típus", category: "Kategória", questions: "Kérdések", attachments: "Mellékletek",
+    filename: "Fájl", size: "Méret", mime: "Típus", pages: "Oldal", format: "Formátum", fmt: "Formátum",
+    deleted: "Törölve", restored: "Visszaállítva", updated: "Módosítva", added: "Hozzáadva", removed: "Eltávolítva",
+    shift: "Műszak", site: "Telephely", position: "Pozíció", level: "Szint", bay: "Állás", slot: "Fakk",
+    phone: "Telefon", address: "Cím", city: "Város", tax_number: "Adószám", company: "Cég", display_name: "Név",
+    payment_method: "Fizetés", cash: "Készpénz", transfer: "Átutalás", invoice_no: "Számlaszám", paid: "Fizetve",
+    error: "Hiba", message: "Üzenet", detail: "Részlet",
+  },
+  en: {
+    partner: "Partner", gross: "Gross", net: "Net", total_gross: "Gross", score: "Score", passed: "Passed",
+    material: "Lesson", machine: "Machine", entries: "Entries", worksheet: "Worksheet", ai_assigned: "AI assigned",
+    count: "Count", qty: "Quantity", quantity: "Quantity", product: "Product", unit_cost: "Unit cost", name: "Name",
+    kind: "Kind", title: "Title", twofa: "Two-factor", channel: "Channel", feature: "Feature", action: "Action",
+    path: "Page", email: "E-mail", role: "Role", reason: "Reason", status: "Status", from: "From", to: "To",
+    location: "Location", code: "Code", key: "Key", serial: "Serial", counter: "Counter", delta: "Delta",
+    counted: "Counted", note: "Note", employee: "Employee", date: "Date", start: "Start", end: "End", hours: "Hours",
+    amount: "Amount", method: "Method", invoice: "Invoice", number: "Number", subject: "Subject", recipients: "Recipients",
+    sent: "Sent", failed: "Failed", mode: "Mode", source: "Source", art: "Art", images: "Images", replaced: "Replaced",
+    bays: "Bays", levels: "Levels", slots: "Slots", row: "Row", created: "Created", old: "Old", new: "New", value: "Value",
+    user: "User", ticket: "Ticket", task: "Task", asset: "Machine", barcode: "Barcode", portions: "Portions", price: "Price",
+    year: "Year", month: "Month", days: "Days", horizon: "Horizon", warehouse: "Warehouse", supplier: "Supplier",
+    order_no: "Order no.", template: "Template", module: "Module", modules: "Modules", plan: "Plan", until: "Until",
+    valid_until: "Valid until", lang: "Language", ip: "IP", via: "Via", id: "ID", type: "Type", category: "Category",
+    questions: "Questions", attachments: "Attachments", filename: "File", size: "Size", mime: "Type", pages: "Pages",
+    format: "Format", fmt: "Format", deleted: "Deleted", restored: "Restored", updated: "Updated", added: "Added",
+    removed: "Removed", shift: "Shift", site: "Site", position: "Position", level: "Level", bay: "Bay", slot: "Slot",
+    phone: "Phone", address: "Address", city: "City", tax_number: "Tax no.", company: "Company", display_name: "Name",
+    payment_method: "Payment", cash: "Cash", transfer: "Transfer", invoice_no: "Invoice no.", paid: "Paid",
+    error: "Error", message: "Message", detail: "Detail",
+  },
+};
+
+// Célzott sablonok: {mező} a részletekből; ha egy mező hiányzik, az általános mondat jön.
+const TEMPLATES: Record<Lang, Dict> = {
+  hu: {
+    "auth.login": "Belépett a rendszerbe",
+    "auth.twofa_sent": "Kétlépcsős kód elküldve ({channel})",
+    "auth.twofa_bad_code": "Rossz kétlépcsős kódot adott meg",
+    "auth.denied": "Tiltott oldalt/funkciót próbált megnyitni: {feature}",
+    "auth.password_change": "Jelszót módosított",
+    "auth.forgot": "Elfelejtett jelszó kérés",
+    "auth.password_reset": "Jelszó visszaállítva",
+    "auth.bootstrap": "Első admin fiók létrehozva",
+    "learning.attempt": "Tesztet töltött ki: „{material}” — {score}% ({passed})",
+    "learning.assign": "Tananyag kiosztva",
+    "learning.material_create": "Új tananyag: „{title}”",
+    "learning.library_install": "Beépített tananyag telepítve: „{title}”",
+    "learning.cover_generate": "Tananyag-borító generálva ({source})",
+    "settlement.create": "Elszámolás rögzítve: {partner} — {gross} Ft",
+    "settlement.invoice": "Számla kiállítva az elszámoláshoz",
+    "settlement.mark_paid": "Elszámolás fizetettre állítva",
+    "settlement.pdf": "Elszámolás PDF letöltve",
+    "settlement.sign": "Elszámolás aláírva",
+    "settlement.backfill": "Régi rendszerből átemelt elszámolások",
+    "support.kb_auto": "Tudásbázis automatikusan bővítve: {machine} ({entries} bejegyzés)",
+    "support.ticket": "Szervizjegy nyitva a támogatási felületről",
+    "support.counter": "Számláló jelentve a támogatási felületről",
+    "task.create": "Feladat létrehozva (munkalap: {worksheet})",
+    "task.update": "Feladat módosítva",
+    "task.delete": "Feladat törölve",
+    "task.technician_assigned": "Szerelő hozzárendelve a feladathoz",
+    "print.enqueue": "Nyomtatás sorba állítva ({count} db)",
+    "intake.print": "Átvételi elismervény nyomtatva",
+    "intake.create": "Gép átvéve (elismervény készült)",
+    "intake.email": "Átvételi elismervény e-mailben elküldve",
+    "asset.counter": "Számláló rögzítve: {counter}",
+    "asset.deploy": "Gép kihelyezve partnerhez",
+    "asset.return": "Gép visszavéve a partnertől",
+    "asset.swap": "Gépcsere végrehajtva",
+    "asset.create": "Új gép felvéve",
+    "asset.update": "Gép adatai módosítva",
+    "warehouse.receive": "Bevételezés: {product} {qty}",
+    "warehouse.transfer": "Áthelyezés raktárak között",
+    "warehouse.adjust": "Leltár-korrekció: {product} → {counted}",
+    "warehouse.place": "Tárhelyre rakva: {product} {qty} → {location}",
+    "warehouse.relocate": "Tárhelyek között áthelyezve: {product} {qty} ({from} → {to})",
+    "warehouse.unplace": "Tárhelyről levéve: {product} {qty} ({location})",
+    "warehouse.locations_generate": "Tárhelyek generálva: {row} sor ({created} új)",
+    "warehouse.location_update": "Tárhely átrendezve: {from} → {to}",
+    "warehouse.create": "Raktár létrehozva: {name}",
+    "warehouse.layout": "Raktár-típus módosítva ({layout})",
+    "stock.replenish": "Partner-készlet feltöltve",
+    "stock.return": "Partner-készlet visszavéve",
+    "stock.min_set": "Minimum-készlet beállítva",
+    "timeclock.kiosk_in": "Beblokkolt a kioszkon",
+    "timeclock.kiosk_out": "Kiblokkolt a kioszkon",
+    "timeclock.manual_create": "Munkaidő kézzel rögzítve",
+    "timeclock.manual_edit": "Munkaidő kézzel módosítva",
+    "employee.create": "Dolgozó felvéve",
+    "employee.update": "Dolgozó adatai módosítva",
+    "employee.reset_password": "Dolgozó jelszava visszaállítva",
+    "employee.reveal": "Dolgozó érzékeny adatai megtekintve",
+    "settings.permissions_update": "Jogosultság-mátrix módosítva",
+    "settings.modules": "Modulok be-/kikapcsolva",
+    "settings.work_rules": "Munkaidő-szabályok módosítva",
+    "settings.email_update": "E-mail beállítások módosítva",
+    "settings.ai_update": "AI beállítások módosítva",
+    "settings.billingo_update": "Billingó beállítások módosítva",
+    "settings.role_create": "Új szerepkör létrehozva",
+    "settings.role_update": "Szerepkör módosítva",
+    "po.create": "Beszerzési rendelés létrehozva",
+    "po.create_from_forecast": "Rendelés-vázlat az előrejelzésből ({count} db)",
+    "po.order": "Beszerzési rendelés megrendelve",
+    "po.receive": "Beszerzési rendelés beérkeztetve",
+    "quote.create": "Árajánlat létrehozva",
+    "quote.send": "Árajánlat elküldve",
+    "quote.signed": "Árajánlatot az ügyfél elfogadta/aláírta",
+    "service.create": "Szervizjegy nyitva",
+    "service.update": "Szervizjegy módosítva",
+    "mailing.send": "Levél elküldve: „{subject}”",
+    "schedule.publish": "Beosztás közzétéve",
+    "schedule.generate": "Beosztás legenerálva",
+    "shift.create": "Műszak létrehozva",
+    "shift.update": "Műszak módosítva",
+    "shift.delete": "Műszak törölve",
+    "timeoff.self_request": "Távollétet igényelt",
+    "timeoff.create_approved": "Távollét rögzítve (jóváhagyva)",
+    "tools.handover": "Szerszám átadva",
+    "tools.check": "Szerszám ellenőrizve",
+    "bug.create": "Hibajegyet küldött",
+    "bug.comment": "Hibajegyhez hozzászólt",
+    "tech_ledger.add": "Szerelő folyószámlára könyvelés",
+    "payroll.export": "Bérexport készült",
+    "payroll.timesheet": "Munkaidő-nyilvántartás PDF készült",
+    "impex.export": "Adatexport készült",
+    "impex.import": "Adatimport lefutott",
+    "admin.backup": "Mentés készült",
+    "admin.wipe": "Adatok törölve (admin eszköz)",
+    "partner.create": "Partner létrehozva",
+    "partner.update": "Partner módosítva",
+    "partner.note": "Partnerhez jegyzet írva",
+    "product.create": "Termék létrehozva",
+    "product.update": "Termék módosítva",
+    "contract.create": "Szerződés létrehozva",
+    "contract.update": "Szerződés módosítva",
+    "delivery.create": "Szállítólevél létrehozva",
+    "delivery.cancel": "Szállítólevél visszavonva",
+    "gls.create": "GLS csomag feladva",
+    "gls.print": "GLS címke nyomtatva",
+    "saferpay.paid": "Kártyás fizetés sikeres",
+    "saferpay.failed": "Kártyás fizetés sikertelen",
+    "user.substitute": "Helyettesítés beállítva",
+    "user.signature_sample": "Aláírás-minta rögzítve",
+    "kb.create": "Tudásbázis-bejegyzés létrehozva",
+    "kb.update": "Tudásbázis-bejegyzés módosítva",
+    "stockreq.create": "Áru-igénylés leadva",
+    "stockreq.approve": "Áru-igénylés jóváhagyva",
+    "stockreq.decline": "Áru-igénylés elutasítva",
+    "stocktake.open": "Leltár megnyitva",
+    "stocktake.close": "Leltár lezárva",
+    "parts.use": "Alkatrész munkalapra könyvelve",
+    "parts.receipt": "Alkatrész bevételezve",
+    "parts.transfer": "Alkatrész áthelyezve",
+    "parts.request_created": "Alkatrész-kérés leadva",
+    "parts.request_issued": "Alkatrész-kérés kiadva",
+    "vending.recipe_edit": "Vending recept módosítva",
+    "vending.commands": "Parancs küldve a vending gépnek",
+  },
+  en: {
+    "auth.login": "Logged in",
+    "auth.twofa_sent": "Two-factor code sent ({channel})",
+    "auth.twofa_bad_code": "Wrong two-factor code entered",
+    "auth.denied": "Tried to open a forbidden page/feature: {feature}",
+    "auth.password_change": "Changed password",
+    "auth.forgot": "Forgotten-password request",
+    "auth.password_reset": "Password reset",
+    "auth.bootstrap": "First admin account created",
+    "learning.attempt": "Took a test: “{material}” — {score}% ({passed})",
+    "learning.assign": "Lesson assigned",
+    "learning.material_create": "New lesson: “{title}”",
+    "learning.library_install": "Built-in lesson installed: “{title}”",
+    "learning.cover_generate": "Lesson cover generated ({source})",
+    "settlement.create": "Settlement recorded: {partner} — {gross} Ft",
+    "settlement.invoice": "Invoice issued for the settlement",
+    "settlement.mark_paid": "Settlement marked paid",
+    "settlement.pdf": "Settlement PDF downloaded",
+    "settlement.sign": "Settlement signed",
+    "settlement.backfill": "Settlements imported from the legacy system",
+    "support.kb_auto": "Knowledge base auto-extended: {machine} ({entries} entries)",
+    "support.ticket": "Service ticket opened from the support page",
+    "support.counter": "Counter reported from the support page",
+    "task.create": "Task created (worksheet: {worksheet})",
+    "task.update": "Task updated",
+    "task.delete": "Task deleted",
+    "task.technician_assigned": "Technician assigned to the task",
+    "print.enqueue": "Print job queued ({count})",
+    "intake.print": "Intake receipt printed",
+    "intake.create": "Machine taken in (receipt created)",
+    "intake.email": "Intake receipt e-mailed",
+    "asset.counter": "Counter recorded: {counter}",
+    "asset.deploy": "Machine deployed to a partner",
+    "asset.return": "Machine returned from the partner",
+    "asset.swap": "Machine swapped",
+    "asset.create": "New machine added",
+    "asset.update": "Machine updated",
+    "warehouse.receive": "Goods received: {product} {qty}",
+    "warehouse.transfer": "Transfer between warehouses",
+    "warehouse.adjust": "Stock adjustment: {product} → {counted}",
+    "warehouse.place": "Put away: {product} {qty} → {location}",
+    "warehouse.relocate": "Relocated: {product} {qty} ({from} → {to})",
+    "warehouse.unplace": "Taken off location: {product} {qty} ({location})",
+    "warehouse.locations_generate": "Locations generated: row {row} ({created} new)",
+    "warehouse.location_update": "Location rearranged: {from} → {to}",
+    "warehouse.create": "Warehouse created: {name}",
+    "warehouse.layout": "Warehouse type changed ({layout})",
+    "stock.replenish": "Partner stock replenished",
+    "stock.return": "Partner stock returned",
+    "stock.min_set": "Minimum stock set",
+    "timeclock.kiosk_in": "Clocked in at the kiosk",
+    "timeclock.kiosk_out": "Clocked out at the kiosk",
+    "timeclock.manual_create": "Work time entered manually",
+    "timeclock.manual_edit": "Work time edited manually",
+    "employee.create": "Employee added",
+    "employee.update": "Employee updated",
+    "employee.reset_password": "Employee password reset",
+    "employee.reveal": "Employee sensitive data viewed",
+    "settings.permissions_update": "Permission matrix changed",
+    "settings.modules": "Modules switched on/off",
+    "settings.work_rules": "Work rules changed",
+    "settings.email_update": "E-mail settings changed",
+    "settings.ai_update": "AI settings changed",
+    "settings.billingo_update": "Billingo settings changed",
+    "settings.role_create": "New role created",
+    "settings.role_update": "Role updated",
+    "po.create": "Purchase order created",
+    "po.create_from_forecast": "Draft orders from the forecast ({count})",
+    "po.order": "Purchase order placed",
+    "po.receive": "Purchase order received",
+    "quote.create": "Quote created",
+    "quote.send": "Quote sent",
+    "quote.signed": "Quote accepted/signed by the customer",
+    "service.create": "Service ticket opened",
+    "service.update": "Service ticket updated",
+    "mailing.send": "Mail sent: “{subject}”",
+    "schedule.publish": "Schedule published",
+    "schedule.generate": "Schedule generated",
+    "shift.create": "Shift created",
+    "shift.update": "Shift updated",
+    "shift.delete": "Shift deleted",
+    "timeoff.self_request": "Requested time off",
+    "timeoff.create_approved": "Time off recorded (approved)",
+    "tools.handover": "Tool handed over",
+    "tools.check": "Tool checked",
+    "bug.create": "Submitted a bug report",
+    "bug.comment": "Commented on a bug report",
+    "tech_ledger.add": "Technician ledger entry",
+    "payroll.export": "Payroll export created",
+    "payroll.timesheet": "Timesheet PDF created",
+    "impex.export": "Data export created",
+    "impex.import": "Data import run",
+    "admin.backup": "Backup created",
+    "admin.wipe": "Data wiped (admin tool)",
+    "partner.create": "Partner created",
+    "partner.update": "Partner updated",
+    "partner.note": "Note added to partner",
+    "product.create": "Product created",
+    "product.update": "Product updated",
+    "contract.create": "Contract created",
+    "contract.update": "Contract updated",
+    "delivery.create": "Delivery note created",
+    "delivery.cancel": "Delivery note cancelled",
+    "gls.create": "GLS parcel created",
+    "gls.print": "GLS label printed",
+    "saferpay.paid": "Card payment succeeded",
+    "saferpay.failed": "Card payment failed",
+    "user.substitute": "Substitute set",
+    "user.signature_sample": "Signature sample recorded",
+    "kb.create": "Knowledge entry created",
+    "kb.update": "Knowledge entry updated",
+    "stockreq.create": "Stock request submitted",
+    "stockreq.approve": "Stock request approved",
+    "stockreq.decline": "Stock request declined",
+    "stocktake.open": "Stocktake opened",
+    "stocktake.close": "Stocktake closed",
+    "parts.use": "Part booked onto a worksheet",
+    "parts.receipt": "Part received",
+    "parts.transfer": "Part transferred",
+    "parts.request_created": "Parts request submitted",
+    "parts.request_issued": "Parts request issued",
+    "vending.recipe_edit": "Vending recipe edited",
+    "vending.commands": "Command sent to the vending machine",
+  },
+};
+
+const YES_NO: Record<Lang, [string, string]> = { hu: ["igen", "nem"], en: ["yes", "no"] };
+
+function fmtValue(v: unknown, lang: Lang): string {
+  if (v == null || v === "") return "—";
+  if (typeof v === "boolean") return v ? YES_NO[lang][0] : YES_NO[lang][1];
+  if (typeof v === "number") return v.toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { maximumFractionDigits: 3 });
+  if (Array.isArray(v)) return v.length === 0 ? "—" : v.map((x) => fmtValue(x, lang)).join(", ");
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+/** A részletek emberi címkével, „Címke: érték” párokban. */
+export function describeDetails(detail: Record<string, unknown> | null | undefined, lang: Lang, skip: Set<string> = new Set()): string[] {
+  if (!detail || typeof detail !== "object") return [];
+  const labels = FIELD[lang];
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(detail)) {
+    if (skip.has(k)) continue;
+    const label = labels[k] ?? k.replace(/_/g, " ");
+    out.push(`${label}: ${fmtValue(v, lang)}`);
+  }
+  return out;
+}
+
+/** Egy mondat a műveletről; a sablon mezőit kiveszi a részletekből. */
+export function describeAudit(item: AuditLike, lang: Lang): { text: string; rest: string[]; generic: boolean } {
+  const detail = (item.detail && typeof item.detail === "object" ? item.detail : {}) as Record<string, unknown>;
+  const tpl = TEMPLATES[lang][item.action];
+  if (tpl) {
+    const used = new Set<string>();
+    let missing = false;
+    const text = tpl.replace(/\{([a-z_]+)\}/g, (_m, key: string) => {
+      if (!(key in detail) || detail[key] == null) { missing = true; return "—"; }
+      used.add(key);
+      return fmtValue(detail[key], lang);
+    });
+    if (!missing) return { text, rest: describeDetails(detail, lang, used), generic: false };
+  }
+  // általános: „Elszámolás — létrehozva”
+  const [, suffix = ""] = item.action.includes(".") ? item.action.split(/\.(.+)/) : ["", item.action];
+  const entity = ENTITY[lang][item.entity_type] ?? item.entity_type.replace(/_/g, " ");
+  const verb = VERB[lang][suffix] ?? VERB[lang][suffix.split("_").pop() ?? ""] ?? suffix.replace(/_/g, " ");
+  const cap = entity.charAt(0).toUpperCase() + entity.slice(1);
+  return { text: `${cap} — ${verb}`, rest: describeDetails(detail, lang), generic: true };
+}
+
+export function entityLabel(entityType: string, lang: Lang): string {
+  return ENTITY[lang][entityType] ?? entityType.replace(/_/g, " ");
+}

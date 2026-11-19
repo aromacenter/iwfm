@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { describeAudit, entityLabel } from "@/lib/auditText";
 
 interface AuditItem {
   id: string;
@@ -262,21 +263,28 @@ export default function NaploPage() {
               </tr>
             </thead>
             <tbody>
-              {(data?.items ?? []).map((item) => (
+              {(data?.items ?? []).map((item) => {
+                // 165. kör: olvasható mondat a kód helyett; a kód és a nyers JSON tooltipben marad
+                const d = describeAudit(item, lang === "hu" ? "hu" : "en");
+                return (
                 <tr key={item.id} className="border-b border-slate-100 last:border-0 align-top">
                   <td className="px-4 py-2.5 whitespace-nowrap text-slate-500">{fmt(item.created_at)}</td>
                   <td className="px-4 py-2.5 font-medium">{item.actor_name ?? "—"}</td>
-                  <td className="px-4 py-2.5"><code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{item.action}</code></td>
-                  <td className="px-4 py-2.5 text-slate-500">
-                    {item.entity_type}
-                    {item.entity_id && <span className="ml-1 text-xs text-slate-400">{item.entity_id.slice(0, 12)}</span>}
+                  <td className="px-4 py-2.5" title={item.action}>
+                    <div className={d.generic ? "text-slate-700" : "font-medium text-slate-800"}>{d.text}</div>
+                    <code className="text-[10px] text-slate-400">{item.action}</code>
                   </td>
-                  <td className="max-w-72 px-4 py-2.5 text-xs text-slate-500">
-                    {item.detail ? JSON.stringify(item.detail) : "—"}
+                  <td className="px-4 py-2.5 text-slate-500">
+                    {entityLabel(item.entity_type, lang === "hu" ? "hu" : "en")}
+                    {item.entity_id && <span className="ml-1 text-xs text-slate-400">{item.entity_id.slice(0, 8)}</span>}
+                  </td>
+                  <td className="max-w-80 px-4 py-2.5 text-xs text-slate-500" title={item.detail ? JSON.stringify(item.detail) : undefined}>
+                    {d.rest.length > 0 ? d.rest.map((r, i) => <div key={i}>{r}</div>) : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-400">{item.ip_address ?? "—"}</td>
                 </tr>
-              ))}
+                );
+              })}
               {data && data.items.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("audit.empty")}</td></tr>
               )}
