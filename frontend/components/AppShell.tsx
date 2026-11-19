@@ -49,7 +49,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/szerviz", key: "nav.service", perm: "service", icon: Wrench, module: "service" },
       { href: "/atvetel", key: "nav.intake", perm: "intake", icon: Inbox, module: "intake" },
       { href: "/atadas", key: "nav.handover", perm: "invoicing", icon: Handshake, module: "handover" },
-      { href: "/szerelo-atadas", key: "nav.serviceHandover", perm: "tasks", icon: PackageCheck, module: "pickup" },
+      { href: "/szerelo-atadas", key: "nav.serviceHandover", perm: "pickup", icon: PackageCheck, module: "pickup" },
       { href: "/gepcserek", key: "nav.swaps", perm: "machines", icon: RefreshCw, module: "machines" },
       { href: "/sajat-raktar", key: "nav.myWarehouse", perm: "always", icon: Truck, module: "warehouse" },
       { href: "/sajat-alkatreszek", key: "nav.myParts", perm: "always", icon: Cog, module: "parts" },

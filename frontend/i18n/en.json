@@ -272,7 +272,8 @@
     "my_schedule": "My schedule",
     "my_tasks": "My tasks / worksheet",
     "delete": "Delete functions",
-    "parts": "Parts warehouse management (storekeeper)"
+    "parts": "Parts warehouse management (storekeeper)",
+    "pickup": "Service pickup (collecting machines from external technicians)"
   },
   "validation": {
     "email": "invalid email address",
@@ -4731,7 +4732,8 @@
       "my_schedule": "My schedule (self-service): own shifts, clock in/out, leave requests.",
       "my_tasks": "My tasks / worksheet (self-service): assigned tasks, filling the worksheet (timer, works, materials, parts from own van, photo), work-time correction requests. No access to others' tasks.",
       "delete": "Delete functions: permanent deletions anywhere (partner, machine, worksheet, warehouse, settlement…). Admin only by default. Action switches do not apply here: this is the “delete” capability itself.",
-      "parts": "Parts warehouse management (storekeeper): items, receipts, moves, location codes, labels, per-van min/max, issuing requests, procurement, stocktake, reports. Technicians only need “My tasks” for their van stock; this is the central storekeeper right."
+      "parts": "Parts warehouse management (storekeeper): items, receipts, moves, location codes, labels, per-van min/max, issuing requests, procurement, stocktake, reports. Technicians only need “My tasks” for their van stock; this is the central storekeeper right.",
+      "pickup": "Service pickup: collecting finished machines from external/contractor technicians in bulk, the fees due to them and the ledger line. Can be granted to in-house technicians without the Tasks permission; roles with Tasks get it automatically."
     }
   },
   "manual": {

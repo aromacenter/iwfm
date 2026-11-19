@@ -272,7 +272,8 @@
     "my_schedule": "Saját beosztás",
     "my_tasks": "Saját feladatok / munkalap",
     "delete": "Törlés funkciók",
-    "parts": "Alkatrész-raktár kezelése (raktáros)"
+    "parts": "Alkatrész-raktár kezelése (raktáros)",
+    "pickup": "Szerelő-átadás (gépek elhozása a külsős szerelőtől)"
   },
   "validation": {
     "email": "érvénytelen email-cím",
@@ -4731,7 +4732,8 @@
       "my_schedule": "Saját beosztás (önkiszolgáló): a dolgozó a saját műszakjait látja, be-/kijelentkezik, távollétet kérelmez.",
       "my_tasks": "Saját feladatok / munkalap (önkiszolgáló): a dolgozó a neki kiosztott feladatokat látja, munkalapot tölt ki (timer, munkák, anyagok, beépített alkatrészek a saját autójából, fotó), munkaidő-korrekciót kér. Mások feladatait nem látja.",
       "delete": "Törlés funkciók: végleges törlések bárhol (partner, gép, munkalap, raktár, elszámolás…). Alapból csak admin. A művelet-kapcsolók itt nem értelmezettek: ez maga a „törlés” képesség a többi funkcióhoz.",
-      "parts": "Alkatrész-raktár kezelése (raktáros): cikkek, bevételezés, mozgatás, helykódok, címkék, autónkénti min/max, kérések kiadása, beszerzés, leltár, riportok. A szerelő saját autó-készletéhez a „Saját feladatok” elég; ez a központi raktáros jog."
+      "parts": "Alkatrész-raktár kezelése (raktáros): cikkek, bevételezés, mozgatás, helykódok, címkék, autónkénti min/max, kérések kiadása, beszerzés, leltár, riportok. A szerelő saját autó-készletéhez a „Saját feladatok” elég; ez a központi raktáros jog.",
+      "pickup": "Szerelő-átadás: a külsős/alvállalkozó szerelőnél lévő kész gépek tömeges elhozása, a szerelőnek járó díjak és a főkönyvi sor. Belsős szerelőnek is adható a Feladatok-jog nélkül; a Feladatok-joggal rendelkezők automatikusan megkapják."
     }
   },
   "manual": {

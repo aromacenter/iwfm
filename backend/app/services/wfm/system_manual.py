@@ -221,12 +221,15 @@ A gépeknél beállítható karbantartási ciklus; az esedékesek a Szerviz olda
     {
         "key": "szerelo_atadas",
         "title": "Szerelő-átadás (külső szerviztől elhozott gépek, kifizetés)",
-        "keywords": "szerelő átadás külső szerviz KSZ elhozás kifizetés készpénz átutalás folyószámla szerelő díj értesítés ügyfél",
+        "keywords": "szerelő átadás külső szerviz KSZ elhozás kifizetés készpénz átutalás folyószámla szerelő díj értesítés ügyfél jogosultság ki látja menü nincs meg",
         "body": """## Folyamat
 1. Szerelő-átadás: a külső szerviznél lévő, elkészült KSZ-munkalapok listája a szerelő díjával (a konstrukció költsége, duplán nem számol).
 2. Kijelölés → „Elhozás”: az ügyfél e-mailt kap (a készülék átvehető), ha a pipa be van kapcsolva.
 3. Kifizetett összeg: készpénz (a kitöltő kasszájából kimegy és a szerelő folyószámlájára könyvelődik) vagy átutalás (csak a folyószámlára, kassza-mozgás nélkül; a szerelő számlázza).
-4. A gép az Átadás várólistára kerül az ügyfélnek.""",
+4. A gép az Átadás várólistára kerül az ügyfélnek.
+
+## Ki látja?
+A menüpont a „Szerelő-átadás” jogosultsághoz kötött (Beállítások → Jogosultságok → szerepkör → Szerelő-átadás pipa). A Feladatok-joggal rendelkező szerepkörök automatikusan megkapják; a belsős szerelőknek (dolgozó szerepkör) külön adható a Feladatok-jog nélkül is. A külsős szerelő (alvállalkozó) alapból nem látja. A Szerelő-átadás modulnak bekapcsolva kell lennie.""",
     },
     {
         "key": "partnerek",

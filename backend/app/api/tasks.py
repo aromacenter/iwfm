@@ -3468,7 +3468,7 @@ async def my_company_technicians(
 @router.get("/service-handover/list", dependencies=[Depends(require_module("pickup"))])
 async def service_handover_list(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("tasks")),
+    _: User = Depends(require_perm("pickup")),
 ):
     """A külsős szerelőnél lévő (még el nem hozott) KSZ-gépek, szerelőnként
     csoportosítható: munkalap + gép + ügyfél + a szerelőnek járó díj."""
@@ -3525,7 +3525,7 @@ async def service_handover_pickup(
     body: ServicePickupBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("tasks")),
+    actor: User = Depends(require_perm("pickup")),
 ):
     """A szerelő átadja nekünk a nála lévő kész gépeket (tömegesen): a
     munkalapok elhozottá válnak, az ügyfelek (best-effort) emailt kapnak,
@@ -3621,7 +3621,7 @@ async def service_fees(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_perm("tasks")),
+    _: User = Depends(require_perm("pickup")),
 ):
     """Szerelőnkénti díj-összesítés: az időszakban elhozott KSZ-munkalapok
     visszaigazolt költségei — ennyi javítási díj jár a szerelőnek."""
@@ -3725,7 +3725,7 @@ async def add_tech_ledger(
     body: TechLedgerBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("tasks")),
+    actor: User = Depends(require_perm("pickup")),
 ):
     """Szerelő-folyószámla tétel: cost = a szerelő saját pénzéből vett
     alkatrész (a tartozásunkat NÖVELI), payout = készpénz-kifizetés

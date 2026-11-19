@@ -46,6 +46,7 @@ FEATURES = (
     "agent_report",   # üzletkötő-elszámolás
     "service",        # szerviz (hibajegyek, karbantartás) — magában foglalja az átvételt+tudásbázist
     "intake",         # gép-átvétel (elismervény) — önállóan is adható (pl. alvállalkozó)
+    "pickup",         # Szerelő-átadás: kész gépek elhozása a külsős szerelőtől, díjak (163. kör)
     "knowledge",      # tudásbázis — önállóan is adható
     "learning",       # X-Learning: tananyagok, kiosztás, eredmények (vezetői rész)
     "import_export",  # import/export
@@ -60,7 +61,7 @@ DEFAULT_MATRIX: dict[str, list[str]] = {
     "manager": [
         "dashboard", "tasks", "schedule", "attendance", "timeoff", "employees",
         "partners", "machines", "products", "settlements", "invoicing",
-        "agent_report", "service", "import_export", "payroll", "parts", "learning",
+        "agent_report", "service", "import_export", "payroll", "parts", "learning", "pickup",
     ],
     "uzletkoto": [
         "dashboard", "partners", "machines", "products", "settlements",
@@ -69,7 +70,7 @@ DEFAULT_MATRIX: dict[str, list[str]] = {
     # Külsős szervizes (alvállalkozó): a szervizJEGYEKET nem látja — átvétel,
     # tudásbázis és a saját KSZ-munkalapjai kellenek neki.
     "szervizes": ["intake", "knowledge", "my_tasks"],
-    "employee": ["my_schedule", "my_tasks"],
+    "employee": ["my_schedule", "my_tasks", "pickup"],
 }
 
 # Visszafelé kompatibilitás a régi hívókkal (settings/tesztek): a konfigurálható
@@ -169,6 +170,10 @@ async def get_permission_matrix(db: AsyncSession) -> dict[str, list[str]]:
         # mentett (régebbi) mátrixokon se vesszen el a raktáros hozzáférés.
         if "settlements" in out[role] and "parts" not in out[role]:
             out[role].append("parts")
+        # 163. kör: a Szerelő-átadás korábban a Feladatok-jog része volt — a mentett
+        # mátrixokon a Feladatok-joggal rendelkezők ne veszítsék el.
+        if "tasks" in out[role] and "pickup" not in out[role]:
+            out[role].append("pickup")
     return out
 
 
