@@ -4285,7 +4285,18 @@
     "addStep": "Új lépés",
     "addStepHint": "A lépés a recept végére kerül a gépen. Meglévő lépésnél csak az adag módosul.",
     "removeStep": "Lépés elvetése (csak a most hozzáadott törölhető)",
-    "lastBoot": "Utolsó bekapcsolás: {at}"
+    "lastBoot": "Utolsó bekapcsolás: {at}",
+    "pin": "Szervizkód",
+    "pinSet": "beállítva",
+    "pinSetFails": "beállítva · {n} rossz próba",
+    "pinNone": "nincs kód",
+    "pinHint": "A gép kezelőfelületét zárja; a háttér-jelentés kód nélkül is megy.",
+    "pinPrompt": "Szervizkód a(z) {name} gépre (4–8 számjegy). Üresen hagyva a kód törlődik.",
+    "pinSave": "Küldés a gépre",
+    "pinInvalid": "A szervizkód 4–8 számjegy.",
+    "pinClearConfirm": "Törlöd a szervizkódot a(z) {name} gépen? Utána bárki megnyithatja az appot a gépen.",
+    "pinQueued": "Szervizkód elküldve — a gép a következő életjelnél (≤ 5 perc) alkalmazza.",
+    "pinClearQueued": "Kód-törlés elküldve a gépnek."
   },
   "vpromo": {
     "title": "Vending promóció",

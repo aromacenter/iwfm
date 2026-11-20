@@ -111,7 +111,7 @@ const STATE_CHIP: Record<string, string> = {
 
 export default function VendingTelemetriaPage() {
   const { t, lang } = useT();
-  const { toast, confirm } = useUI();
+  const { toast, confirm, prompt } = useUI();
   const ft = (n: number) => `${Math.round(n).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB")} Ft`;
   const fmt = (dt: string) =>
     new Date(dt).toLocaleString(lang === "hu" ? "hu-HU" : "en-GB", { dateStyle: "short", timeStyle: "medium" });
@@ -148,6 +148,22 @@ export default function VendingTelemetriaPage() {
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<{ machine: Machine; rows: TelemetryRow[] } | null>(null);
   const [sales, setSales] = useState<{ machine: Machine; days: number; data: SalesData } | null>(null);
+  // 167. kör: szervizkód a gép kezelőfelületére (az ügynök 3.12+ a következő pingnél alkalmazza)
+  async function setPin(m: Machine) {
+    const v = await prompt(t("vtel.pinPrompt", { name: m.name }), { placeholder: "1234" });
+    if (v == null) return;
+    const code = v.trim();
+    if (code !== "" && !/^\d{4,8}$/.test(code)) { toast(t("vtel.pinInvalid"), "error"); return; }
+    if (code === "" && !(await confirm(t("vtel.pinClearConfirm", { name: m.name })))) return;
+    try {
+      await api.post(`/api/saferpay/machines/${m.id}/commands`, { commands: [`pin:${code}`] });
+      toast(t(code ? "vtel.pinQueued" : "vtel.pinClearQueued"), "success");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function pingNow(m: Machine) {
     try {
       await api.post(`/api/saferpay/machines/${m.id}/commands`, { commands: ["report", "errors", "promos", "recipes", "catalog", "assets"] });
@@ -545,6 +561,7 @@ export default function VendingTelemetriaPage() {
                   {tile("⚠️", t("vtel.errors"), m.open_errors > 0 ? t("vtel.errorsBadge", { n: m.open_errors }) : "0", () => void openErrors(m), m.open_errors > 0 ? "alert" : undefined)}
                   {tile("📄", t("vtel.files"), null, () => void openFiles(m))}
                   {tile("📡", t("vtel.pingNow"), m.pending_commands.length > 0 ? `⏳ ${m.pending_commands.length}` : (m.online ? t("vtel.online") : t("vtel.offline")), () => void pingNow(m), "accent", t("vtel.pingNowHint"))}
+                  {tile("🔐", t("vtel.pin"), m.telemetry?.pin_set ? (Number(m.telemetry?.pin_fail) > 0 ? t("vtel.pinSetFails", { n: Number(m.telemetry?.pin_fail) }) : t("vtel.pinSet")) : t("vtel.pinNone"), () => void setPin(m), m.telemetry?.pin_set ? undefined : "alert", t("vtel.pinHint"))}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <button onClick={() => void copyKey(m)} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100">

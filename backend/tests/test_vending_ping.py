@@ -70,3 +70,30 @@ async def test_boot_greeting_is_kept(client, admin, monkeypatch):
     await client.post("/api/pay/ping", json={**auth, "data": {"agent": "3.11"}})
     mc = next(x for x in (await client.get("/api/saferpay/machines", headers=adm)).json() if x["id"] == m["id"])
     assert mc["telemetry"]["boot_at"] == boot_at
+
+async def test_pin_command_and_status(client, admin, monkeypatch):
+    """167. kör: szervizkód-parancs (pin:1234 / pin:) — a naplóban maszkolva; a ping hozza a pin_set állapotot."""
+    from app.api import saferpay as sp
+
+    async def fake_geo(ip):
+        return None
+
+    monkeypatch.setattr(sp, "_geo_lookup", fake_geo)
+    _, adm = admin
+    m = (await client.post("/api/saferpay/machines", json={"machine_code": "pin-1", "name": "Teszt"}, headers=adm)).json()
+    mid = m["id"]
+    assert (await client.post(f"/api/saferpay/machines/{mid}/commands", json={"commands": ["pin:12"]}, headers=adm)).status_code == 422
+    assert (await client.post(f"/api/saferpay/machines/{mid}/commands", json={"commands": ["pin:abcd"]}, headers=adm)).status_code == 422
+    assert (await client.post(f"/api/saferpay/machines/{mid}/commands", json={"commands": ["pin:1234"]}, headers=adm)).status_code == 200
+    assert (await client.post(f"/api/saferpay/machines/{mid}/commands", json={"commands": ["pin:5678", "report"]}, headers=adm)).status_code == 200
+    mc = next(x for x in (await client.get("/api/saferpay/machines", headers=adm)).json() if x["id"] == mid)
+    assert mc["pending_commands"] == ["pin:5678", "report"]  # az előző kód-parancsot felülírja
+    audit = (await client.get("/api/audit?action=vending.commands", headers=adm)).json()
+    rows = audit if isinstance(audit, list) else audit["items"]
+    assert all("5678" not in str(r["detail"]) and "1234" not in str(r["detail"]) for r in rows)
+    auth = {"machine_code": "pin-1", "key": m["api_key"]}
+    res = await client.post("/api/pay/ping", json={**auth, "data": {"agent": "3.12", "pin_set": True, "pin_fail": 2}})
+    assert res.json()["commands"] == ["pin:5678", "report"]
+    mc = next(x for x in (await client.get("/api/saferpay/machines", headers=adm)).json() if x["id"] == mid)
+    assert mc["telemetry"]["pin_set"] is True and mc["telemetry"]["pin_fail"] == 2 and mc["pending_commands"] == []
+    assert (await client.post(f"/api/saferpay/machines/{mid}/commands", json={"commands": ["pin:"]}, headers=adm)).status_code == 200

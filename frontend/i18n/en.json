@@ -4285,7 +4285,18 @@
     "addStep": "New step",
     "addStepHint": "The step is appended to the recipe on the machine. Existing steps only change their portions.",
     "removeStep": "Discard step (only steps added now can be removed)",
-    "lastBoot": "Last power-on: {at}"
+    "lastBoot": "Last power-on: {at}",
+    "pin": "Service code",
+    "pinSet": "set",
+    "pinSetFails": "set · {n} failed tries",
+    "pinNone": "no code",
+    "pinHint": "Locks the machine's control UI; background reporting works without it.",
+    "pinPrompt": "Service code for {name} (4–8 digits). Leave empty to remove the code.",
+    "pinSave": "Send to machine",
+    "pinInvalid": "The service code is 4–8 digits.",
+    "pinClearConfirm": "Remove the service code on {name}? Anyone could then open the app on the machine.",
+    "pinQueued": "Service code sent — the machine applies it at the next heartbeat (≤ 5 min).",
+    "pinClearQueued": "Code removal sent to the machine."
   },
   "vpromo": {
     "title": "Vending promotion",

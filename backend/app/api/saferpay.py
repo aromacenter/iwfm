@@ -10,6 +10,7 @@ a Saferpay felé pollozni tilos), és fizetve-állapotnál kiadja az italt.
 from __future__ import annotations
 
 import hmac
+import re
 import json
 import uuid
 from datetime import UTC, date, datetime, timedelta
@@ -421,6 +422,11 @@ def _machine_out(
 
 ONLINE_WINDOW_S = 15 * 60
 AGENT_COMMANDS = ("report", "errors", "promos", "recipes", "catalog", "assets", "update")
+_PIN_RE = re.compile(r"^pin:(\d{4,8})?$")  # 167. kör: szervizkód beállítása / törlése (pin: üresen)
+
+
+def _command_ok(c: str) -> bool:
+    return c in AGENT_COMMANDS or bool(_PIN_RE.match(c))
 
 
 def _location_of(t: dict) -> dict | None:
@@ -484,7 +490,7 @@ async def _note_ip(m: VendingMachine, request: Request) -> None:
 
 
 def _take_commands(m: VendingMachine) -> list[str]:
-    cmds = [c for c in (m.pending_commands or []) if c in AGENT_COMMANDS]
+    cmds = [c for c in (m.pending_commands or []) if _command_ok(c)]
     m.pending_commands = []
     return cmds
 
@@ -838,15 +844,19 @@ async def queue_commands(
     """Parancs(ok) az ügynöknek — a következő pingnél (≤ 5 perc) hajtja végre:
     report | errors | promos | recipes | catalog | assets | update."""
     m = await _machine_or_404(db, machine_id)
-    bad = [c for c in body.commands if c not in AGENT_COMMANDS]
+    bad = [c for c in body.commands if not _command_ok(c)]
     if bad:
         raise HTTPException(status_code=422, detail={"code": "vending.bad_command", "commands": bad})
     pending = list(m.pending_commands or [])
     for c in body.commands:
+        if c.startswith("pin:"):  # egy gépre egy kód-parancs: a korábbi (még ki nem ment) felülíródik
+            pending = [x for x in pending if not x.startswith("pin:")]
         if c not in pending:
             pending.append(c)
     m.pending_commands = pending
-    await record_audit(db, actor=actor, action="vending.commands", entity_type="vending_machine", entity_id=str(m.id), detail={"commands": pending}, request=request)
+    # a szervizkód a naplóba NEM kerül be — csak az, hogy kód-parancs ment
+    logged = ["pin:***" if x.startswith("pin:") and x != "pin:" else x for x in pending]
+    await record_audit(db, actor=actor, action="vending.commands", entity_type="vending_machine", entity_id=str(m.id), detail={"commands": logged}, request=request)
     await db.commit()
     return {"pending_commands": pending}
 
@@ -1974,7 +1984,7 @@ async def agent_ping(body: TelemetryBody, request: Request, db: AsyncSession = D
         raise HTTPException(status_code=422, detail={"code": "vending.payload_too_big"})
     m.last_seen_at = datetime.now(UTC)
     merged = dict(m.telemetry or {})
-    for k in ("agent", "uptime_min", "net", "net_kbps", "ip_local", "ssid", "lat", "lon", "loc_src", "loc_acc_m", "loc_at"):
+    for k in ("agent", "uptime_min", "net", "net_kbps", "ip_local", "ssid", "lat", "lon", "loc_src", "loc_acc_m", "loc_at", "pin_set", "pin_fail"):
         if k in data:
             merged[k] = data[k]
     merged["ping_at"] = m.last_seen_at.isoformat()
