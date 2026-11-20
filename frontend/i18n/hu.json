@@ -4284,7 +4284,8 @@
     "newRecipeNeedsStep": "Új recepthez legalább egy lépés kell, 0-nál nagyobb adaggal.",
     "addStep": "Új lépés",
     "addStepHint": "A lépés a recept végére kerül a gépen. Meglévő lépésnél csak az adag módosul.",
-    "removeStep": "Lépés elvetése (csak a most hozzáadott törölhető)"
+    "removeStep": "Lépés elvetése (csak a most hozzáadott törölhető)",
+    "lastBoot": "Utolsó bekapcsolás: {at}"
   },
   "vpromo": {
     "title": "Vending promóció",

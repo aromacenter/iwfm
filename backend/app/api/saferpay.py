@@ -1978,6 +1978,11 @@ async def agent_ping(body: TelemetryBody, request: Request, db: AsyncSession = D
         if k in data:
             merged[k] = data[k]
     merged["ping_at"] = m.last_seen_at.isoformat()
+    # 166. kör: bekapcsolás utáni első ping = „jó reggelt, megvagyok” — az adminon
+    # külön látszik az utolsó bekapcsolás ideje és a köszönés
+    if data.get("event") == "boot":
+        merged["boot_at"] = m.last_seen_at.isoformat()
+        merged["greeting"] = str(data.get("greeting") or "")[:80]
     m.telemetry = merged
     await _note_ip(m, request)
     commands = _take_commands(m)

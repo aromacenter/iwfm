@@ -514,6 +514,9 @@ export default function VendingTelemetriaPage() {
                   {" · "}✅ {t("vtel.todayStats", { n: m.paid_today })} · {ft(m.revenue_today)}
                   {" · "}<span className={`inline-block h-2 w-2 rounded-full align-middle ${m.online ? "bg-emerald-500" : "bg-rose-500"}`} /> {m.online ? t("vtel.online") : t("vtel.offline")}
                   {m.counter_total != null && <> · 🧮 {t("vtel.counter")}: <b>{m.counter_total.toLocaleString("hu-HU")}</b></>}
+                  {typeof m.telemetry?.boot_at === "string" && (
+                    <> · 🌅 {t("vtel.lastBoot", { at: fmt(m.telemetry.boot_at as string) })}{m.telemetry?.greeting ? ` — „${String(m.telemetry.greeting)}”` : ""}</>
+                  )}
                   {m.drinks_today != null && <> · ☕ {t("vtel.drinksToday", { n: m.drinks_today })}</>}
                 </p>
                 {m.note && <p className="mt-0.5 text-xs text-slate-400">{m.note}</p>}

@@ -4284,7 +4284,8 @@
     "newRecipeNeedsStep": "A new recipe needs at least one step with a portion above 0.",
     "addStep": "New step",
     "addStepHint": "The step is appended to the recipe on the machine. Existing steps only change their portions.",
-    "removeStep": "Discard step (only steps added now can be removed)"
+    "removeStep": "Discard step (only steps added now can be removed)",
+    "lastBoot": "Last power-on: {at}"
   },
   "vpromo": {
     "title": "Vending promotion",

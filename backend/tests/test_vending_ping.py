@@ -49,3 +49,24 @@ async def test_ping_commands_and_location(client, admin, monkeypatch):
     await client.post(f"/api/saferpay/machines/{m['id']}/commands", json={"commands": ["errors"]}, headers=adm)
     res = await client.post("/api/pay/telemetry", json={**auth, "data": {"agent": "3.5"}}, headers={"X-Forwarded-For": "192.168.0.5"})
     assert res.status_code == 200 and res.json()["commands"] == ["errors"] and calls == ["84.0.0.2"]
+
+async def test_boot_greeting_is_kept(client, admin, monkeypatch):
+    """166. kör: bekapcsolás utáni első ping (event=boot) → boot_at + köszönés a pillanatképben."""
+    from app.api import saferpay as sp
+
+    async def fake_geo(ip):
+        return None
+
+    monkeypatch.setattr(sp, "_geo_lookup", fake_geo)
+    _, adm = admin
+    m = (await client.post("/api/saferpay/machines", json={"machine_code": "boot-1", "name": "Teszt"}, headers=adm)).json()
+    auth = {"machine_code": "boot-1", "key": m["api_key"]}
+    res = await client.post("/api/pay/ping", json={**auth, "data": {"agent": "3.11", "event": "boot", "greeting": "Jó reggelt, megvagyok!"}})
+    assert res.status_code == 200, res.text
+    mc = next(x for x in (await client.get("/api/saferpay/machines", headers=adm)).json() if x["id"] == m["id"])
+    assert mc["telemetry"]["greeting"] == "Jó reggelt, megvagyok!" and mc["telemetry"]["boot_at"]
+    # a sima ping nem írja felül a bekapcsolás idejét
+    boot_at = mc["telemetry"]["boot_at"]
+    await client.post("/api/pay/ping", json={**auth, "data": {"agent": "3.11"}})
+    mc = next(x for x in (await client.get("/api/saferpay/machines", headers=adm)).json() if x["id"] == m["id"])
+    assert mc["telemetry"]["boot_at"] == boot_at
