@@ -107,6 +107,57 @@ def _is_due(c: PartnerContract, today: date, now_local: datetime) -> bool:
 
 
 AUTO_SETTLED_BY = "Automata bérleti számlázás"
+RESTOCK_TASK_TITLE = "Készlet-ellenőrzés és feltöltés: {partner}"
+
+
+def next_workday(d: date) -> date:
+    """Ugyanaz a nap, ha munkanap; különben a következő munkanap (ünnep,
+    hétvége, áthelyezett pihenőnap figyelembevételével)."""
+    from app.services.wfm.holidays import is_non_working_day, is_worked_saturday
+
+    for _ in range(14):
+        if is_worked_saturday(d) or (d.weekday() < 5 and not is_non_working_day(d)):
+            return d
+        d += timedelta(days=1)
+    return d
+
+
+async def _restock_task(db: AsyncSession, partner: Partner, today: date) -> bool:
+    """Feladat a partner képviselőjének (Partner.agent_user_id → Employee):
+    havonta egyszer, a számlázás munkanapjára. Képviselő vagy karton nélkül
+    nem készül (naplózva)."""
+    from app.api.tasks import _next_worksheet_serial
+    from app.models import Employee, Task, Worksheet
+
+    if not partner.agent_user_id:
+        logger.info("fixed rental restock task: nincs képviselő (%s)", partner.name)
+        return False
+    emp = (await db.execute(select(Employee).where(Employee.user_id == partner.agent_user_id))).scalars().first()
+    if emp is None:
+        logger.info("fixed rental restock task: a képviselőnek nincs dolgozó-kartonja (%s)", partner.name)
+        return False
+    title = RESTOCK_TASK_TITLE.format(partner=partner.name)[:256]
+    due = next_workday(today)
+    month_start = today.replace(day=1)
+    dup = (await db.execute(
+        select(Task).where(Task.employee_id == emp.id, Task.title == title, Task.due_date >= month_start).limit(1)
+    )).scalars().first()
+    if dup is not None:
+        return False
+    task = Task(
+        title=title,
+        description=(
+            f"Fix bérleti díjas partner — a havi számlázással egy időben ({today.isoformat()}) "
+            "ellenőrizd az árukészletet a helyszínen, és töltsd fel, ami hiányzik."
+        ),
+        employee_id=emp.id,
+        due_date=due,
+    )
+    db.add(task)
+    await db.flush()
+    db.add(Worksheet(task_id=task.id, serial=await _next_worksheet_serial(db), work_description=""))
+    await db.commit()
+    return True
 
 
 async def run_fixed_rental_billing(db: AsyncSession, now: datetime | None = None) -> int:
@@ -291,6 +342,13 @@ async def _bill_contract(
                 "late_fee": overdue is not None},
     ))
     await db.commit()
+    # 168. kör (125b8394): a számlázás napján (vagy a következő munkanapon)
+    # a partner képviselője feladatot kap: készlet ellenőrzése és feltöltése
+    try:
+        await _restock_task(db, partner, today)
+    except Exception:
+        logger.exception("fixed rental restock task failed for %s", partner.name)
+        await db.rollback()
 
     # Számla azonnal (a kézi auto-billing mintájára) — hiba esetén az
     # elszámolás megmarad, a státusz error, az admin TG-t kap.

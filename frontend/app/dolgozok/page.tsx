@@ -800,6 +800,9 @@ export default function DolgozokPage() {
                     <input type="time" value={form.fixed_work_end} onChange={(e) => set("fixed_work_end", e.target.value)} className={inputCls} />
                   </div>
                   <span className="mt-1 block text-xs text-slate-400">{t("emp.fixedHoursHint")}</span>
+                  {form.fixed_work_start && form.fixed_work_end && form.fixed_work_end <= form.fixed_work_start && (
+                    <span className="mt-1 block text-xs font-medium text-amber-700">⚠️ {t("emp.fixedHoursOvernight")}</span>
+                  )}
                 </Field>
               )}
               <Field label={t("emp.site")}>

@@ -549,7 +549,7 @@ export default function GepekPage() {
     api.get<Asset>(`/api/assets/${encodeURIComponent(id)}`)
       .then((a) => {
         if (a.status !== "deployed") { toast(t("inv.swapNotDeployed"), "error"); return; }
-        setError(null); setSwapCode(""); resetProto(null); setSwapFor(a);
+        setError(null); setSwapCode(""); resetProto(null); setSwapUnreadable(false); setSwapFor(a);
       })
       .catch((err) => toast(errorMessage(err), "error"))
       .finally(() => window.history.replaceState(null, "", window.location.pathname));
@@ -562,6 +562,7 @@ export default function GepekPage() {
   // A leszerelt gép ZÁRÓ állásai (ebből számláz a következő elszámolás) és a
   // cseregép INDULÓ állásai (73cbc5ee) — több számlálósnál MIND megadandó.
   const [swapOldCounters, setSwapOldCounters] = useState<string[]>([]);
+  const [swapUnreadable, setSwapUnreadable] = useState(false);  // 168. kör: zárlatos gép, záró állás a szervizben
   const [swapNewCounters, setSwapNewCounters] = useState<string[]>([]);
 
   useEffect(() => {
@@ -625,8 +626,9 @@ export default function GepekPage() {
         counter_prices: swapPrices.some((p) => p.trim())
           ? swapPrices.map((p) => (p.trim() ? Number(p) : null))
           : null,
-        old_counters: oldNums.length > 1 ? oldNums : null,
-        old_counter: oldNums.length === 1 ? oldNums[0] : null,
+        old_counters: swapUnreadable ? null : (oldNums.length > 1 ? oldNums : null),
+        old_counter: swapUnreadable ? null : (oldNums.length === 1 ? oldNums[0] : null),
+        counter_unreadable: swapUnreadable,
         new_counters: newNums.length > 1 ? newNums : null,
         new_counter: newNums.length === 1 ? newNums[0] : null,
         protocol: protoPayload(),
@@ -1385,7 +1387,12 @@ export default function GepekPage() {
               <p className="text-sm font-medium text-amber-900">⏱ {t("inv.swapOldCounters")}</p>
               <p className="text-xs text-amber-800">{t("inv.swapOldCountersHint")}</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {swapOldCounters.map((c, i) => (
+                <label className="mb-1 flex items-center gap-2 text-xs text-amber-800">
+                  <input type="checkbox" checked={swapUnreadable} onChange={(e) => setSwapUnreadable(e.target.checked)} className="h-4 w-4" />
+                  {t("inv.swapCounterUnreadable")}
+                </label>
+                {swapUnreadable && <p className="mb-1 text-xs text-amber-700">{t("inv.swapCounterUnreadableHint")}</p>}
+                {!swapUnreadable && swapOldCounters.map((c, i) => (
                   <label key={i} className="block text-xs text-amber-900">
                     {t("inv.counterN", { n: i + 1 })}
                     <input

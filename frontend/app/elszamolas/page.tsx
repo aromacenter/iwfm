@@ -161,6 +161,7 @@ interface CtxMachine {
   swapped?: boolean;
   swap_final_counters?: number[] | null;
   swap_final_counter?: number | null;
+  swap_counter_pending?: boolean;  // 168. kör: a záró állást a szerviz még nem rögzítette
   swap_at?: string | null;
 }
 
@@ -2173,6 +2174,11 @@ export default function ElszamolasPage() {
                             className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
                           >
                             🔁 {t("cons.swapped")}
+                          </span>
+                        )}
+                        {m.swapped && m.swap_counter_pending && (
+                          <span className="ml-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-800" title={t("cons.swapCounterPendingHint")}>
+                            ⏳ {t("cons.swapCounterPending")}
                           </span>
                         )}
                       </div>

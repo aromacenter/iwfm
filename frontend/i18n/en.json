@@ -596,7 +596,9 @@
     "printNo": "Not now",
     "printBtn": "Print (A4 / 50 / 80 mm)",
     "invoiceLinkHint": "Open the invoice in Billingó (tracks who opened it and when)",
-    "billingoPdfBtn": "Download Billingó document (PDF)"
+    "billingoPdfBtn": "Download Billingó document (PDF)",
+    "swapCounterPending": "closing counter missing",
+    "swapCounterPendingHint": "The swap was done with an unreadable counter; service records the closing counter on the swap worksheet, until then the machine cannot be settled."
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1635,7 +1637,8 @@
     "username": "Username (works instead of email)",
     "usernamePh": "e.g. kiss.peter",
     "usernameHint": "3–64 chars: lowercase, digits, dot, dash, underscore",
-    "loginIdHint": "Email OR username is enough to log in — provide at least one."
+    "loginIdHint": "Email OR username is enough to log in — provide at least one.",
+    "fixedHoursOvernight": "The end is not later than the start — the system treats it as an overnight shift (with night bonus). If it should end at 12:00, check it is not 00:00."
   },
   "sched": {
     "title": "Schedule",
@@ -2088,7 +2091,12 @@
     "reschSent": "Reschedule request sent to your manager.",
     "reschPending": "Reschedule requested",
     "reschWithdraw": "Withdraw",
-    "reschWithdrawn": "Request withdrawn."
+    "reschWithdrawn": "Request withdrawn.",
+    "swapCounterTitle": "Closing counter of the swapped machine is missing",
+    "swapCounterHint": "It could not be read at the swap. Last settled counter: {prev}. Once the machine runs in service, enter the closing counter — the settlement uses it.",
+    "swapCounterPlaceholder": "closing counter",
+    "swapCounterSave": "Record closing counter",
+    "swapCounterSaved": "Closing counter recorded — the partner can be settled."
   },
   "mySched": {
     "codeInfo": "Your ID for the clock terminal:",
@@ -2748,7 +2756,10 @@
     "learning.package_not_found": "No such built-in lesson.",
     "learning.cover_ai_failed": "The AI provider failed while drawing the cover — try again or pick from the library.",
     "learning.cover_ai_unusable": "The AI returned no usable drawing — try again or pick from the library.",
-    "learning.art_not_found": "No such illustration."
+    "learning.art_not_found": "No such illustration.",
+    "settlement.swap_counter_pending": "The closing counter of the swap of machine {barcode} is not recorded yet — service enters it on the swap worksheet, then it can be settled.",
+    "asset.no_pending_swap_counter": "No pending swap closing counter for this machine.",
+    "asset.counter_required": "Enter the closing counter."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -3121,7 +3132,9 @@
     "swapPricesTitle": "Per-counter prices (suggested from the replaced machine)",
     "partsHistory": "🔩 Installed parts",
     "partsHistoryEmpty": "No parts installed in this machine yet.",
-    "newLabelConfirm": "New machine saved ({barcode}). Queue the barcode label on the Godex printer?"
+    "newLabelConfirm": "New machine saved ({barcode}). Queue the barcode label on the Godex printer?",
+    "swapCounterUnreadable": "Counter cannot be read (short circuit / machine does not start)",
+    "swapCounterUnreadableHint": "The swap proceeds with the last settled counter; service records the real closing counter on the swap worksheet, and the settlement waits for it."
   },
   "wh": {
     "title": "Warehouse",

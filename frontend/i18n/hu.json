@@ -596,7 +596,9 @@
     "printNo": "Most nem nyomtatok",
     "printBtn": "Nyomtatás (A4 / 50 / 80 mm)",
     "invoiceLinkHint": "Számla megnyitása a Billingóban (nyomon követhető, ki mikor nyitotta meg)",
-    "billingoPdfBtn": "Billingó-bizonylat letöltése (PDF)"
+    "billingoPdfBtn": "Billingó-bizonylat letöltése (PDF)",
+    "swapCounterPending": "záró állás hiányzik",
+    "swapCounterPendingHint": "A csere leolvashatatlan számlálóval történt; a szerviz a csere-munkalapon rögzíti a záró állást, addig a gép nem számolható el."
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1635,7 +1637,8 @@
     "username": "Felhasználónév (email helyett is jó)",
     "usernamePh": "pl. kiss.peter",
     "usernameHint": "3–64 karakter: kisbetű, szám, pont, kötőjel, aláhúzás",
-    "loginIdHint": "Belépéshez elég az email VAGY a felhasználónév — legalább az egyiket add meg."
+    "loginIdHint": "Belépéshez elég az email VAGY a felhasználónév — legalább az egyiket add meg.",
+    "fixedHoursOvernight": "A befejezés nem későbbi a kezdésnél — a rendszer éjfélen átnyúló munkaidőként számolja (éjszakai pótlékkal). Ha 12:00-ig tart, ellenőrizd, hogy nem 00:00 lett."
   },
   "sched": {
     "title": "Beosztás",
@@ -2088,7 +2091,12 @@
     "reschSent": "Átütemezés-kérés elküldve a vezetőnek.",
     "reschPending": "Átütemezés kérve",
     "reschWithdraw": "Visszavonás",
-    "reschWithdrawn": "Kérés visszavonva."
+    "reschWithdrawn": "Kérés visszavonva.",
+    "swapCounterTitle": "A kicserélt gép záró számlálója hiányzik",
+    "swapCounterHint": "A cserekor nem volt leolvasható. Előző elszámolt állás: {prev}. Ha a gép már üzemel a szervizben, írd be a záró állást — az elszámolás ezzel számol.",
+    "swapCounterPlaceholder": "záró állás",
+    "swapCounterSave": "Záró számláló rögzítése",
+    "swapCounterSaved": "Záró állás rögzítve — a partner elszámolható."
   },
   "mySched": {
     "codeInfo": "Törzsszámod a blokkoló-terminálhoz:",
@@ -2748,7 +2756,10 @@
     "learning.package_not_found": "Nincs ilyen beépített tananyag.",
     "learning.cover_ai_failed": "Az AI-szolgáltató hibát adott a borító rajzolásakor — próbáld újra, vagy válassz a könyvtárból.",
     "learning.cover_ai_unusable": "Az AI nem adott használható rajzot — próbáld újra, vagy válassz a könyvtárból.",
-    "learning.art_not_found": "Nincs ilyen illusztráció."
+    "learning.art_not_found": "Nincs ilyen illusztráció.",
+    "settlement.swap_counter_pending": "A(z) {barcode} gép cseréjének záró állása még nincs rögzítve — a szerviz a csere-munkalapon adja meg, utána számolható el.",
+    "asset.no_pending_swap_counter": "Ehhez a géphez nincs függő gépcsere-záróállás.",
+    "asset.counter_required": "Add meg a záró állást."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -3121,7 +3132,9 @@
     "swapPricesTitle": "Adagárak számlálónként (javaslat a kicserélt gép árai alapján)",
     "partsHistory": "🔩 Beépített alkatrészek",
     "partsHistoryEmpty": "Még nincs beépített alkatrész ebben a gépben.",
-    "newLabelConfirm": "Új gép mentve ({barcode}). Mehet a vonalkód-címke a Godex nyomtatási sorba?"
+    "newLabelConfirm": "Új gép mentve ({barcode}). Mehet a vonalkód-címke a Godex nyomtatási sorba?",
+    "swapCounterUnreadable": "A számláló nem olvasható le (zárlatos / nem indul a gép)",
+    "swapCounterUnreadableHint": "A csere az előző elszámolt állással megy; a tényleges záró állást a szerviz rögzíti a csere-munkalapon („Záró számláló rögzítése”), az elszámolás addig vár rá."
   },
   "wh": {
     "title": "Raktár",

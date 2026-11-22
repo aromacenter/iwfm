@@ -53,6 +53,7 @@ interface TaskOut {
     partner_name: string | null;
     counter: number | null;
     maintenance_fee: number | null;
+    swap_counter_pending?: boolean;  // 168. kör: gépcsere leolvashatatlan számlálóval
   } | null;
   ticket_images: string[]; // szervizjegyből jött feladat csatolt képei (id-k)
   intake_id: string | null;
@@ -361,6 +362,21 @@ export default function FeladataimPage() {
     }
   }, [canService]);
   useEffect(load, [load]);
+
+  // 168. kör: a kicserélt (zárlatos) gép záró számlálója — az elszámolás erre vár
+  const [swapCounterInput, setSwapCounterInput] = useState<Record<string, string>>({});
+  async function recordSwapCounter(taskId: string) {
+    const raw = (swapCounterInput[taskId] ?? "").trim();
+    if (!raw) return;
+    try {
+      await api.post(`/api/me/tasks/${taskId}/swap-counter`, { counter: Number(raw) });
+      toast(t("myTasks.swapCounterSaved"), "success");
+      setSwapCounterInput((m) => ({ ...m, [taskId]: "" }));
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   // Feladat kiadása a cég szerelőjének (87994b7c) — a load után, mert azt hívja
   async function assignTechnician(taskId: string, name: string) {
@@ -1042,6 +1058,25 @@ export default function FeladataimPage() {
                 </p>
                 {task.asset.partner_name && (
                   <p className="text-xs text-slate-500">📍 {task.asset.partner_name}</p>
+                )}
+                {task.asset.swap_counter_pending && (
+                  <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                    <p className="font-semibold">⚠️ {t("myTasks.swapCounterTitle")}</p>
+                    <p className="mb-1">{t("myTasks.swapCounterHint", { prev: task.asset.counter ?? 0 })}</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        value={swapCounterInput[task.id] ?? ""}
+                        onChange={(e) => setSwapCounterInput((m) => ({ ...m, [task.id]: e.target.value }))}
+                        placeholder={t("myTasks.swapCounterPlaceholder")}
+                        className="w-36 rounded-lg border border-amber-300 bg-white px-2 py-1"
+                      />
+                      <button type="button" onClick={() => void recordSwapCounter(task.id)} className="rounded-lg bg-amber-600 px-3 py-1 font-medium text-white hover:bg-amber-700">
+                        {t("myTasks.swapCounterSave")}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}

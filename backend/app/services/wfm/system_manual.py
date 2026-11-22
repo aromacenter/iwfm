@@ -85,7 +85,10 @@ Ugyanez a csere a Gépek oldalon a gép sorában lévő „Gépcsere” gombbal 
 A lista mutatja: dátum, sorszám, partner, leszerelt gép → cseregép, átadás módja, ki rögzítette, alá van-e írva. Keresni lehet partnerre, vonalkódra, gyári számra, sorszámra, rögzítőre; szűrni dátumra és az átadás módjára. A korábbi cseréknél az átadás módja utólag is beállítható a sorban.
 
 ## Jegyzőkönyv
-Minden sorban letölthető a jegyzőkönyv PDF-je, és e-mailben elküldhető a partnernek. Az átadás módja a jegyzőkönyvön is szerepel.""",
+Minden sorban letölthető a jegyzőkönyv PDF-je, és e-mailben elküldhető a partnernek. Az átadás módja a jegyzőkönyvön is szerepel.
+
+## Ha a számláló nem olvasható (zárlatos gép)
+A cserénél pipáld be „A számláló nem olvasható le” opciót: a csere az előző elszámolt állással megy végbe, a csere-munkalapon a szervizes a „Záró számláló rögzítése” mezőbe írja be a tényleges állást (a Gépek oldalon az admin is megadhatja), és a partner elszámolása addig vár rá — az elszámoláson „záró állás hiányzik” jelzés látszik. A rögzített állással készül az elszámolás.""",
     },
     {
         "key": "ketlepcsos_belepes",
@@ -279,7 +282,10 @@ A bizonylaton az a cég szerepel, amelyik a partnernél számlázó cégként be
 „Feltöltés” gomb: termék, mennyiség, beszerzési ár, forrás-raktár (az autó). GLS-sel is feladható.
 
 ## Azonnali eladás, offline
-Azonnali eladás nem bizományi tételekre bruttó árral. Hálózat nélkül az elszámolás offline mentődik, és újracsatlakozáskor beküldődik.""",
+Azonnali eladás nem bizományi tételekre bruttó árral. Hálózat nélkül az elszámolás offline mentődik, és újracsatlakozáskor beküldődik.
+
+## Fix bérleti díj: havi készlet-ellenőrzési feladat
+A fix bérleti díjas szerződés automatikus számlázásának napján (ha nem munkanap, a következő munkanapra) a partner képviselője feladatot kap: „Készlet-ellenőrzés és feltöltés: <partner>”. Feltétel, hogy a partnernél be legyen állítva a képviselő, és annak legyen dolgozó-kartonja. Havonta egy feladat készül.""",
     },
     {
         "key": "raktar",

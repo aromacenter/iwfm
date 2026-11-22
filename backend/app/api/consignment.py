@@ -769,6 +769,7 @@ class SettlementCtxMachine(BaseModel):
     swap_final_counters: list[int] | None = None
     swap_final_counter: int | None = None
     swap_at: str | None = None
+    swap_counter_pending: bool = False  # 168. kör: a záró állást a szerviz még nem rögzítette
 
 
 class DebtItemOut(BaseModel):
@@ -924,6 +925,7 @@ async def settlement_context(
             swap_final_counters=sp.get("counters"),
             swap_final_counter=sp.get("counter"),
             swap_at=sp.get("at"),
+            swap_counter_pending=bool(sp.get("counter_pending")),
         ))
 
     # A gép termék-tartaléka csak KÁVÉ (bizományos) lehet — a darabra menő
@@ -1814,6 +1816,13 @@ async def create_settlement(
             if asset.partner_id != partner.id and swap_pending is None:
                 raise HTTPException(
                     status_code=422, detail={"code": "settlement.machine_wrong_partner"}
+                )
+            # 168. kör: leolvashatatlan számlálójú csere — amíg a szerviz nem
+            # rögzíti a záró állást, a gép nem számolható el
+            if swap_pending is not None and swap_pending.get("counter_pending"):
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "settlement.swap_counter_pending", "barcode": asset.barcode},
                 )
             prev_counter, _ = await _machine_prev_counter(db, asset)
             new_counter = (

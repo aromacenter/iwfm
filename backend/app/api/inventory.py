@@ -1513,6 +1513,9 @@ class SwapBody(BaseModel):
     new_counters: list[int] | None = Field(default=None, max_length=99)
     new_counter: int | None = Field(default=None, ge=0)
     protocol: ProtocolFields | None = None
+    # 168. kör (9aee0a88): zárlatos gép, a záró állás nem olvasható — az előző
+    # állással megy a csere, a tényleges állást a szerviz rögzíti utólag.
+    counter_unreadable: bool = False
 
 
 @assets_router.post("/{asset_id}/swap", response_model=AssetOut)
@@ -1576,12 +1579,17 @@ async def swap_asset(
         sum(final_counters) if final_counters
         else (body.old_counter if body.old_counter is not None else old.counter)
     )
+    if body.counter_unreadable:
+        # az előző (utoljára elszámolt) állás a helyőrző; a szerviz rögzíti a valódit
+        final_counters = None
+        final_counter = old.counter
     old.swap_pending = {
         "partner_id": str(old.partner_id),
         "counters": list(final_counters) if final_counters else None,
         "counter": int(final_counter or 0),
         "at": datetime.now(UTC).isoformat(),
         "replaced_by": new.barcode,
+        **({"counter_pending": True} if body.counter_unreadable else {}),
     }
 
     # régi gép: szervizre, kihelyezés lezárva
@@ -1609,7 +1617,7 @@ async def swap_asset(
     )
     swap_proto = await create_protocol(
         db, kind="swap", asset=old, partner=partner, actor=actor, fields=body.protocol, replacement=new,
-        counters=list(final_counters) if final_counters else ([int(final_counter)] if final_counter is not None else None),
+        counters=None if body.counter_unreadable else (list(final_counters) if final_counters else ([int(final_counter)] if final_counter is not None else None)),
         replacement_counters=list(body.new_counters) if body.new_counters else ([body.new_counter] if body.new_counter is not None else None),
         note=note or None,
     )
@@ -1635,6 +1643,9 @@ async def swap_asset(
                     "A gépet cseréled a(z) "
                     f"{partner.name if partner else '?'} partnernél — rögzítsd a "
                     "hibáját és a javítási konstrukciókat ezen a munkalapon."
+                    + ("\n\n⚠️ A számláló a cserekor nem volt leolvasható — a szervizben "
+                       "rögzítsd a záró állást (ezen a feladaton: „Záró számláló rögzítése”), "
+                       "az elszámolás addig vár rá." if body.counter_unreadable else "")
                 ),
                 employee_id=swapper_emp.id,
                 due_date=_date.today(),
@@ -1660,6 +1671,37 @@ async def swap_asset(
 
     await db.commit()
     return _with_protocol(_asset_out(new, partner.name if partner else None), swap_proto, swap_sent)
+
+
+class SwapCounterBody(BaseModel):
+    counters: list[int] | None = Field(default=None, max_length=99)
+    counter: int | None = Field(default=None, ge=0)
+
+
+@assets_router.post("/{asset_id}/swap-counter", response_model=AssetOut)
+async def record_swap_counter(
+    asset_id: str,
+    body: SwapCounterBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("machines")),
+):
+    """Leolvashatatlan számlálójú gépcsere záró állásának utólagos rögzítése
+    (168. kör): a következő elszámolás ezzel az állással számol."""
+    from app.services.wfm.swap_counter import apply_swap_counter
+
+    asset = await _get_asset_or_404(db, asset_id)
+    final = apply_swap_counter(asset, body.counters, body.counter)
+    db.add(AssetMovement(
+        asset_id=asset.id, action="counter", partner_id=None,
+        detail=f"Gépcsere záró állás utólag rögzítve: {final}", actor_user_id=actor.id,
+    ))
+    await record_audit(
+        db, actor=actor, action="asset.swap_counter", entity_type="asset", entity_id=asset.barcode,
+        detail={"counter": final, "counters": body.counters}, request=request,
+    )
+    await db.commit()
+    return _asset_out(asset, None)
 
 
 @assets_router.post("/{asset_id}/reset-counters", response_model=AssetOut)

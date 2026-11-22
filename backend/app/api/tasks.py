@@ -1035,6 +1035,8 @@ async def _tasks_out(db: AsyncSession, tasks: list[Task]) -> list[TaskOut]:
                 "partner_visit_window": pwindow,
                 "counter": a.counter,
                 "maintenance_fee": a.maintenance_fee,
+                # 168. kör: gépcsere leolvashatatlan számlálóval — a szerviz rögzíti
+                "swap_counter_pending": bool(isinstance(a.swap_pending, dict) and a.swap_pending.get("counter_pending")),
             }
             for a, pname, pwindow in asset_rows
         }
@@ -2143,6 +2145,43 @@ async def my_ticket_image(
 
 class TechnicianBody(BaseModel):
     name: str | None = Field(default=None, max_length=256)  # üres = kiosztás törlése
+
+
+class SwapCounterBody(BaseModel):
+    counters: list[int] | None = Field(default=None, max_length=99)
+    counter: int | None = Field(default=None, ge=0)
+
+
+@me_router.post("/{task_id}/swap-counter", response_model=TaskOut)
+async def my_record_swap_counter(
+    task_id: str,
+    body: SwapCounterBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """A szerelő a munkalapról rögzíti a kicserélt (zárlatos) gép záró
+    számlálóját (168. kör) — az elszámolás ezzel számol."""
+    from app.models import Asset, AssetMovement
+    from app.services.wfm.swap_counter import apply_swap_counter
+
+    task = await _own_task_or_404(db, emp, task_id)
+    ws = (await db.execute(select(Worksheet).where(Worksheet.task_id == task.id))).scalar_one_or_none()
+    asset = (await db.execute(select(Asset).where(Asset.id == ws.asset_id))).scalar_one_or_none() if ws and ws.asset_id else None
+    if asset is None:
+        raise HTTPException(status_code=422, detail={"code": "asset.no_pending_swap_counter"})
+    final = apply_swap_counter(asset, body.counters, body.counter)
+    db.add(AssetMovement(
+        asset_id=asset.id, action="counter", partner_id=None,
+        detail=f"Gépcsere záró állás a szervizben rögzítve: {final}", actor_user_id=user.id,
+    ))
+    await record_audit(
+        db, actor=user, action="asset.swap_counter", entity_type="asset", entity_id=asset.barcode,
+        detail={"counter": final, "counters": body.counters, "task": str(task.id)}, request=request,
+    )
+    await db.commit()
+    return (await _tasks_out(db, [task]))[0]
 
 
 @me_router.post("/{task_id}/technician", response_model=TaskOut)
