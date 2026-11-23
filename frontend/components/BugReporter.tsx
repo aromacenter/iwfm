@@ -514,8 +514,18 @@ export default function BugReporter() {
         const last = lastStaffComment(popupBug);
         return (
           <div data-bug-ui="1" className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-md space-y-3 rounded-2xl border border-amber-200 bg-white p-5 shadow-2xl">
-              <h2 className="text-lg font-bold">💬 {t("bugs.replyTitle")}</h2>
+            {/* Mobilon a hosszú válasz kilógott a képernyőről és a gombok elérhetetlenek
+                voltak (nem görgethető, nem zárható) → max. magasság + görgetés + ✕ (169. kör) */}
+            <div className="relative max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl border border-amber-200 bg-white p-5 shadow-2xl">
+              <button
+                type="button"
+                onClick={() => dismissPopup(popupBug)}
+                aria-label={t("common.close")}
+                className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                ✕
+              </button>
+              <h2 className="pr-8 text-lg font-bold">💬 {t("bugs.replyTitle")}</h2>
               <p className="line-clamp-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">{popupBug.kind === "idea" ? "💡" : "🐞"} {popupBug.description}</p>
               {last && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -559,25 +569,37 @@ export default function BugReporter() {
         );
       })()}
 
+      {/* Mobilon a panel teteje a képernyő fölé lógott (nem volt max. magasság):
+          a rendelkezésre álló helyre korlátozzuk, a panel maga görgethető, és ✕-szel zárható. */}
       {open && (
         <div
           data-bug-ui="1"
           onPaste={onPaste}
           style={panelHidden ? { visibility: "hidden" } : undefined}
-          className="fixed bottom-40 right-5 z-[60] w-[340px] max-w-[calc(100vw-40px)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
+          className="fixed bottom-40 right-5 z-[60] max-h-[calc(100dvh-11.5rem)] w-[340px] max-w-[calc(100vw-40px)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
         >
-          <div className="mb-3 flex rounded-lg border border-slate-200 p-0.5 text-sm font-medium">
+          <div className="mb-3 flex items-center gap-1.5">
+            <div className="flex flex-1 rounded-lg border border-slate-200 p-0.5 text-sm font-medium">
+              <button
+                onClick={() => setTab("report")}
+                className={`flex-1 rounded-md px-2 py-1 ${tab === "report" ? "bg-rose-600 text-white" : "text-slate-600"}`}
+              >
+                {t("bugs.tabReport")}
+              </button>
+              <button
+                onClick={() => setTab("mine")}
+                className={`flex-1 rounded-md px-2 py-1 ${tab === "mine" ? "bg-rose-600 text-white" : "text-slate-600"}`}
+              >
+                {t("bugs.tabMine")} {unread.length > 0 ? `💬${unread.length}` : needsRetest && "⏳"}
+              </button>
+            </div>
             <button
-              onClick={() => setTab("report")}
-              className={`flex-1 rounded-md px-2 py-1 ${tab === "report" ? "bg-rose-600 text-white" : "text-slate-600"}`}
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label={t("common.close")}
+              className="rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
             >
-              {t("bugs.tabReport")}
-            </button>
-            <button
-              onClick={() => setTab("mine")}
-              className={`flex-1 rounded-md px-2 py-1 ${tab === "mine" ? "bg-rose-600 text-white" : "text-slate-600"}`}
-            >
-              {t("bugs.tabMine")} {unread.length > 0 ? `💬${unread.length}` : needsRetest && "⏳"}
+              ✕
             </button>
           </div>
 
