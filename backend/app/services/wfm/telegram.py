@@ -127,6 +127,11 @@ async def fetch_updates(config: dict, offset: int | None) -> list[dict]:
         if not data.get("ok"):
             return []
         return data.get("result") or []
+    except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        # átmeneti hálózati hiba (Telegram API lassú/elérhetetlen): egy sor, stack nélkül —
+        # a következő körben újrapróbálja, a naplót ne öntse el (169. kör)
+        logger.warning("telegram getUpdates: %s — következő körben újra", exc.__class__.__name__)
+        return []
     except (httpx.HTTPError, ValueError):
         logger.warning("telegram getUpdates failed", exc_info=True)
         return []
