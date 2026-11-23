@@ -12,7 +12,7 @@ import os
 import secrets as _secrets
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -368,6 +368,207 @@ async def operator_login_2fa(body: OperatorLogin2faBody, db: AsyncSession = Depe
     )
     await db.commit()
     return {"mode": body.mode}
+
+
+# ── 170. kör: fiók-kérés a Flotta-pultból ───────────────────────────────────
+# A pult nem hoz létre fiókot: kérést ad le, amiről a cég adminja a felületén
+# felugró ablakban dönt (app/api/user_requests.py). A pult sosem lát és sosem
+# ad meg jelszót — a jóváhagyott fiók 24 órás jelszó-beállító linket kap.
+# Üzemeltetői fiók: mindig admin jogkörű, nem számít a licencbe, piros sáv jelzi.
+
+
+class OperatorUserBody(BaseModel):
+    last_name: str = Field(min_length=1, max_length=128)
+    first_name: str = Field(min_length=1, max_length=128)
+    email: EmailStr | None = None
+    username: str | None = Field(default=None, max_length=64)
+    role: str = Field(default="employee", pattern="^[a-z][a-z0-9_]{1,31}$")
+    with_employee: bool = True  # dolgozói karton is (beosztás, munkaidő, tananyag)
+    is_operator: bool = True  # üzemeltetői (X-systems) fiók
+    note: str | None = Field(default=None, max_length=512)  # üzenet az adminnak
+
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: str | None) -> str | None:
+        from app.api.employees import _clean_username
+
+        return _clean_username(v)
+
+
+def _user_row(u, has_employee: bool, from_operator: bool = False) -> dict:
+    return {
+        "id": str(u.id), "display_name": u.display_name, "email": u.email,
+        "username": u.username, "role": u.role, "is_active": bool(u.is_active),
+        "is_operator": bool(getattr(u, "is_operator", False)),
+        "has_employee": has_employee, "from_operator": from_operator,
+    }
+
+
+@router.get("/users", dependencies=[Depends(require_operator)])
+async def operator_users(db: AsyncSession = Depends(get_db)):
+    """A példány fiókjai (jelszó nélkül), szerepkörei, licenc fiók-limitje és a
+    pult kéréseinek állapota — a pult felhasználó-kezelő ablakához."""
+    from app.api.deps import get_roles
+    from app.models import Employee, User
+    from app.services.wfm import user_requests as ur
+    from app.services.wfm.license import get_license_row, limits_for, usage
+
+    rows = (
+        await db.execute(
+            select(User, Employee.id).outerjoin(Employee, Employee.user_id == User.id)
+            .order_by(User.display_name)
+        )
+    ).all()
+    origin = await ur.operator_origin_user_ids(db)
+    roles = await get_roles(db)
+    lim = limits_for(await get_license_row(db))
+    reqs = await ur.recent_for_operator(db)
+    await db.commit()  # a lejáratás írt
+    return {
+        "users": [_user_row(u, emp_id is not None, u.id in origin) for u, emp_id in rows],
+        "roles": [{"key": r.key, "name": r.name} for r in roles],
+        "max_users": lim["max_users"], "usage": await usage(db),
+        "requests": [ur.req_out(r) for r in reqs],
+        "pending_days": ur.PENDING_DAYS,
+    }
+
+
+@router.post("/users", status_code=202, dependencies=[Depends(require_operator)])
+async def operator_request_user(
+    body: OperatorUserBody, request: Request, db: AsyncSession = Depends(get_db)
+):
+    """Fiók-kérés: ellenőrzés előre (szerepkör, azonosító, ütközés, licenc), aztán
+    a kérés vár a cég adminjának döntésére; az adminok értesítést kapnak."""
+    from app.api.deps import get_role_levels, record_audit
+    from app.models import OperatorUserRequest, User
+    from app.services.wfm import user_requests as ur
+    from app.services.wfm.license import check_capacity
+
+    role = "admin" if body.is_operator else body.role
+    if role not in await get_role_levels(db):
+        raise HTTPException(status_code=422, detail={"code": "employee.bad_role"})
+    email = body.email.lower() if body.email else None
+    if not email and not body.username:
+        raise HTTPException(status_code=422, detail={"code": "employee.login_id_required"})
+    has_admin = (
+        await db.execute(
+            select(User.id).where(User.role == "admin", User.is_active.is_(True), User.is_operator.is_(False)).limit(1)
+        )
+    ).first()
+    if has_admin is None:
+        raise HTTPException(status_code=422, detail={"code": "user_request.no_admin"})
+    await ur.ensure_login_free(db, email, body.username)
+    dupe = (
+        await db.execute(
+            select(OperatorUserRequest.id).where(
+                OperatorUserRequest.status == "pending",
+                (OperatorUserRequest.email == email) if email else (OperatorUserRequest.username == body.username),
+            ).limit(1)
+        )
+    ).first()
+    if dupe is not None:
+        raise HTTPException(status_code=409, detail={"code": "user_request.duplicate"})
+    if not body.is_operator:
+        await check_capacity(db, new_users=1, new_employees=1 if body.with_employee else 0)
+    req = OperatorUserRequest(
+        kind="create", status="pending", last_name=body.last_name.strip(), first_name=body.first_name.strip(),
+        email=email, username=body.username, role=role, with_employee=body.with_employee,
+        is_operator=body.is_operator, note=(body.note or "").strip() or None,
+    )
+    db.add(req)
+    await db.flush()
+    await record_audit(
+        db, actor=None, action="user.request_operator", entity_type="user_request", entity_id=str(req.id),
+        detail={"name": f"{req.last_name} {req.first_name}", "role": role, "operator": req.is_operator,
+                "login": email or body.username},
+        request=request,
+    )
+    await db.commit()
+    kind = "üzemeltetői (X-systems, admin jogkörű)" if req.is_operator else f"{role} szerepkörű"
+    await ur.notify_admins(
+        db, "X-admin: fiók-kérés az üzemeltetőtől",
+        f"Az üzemeltető (X-systems) {kind} fiókot kér hozzáadni: {req.last_name} {req.first_name} "
+        f"({email or body.username}).\n{('Üzenet: ' + req.note) if req.note else ''}\n"
+        "A döntés az X-admin felületén, adminként belépve a felugró ablakban hozható meg "
+        f"({ur.PENDING_DAYS} napig él a kérés).",
+    )
+    return {"request": ur.req_out(req)}
+
+
+@router.delete("/users/requests/{rid}", dependencies=[Depends(require_operator)])
+async def operator_withdraw_request(rid: str, request: Request, db: AsyncSession = Depends(get_db)):
+    from datetime import UTC, datetime
+
+    from app.api.deps import record_audit
+    from app.services.wfm import user_requests as ur
+
+    req = await ur.get_request_or_404(db, rid)
+    if req.status != "pending":
+        raise HTTPException(status_code=409, detail={"code": "user_request.not_pending"})
+    req.status = "withdrawn"
+    req.decided_at = datetime.now(UTC)
+    await record_audit(
+        db, actor=None, action="user.request_withdrawn", entity_type="user_request", entity_id=str(req.id),
+        detail={"name": f"{req.last_name} {req.first_name}"}, request=request,
+    )
+    await db.commit()
+    return {"request": ur.req_out(req)}
+
+
+async def _operator_user_or_404(db: AsyncSession, user_id: str):
+    import uuid as _uuid
+
+    from app.models import User
+    from app.services.wfm import user_requests as ur
+
+    try:
+        uid = _uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+    user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+    if user is None or uid not in await ur.operator_origin_user_ids(db):
+        raise HTTPException(status_code=404, detail={"code": "user.not_found"})
+    return user
+
+
+@router.delete("/users/{user_id}", dependencies=[Depends(require_operator)])
+async def operator_deactivate_user(user_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """A pultból létrejött fiók megszüntetése: letiltás + kiléptetés + értesítő az adminnak."""
+    from app.models import Employee
+    from app.services.wfm import user_requests as ur
+
+    user = await _operator_user_or_404(db, user_id)
+    if not user.is_active:
+        raise HTTPException(status_code=409, detail={"code": "user.already_inactive"})
+    notice = await ur.deactivate_from_operator(db, user, request)
+    has_emp = (await db.execute(select(Employee.id).where(Employee.user_id == user.id))).first() is not None
+    await db.commit()
+    await ur.notify_admins(
+        db, "X-admin: üzemeltetői fiók megszüntetve",
+        f"Az üzemeltető (X-systems) megszüntette a pultból létrehozott fiókot: {user.display_name} "
+        f"({user.email or user.username}). A fiók letiltva, a belépései érvénytelenek.",
+    )
+    return {"ok": True, "user": _user_row(user, has_emp, True), "notice": ur.req_out(notice)}
+
+
+@router.post("/users/{user_id}/login-link", dependencies=[Depends(require_operator)])
+async def operator_login_link(user_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Egygombos belépés a pultból: 2 perces, egyszer használatos link — csak
+    aktív üzemeltetői fiókra. Naplózva."""
+    from app.api.deps import record_audit
+    from app.core.security import OPERATOR_LOGIN_SECONDS, mint_operator_login_token
+
+    user = await _operator_user_or_404(db, user_id)
+    if not user.is_active or not user.is_operator:
+        raise HTTPException(status_code=409, detail={"code": "user.not_operator"})
+    token = mint_operator_login_token(user_id=user.id, token_version=user.token_version)
+    url = f"{get_settings().frontend_origin.rstrip('/')}/login?ot={token}"
+    await record_audit(
+        db, actor=None, action="user.login_link_operator", entity_type="user", entity_id=str(user.id),
+        detail={"name": user.display_name}, request=request,
+    )
+    await db.commit()
+    return {"url": url, "expires_seconds": OPERATOR_LOGIN_SECONDS, "name": user.display_name}
 
 
 @router.put("/license", dependencies=[Depends(require_operator)])

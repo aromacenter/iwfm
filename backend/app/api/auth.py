@@ -84,6 +84,7 @@ class UserOut(BaseModel):
     # 148. kör: a fiók saját száma (törzsszám vagy fiók-szám) + van-e összekapcsolt Telegram
     user_code: str | None = None
     telegram_linked: bool = False
+    is_operator: bool = False  # 170. kör: üzemeltetői (X-systems) fiók — piros sáv a felületen
 
 
 def _user_out(
@@ -102,6 +103,7 @@ def _user_out(
         substitute_user_id=(
             str(user.substitute_user_id) if user.substitute_user_id else None
         ),
+        is_operator=bool(getattr(user, "is_operator", False)),
     )
 
 
@@ -261,6 +263,55 @@ class TwofaVerifyBody(BaseModel):
     challenge_id: str = Field(min_length=8, max_length=64)
     code: str = Field(min_length=4, max_length=12)
     trust_device: bool = False
+
+
+class TokenLoginBody(BaseModel):
+    token: str = Field(min_length=10, max_length=2048)
+
+
+_used_login_jti: dict[str, float] = {}  # 170. kör: elhasznált egyszeri belépő-linkek
+
+
+@router.post("/login/token", response_model=UserOut)
+async def login_with_token(
+    body: TokenLoginBody, request: Request, response: Response, db: AsyncSession = Depends(get_db)
+):
+    """170. kör: egygombos üzemeltetői belépés a Flotta-pultból. A link 2 perces
+    és egyszer használatos; csak aktív üzemeltetői (is_operator) fiókra megy.
+    A kétlépcsős belépést a pult saját, kétlépcsős belépése helyettesíti."""
+    import uuid as _uuid
+
+    import jwt as _pyjwt
+
+    from app.core.security import decode_token
+
+    ip = request.client.host if request.client else "?"
+    if _throttled(f"oplogin:{ip}"):
+        raise HTTPException(status_code=429, detail={"code": "auth.throttled"})
+    try:
+        payload = decode_token(body.token)
+        if payload.get("purpose") != "oplogin":
+            raise _pyjwt.PyJWTError("wrong purpose")
+        uid = _uuid.UUID(payload["sub"])
+        jti = str(payload["jti"])
+    except (_pyjwt.PyJWTError, KeyError, ValueError):
+        _record_failure(f"oplogin:{ip}")
+        raise HTTPException(status_code=422, detail={"code": "auth.login_link_invalid"})
+    now = _time.time()
+    for k, exp in list(_used_login_jti.items()):
+        if exp < now:
+            _used_login_jti.pop(k, None)
+    if jti in _used_login_jti:
+        raise HTTPException(status_code=422, detail={"code": "auth.login_link_invalid"})
+    user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+    if (
+        user is None or not user.is_active or not getattr(user, "is_operator", False)
+        or int(payload.get("tv", -1)) != user.token_version
+    ):
+        _record_failure(f"oplogin:{ip}")
+        raise HTTPException(status_code=422, detail={"code": "auth.login_link_invalid"})
+    _used_login_jti[jti] = float(payload.get("exp", now + 300))
+    return await _finish_login(db, user, request, response, twofa_channel="operator_link")
 
 
 @router.post("/login/verify", response_model=UserOut)

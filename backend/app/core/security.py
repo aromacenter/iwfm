@@ -58,6 +58,25 @@ def decode_token(token: str) -> dict:
 RESET_TOKEN_HOURS = 24
 
 
+OPERATOR_LOGIN_SECONDS = 120
+
+
+def mint_operator_login_token(*, user_id: uuid.UUID, token_version: int) -> str:
+    """170. kör: egygombos üzemeltetői belépés a Flotta-pultból — 2 perces,
+    egyszer használatos link (a jti-t a felhasználás elhasználja)."""
+    settings = get_settings()
+    now = datetime.now(UTC)
+    payload = {
+        "sub": str(user_id),
+        "purpose": "oplogin",
+        "tv": token_version,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=OPERATOR_LOGIN_SECONDS)).timestamp()),
+        "jti": uuid.uuid4().hex,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+
+
 def mint_reset_token(*, user_id: uuid.UUID, token_version: int) -> str:
     """Egyszer használatos jelszó-visszaállító token (b3640159): a
     token_version-t hordozza, így a jelszó beállítása (ami lépteti a

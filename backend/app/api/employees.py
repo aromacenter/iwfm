@@ -661,6 +661,9 @@ async def update_employee(
         role_user = (
             await db.execute(select(User).where(User.id == emp.user_id))
         ).scalar_one_or_none()
+        if role_user is not None and getattr(role_user, "is_operator", False) and new_role != "admin":
+            # 170. kör: az üzemeltetői fiók mindig admin jogkörű
+            raise HTTPException(status_code=422, detail={"code": "employee.operator_role_locked"})
         if role_user is not None:
             role_user.role = new_role
 

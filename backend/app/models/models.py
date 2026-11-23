@@ -62,6 +62,10 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(256), nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="employee")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # 170. kör: üzemeltetői (X-systems) fiók — a Flotta-pultból kérve, a cég
+    # adminjának jóváhagyásával jön létre; mindig admin jogkörű, nem számít a
+    # licenc fiók-limitjébe, és a felületen piros sáv jelzi a belépését.
+    is_operator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # A kiadott JWT-k érvényességi pecsétje: növelésekor minden korábbi token
     # érvénytelenné válik (jelszóváltás / kényszerített kijelentkeztetés).
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -396,6 +400,37 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class OperatorUserRequest(Base):
+    """170. kör: a Flotta-pult fiók-kérései és értesítései a cég adminjának.
+    kind=create: új fiók kérése — pending → approved / declined / withdrawn /
+    expired (az admin a felugró ablakban dönt). kind=delete: a pultból
+    megszüntetett fiókról szóló értesítés — done → acked (az admin nyugtázta)."""
+
+    __tablename__ = "operator_user_requests"
+    __table_args__ = (Index("ix_opuserreq_status", "status"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="create")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    last_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    first_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="employee")
+    with_employee: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_operator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    decline_reason: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    reset_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    acked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class LoginChallenge(Base):

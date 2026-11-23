@@ -32,6 +32,23 @@ export default function LoginPage() {
   const [twofa, setTwofa] = useState<TwofaStart | null>(null); // 147. kör: jelszó után kód
   const router = useRouter();
   const { t } = useT();
+  // 170. kör: egygombos üzemeltetői belépés a Flotta-pultból (2 perces, egyszeri link)
+  useEffect(() => {
+    const ot = new URLSearchParams(window.location.search).get("ot");
+    if (!ot) return;
+    window.history.replaceState(null, "", "/login");
+    // a setBusy a kérés indítása után, callbackben — nem közvetlenül az effektben
+    Promise.resolve()
+      .then(() => {
+        setBusy(true);
+        return api.post("/api/auth/login/token", { token: ot });
+      })
+      .then(() => router.replace("/naptar"))
+      .catch((err) => {
+        setError(errorMessage(err));
+        setBusy(false);
+      });
+  }, [router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

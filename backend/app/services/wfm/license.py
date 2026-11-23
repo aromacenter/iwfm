@@ -234,10 +234,16 @@ def license_state(row: LicenseSettings | None, today: date | None = None) -> dic
 
 
 async def usage(db: AsyncSession) -> dict:
-    users = (await db.execute(select(func.count()).select_from(User))).scalar_one()
+    # 170. kör: az üzemeltetői (X-systems) fiókok és kartonjaik nem számítanak
+    # a cég licencébe
+    users = (
+        await db.execute(select(func.count()).select_from(User).where(User.is_operator.is_(False)))
+    ).scalar_one()
     employees = (
         await db.execute(
-            select(func.count()).select_from(Employee).where(Employee.status == "active")
+            select(func.count()).select_from(Employee)
+            .join(User, User.id == Employee.user_id)
+            .where(Employee.status == "active", User.is_operator.is_(False))
         )
     ).scalar_one()
     return {"users": int(users), "employees": int(employees)}

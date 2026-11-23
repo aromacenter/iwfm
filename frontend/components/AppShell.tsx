@@ -10,6 +10,7 @@ import AssistantChat from "@/components/AssistantChat";
 import BrandLogo from "@/components/BrandLogo";
 import BugReporter from "@/components/BugReporter";
 import MySignatureDialog from "@/components/MySignatureDialog";
+import OperatorRequests from "@/components/OperatorRequests";
 import { api, errorMessage } from "@/lib/api";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 import { requestFlush, useOffline } from "@/lib/offline";
@@ -469,6 +470,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <main className="min-w-0 flex-1">
+        {/* 170. kör: üzemeltetői (X-systems) fiókkal belépve piros sáv minden lapon */}
+        {user.is_operator && (
+          <div className="border-b border-rose-700 bg-rose-600 px-4 py-2 text-center text-sm font-semibold text-white">
+            🛠 {t("account.operatorBar")}
+          </div>
+        )}
         {/* Hálózat + offline-várólista sáv (130. kör): minden lapon látszik */}
         {(!online || pending > 0) && (
           <div
@@ -533,6 +540,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {moduleOn("ai") && <AssistantChat />}
       {moduleOn("bugreport") && <BugReporter />}
+      {user.role === "admin" && <OperatorRequests />}
 
       {sigOpen && <MySignatureDialog onClose={() => setSigOpen(false)} />}
 

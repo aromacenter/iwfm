@@ -170,7 +170,8 @@
     "send": "Send",
     "yes": "Yes",
     "logout": "Sign out",
-    "saved": "✓ Saved."
+    "saved": "✓ Saved.",
+    "no": "No"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -1422,7 +1423,8 @@
     "resetLinkHint": "Send it to the employee (e.g. via Telegram or SMS): they set their own password on the link. Valid for 24 hours, single use.",
     "linkCopied": "Link copied!",
     "linkCopyFailed": "Copy failed — select it manually.",
-    "copy": "Copy"
+    "copy": "Copy",
+    "operatorBar": "Operator session — X-systems support account. Every action is logged."
   },
   "login": {
     "title": "Sign in",
@@ -2759,7 +2761,16 @@
     "learning.art_not_found": "No such illustration.",
     "settlement.swap_counter_pending": "The closing counter of the swap of machine {barcode} is not recorded yet — service enters it on the swap worksheet, then it can be settled.",
     "asset.no_pending_swap_counter": "No pending swap closing counter for this machine.",
-    "asset.counter_required": "Enter the closing counter."
+    "asset.counter_required": "Enter the closing counter.",
+    "user_request.not_found": "Request not found.",
+    "user_request.not_pending": "This request has already been decided.",
+    "user_request.duplicate": "A pending request already exists for this login.",
+    "user_request.no_admin": "There is no admin on this instance yet to approve it.",
+    "user.not_found": "Account not found.",
+    "user.already_inactive": "The account is already deactivated.",
+    "user.not_operator": "Not an active operator account.",
+    "auth.login_link_invalid": "The login link expired or was already used — request a new one from the console.",
+    "employee.operator_role_locked": "An operator account is always admin — its role cannot be changed."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -4894,5 +4905,31 @@
     "worktime": "Work time tracking",
     "tools": "Tool registry",
     "learning": "X-Learning"
+  },
+  "opReq": {
+    "title": "The operator requests a new account",
+    "intro": "X-systems (the operator of this system) requested a new account for this company from its console. The account is created only if you approve — nobody sees a password, the owner receives a set-password link.",
+    "name": "Name",
+    "login": "Login",
+    "role": "Access",
+    "card": "Employee card",
+    "note": "Message",
+    "operatorRole": "Operator account — admin (full access)",
+    "operatorWarn": "Operator account: always admin, does not count against your licence, and a red bar shows at the top while someone is logged in with it. It can be removed from the console any time — you will be notified.",
+    "approve": "Approve",
+    "decline": "Decline",
+    "declineConfirm": "Send decline",
+    "reasonPlaceholder": "Reason (optional)",
+    "approved": "Account created.",
+    "declined": "Request declined.",
+    "doneTitle": "Account created",
+    "doneHint": "The owner sets their password with this link, valid for 24 hours. The operator sees it in the console too — you do not have to forward it.",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied.",
+    "copyFailed": "Copy failed — select the field.",
+    "deleteTitle": "Operator account removed",
+    "deleteBody": "X-systems removed the account it created from its console: {name} ({login}). The account is disabled and its sessions are invalid.",
+    "ack": "OK",
+    "more": "+{n} more requests waiting"
   }
 }

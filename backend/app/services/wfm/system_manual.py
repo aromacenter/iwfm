@@ -445,6 +445,19 @@ Csak admin látja (Rendszer → Audit napló). Minden sor egy művelet: mikor, k
 A napló gördülő 3 hónapot (90 nap) tart meg: a régebbi sorok naponta automatikusan törlődnek. Kivétel az elszámoltathatóság miatt védett műveletek (adminisztrációs eszközök, dolgozó anonimizálása, a törlési futások naplója) — ezek megmaradnak. Más megőrzési idő a példány környezeti beállításával (WFM_RETENTION_AUDIT_DAYS) adható; 0 = nincs törlés.""",
     },
     {
+        "key": "uzemeltetoi_fiok",
+        "title": "Üzemeltetői fiók-kérés (felugró ablak az adminnak)",
+        "keywords": "üzemeltető üzemeltetői fiók X-systems kérés felugró ablak jóváhagyás elfogadás elutasítás piros sáv támogatás hozzáférés megszüntetés értesítés",
+        "body": """## Mi ez?
+A rendszer üzemeltetője (X-systems) a saját pultjából kérhet fiókot a céghez — például támogatáshoz, beállítás-segítséghez. A fiók **nem jön létre magától**: az adminnál belépéskor (és percenként frissülve) felugró ablak jelenik meg a kérés adataival (név, belépési azonosító, jogkör, karton, üzenet), és csak az **Elfogadom** gombbal jön létre. Elutasítani indokkal lehet; a döntetlen kérés 7 nap után lejár. Az adminok Telegram- és e-mail-értesítést is kapnak a kérésről (ha be van állítva).
+
+## Üzemeltetői fiók
+Mindig admin jogkörű (nem fokozható le), **nem számít a licenc fiók-limitjébe**, és amíg valaki vele van belépve, a felület tetején **piros sáv** jelzi: „Üzemeltetői belépés”. Minden művelete ugyanúgy a naplóban látszik, mint bárki másé. Jelszót senki nem lát: a fiók gazdája 24 órás linken állítja be, az üzemeltető pedig a pultjából egy gombbal, 2 perces egyszeri linkkel léphet be.
+
+## Megszüntetés
+Ha már nincs rá szükség, az üzemeltető a pultból megszünteti: a fiók letiltódik, a belépései azonnal érvénytelenek (a piros sáv eltűnik), és az admin erről felugró értesítést kap („Rendben” gombbal nyugtázza). A cég adminja is bármikor archiválhatja a fiók kartonját a Dolgozók között.""",
+    },
+    {
         "key": "hibajelentes",
         "title": "Hibajelentés és napló",
         "keywords": "hibajelentés bogár gomb képernyőkép hibajegy státusz napló audit ki mit csinált tiltás",

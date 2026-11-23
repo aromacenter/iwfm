@@ -36,6 +36,7 @@ from app.api import (
     payroll,
     portal,
     tools,
+    user_requests,
     learning,
     print_jobs as print_jobs_api,
     quotes as quotes_api,
@@ -231,6 +232,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
     app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
     app.include_router(operator_api.router, prefix="/api/operator", tags=["operator"])
+    app.include_router(user_requests.router, prefix="/api/user-requests", tags=["user-requests"])
     app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"], dependencies=[Depends(_mod("tasks"))])
     app.include_router(tasks.me_router, prefix="/api/me/tasks", tags=["self-service"], dependencies=[Depends(_mod("tasks"))])
     app.include_router(

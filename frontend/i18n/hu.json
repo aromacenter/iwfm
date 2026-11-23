@@ -170,7 +170,8 @@
     "send": "Küldés",
     "yes": "Igen",
     "logout": "Kijelentkezés",
-    "saved": "✓ Mentve."
+    "saved": "✓ Mentve.",
+    "no": "Nem"
   },
   "nav": {
     "dashboard": "Vezérlőpult",
@@ -1422,7 +1423,8 @@
     "resetLinkHint": "Küldd el a dolgozónak (pl. Telegramon vagy SMS-ben): a linken ő maga ad meg új jelszót. 24 óráig érvényes és egyszer használható.",
     "linkCopied": "Link a vágólapon!",
     "linkCopyFailed": "Nem sikerült másolni — jelöld ki kézzel.",
-    "copy": "Másolás"
+    "copy": "Másolás",
+    "operatorBar": "Üzemeltetői belépés — X-systems ügyfélszolgálati fiók. Minden művelet naplózva."
   },
   "login": {
     "title": "Bejelentkezés",
@@ -2759,7 +2761,16 @@
     "learning.art_not_found": "Nincs ilyen illusztráció.",
     "settlement.swap_counter_pending": "A(z) {barcode} gép cseréjének záró állása még nincs rögzítve — a szerviz a csere-munkalapon adja meg, utána számolható el.",
     "asset.no_pending_swap_counter": "Ehhez a géphez nincs függő gépcsere-záróállás.",
-    "asset.counter_required": "Add meg a záró állást."
+    "asset.counter_required": "Add meg a záró állást.",
+    "user_request.not_found": "A kérés nem található.",
+    "user_request.not_pending": "A kérésről már döntés született.",
+    "user_request.duplicate": "Erre az azonosítóra már van függő kérés.",
+    "user_request.no_admin": "A példányon még nincs admin, aki jóváhagyhatná.",
+    "user.not_found": "A fiók nem található.",
+    "user.already_inactive": "A fiók már megszüntetve.",
+    "user.not_operator": "Ez nem aktív üzemeltetői fiók.",
+    "auth.login_link_invalid": "A belépő link lejárt vagy már felhasználták — kérj újat a pultból.",
+    "employee.operator_role_locked": "Az üzemeltetői fiók jogköre mindig admin — nem módosítható."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -4894,5 +4905,31 @@
     "worktime": "Munkaidő-mérés",
     "tools": "Szerszám-nyilvántartás",
     "learning": "X-Learning"
+  },
+  "opReq": {
+    "title": "Az üzemeltető fiókot kér hozzáadni",
+    "intro": "Az X-systems (a rendszer üzemeltetője) a pultjából új fiókot kért ehhez a céghez. A fiók csak akkor jön létre, ha elfogadod — jelszót senki nem lát, a belépő linket a fiók gazdája kapja.",
+    "name": "Név",
+    "login": "Belépés",
+    "role": "Jogkör",
+    "card": "Dolgozói karton",
+    "note": "Üzenet",
+    "operatorRole": "Üzemeltetői fiók — admin (teljes jogkör)",
+    "operatorWarn": "Üzemeltetői fiók: mindig admin jogkörű, nem számít a licenc fiók-limitjébe, és amíg vele van valaki belépve, a felület tetején piros sáv jelzi. A pultból bármikor megszüntethető — erről értesítést kapsz.",
+    "approve": "Elfogadom",
+    "decline": "Elutasítom",
+    "declineConfirm": "Elutasítás küldése",
+    "reasonPlaceholder": "Indok (nem kötelező)",
+    "approved": "Fiók létrehozva.",
+    "declined": "Kérés elutasítva.",
+    "doneTitle": "A fiók létrejött",
+    "doneHint": "Ezzel a 24 órán belül érvényes linkkel állítja be a jelszavát a fiók gazdája. Az üzemeltető is látja a pultjában — nem kötelező továbbítanod.",
+    "copyLink": "Link másolása",
+    "linkCopied": "Link a vágólapon.",
+    "copyFailed": "A másolás nem sikerült — jelöld ki a mezőt.",
+    "deleteTitle": "Üzemeltetői fiók megszüntetve",
+    "deleteBody": "Az X-systems megszüntette a pultjából létrehozott fiókot: {name} ({login}). A fiók letiltva, a belépései érvénytelenek.",
+    "ack": "Rendben",
+    "more": "+{n} további kérés vár"
   }
 }
