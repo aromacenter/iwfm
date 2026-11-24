@@ -3734,7 +3734,10 @@ async def settlement_invoice_storno(
     ).scalar_one_or_none()
     reason = body.reason.strip()
     try:
-        storno_id, storno_number = await cancel_invoice(db, s.billingo_document_id, reason, s.invoicing_company)
+        recipients = _split_emails(s.invoice_emails or (partner.contact_email if partner else None))
+        storno_id, storno_number = await cancel_invoice(
+            db, s.billingo_document_id, reason, s.invoicing_company, recipients
+        )
     except ValueError as exc:
         if str(exc) == "billingo_not_configured":
             raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})

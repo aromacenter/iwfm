@@ -246,16 +246,37 @@ async def _find_or_create_billingo_partner(api_key: str, partner: Partner) -> in
     """Partner keresése névre; ha nincs, létrehozás. Visszaadja a Billingó id-t.
     A számlán a hivatalos cégnév szerepel (company_name), ha meg van adva."""
     invoice_name = (partner.company_name or "").strip() or partner.name
-    data = await _api(api_key, "GET", f"/partners?query={httpx.QueryParams({'q': invoice_name})['q']}")
-    for item in data.get("data", []):
-        if item.get("name", "").strip().lower() == invoice_name.strip().lower():
-            # Meglévő Billingó-partner hiányos adatokkal (3fe1fdcb: a számlán
-            # üres vevő) → a nálunk meglévő adószámot/címet/e-mailt felvisszük.
-            try:
-                await _complete_billingo_partner(api_key, int(item["id"]), item, partner)
-            except Exception:  # pragma: no cover — best-effort
-                logger.warning("Billingó partner-kiegészítés sikertelen", exc_info=True)
-            return int(item["id"])
+    data = await _api(api_key, "GET", f"/partners?query={httpx.QueryParams({'q': invoice_name})['q']}&per_page=100")
+    matches = [
+        item for item in data.get("data", [])
+        if (item.get("name") or "").strip().lower() == invoice_name.strip().lower()
+    ]
+    taxcode = (partner.tax_number or "").strip()
+    if matches:
+        # 171. kör (Zália): több azonos nevű Billingó-karton esetén NEM a találati
+        # sorrend dönt — a nálunk tárolt adószámmal egyező kartont választjuk;
+        # ha egyik sem egyezik, az elsőt, és arra felvisszük az adószámot.
+        item = next(
+            (m for m in matches if taxcode and (m.get("taxcode") or "").strip() == taxcode),
+            matches[0],
+        )
+        if len(matches) > 1:
+            logger.warning(
+                "Billingó: %d azonos nevű partner-karton (%s) — a választott: %s (adószám: %s)",
+                len(matches), invoice_name, item.get("id"), item.get("taxcode") or "nincs",
+            )
+        # Meglévő Billingó-partner hiányos adatokkal (3fe1fdcb: a számlán
+        # üres vevő) → a nálunk meglévő adószámot/címet/e-mailt felvisszük.
+        # Ha az ADÓSZÁM pótlása nem sikerül, a számla nem készülhet el adószám
+        # nélkül (171. kör) — a hiba a hívóhoz megy; cím/e-mail hiánya best-effort.
+        try:
+            await _complete_billingo_partner(api_key, int(item["id"]), item, partner)
+        except Exception:
+            if taxcode and (item.get("taxcode") or "").strip() != taxcode:
+                logger.warning("Billingó partner-kiegészítés (adószám) sikertelen: %s", invoice_name, exc_info=True)
+                raise
+            logger.warning("Billingó partner-kiegészítés sikertelen", exc_info=True)
+        return int(item["id"])
 
     # Strukturált számlázási cím előnyben; visszaesés a székhelyre, majd az
     # egysoros cím felbontására (átvételből jövő ügyfélnél csak az van).
@@ -413,6 +434,7 @@ async def create_invoice_for_settlement(
         raise ValueError("billingo_no_items")
 
     billingo_partner_id = await _find_or_create_billingo_partner(api_key, partner)
+    logger.info("Billingó számla: %s → partner-karton %s", partner.name, billingo_partner_id)
 
     today = date.today()
     # Készpénz/kártya: minden dátum a mai nap; átutalásnál eseti napok →
@@ -648,17 +670,23 @@ async def download_document_pdf(
 
 
 async def cancel_document(
-    db: AsyncSession, document_id: str, reason: str, company: str | None = None
+    db: AsyncSession, document_id: str, reason: str, company: str | None = None,
+    recipients: list[str] | None = None,
 ) -> tuple[str, str | None]:
-    """171. kör: a bizonylat sztornózása a Billingóban (POST /documents/{id}/cancel)
-    — a Billingó sztornó-bizonylatot készít, annak az azonosítóját és sorszámát
-    adjuk vissza. A Billingó-API nem fogad indokot: az nálunk, az elszámoláson és
-    a naplóban marad. ValueError('billingo_not_configured'), ha nincs API-kulcs."""
+    """171. kör: a bizonylat sztornózása a Billingóban (POST /documents/{id}/cancel,
+    DocumentCancellation: cancellation_reason + cancellation_recipients — vesszővel
+    több e-mail). A Billingó sztornó-bizonylatot készít, és az indokkal értesíti a
+    címzetteket; az azonosítóját és sorszámát adjuk vissza.
+    ValueError('billingo_not_configured'), ha nincs API-kulcs."""
     settings = await get_or_create_settings(db)
     api_key, _block, _test = _account(settings, company)
     if not settings.enabled or not api_key:
         raise ValueError("billingo_not_configured")
-    data = await _api(api_key, "POST", f"/documents/{document_id}/cancel")
+    body: dict = {"cancellation_reason": reason[:1000]}
+    emails = [e for e in (recipients or []) if "@" in e]
+    if emails:
+        body["cancellation_recipients"] = ", ".join(emails)
+    data = await _api(api_key, "POST", f"/documents/{document_id}/cancel", body)
     sid = data.get("id")
     num = data.get("invoice_number")
     logger.info("Billingó sztornó: %s → %s (%s) — indok: %s", document_id, sid, num, reason[:120])

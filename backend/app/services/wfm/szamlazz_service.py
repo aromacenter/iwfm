@@ -281,7 +281,8 @@ async def create_handover_invoice(
 
 
 async def cancel_invoice(
-    db: AsyncSession, invoice_number: str, reason: str, company: str | None = None
+    db: AsyncSession, invoice_number: str, reason: str, company: str | None = None,
+    recipients: list[str] | None = None,
 ) -> tuple[str, str | None]:
     """171. kör: számla sztornózása a Számla Agentnél (action-szamla_agent_st,
     xmlszamlast) — a fejlec/megjegyzes a sztornó indoka. Visszatérés: a sztornó

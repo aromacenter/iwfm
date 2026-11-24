@@ -90,8 +90,8 @@ async def test_invoice_storno_with_reason(client, admin, monkeypatch):
     _, adm = admin
     calls: list = []
 
-    async def fake_cancel(db, document_id, reason, company=None):
-        calls.append((document_id, reason, company))
+    async def fake_cancel(db, document_id, reason, company=None, recipients=None):
+        calls.append((document_id, reason, company, recipients))
         return "STORNO-1", "XPSZLA/ST/000001"
 
     monkeypatch.setattr(invoicing, "cancel_invoice", fake_cancel)
@@ -103,7 +103,7 @@ async def test_invoice_storno_with_reason(client, admin, monkeypatch):
         s = Settlement(
             partner_id=p.id, settled_by_name="Teszt", payment_method="transfer", total_net=1000, total_gross=1270,
             invoiced=True, billingo_document_id="DOC-1", billingo_status="invoice", billingo_document_number="XPSZLA/000001",
-            payment_status="outstanding", invoicing_company="xp",
+            payment_status="outstanding", invoicing_company="xp", invoice_emails="szamla@sztorno.hu",
         )
         db.add(s)
         await db.commit()
@@ -118,7 +118,7 @@ async def test_invoice_storno_with_reason(client, admin, monkeypatch):
     assert out["invoiced"] is False and out["billingo_status"] == "storno" and out["payment_status"] == "none"
     assert out["storno_document_number"] == "XPSZLA/ST/000001" and out["storno_original_number"] == "XPSZLA/000001"
     assert out["storno_reason"].startswith("Téves") and out["storno_by_name"] and out["storno_at"]
-    assert calls == [("DOC-1", "Téves összeg került a számlára.", "xp")]
+    assert calls == [("DOC-1", "Téves összeg került a számlára.", "xp", ["szamla@sztorno.hu"])]
     # másodszor nincs mit sztornózni
     res = await client.post(f"/api/settlements/{sid}/invoice-storno", json={"reason": "Még egyszer."}, headers=adm)
     assert res.status_code == 404 and res.json()["detail"]["code"] == "settlement.not_invoiced"
@@ -135,7 +135,7 @@ async def test_storno_provider_error_is_reported(client, admin, monkeypatch):
 
     _, adm = admin
 
-    async def boom(db, document_id, reason, company=None):
+    async def boom(db, document_id, reason, company=None, recipients=None):
         raise RuntimeError("Billingó 422 /documents/x/cancel: already cancelled")
 
     monkeypatch.setattr(invoicing, "cancel_invoice", boom)
@@ -154,3 +154,45 @@ async def test_storno_provider_error_is_reported(client, admin, monkeypatch):
     # a számla érintetlen maradt
     det = (await client.get(f"/api/settlements/{sid}", headers=adm)).json()
     assert det["invoiced"] is True and det["storno_at"] is None
+
+
+async def test_billingo_partner_lookup_prefers_matching_taxcode(monkeypatch):
+    """Zália-eset: két azonos nevű Billingó-karton, az egyiken nincs adószám — az
+    adószámmal egyezőt kell használni, nem a találati sorrend szerinti elsőt."""
+    from app.models import Partner
+    from app.services.wfm import billingo_service as bs
+
+    calls: list = []
+
+    async def fake_api(api_key, method, path, json_body=None):
+        calls.append((method, path, json_body))
+        if method == "GET":
+            return {"data": [
+                {"id": 11, "name": "Zália Dohány Betéti Társaság", "taxcode": "", "address": {"city": "Budapest", "address": "Kapos u. 33"}},
+                {"id": 12, "name": "Zália Dohány Betéti Társaság", "taxcode": "24336541-2-43", "tax_type": "HAS_TAX_NUMBER", "address": {"city": "Budapest", "address": "Kapos u. 33"}},
+            ]}
+        return {"id": 99}
+
+    monkeypatch.setattr(bs, "_api", fake_api)
+    p = Partner(name="Oktogon Dohánybolt", company_name="Zália Dohány Betéti Társaság", tax_number="24336541-2-43",
+                address_zip="1214", address_city="Budapest", address_street="Kapos u.", address_number="33")
+    assert await bs._find_or_create_billingo_partner("k", p) == 12
+    assert not any(m == "PUT" for m, _p, _b in calls)  # a jó kartonon nincs mit pótolni
+
+    # csak adószám nélküli karton van → PUT-tal pótoljuk; ha a pótlás elbukik, a számla nem készülhet
+    calls.clear()
+
+    async def api_one_card(api_key, method, path, json_body=None):
+        calls.append((method, path, json_body))
+        if method == "GET":
+            return {"data": [{"id": 11, "name": "Zália Dohány Betéti Társaság", "taxcode": "", "address": {"city": "Budapest", "address": "Kapos u. 33"}}]}
+        if method == "PUT":
+            raise bs.BillingoApiError(422, path, '{"message":"Validation failed","errors":{"taxcode":["invalid"]}}')
+        return {"id": 99}
+
+    monkeypatch.setattr(bs, "_api", api_one_card)
+    import pytest
+
+    with pytest.raises(bs.BillingoApiError):
+        await bs._find_or_create_billingo_partner("k", p)
+    assert any(m == "PUT" and b.get("taxcode") == "24336541-2-43" and b.get("tax_type") == "HAS_TAX_NUMBER" for m, _p, b in calls)

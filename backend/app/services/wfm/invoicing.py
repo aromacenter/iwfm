@@ -73,13 +73,15 @@ async def send_invoice_email(
 
 
 async def cancel_invoice(
-    db: AsyncSession, document_id: str, reason: str, company: str | None = None
+    db: AsyncSession, document_id: str, reason: str, company: str | None = None,
+    recipients: list[str] | None = None,
 ) -> tuple[str, str | None]:
-    """171. kör: a kiállított számla sztornózása a számlázóban. Visszatérés:
-    (sztornó bizonylat azonosítója, sorszáma)."""
+    """171. kör: a kiállított számla sztornózása a számlázóban, indokkal (Billingó:
+    cancellation_reason + értesítendő címzettek; Számlázz.hu: fejlec/megjegyzes).
+    Visszatérés: (sztornó bizonylat azonosítója, sorszáma)."""
     if await _provider(db) == "szamlazz":
-        return await szamlazz_service.cancel_invoice(db, document_id, reason, company)
-    return await billingo_service.cancel_document(db, document_id, reason, company)
+        return await szamlazz_service.cancel_invoice(db, document_id, reason, company, recipients)
+    return await billingo_service.cancel_document(db, document_id, reason, company, recipients)
 
 
 async def fetch_payment_status(
