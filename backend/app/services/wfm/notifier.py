@@ -349,6 +349,16 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
 
         logging.getLogger(__name__).warning("fixed rental billing failed", exc_info=True)
 
+    # 172. kör: ki nem küldött számlák újraküldése (48 óra, óránként egy próba)
+    from app.services.wfm.rental_billing import resend_unsent_invoices
+
+    try:
+        await resend_unsent_invoices(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("invoice resend failed", exc_info=True)
+
     # Naptár- és Mt.-figyelés (AI, havi őrökkel, best-effort).
     from app.services.wfm.calendar_watch import ensure_next_year_calendar, monthly_mt_check
 

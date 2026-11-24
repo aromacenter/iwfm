@@ -290,6 +290,9 @@ Az előzményekben a kiszámlázott elszámolásnál a 🧾✖ gomb — kizáró
 ## Fix bérleti díj: azonos adószámú címek EGY számlán
 Ha több üzemelési címnek (azonos adószám) saját fix bérleti szerződése van, és mindegyiken be van pipálva az „azonos adószámú címek EGY számlán”, akkor egy számla készül a legrégebbi szerződés partnerére, szerződésenként egy tétellel (a cím nevével), feltéve, hogy a számlázási nap, ciklus, fizetési mód és határidő megegyezik. Eltérő beállításnál külön számla készül (a szerver naplója jelzi). A saját szerződés nélküli társcímek gépei továbbra is gépenkénti tételként kerülnek a fő szerződés számlájára.
 
+## Fix bérleti díj: első számlázás és a számla kiküldése
+Az automata számlázás első futása a szerződés **létrehozása utáni első számlázási nap**: ha a számlázás napja 5-e, és a szerződést 16-án rögzítik, az első számla a következő hónap 5-én készül (a már elmúlt napra nem számláz visszamenőleg). Minden kiállított számlát — a kézit és az automatát is — a számlázó (Billingó) azonnal kiküldi e-mailben az elszámolás címzettjeire, annak híján a partner e-mail címére (összevont számlánál minden érintett címre). Ha a küldés nem sikerül vagy nincs e-mail cím, a rendszer 48 órán át óránként újrapróbálja, és a szerver naplójába figyelmeztetés kerül — ezért fontos, hogy minden számlázott partnernél legyen e-mail cím.
+
 ## Fix bérleti díj: havi készlet-ellenőrzési feladat
 A fix bérleti díjas szerződés automatikus számlázásának napján (ha nem munkanap, a következő munkanapra) a partner képviselője feladatot kap: „Készlet-ellenőrzés és feltöltés: <partner>”. Feltétel, hogy a partnernél be legyen állítva a képviselő, és annak legyen dolgozó-kartonja. Havonta egy feladat készül.""",
     },

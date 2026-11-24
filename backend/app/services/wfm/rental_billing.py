@@ -49,6 +49,29 @@ def _effective_billing_day(billing_day: int, today: date) -> int:
     return min(billing_day, last)
 
 
+def first_billing_date(billing_day: int, start: date) -> date:
+    """172. kör: az első számlázási nap, ami NEM korábbi a kezdésnél (a
+    szerződés létrehozása / érvényesség kezdete): ha a hónap számlázási napja
+    már elmúlt, a következő hónapé."""
+    cand = date(start.year, start.month, _effective_billing_day(billing_day, start))
+    if cand >= start:
+        return cand
+    y, m = (start.year + 1, 1) if start.month == 12 else (start.year, start.month + 1)
+    nxt = date(y, m, 1)
+    return date(y, m, _effective_billing_day(billing_day, nxt))
+
+
+def contract_start(c: PartnerContract, today: date | None = None) -> date:
+    """A szerződés „kezdése” az első számlázáshoz: a létrehozás napja és az
+    érvényesség kezdete közül a későbbi (régi, created_at nélküli sornál a
+    valid_from). A jövőbeli created_at-ot (szimulált, múltbeli futás) nem nézzük."""
+    start = c.valid_from
+    created = getattr(c, "created_at", None)
+    if created is not None and (today is None or created.date() <= today):
+        start = max(start, created.date())
+    return start
+
+
 async def _overdue_ref(db: AsyncSession, partner_id: uuid.UUID):
     """A legrégebbi 30+ napja lejárt, rendezetlen elszámolás (késedelmi felár
     hivatkozásához) — a kézi elszámolás szabályával azonos."""
@@ -99,14 +122,94 @@ def _is_due(c: PartnerContract, today: date, now_local: datetime) -> bool:
         eff_day = _effective_billing_day(int(c.billing_day or 1), today)
         if today.day < eff_day:
             return False
-        return not (last and last.year == today.year and last.month == today.month)
+        if last and last.year == today.year and last.month == today.month:
+            return False
+        if last is None and today < first_billing_date(int(c.billing_day or 1), contract_start(c, today)):
+            return False  # 172. kör: a létrehozás hónapjában már elmúlt nap → következő hónap
+        return True
     period = CYCLE_DAYS.get(cycle, 7)
     if last is None:
+        if today < contract_start(c, today):
+            return False
         return today.weekday() == int(c.billing_weekday if c.billing_weekday is not None else 0)
     return (today - last).days >= period
 
 
 AUTO_SETTLED_BY = "Automata bérleti számlázás"
+RESEND_WINDOW_HOURS = 48  # ennyi ideig próbáljuk újra a ki nem küldött számlát
+_resend_last_try: dict[str, float] = {}  # settlement id → monotonic idő (óránként egy próba)
+
+
+def invoice_recipients(settlement: Settlement, partners: list) -> list[str]:
+    """A számla címzettjei: az elszámolás saját címzettjei, annak híján a
+    partner(ek) e-mailje — összevont számlánál minden érintett cím, duplázás nélkül."""
+    from app.services.wfm.email_service import split_addresses
+
+    out: list[str] = []
+    sources = [settlement.invoice_emails] if settlement.invoice_emails else [p.contact_email for p in partners]
+    for src in sources:
+        for e in split_addresses(src):
+            if "@" in e and e.lower() not in {x.lower() for x in out}:
+                out.append(e)
+    return out
+
+
+async def send_settlement_invoice(db: AsyncSession, settlement: Settlement, partners: list) -> bool:
+    """A kiállított számla kiküldése a Billingón át (172. kör). Siker: receipt_sent_at
+    beáll; hiba vagy hiányzó cím: figyelmeztetés a naplóba, a háttér-újrapróbálás
+    (resend_unsent_invoices) 48 órán át óránként próbálja."""
+    from app.services.wfm.invoicing import send_invoice_email
+
+    if not settlement.billingo_document_id:
+        return False
+    emails = invoice_recipients(settlement, partners)
+    if not emails:
+        logger.warning("számla-küldés: nincs e-mail cím (%s, %s)", settlement.id, partners[0].name if partners else "?")
+        return False
+    try:
+        await send_invoice_email(db, settlement.billingo_document_id, emails, settlement.invoicing_company)
+    except Exception:
+        logger.warning("számla-küldés sikertelen (%s) — újrapróbáljuk", settlement.id, exc_info=True)
+        return False
+    settlement.receipt_sent_at = settlement.receipt_sent_at or datetime.now(UTC)
+    await db.commit()
+    logger.info("számla kiküldve: %s → %s", settlement.billingo_document_number or settlement.billingo_document_id, ", ".join(emails))
+    return True
+
+
+async def resend_unsent_invoices(db: AsyncSession, now: datetime | None = None) -> int:
+    """Biztonsági háló (172. kör): az elmúlt 48 órában kiállított, de ki nem
+    küldött számlák újraküldése (óránként egy próba számlánként). A háttérhurok hívja."""
+    import time as _time
+
+    now = now or datetime.now(UTC)
+    since = now - timedelta(hours=RESEND_WINDOW_HOURS)
+    rows = (
+        await db.execute(
+            select(Settlement).where(
+                Settlement.invoiced.is_(True),
+                Settlement.billingo_document_id.is_not(None),
+                Settlement.receipt_sent_at.is_(None),
+                Settlement.created_at >= since,
+            ).order_by(Settlement.created_at).limit(50)
+        )
+    ).scalars().all()
+    sent = 0
+    mono = _time.monotonic()
+    for s in rows:
+        key = str(s.id)
+        if mono - _resend_last_try.get(key, -1e9) < 3600:
+            continue
+        _resend_last_try[key] = mono
+        partner = (await db.execute(select(Partner).where(Partner.id == s.partner_id))).scalar_one_or_none()
+        if partner is None:
+            continue
+        if await send_settlement_invoice(db, s, [partner]):
+            sent += 1
+    # takarítás: a 48 órán túli kulcsok
+    if len(_resend_last_try) > 500:
+        _resend_last_try.clear()
+    return sent
 RESTOCK_TASK_TITLE = "Készlet-ellenőrzés és feltöltés: {partner}"
 
 
@@ -450,6 +553,9 @@ async def _bill_contract(
             if due:
                 settlement.due_date = due
             await db.commit()
+            # 172. kör: MINDEN számlát a Billingó küld ki — az automatát is,
+            # a partner (és az összevont társcímek) e-mail címére
+            await send_settlement_invoice(db, settlement, [partner] + [op for _o, op in co_contracts])
         except Exception as exc:  # noqa: BLE001 — best effort, de jelezzük
             logger.warning("fixed rental invoice failed for %s", settlement.id, exc_info=True)
             settlement.billingo_status = "error"

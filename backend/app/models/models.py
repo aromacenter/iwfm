@@ -3144,6 +3144,12 @@ class PartnerContract(Base):
         Boolean, nullable=False, default=False, server_default="0"
     )
     rental_last_billed: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 172. kör: mikor jött létre a szerződés — az automata számlázás első
+    # futása a létrehozás UTÁNI első számlázási nap (a hónapban már elmúlt
+    # nap nem számláz visszamenőleg). Régi sorokon None → a valid_from számít.
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=lambda: datetime.now(UTC)
+    )
     # Telefonos elszámolás: a partnert NEM kell útvonalba tervezni — az
     # állásokat telefonon/QR-en diktálja. Ha visit_weeks is be van állítva,
     # ritkább (pl. karbantartó) látogatás mégis ütemeződik.

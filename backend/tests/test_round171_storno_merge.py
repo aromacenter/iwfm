@@ -40,14 +40,14 @@ async def test_same_tax_own_contracts_billed_on_one_invoice(client, manager, no_
     other_day = day - 1 if day > 1 else day + 1
     await _contract(client, mgr, d["id"], 10000, other_day)
 
-    d_due = other_day <= date.today().day  # a más napos szerződés ma esedékes-e (külön számla)
+    # a más napos szerződés ma jött létre → az első számlázása a következő esedékes nap (172. kör)
     factory = app_db.get_session_factory()
     async with factory() as db:
         created = await run_fixed_rental_billing(db)
-    assert created == (2 if d_due else 1)  # a három + a telephely EGY számlán; a más napos külön
-    assert len(no_invoice) == created
+    assert created == 1  # a három + a telephely EGY számlán
+    assert len(no_invoice) == 1
     rd = (await client.get(f"/api/settlements?partner_id={d['id']}", headers=mgr)).json()
-    assert len(rd if isinstance(rd, list) else rd["items"]) == (1 if d_due else 0)
+    assert len(rd if isinstance(rd, list) else rd["items"]) == 0
     rows = (await client.get(f"/api/settlements?partner_id={a['id']}", headers=mgr)).json()
     rows = rows if isinstance(rows, list) else rows["items"]
     assert len(rows) == 1
