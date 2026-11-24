@@ -25,7 +25,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, is_manager, record_audit, require_perm
+from app.api.deps import get_current_user, is_manager, record_audit, require_perm, require_role
 from app.db import get_db
 from app.services.wfm import license as license_service
 from app.models import (
@@ -3719,10 +3719,10 @@ async def settlement_invoice_storno(
     body: InvoiceStornoBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_perm("invoicing")),
+    actor: User = Depends(require_role("admin")),
 ):
     """171. kör: a kiállított számla sztornózása a számlázóban, kötelező
-    indokkal. Az elszámolás megmarad, újra kiszámlázható; a kintlévőség törlődik.
+    indokkal — CSAK admin (a user kérése: senki másnak ne legyen elérhető). Az elszámolás megmarad, újra kiszámlázható; a kintlévőség törlődik.
     A könyvelési feladást (CashBook) nem vonja vissza — azt kézzel kell rendezni."""
     from app.services.wfm.invoicing import cancel_invoice
 

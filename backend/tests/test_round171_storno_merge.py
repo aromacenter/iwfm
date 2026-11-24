@@ -109,6 +109,11 @@ async def test_invoice_storno_with_reason(client, admin, monkeypatch):
         await db.commit()
         sid = str(s.id)
 
+    # csak admin sztornózhat — a vezető sem
+    from tests.conftest import make_user
+    _, mgr_h = await make_user(email="vezeto@example.com", role="manager")
+    res = await client.post(f"/api/settlements/{sid}/invoice-storno", json={"reason": "Vezetőként próbálom."}, headers=mgr_h)
+    assert res.status_code == 403
     # indok kötelező
     res = await client.post(f"/api/settlements/{sid}/invoice-storno", json={"reason": "x"}, headers=adm)
     assert res.status_code == 422

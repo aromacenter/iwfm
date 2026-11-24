@@ -259,7 +259,7 @@ export default function ElszamolasPage() {
   const { t, lang } = useT();
   const { toast, confirm, prompt } = useUI();
   const router = useRouter();
-  const { can } = usePerms();
+  const { can, role } = usePerms();
   const canDelete = can("delete");
   const canPrices = can("products");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -3003,13 +3003,15 @@ export default function ElszamolasPage() {
                           >
                             🧾✉
                           </button>
-                          <button
-                            onClick={() => stornoInvoice(s)}
-                            title={t("cons.stornoBtn")}
-                            className="rounded border border-rose-300 px-2 py-1 text-sm leading-none text-rose-700 hover:bg-rose-50"
-                          >
-                            🧾✖
-                          </button>
+                          {role === "admin" && (
+                            <button
+                              onClick={() => stornoInvoice(s)}
+                              title={t("cons.stornoBtn")}
+                              className="rounded border border-rose-300 px-2 py-1 text-sm leading-none text-rose-700 hover:bg-rose-50"
+                            >
+                              🧾✖
+                            </button>
+                          )}
                           <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800" title={s.billingo_document_number ?? undefined}>
                             {t("cons.invoiced")}{s.billingo_document_number ? ` ${s.billingo_document_number}` : s.billingo_status ? ` (${s.billingo_status})` : ""}
                           </span>

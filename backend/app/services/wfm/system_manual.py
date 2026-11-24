@@ -284,8 +284,8 @@ A bizonylaton az a cég szerepel, amelyik a partnernél számlázó cégként be
 ## Azonnali eladás, offline
 Azonnali eladás nem bizományi tételekre bruttó árral. Hálózat nélkül az elszámolás offline mentődik, és újracsatlakozáskor beküldődik.
 
-## Számla sztornózása
-Az előzményekben a kiszámlázott elszámolásnál a 🧾✖ gomb: kötelező indok megadása után a rendszer a számlázóban (Billingó / Számlázz.hu) sztornó számlát készít, az elszámolás „Sztornózva” jelölést kap (sorszám + indok, ki és mikor), a kintlévőség törlődik, és az elszámolás javítás után újra kiszámlázható. Az indok a sztornó bizonylatra kerül (Billingó: sztornó indoka + a számla címzettjei értesítést kapnak; Számlázz.hu: megjegyzés), és a naplóban is látszik. A könyvelési feladást (CashBook) nem vonja vissza — azt kézzel kell rendezni.
+## Számla sztornózása (csak admin)
+Az előzményekben a kiszámlázott elszámolásnál a 🧾✖ gomb — kizárólag admin szerepkörrel látható és használható: kötelező indok megadása után a rendszer a számlázóban (Billingó / Számlázz.hu) sztornó számlát készít, az elszámolás „Sztornózva” jelölést kap (sorszám + indok, ki és mikor), a kintlévőség törlődik, és az elszámolás javítás után újra kiszámlázható. Az indok a sztornó bizonylatra kerül (Billingó: sztornó indoka + a számla címzettjei értesítést kapnak; Számlázz.hu: megjegyzés), és a naplóban is látszik. A könyvelési feladást (CashBook) nem vonja vissza — azt kézzel kell rendezni.
 
 ## Fix bérleti díj: azonos adószámú címek EGY számlán
 Ha több üzemelési címnek (azonos adószám) saját fix bérleti szerződése van, és mindegyiken be van pipálva az „azonos adószámú címek EGY számlán”, akkor egy számla készül a legrégebbi szerződés partnerére, szerződésenként egy tétellel (a cím nevével), feltéve, hogy a számlázási nap, ciklus, fizetési mód és határidő megegyezik. Eltérő beállításnál külön számla készül (a szerver naplója jelzi). A saját szerződés nélküli társcímek gépei továbbra is gépenkénti tételként kerülnek a fő szerződés számlájára.
