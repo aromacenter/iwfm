@@ -72,6 +72,16 @@ async def send_invoice_email(
     await billingo_service.send_document_email(db, document_id, emails, company)
 
 
+async def cancel_invoice(
+    db: AsyncSession, document_id: str, reason: str, company: str | None = None
+) -> tuple[str, str | None]:
+    """171. kör: a kiállított számla sztornózása a számlázóban. Visszatérés:
+    (sztornó bizonylat azonosítója, sorszáma)."""
+    if await _provider(db) == "szamlazz":
+        return await szamlazz_service.cancel_invoice(db, document_id, reason, company)
+    return await billingo_service.cancel_document(db, document_id, reason, company)
+
+
 async def fetch_payment_status(
     db: AsyncSession, document_id: str, company: str | None = None
 ) -> str | None:

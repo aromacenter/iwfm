@@ -599,7 +599,13 @@
     "invoiceLinkHint": "Számla megnyitása a Billingóban (nyomon követhető, ki mikor nyitotta meg)",
     "billingoPdfBtn": "Billingó-bizonylat letöltése (PDF)",
     "swapCounterPending": "záró állás hiányzik",
-    "swapCounterPendingHint": "A csere leolvashatatlan számlálóval történt; a szerviz a csere-munkalapon rögzíti a záró állást, addig a gép nem számolható el."
+    "swapCounterPendingHint": "A csere leolvashatatlan számlálóval történt; a szerviz a csere-munkalapon rögzíti a záró állást, addig a gép nem számolható el.",
+    "stornoBtn": "Számla sztornózása (indokkal)",
+    "stornoPrompt": "Számla sztornózása — {partner} {number}. Írd be az indokot (kötelező): a számlázóban sztornó számla készül, az elszámolás újra kiszámlázható lesz.",
+    "stornoReasonPh": "pl. téves összeg, rossz partner, duplán kiállítva…",
+    "stornoReasonShort": "Az indok legalább 3 karakter legyen.",
+    "stornoDone": "Számla sztornózva ({number}).",
+    "stornoBadge": "Sztornózva"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -2511,7 +2517,7 @@
     "settlement.no_items": "Nincs számlázható tétel (nulla fogyás).",
     "settlement.no_email": "Nincs email-cím — add meg a címzettet, vagy rögzíts kapcsolattartói emailt a partnernél.",
     "settlement.bad_signature": "Érvénytelen aláírás-adat — próbáld újra.",
-    "settlement.not_invoiced": "Ehhez az elszámoláshoz még nincs kiállított számla.",
+    "settlement.not_invoiced": "Ehhez az elszámoláshoz nincs kiállított számla.",
     "settlement.already_paid": "Ez az elszámolás már fizetettnek van jelölve.",
     "settlement.sync_failed": "A Billingó fizetési státusz lekérése nem sikerült.",
     "service.not_found": "A szervizjegy nem található.",
@@ -2770,7 +2776,8 @@
     "user.already_inactive": "A fiók már megszüntetve.",
     "user.not_operator": "Ez nem aktív üzemeltetői fiók.",
     "auth.login_link_invalid": "A belépő link lejárt vagy már felhasználták — kérj újat a pultból.",
-    "employee.operator_role_locked": "Az üzemeltetői fiók jogköre mindig admin — nem módosítható."
+    "employee.operator_role_locked": "Az üzemeltetői fiók jogköre mindig admin — nem módosítható.",
+    "settlement.storno_failed": "A számlázó nem fogadta el a sztornót."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",

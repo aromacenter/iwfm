@@ -2612,6 +2612,15 @@ class Settlement(Base):
     # Kerekítési különbözet a bruttó végösszegen (készpénz/utánvét: 5 Ft-ra,
     # egyébként egész Ft-ra) — a bizonylaton külön sorként látszik (09637c9b).
     rounding_adjust: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 171. kör: a számla sztornózása a számlázóban — a sztornó bizonylat
+    # azonosítója/sorszáma, az eredeti sorszám, az indok, mikor és ki.
+    # Sztornó után invoiced=False (újra kiszámlázható), billingo_status="storno".
+    storno_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    storno_document_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    storno_original_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    storno_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    storno_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    storno_by_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     # Kintlévőség: none (nincs számlázva) | paid | outstanding
     payment_status: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # fizetési határidő

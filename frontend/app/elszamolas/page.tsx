@@ -76,6 +76,11 @@ interface Settlement {
   billingo_document_id?: string | null;
   billingo_document_number?: string | null;
   rounding_adjust?: number | null;
+  storno_document_number?: string | null; // 171. kör: sztornó
+  storno_original_number?: string | null;
+  storno_reason?: string | null;
+  storno_at?: string | null;
+  storno_by_name?: string | null;
   has_signature: boolean;
   receipt_sent_at: string | null;
   debt_before: number | null;
@@ -1365,6 +1370,24 @@ export default function ElszamolasPage() {
   async function downloadInvoicePdf(s: Settlement) {
     try {
       await downloadFile(`/api/settlements/${s.id}/invoice-pdf`, `szamla-${s.id.slice(0, 8)}.pdf`);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  // 171. kör: számla sztornózása kötelező indokkal
+  async function stornoInvoice(s: Settlement) {
+    const reason = await prompt(t("cons.stornoPrompt", { partner: s.partner_name ?? "?", number: s.billingo_document_number ?? "" }), {
+      type: "textarea", placeholder: t("cons.stornoReasonPh"),
+    });
+    if (!reason || reason.trim().length < 3) {
+      if (reason !== null) toast(t("cons.stornoReasonShort"), "error");
+      return;
+    }
+    try {
+      const res = await api.post<Settlement>(`/api/settlements/${s.id}/invoice-storno`, { reason: reason.trim() });
+      toast(t("cons.stornoDone", { number: res.storno_document_number ?? "" }), "success");
+      loadHistory();
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -2980,17 +3003,35 @@ export default function ElszamolasPage() {
                           >
                             🧾✉
                           </button>
+                          <button
+                            onClick={() => stornoInvoice(s)}
+                            title={t("cons.stornoBtn")}
+                            className="rounded border border-rose-300 px-2 py-1 text-sm leading-none text-rose-700 hover:bg-rose-50"
+                          >
+                            🧾✖
+                          </button>
                           <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800" title={s.billingo_document_number ?? undefined}>
                             {t("cons.invoiced")}{s.billingo_document_number ? ` ${s.billingo_document_number}` : s.billingo_status ? ` (${s.billingo_status})` : ""}
                           </span>
                         </>
                       ) : (
-                        <button
-                          onClick={() => invoice(s)}
-                          className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
-                        >
-                          {t("cons.invoiceBtn")}
-                        </button>
+                        <>
+                          {s.storno_at && (
+                            <span
+                              className="rounded bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800"
+                              title={`${s.storno_reason ?? ""} — ${s.storno_by_name ?? ""} ${s.storno_at.slice(0, 16).replace("T", " ")}`}
+                            >
+                              {t("cons.stornoBadge")}{s.storno_document_number ? ` ${s.storno_document_number}` : ""}
+                              {s.storno_original_number ? ` (${s.storno_original_number})` : ""}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => invoice(s)}
+                            className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                          >
+                            {t("cons.invoiceBtn")}
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>

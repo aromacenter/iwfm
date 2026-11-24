@@ -599,7 +599,13 @@
     "invoiceLinkHint": "Open the invoice in Billingó (tracks who opened it and when)",
     "billingoPdfBtn": "Download Billingó document (PDF)",
     "swapCounterPending": "closing counter missing",
-    "swapCounterPendingHint": "The swap was done with an unreadable counter; service records the closing counter on the swap worksheet, until then the machine cannot be settled."
+    "swapCounterPendingHint": "The swap was done with an unreadable counter; service records the closing counter on the swap worksheet, until then the machine cannot be settled.",
+    "stornoBtn": "Cancel invoice (storno, with reason)",
+    "stornoPrompt": "Cancel invoice — {partner} {number}. Enter the reason (required): a storno invoice is issued in the invoicing service and the settlement can be invoiced again.",
+    "stornoReasonPh": "e.g. wrong amount, wrong partner, issued twice…",
+    "stornoReasonShort": "The reason must be at least 3 characters.",
+    "stornoDone": "Invoice cancelled ({number}).",
+    "stornoBadge": "Cancelled"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -2511,7 +2517,7 @@
     "settlement.no_items": "Nothing to invoice (zero consumption).",
     "settlement.no_email": "No email address — enter a recipient or add a contact email to the partner.",
     "settlement.bad_signature": "Invalid signature data — please try again.",
-    "settlement.not_invoiced": "No invoice has been issued for this settlement yet.",
+    "settlement.not_invoiced": "This settlement has no issued invoice.",
     "settlement.already_paid": "This settlement is already marked as paid.",
     "settlement.sync_failed": "Fetching the Billingó payment status failed.",
     "service.not_found": "Service ticket not found.",
@@ -2770,7 +2776,8 @@
     "user.already_inactive": "The account is already deactivated.",
     "user.not_operator": "Not an active operator account.",
     "auth.login_link_invalid": "The login link expired or was already used — request a new one from the console.",
-    "employee.operator_role_locked": "An operator account is always admin — its role cannot be changed."
+    "employee.operator_role_locked": "An operator account is always admin — its role cannot be changed.",
+    "settlement.storno_failed": "The invoicing service rejected the cancellation."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",

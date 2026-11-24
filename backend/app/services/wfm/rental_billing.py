@@ -177,9 +177,16 @@ async def run_fixed_rental_billing(db: AsyncSession, now: datetime | None = None
         )
     ).scalars().all()
     created = 0
+    # 171. kör: azonos adószámú címek SAJÁT fix szerződéssel, mind összevonásra
+    # állítva és azonos számlázási beállítással → EGY számla a legrégebbi
+    # szerződés partnerére, szerződésenként egy tétellel
+    contracts = sorted(contracts, key=lambda x: (x.valid_from, str(x.partner_id)))
+    co_map, skip = await _merge_groups(db, contracts, today, now_local)
     for c in contracts:
+        if c.id in skip:
+            continue
         try:
-            if await _bill_contract(db, c, today, now_local):
+            if await _bill_contract(db, c, today, now_local, co_contracts=co_map.get(c.id)):
                 created += 1
         except Exception:
             logger.exception("fixed rental billing failed for contract %s", c.id)
@@ -187,8 +194,64 @@ async def run_fixed_rental_billing(db: AsyncSession, now: datetime | None = None
     return created
 
 
+def _same_billing(a: PartnerContract, b: PartnerContract) -> bool:
+    """Összevonható-e két fix szerződés egy számlára: azonos ciklus, nap,
+    fizetési mód és határidő (a számlán egy esedékesség van)."""
+    cycle = a.billing_cycle or "monthly"
+    if cycle != (b.billing_cycle or "monthly"):
+        return False
+    if cycle == "monthly":
+        if int(a.billing_day or 1) != int(b.billing_day or 1):
+            return False
+    elif (a.billing_weekday or 0) != (b.billing_weekday or 0):
+        return False
+    return (
+        (a.payment_method or "transfer") == (b.payment_method or "transfer")
+        and (a.payment_terms_days or 0) == (b.payment_terms_days or 0)
+    )
+
+
+async def _merge_groups(
+    db: AsyncSession, contracts: list, today: date, now_local: datetime
+) -> tuple[dict, set]:
+    """171. kör: {elsődleges szerződés id → [(társ-szerződés, partner)]} és a
+    társként számlázott szerződések halmaza (ezeket a fő kör kihagyja).
+    Elsődleges a legrégebbi szerződés (a lista valid_from szerint rendezett)."""
+    co: dict = {}
+    skip: set = set()
+    pids = {c.partner_id for c in contracts}
+    partners = {
+        p.id: p for p in (await db.execute(select(Partner).where(Partner.id.in_(pids)))).scalars().all()
+    } if pids else {}
+    for c in contracts:
+        if c.id in skip or not c.rental_merge_company:
+            continue
+        p = partners.get(c.partner_id)
+        tax = (p.tax_number or "").strip() if p else ""
+        if not p or not p.is_active or not tax:
+            continue
+        sibs = []
+        for o in contracts:
+            if o.id == c.id or o.id in skip or not o.rental_merge_company:
+                continue
+            op = partners.get(o.partner_id)
+            if not op or op.id == p.id or not op.is_active or (op.tax_number or "").strip() != tax:
+                continue
+            if not _same_billing(c, o):
+                logger.info("fixed rental: %s és %s nem vonható össze (eltérő számlázási beállítás)", p.name, op.name)
+                continue
+            if not _is_due(o, today, now_local):
+                continue  # pl. már számlázva ebben a hónapban
+            sibs.append((o, op))
+        if sibs:
+            co[c.id] = sibs
+            skip.update(o.id for o, _ in sibs)
+    return co, skip
+
+
 async def _bill_contract(
-    db: AsyncSession, c: PartnerContract, today: date, now_local: datetime | None = None
+    db: AsyncSession, c: PartnerContract, today: date, now_local: datetime | None = None,
+    co_contracts: list | None = None,
 ) -> bool:
     if (c.billing_cycle or "monthly") == "monthly" and c.billing_day is None:
         return False
@@ -200,6 +263,7 @@ async def _bill_contract(
     ).scalar_one_or_none()
     if partner is None or not partner.is_active:
         return False
+    co_contracts = co_contracts or []  # 171. kör: társ-szerződések (saját díjjal) ugyanerre a számlára
 
     # Érintett partnerek: összevonásnál az azonos adószámú (üzemelési cím)
     # partnerek is — kivéve, akinek SAJÁT fix bérleti szerződése él (azt a
@@ -230,8 +294,15 @@ async def _bill_contract(
             if own is None:
                 partners.append(sib)
 
+    # szerződés-díj partnerenként: az elsődleges + a társ-szerződések (171. kör);
+    # a saját szerződés nélküli társcímeknél 0 → gépenkénti díj
+    contract_fee = float(c.rent_fee or 0)
+    fee_by_partner: dict = {partner.id: contract_fee}
+    for o, op in co_contracts:
+        fee_by_partner[op.id] = float(o.rent_fee or 0)
+    all_partners = partners + [op for _o, op in co_contracts]
     assets: list[tuple[Asset, Partner]] = []
-    for p in partners:
+    for p in all_partners:
         rows = (
             await db.execute(
                 select(Asset).where(
@@ -242,11 +313,12 @@ async def _bill_contract(
                 .order_by(Asset.barcode)
             )
         ).scalars().all()
-        assets.extend((a, p) for a in rows if (a.rent_fee or 0) > 0 or (c.rent_fee or 0) > 0)
-    contract_fee = float(c.rent_fee or 0)
-    if not assets and contract_fee <= 0:
+        assets.extend((a, p) for a in rows if (a.rent_fee or 0) > 0 or fee_by_partner.get(p.id, 0) > 0)
+    if not assets and not any(v > 0 for v in fee_by_partner.values()):
         logger.info("fixed rental: nincs díjas gép (%s) — kihagyva", partner.name)
         c.rental_last_billed = today  # ne próbálkozzon percenként egész hónapban
+        for o, _op in co_contracts:
+            o.rental_last_billed = today
         await db.commit()
         return False
 
@@ -263,35 +335,42 @@ async def _bill_contract(
         invoicing_company=partner.invoicing_company,
         payment_method=c.payment_method or "transfer",
         due_days=c.payment_terms_days,
-        note=f"Fix bérleti díj — {month_label}",
+        note=f"Fix bérleti díj — {month_label}" + (
+            " — összevont számla: " + ", ".join(op.name for _o, op in co_contracts) if co_contracts else ""
+        ),
     )
     db.add(settlement)
     await db.flush()
 
     total_net = 0.0
-    if contract_fee > 0:
-        # 124. kör: a díj a SZERZŐDÉSÉ — egy tétel, a gépek felsorolva a megnevezésben,
-        # gépcsere nem változtatja az összeget
+    # 124. kör: a díj a SZERZŐDÉSÉ — egy tétel, a gépek felsorolva a megnevezésben,
+    # gépcsere nem változtatja az összeget; 171. kör: a társ-szerződések díja is
+    # egy-egy tétel, a cím nevével
+    for p_fee, fee in [(partner, contract_fee)] + [(op, float(o.rent_fee or 0)) for o, op in co_contracts]:
+        if fee <= 0:
+            continue
         machines = ", ".join(
             " ".join(x for x in (a.manufacturer, a.name) if x) + f" ({a.barcode})"
-            for a, p in assets if p.id == partner.id
+            for a, p in assets if p.id == p_fee.id
         )
-        line_name = f"{RENTAL_LINE_NAME} — {month_label}" + (f" — {machines}" if machines else "")
+        site = f" — {p_fee.name}" if co_contracts else ""
+        line_name = f"{RENTAL_LINE_NAME} — {month_label}{site}" + (f" — {machines}" if machines else "")
         db.add(SettlementLine(
             settlement_id=settlement.id,
             product_id=None,
             product_name=line_name[:256],
             previous_qty=0.0, physical_qty=0.0, consumed_qty=0.0,
             portions=1.0,  # 1 hónap
-            price_per_portion=contract_fee,
+            price_per_portion=fee,
             vat_percent=27,
-            amount_net=_money(contract_fee),
+            amount_net=_money(fee),
         ))
-        total_net += contract_fee
-        # összevont társ-címek: azoknak nincs saját fix szerződése — a gépenkénti díjuk marad
-        assets = [(a, p) for a, p in assets if p.id != partner.id and (a.rent_fee or 0) > 0]
+        total_net += fee
+    # gépenkénti díj csak ott, ahol nincs szerződés-díj (saját szerződés nélküli
+    # társcímek, vagy régi, gép-díjas szerződés)
+    assets = [(a, p) for a, p in assets if fee_by_partner.get(p.id, 0) <= 0 and (a.rent_fee or 0) > 0]
     for a, p in assets:
-        site = f" ({p.name})" if (c.rental_merge_company and len(partners) > 1) else ""
+        site = f" ({p.name})" if (c.rental_merge_company and len(all_partners) > 1) else ""
         brand = " ".join(x for x in (a.manufacturer, a.name) if x)
         line_name = f"{RENTAL_LINE_NAME} — {brand}{site} — {month_label}"[:256]
         db.add(SettlementLine(
@@ -334,21 +413,25 @@ async def _bill_contract(
         settlement.due_date = today + timedelta(days=int(c.payment_terms_days))
 
     c.rental_last_billed = today
+    for o, _op in co_contracts:
+        o.rental_last_billed = today  # a társ-szerződés ezen a számlán van
     db.add(AuditEvent(
         action="settlement.fixed_rental", entity_type="settlement",
         entity_id=str(settlement.id),
         detail={"partner": partner.name, "gross": settlement.total_gross,
-                "machines": len(assets), "merged_sites": len(partners),
+                "machines": len(assets), "merged_sites": len(all_partners),
+                "merged_contracts": [op.name for _o, op in co_contracts] or None,
                 "late_fee": overdue is not None},
     ))
     await db.commit()
     # 168. kör (125b8394): a számlázás napján (vagy a következő munkanapon)
     # a partner képviselője feladatot kap: készlet ellenőrzése és feltöltése
-    try:
-        await _restock_task(db, partner, today)
-    except Exception:
-        logger.exception("fixed rental restock task failed for %s", partner.name)
-        await db.rollback()
+    for rp in [partner] + [op for _o, op in co_contracts]:
+        try:
+            await _restock_task(db, rp, today)
+        except Exception:
+            logger.exception("fixed rental restock task failed for %s", rp.name)
+            await db.rollback()
 
     # Számla azonnal (a kézi auto-billing mintájára) — hiba esetén az
     # elszámolás megmarad, a státusz error, az admin TG-t kap.

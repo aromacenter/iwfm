@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_pii
-from app.models import BillingoSettings, Partner, Settlement, SettlementLine
+from app.models import BillingoSettings, Partner, Settlement
 
 logger = logging.getLogger(__name__)
 
@@ -278,6 +278,35 @@ async def create_handover_invoice(
     )
     headers = await _agent_call("action-xmlagentxmlfile", xml)
     return headers.get("szlahu_szamlaszam", ""), ("proforma" if test_mode else "invoice")
+
+
+async def cancel_invoice(
+    db: AsyncSession, invoice_number: str, reason: str, company: str | None = None
+) -> tuple[str, str | None]:
+    """171. kör: számla sztornózása a Számla Agentnél (action-szamla_agent_st,
+    xmlszamlast) — a fejlec/megjegyzes a sztornó indoka. Visszatérés: a sztornó
+    számla sorszáma (azonosítónak és sorszámnak is)."""
+    from urllib.parse import unquote
+
+    settings = await _get_settings(db)
+    agent_key, _prefix, _test_mode = _account(settings, company)
+    if not settings.enabled or not agent_key:
+        raise ValueError("billingo_not_configured")
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<xmlszamlast xmlns="http://www.szamlazz.hu/xmlszamlast" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+        'xsi:schemaLocation="http://www.szamlazz.hu/xmlszamlast '
+        'https://www.szamlazz.hu/szamla/docs/xsds/agentst/xmlszamlast.xsd">'
+        f"<beallitasok><szamlaagentkulcs>{escape(agent_key)}</szamlaagentkulcs>"
+        "<eszamla>false</eszamla><szamlaLetoltes>false</szamlaLetoltes></beallitasok>"
+        f"<fejlec><szamlaszam>{escape(invoice_number)}</szamlaszam>"
+        f"<megjegyzes>{escape(reason[:1000])}</megjegyzes></fejlec>"
+        "</xmlszamlast>"
+    )
+    headers = await _agent_call("action-szamla_agent_st", xml)
+    num = unquote(headers.get("szlahu_szamlaszam", "") or "")
+    return num, (num or None)
 
 
 async def test_connection(db: AsyncSession, company: str | None = None) -> dict:

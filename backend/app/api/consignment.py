@@ -1357,6 +1357,12 @@ class SettlementOut(BaseModel):
     billingo_status: str | None
     billingo_document_number: str | None = None
     rounding_adjust: float | None = None
+    # 171. kör: sztornó (a számlázóban készült sztornó bizonylat + indok)
+    storno_document_number: str | None = None
+    storno_original_number: str | None = None
+    storno_reason: str | None = None
+    storno_at: datetime | None = None
+    storno_by_name: str | None = None
     has_signature: bool = False
     receipt_sent_at: datetime | None = None
     invoice_emails: str | None = None  # számla-címzettek erre az elszámolásra (b08956c7)
@@ -1431,6 +1437,11 @@ def _settlement_out(s: Settlement, partner_name: str | None = None) -> Settlemen
         billingo_document_id=s.billingo_document_id,
         billingo_status=s.billingo_status,
         billingo_document_number=s.billingo_document_number,
+        storno_document_number=s.storno_document_number,
+        storno_original_number=s.storno_original_number,
+        storno_reason=s.storno_reason,
+        storno_at=s.storno_at,
+        storno_by_name=s.storno_by_name,
         rounding_adjust=s.rounding_adjust,
         has_signature=bool(s.partner_signature),
         receipt_sent_at=s.receipt_sent_at,
@@ -3696,6 +3707,64 @@ async def settlement_invoice_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="szamla-{s.billingo_document_id}.pdf"'},
     )
+
+
+class InvoiceStornoBody(BaseModel):
+    reason: str = Field(min_length=3, max_length=512)
+
+
+@settlements_router.post("/{settlement_id}/invoice-storno", response_model=SettlementOut)
+async def settlement_invoice_storno(
+    settlement_id: str,
+    body: InvoiceStornoBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("invoicing")),
+):
+    """171. kör: a kiállított számla sztornózása a számlázóban, kötelező
+    indokkal. Az elszámolás megmarad, újra kiszámlázható; a kintlévőség törlődik.
+    A könyvelési feladást (CashBook) nem vonja vissza — azt kézzel kell rendezni."""
+    from app.services.wfm.invoicing import cancel_invoice
+
+    s = await _get_settlement_or_404(db, settlement_id)
+    if not s.invoiced or not s.billingo_document_id:
+        raise HTTPException(status_code=404, detail={"code": "settlement.not_invoiced"})
+    partner = (
+        await db.execute(select(Partner).where(Partner.id == s.partner_id))
+    ).scalar_one_or_none()
+    reason = body.reason.strip()
+    try:
+        storno_id, storno_number = await cancel_invoice(db, s.billingo_document_id, reason, s.invoicing_company)
+    except ValueError as exc:
+        if str(exc) == "billingo_not_configured":
+            raise HTTPException(status_code=422, detail={"code": "settings.billingo_not_configured"})
+        logger.warning("storno failed for %s: %s", s.id, exc)
+        raise HTTPException(status_code=502, detail={"code": "settlement.storno_failed", "message": str(exc)[:300]})
+    except Exception as exc:  # noqa: BLE001 — a számlázó hibája a hívóhoz
+        logger.warning("storno failed for %s", s.id, exc_info=True)
+        msg = exc.message() if hasattr(exc, "message") and callable(exc.message) else str(exc)[:300]
+        raise HTTPException(status_code=502, detail={"code": "settlement.storno_failed", "message": msg})
+
+    s.storno_document_id = storno_id or None
+    s.storno_document_number = storno_number
+    s.storno_original_number = s.billingo_document_number
+    s.storno_reason = reason
+    s.storno_at = datetime.now(UTC)
+    s.storno_by_name = actor.display_name
+    s.invoiced = False
+    s.billingo_status = "storno"
+    s.payment_status = "none"
+    s.paid_at = None
+    s.due_date = None
+    await record_audit(
+        db, actor=actor, action="settlement.invoice_storno", entity_type="settlement",
+        entity_id=str(s.id),
+        detail={"reason": reason, "storno_number": storno_number, "original": s.storno_original_number,
+                "partner": partner.name if partner else None, "cashbook": bool(s.cashbook_sent_at)},
+        request=request,
+    )
+    await db.commit()
+    return _settlement_out(s, partner.name if partner else None)
 
 
 class InvoiceEmailBody(BaseModel):

@@ -647,6 +647,24 @@ async def download_document_pdf(
         return res.content
 
 
+async def cancel_document(
+    db: AsyncSession, document_id: str, reason: str, company: str | None = None
+) -> tuple[str, str | None]:
+    """171. kör: a bizonylat sztornózása a Billingóban (POST /documents/{id}/cancel)
+    — a Billingó sztornó-bizonylatot készít, annak az azonosítóját és sorszámát
+    adjuk vissza. A Billingó-API nem fogad indokot: az nálunk, az elszámoláson és
+    a naplóban marad. ValueError('billingo_not_configured'), ha nincs API-kulcs."""
+    settings = await get_or_create_settings(db)
+    api_key, _block, _test = _account(settings, company)
+    if not settings.enabled or not api_key:
+        raise ValueError("billingo_not_configured")
+    data = await _api(api_key, "POST", f"/documents/{document_id}/cancel")
+    sid = data.get("id")
+    num = data.get("invoice_number")
+    logger.info("Billingó sztornó: %s → %s (%s) — indok: %s", document_id, sid, num, reason[:120])
+    return (str(sid) if sid else ""), (str(num)[:64] if num else None)
+
+
 async def fetch_document_number(
     db: AsyncSession, document_id: str, company: str | None = None
 ) -> str | None:
