@@ -48,6 +48,7 @@ interface WorksheetSettings {
   invoice_payment_note_default: string;
   survey_fee: number | null;
   survey_fee_default: number;
+  labor_cost_per_hour?: number | null;
   pickup_phone: string | null;
   label_phone: string | null;
   accent_color: string;
@@ -668,6 +669,7 @@ export default function BeallitasokPage() {
     customer_footer_text: "",
     intake_footer_text: "",
     survey_fee: "",
+    labor_cost_per_hour: "",
     pickup_phone: "",
     label_phone: "",
     invoice_payment_note: "",
@@ -802,6 +804,7 @@ export default function BeallitasokPage() {
           customer_footer_text: s.customer_footer_text ?? "",
           intake_footer_text: s.intake_footer_text ?? "",
           survey_fee: s.survey_fee != null ? String(s.survey_fee) : "",
+          labor_cost_per_hour: s.labor_cost_per_hour != null ? String(s.labor_cost_per_hour) : "",
           pickup_phone: s.pickup_phone ?? "",
           label_phone: s.label_phone ?? "",
           invoice_payment_note: s.invoice_payment_note ?? "",
@@ -1017,7 +1020,7 @@ export default function BeallitasokPage() {
   }
 
   const [notif, setNotif] = useState({
-    daily_enabled: false, recipients: "", send_hour: "6",
+    daily_enabled: false, daily_telegram: false, recipients: "", send_hour: "6",
     weekly_backup: false, auto_receipt: false, task_carry_over: true,
     weekly_digest: false, weekly_day: "0", reminders_enabled: false, reminder_days: "3,7,14",
     wa_enabled: false, wa_phone_id: "", wa_recipients: "", wa_token: "", wa_token_set: false,
@@ -1032,7 +1035,7 @@ export default function BeallitasokPage() {
       .get<{
         daily_enabled: boolean; recipients: string | null; send_hour: number;
         weekly_backup: boolean; auto_receipt: boolean; task_carry_over?: boolean;
-        weekly_digest?: boolean; weekly_day?: number; reminders_enabled?: boolean; reminder_days?: string | null;
+        weekly_digest?: boolean; weekly_day?: number; reminders_enabled?: boolean; reminder_days?: string | null; daily_telegram?: boolean;
         wa_enabled: boolean; wa_phone_id: string | null; wa_recipients: string | null; wa_token_set: boolean;
         tg_enabled: boolean; tg_chat_ids: string | null; tg_token_set: boolean;
         tg_events: string[];
@@ -1044,6 +1047,7 @@ export default function BeallitasokPage() {
         weekly_backup: s.weekly_backup,
         auto_receipt: s.auto_receipt,
         task_carry_over: s.task_carry_over ?? true,
+        daily_telegram: s.daily_telegram ?? false,
         weekly_digest: s.weekly_digest ?? false, weekly_day: String(s.weekly_day ?? 0),
         reminders_enabled: s.reminders_enabled ?? false, reminder_days: s.reminder_days ?? "3,7,14",
         wa_enabled: s.wa_enabled, wa_phone_id: s.wa_phone_id ?? "",
@@ -1068,6 +1072,7 @@ export default function BeallitasokPage() {
         auto_receipt: notif.auto_receipt,
         task_carry_over: notif.task_carry_over,
         weekly_digest: notif.weekly_digest,
+        daily_telegram: notif.daily_telegram,
         weekly_day: Number(notif.weekly_day) || 0,
         reminders_enabled: notif.reminders_enabled,
         reminder_days: notif.reminder_days || null,
@@ -1347,6 +1352,7 @@ export default function BeallitasokPage() {
         customer_footer_text: ws.customer_footer_text || null,
         intake_footer_text: ws.intake_footer_text || null,
         survey_fee: ws.survey_fee ? Number(ws.survey_fee) : null,
+        labor_cost_per_hour: ws.labor_cost_per_hour ? Number(ws.labor_cost_per_hour) : null,
         pickup_phone: ws.pickup_phone || null,
         label_phone: ws.label_phone || null,
         invoice_payment_note: ws.invoice_payment_note || null,
@@ -1501,6 +1507,17 @@ export default function BeallitasokPage() {
               className="ml-2 w-32 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
             /> Ft
             <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsSurveyFeeHint")}</span>
+          </label>
+          <label className="block text-sm">
+            {t("settings.wsLaborCost")}
+            <input
+              type="number" min={0} step="1"
+              value={ws.labor_cost_per_hour}
+              onChange={(e) => setWs({ ...ws, labor_cost_per_hour: e.target.value })}
+              placeholder="0"
+              className="ml-2 w-32 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
+            /> Ft/óra
+            <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsLaborCostHint")}</span>
           </label>
           <label className="block text-sm">
             {t("settings.wsPickupPhone")}
@@ -2853,6 +2870,10 @@ export default function BeallitasokPage() {
               <input type="checkbox" checked={notif.daily_enabled} onChange={(e) => setNotif({ ...notif, daily_enabled: e.target.checked })} className="h-4 w-4" />
               {t("notif.daily")}
             </label>
+            <label className="flex items-center gap-2" title={t("notif.dailyTelegramHint")}>
+              <input type="checkbox" checked={notif.daily_telegram} onChange={(e) => setNotif({ ...notif, daily_telegram: e.target.checked })} className="h-4 w-4" />
+              {t("notif.dailyTelegram")}
+            </label>
             <label className="flex items-center gap-2">
               {t("notif.hour")}
               <input type="number" min={0} max={23} value={notif.send_hour} onChange={(e) => setNotif({ ...notif, send_hour: e.target.value })} className="w-16 rounded-lg border border-slate-300 px-2 py-1" />
@@ -2942,7 +2963,7 @@ export default function BeallitasokPage() {
               <div className="mb-1.5 text-xs font-semibold text-sky-800">{t("notif.tgEventsTitle")}</div>
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {["settlement.created", "settlement.signed", "settlement.paid", "ticket.created", "ticket.done",
-                  "order.created", "partner.created", "counter.reported", "stock.low", "stock.expiring", "vending.error",
+                  "order.created", "partner.created", "partner.consumption_drop", "counter.reported", "stock.low", "stock.expiring", "vending.error",
                   "parts.low", "parts.request", "worksheet.quote_ready"].map((ev) => (
                   <label key={ev} className="flex items-center gap-2 text-sm">
                     <input

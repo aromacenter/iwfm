@@ -85,6 +85,8 @@ class UserOut(BaseModel):
     user_code: str | None = None
     telegram_linked: bool = False
     is_operator: bool = False  # 170. kör: üzemeltetői (X-systems) fiók — piros sáv a felületen
+    # 180. kör: az ügyfél adminja/vezetője látja, ha üzemeltetői fiók aktív (15 percen belül járt bent)
+    operator_active: dict | None = None
 
 
 def _user_out(
@@ -119,6 +121,20 @@ async def _me(db: AsyncSession, user: User) -> UserOut:
         await db.commit()
     out.user_code = code
     out.telegram_linked = (await twofa.telegram_chat(db, user)) is not None
+    if not out.is_operator and out.level >= 1:
+        from datetime import UTC, datetime, timedelta
+
+        cutoff = datetime.now(UTC) - timedelta(minutes=15)
+        op = (
+            await db.execute(
+                select(User).where(User.is_operator.is_(True), User.is_active.is_(True), User.last_seen_at >= cutoff)
+                .order_by(User.last_seen_at.desc())
+            )
+        ).scalars().first()
+        if op is not None:
+            seen = op.last_seen_at if op.last_seen_at.tzinfo else op.last_seen_at.replace(tzinfo=UTC)
+            minutes = max(0, int((datetime.now(UTC) - seen).total_seconds() // 60))
+            out.operator_active = {"name": op.display_name or op.email or "", "minutes_ago": minutes, "last_seen": seen.isoformat()}
     return out
 
 

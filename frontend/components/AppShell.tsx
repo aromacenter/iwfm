@@ -173,6 +173,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .catch(() => router.replace("/login"))
       .finally(() => setLoading(false));
   }, [router]);
+  // 180. kör: az ügyfél vezetője percenként frissíti, hogy üzemeltetői fiók aktív-e
+  const watchOperator = !!user && !user.is_operator && (user.role === "admin" || user.role === "manager");
+  useEffect(() => {
+    if (!watchOperator) return;
+    const id = setInterval(() => {
+      api.get<AuthUser>("/api/auth/me").then((u) => setUser((cur) => (cur ? { ...cur, operator_active: u.operator_active ?? null } : cur))).catch(() => {});
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [watchOperator]);
 
   // Licenc-állapot a bannerhez + a modul-kapcsolók a menü szűréséhez
   const [license, setLicense] = useState<{
@@ -474,6 +483,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {user.is_operator && (
           <div className="border-b border-rose-700 bg-rose-600 px-4 py-2 text-center text-sm font-semibold text-white">
             🛠 {t("account.operatorBar")}
+          </div>
+        )}
+        {/* 180. kör: az ügyfél adminja/vezetője is látja, amíg üzemeltetői fiók van bent */}
+        {!user.is_operator && user.operator_active && (
+          <div className="border-b border-rose-700 bg-rose-600 px-4 py-2 text-center text-sm font-semibold text-white">
+            🛠 {t("account.operatorActiveBar", { name: user.operator_active.name, min: user.operator_active.minutes_ago })}
           </div>
         )}
         {/* Hálózat + offline-várólista sáv (130. kör): minden lapon látszik */}

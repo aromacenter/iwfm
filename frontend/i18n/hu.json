@@ -35,7 +35,9 @@
     "tokenSet": "beállítva",
     "tokenHint": "Üresen hagyva a meglévő marad; „-” beírásával törölhető.",
     "tgEventsTitle": "Mely eseményekről küldjön értesítést?",
-    "tgEventsHint": "A bepipált eseményekről automatizálás-szabály nélkül is megy üzenet a fenti chat(ek)be. Egyedi szöveghez vagy szűréshez használd az Automatizálásokat."
+    "tgEventsHint": "A bepipált eseményekről automatizálás-szabály nélkül is megy üzenet a fenti chat(ek)be. Egyedi szöveghez vagy szűréshez használd az Automatizálásokat.",
+    "dailyTelegram": "Reggeli brief a Telegram-csoportba",
+    "dailyTelegramHint": "A napi összefoglaló (mai feladatok, lejáró tételek, alacsony készlet, lejárt számlák, fogyás-csökkenés) a beállított órában a Telegram-csoportba is megy — e-mail nélkül is."
   },
   "report": {
     "monthly": "Havi zárás PDF:",
@@ -1109,7 +1111,8 @@
       "parts_request": "Alkatrész-kérés érkezett",
       "task_reschedule_requested": "Szerelő átütemezést kér",
       "settlement_paid": "Számla kiegyenlítve",
-      "stock_expiring": "Raktári tétel lejár"
+      "stock_expiring": "Raktári tétel lejár",
+      "partner_consumption_drop": "Partner fogyása csökken"
     },
     "ops": {
       "eq": "=",
@@ -1434,7 +1437,8 @@
     "linkCopied": "Link a vágólapon!",
     "linkCopyFailed": "Nem sikerült másolni — jelöld ki kézzel.",
     "copy": "Másolás",
-    "operatorBar": "Üzemeltetői belépés — X-systems ügyfélszolgálati fiók. Minden művelet naplózva."
+    "operatorBar": "Üzemeltetői belépés — X-systems ügyfélszolgálati fiók. Minden művelet naplózva.",
+    "operatorActiveBar": "Üzemeltetői belépés aktív: {name} (utoljára {min} perce)"
   },
   "login": {
     "title": "Bejelentkezés",
@@ -2402,7 +2406,9 @@
     "saferpayHint": "A Worldline Saferpay fiók API-adatai. A QR a gépek kijelzőjén jelenik meg — itt csak a bekötés és az adminisztráció történik. Teszt-módban a test.saferpay.com felé megy minden hívás.",
     "saferpayUser": "API felhasználó (JSON API basic auth)",
     "saferpayPassword": "API jelszó",
-    "saferpayTestMode": "Teszt-mód (test.saferpay.com)"
+    "saferpayTestMode": "Teszt-mód (test.saferpay.com)",
+    "wsLaborCost": "Szerelői munkaóra önköltsége (nettó)",
+    "wsLaborCostHint": "A gép-jövedelmezőség a munkalapok óráit ezzel szorozza szerviz-költségként — üresen nem számol vele."
   },
   "kiosk": {
     "title": "Munkaidő-terminál",
@@ -4046,7 +4052,10 @@
     "mhPartner": "Partner",
     "mhCounter": "Számláló",
     "mhService": "{n} szerviz-esemény",
-    "mhNoService": "Nincs szerviz-előzmény."
+    "mhNoService": "Nincs szerviz-előzmény.",
+    "profitLabor": "Munkaóra-költség",
+    "profitNoRate": "(munkaóra-önköltség nincs beállítva: Beállítások → Munkalap)",
+    "profitWatch": "Veszteséges és sok szerviz — cserére vagy visszahozásra érdemes ránézni"
   },
   "svcHo": {
     "title": "Szerelő-átadás",

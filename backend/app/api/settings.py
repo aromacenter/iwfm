@@ -329,6 +329,8 @@ class WorksheetSettingsBody(BaseModel):
     intake_footer_text: str | None = Field(default=None, max_length=2000)
     # Felmérési díj (nettó Ft) — az árajánlat "nem kérem a javítást" opciója.
     survey_fee: float | None = Field(default=None, ge=0, le=10_000_000)
+    # 178. kör: szerelői munkaóra önköltsége (Ft/óra, nettó) — a gép-jövedelmezőséghez
+    labor_cost_per_hour: float | None = Field(default=None, ge=0, le=1_000_000)
     # 155. kör: elkészült-gép értesítő telefonszáma; Godex-címke ügyeleti száma
     pickup_phone: str | None = Field(default=None, max_length=32)
     label_phone: str | None = Field(default=None, max_length=32)
@@ -371,6 +373,7 @@ class WorksheetSettingsOut(BaseModel):
     customer_footer_default: str
     intake_footer_default: str
     survey_fee: float | None
+    labor_cost_per_hour: float | None = None
     survey_fee_default: float
     pickup_phone: str | None
     label_phone: str | None
@@ -419,6 +422,7 @@ def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
         customer_footer_default=DEFAULT_CUSTOMER_FOOTER,
         intake_footer_default=DEFAULT_INTAKE_FOOTER,
         survey_fee=row.survey_fee,
+        labor_cost_per_hour=row.labor_cost_per_hour,
         survey_fee_default=DEFAULT_SURVEY_FEE,
         pickup_phone=row.pickup_phone,
         label_phone=row.label_phone,
@@ -588,6 +592,7 @@ async def update_worksheet_settings(
     row.customer_footer_text = (body.customer_footer_text or "").strip() or None
     row.intake_footer_text = (body.intake_footer_text or "").strip() or None
     row.survey_fee = body.survey_fee
+    row.labor_cost_per_hour = body.labor_cost_per_hour
     row.pickup_phone = (body.pickup_phone or "").strip() or None
     row.label_phone = (body.label_phone or "").strip() or None
     row.invoice_payment_note = (body.invoice_payment_note or "").strip() or None
@@ -1809,6 +1814,8 @@ class NotificationBody(BaseModel):
     reminder_days: str | None = Field(default=None, max_length=64, pattern="^[0-9,; ]*$")
     # 153. kör: el nem végzett feladatok automatikus átütemezése (alapból BE)
     task_carry_over: bool = True
+    # 179. kör: reggeli brief a Telegram-csoportba is (e-mail nélkül is megy)
+    daily_telegram: bool = False
 
     @field_validator("tg_events")
     @classmethod
@@ -1854,6 +1861,7 @@ async def get_notification_settings(
         "last_weekly_sent": row.last_weekly_sent,
         "reminders_enabled": bool(row.reminders_enabled),
         "reminder_days": row.reminder_days or "3,7,14",
+        "daily_telegram": bool(getattr(row, "daily_telegram", False)),
     }
 
 
@@ -1869,6 +1877,7 @@ async def update_notification_settings(
     row = await _get(db)
     row.daily_enabled = body.daily_enabled
     row.task_carry_over = body.task_carry_over
+    row.daily_telegram = body.daily_telegram
     row.recipients = (body.recipients or "").strip() or None
     row.send_hour = body.send_hour
     row.weekly_backup = body.weekly_backup

@@ -71,7 +71,7 @@ export default function StatisztikaPage() {
   interface ProfitRow {
     asset_id: string | null; barcode: string; name: string | null; partner_name: string | null;
     revenue_net: number; rent_net: number; maintenance_net: number; service_cost: number; parts_cost: number;
-    hours: number; visits: number; tickets: number; net_result: number; margin_pct: number | null;
+    hours: number; visits: number; tickets: number; net_result: number; margin_pct: number | null; labor_cost?: number; watch?: boolean;
   }
   interface ProfitOut { months: number; since: string; rows: ProfitRow[]; totals: Record<string, number> }
   const [profit, setProfit] = useState<ProfitOut | null>(null);
@@ -348,6 +348,8 @@ export default function StatisztikaPage() {
             <span>{t("stats.profitCost")}: <b className="text-rose-700">{ft(profit.totals.service_cost)}</b></span>
             <span>{t("stats.profitNet")}: <b className={profit.totals.net_result < 0 ? "text-rose-700" : "text-emerald-700"}>{ft(profit.totals.net_result)}</b></span>
             {profit.totals.loss_making > 0 && <span className="text-rose-700">⚠️ {t("stats.profitLoss", { n: profit.totals.loss_making })}</span>}
+            {(profit.totals.labor_cost ?? 0) > 0 && <span className="text-slate-500">{t("stats.profitLabor")}: <b>{ft(profit.totals.labor_cost)}</b></span>}
+            {(profit.totals.hour_rate ?? 0) === 0 && <span className="text-xs text-slate-400">{t("stats.profitNoRate")}</span>}
           </div>
           <div className="max-h-[480px] overflow-y-auto">
             <div className="overflow-x-auto">
@@ -378,7 +380,7 @@ export default function StatisztikaPage() {
                       <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.revenue_net)}</td>
                       <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{ft(r.rent_net)}</td>
                       <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{ft(r.maintenance_net)}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums text-rose-700">{ft(r.service_cost)}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-rose-700" title={r.labor_cost ? `${t("stats.profitLabor")}: ${ft(r.labor_cost)} · ${r.hours} h` : undefined}>{ft(r.service_cost)}{r.watch && <span className="ml-1" title={t("stats.profitWatch")}>🚩</span>}</td>
                       <td className={`py-1.5 pr-2 text-right font-medium tabular-nums ${r.net_result < 0 ? "text-rose-700" : ""}`}>{ft(r.net_result)}</td>
                       <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{r.margin_pct != null ? `${r.margin_pct}%` : "—"}</td>
                       <td className="py-1.5 text-right tabular-nums text-slate-400">{r.visits}{r.tickets > 0 ? ` · 🔧${r.tickets}` : ""}</td>

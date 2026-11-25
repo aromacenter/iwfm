@@ -35,7 +35,9 @@
     "tokenSet": "set",
     "tokenHint": "Leave empty to keep the current one; enter \"-\" to clear.",
     "tgEventsTitle": "Which events should send a notification?",
-    "tgEventsHint": "Checked events send a message to the chat(s) above without any automation rule. For custom text or filtering, use Automations."
+    "tgEventsHint": "Checked events send a message to the chat(s) above without any automation rule. For custom text or filtering, use Automations.",
+    "dailyTelegram": "Morning brief to the Telegram group",
+    "dailyTelegramHint": "The daily digest (today's tasks, expiring lots, low stock, overdue invoices, consumption drops) also goes to the Telegram group at the set hour — even without e-mail."
   },
   "report": {
     "monthly": "Monthly closing PDF:",
@@ -1109,7 +1111,8 @@
       "parts_request": "Parts request received",
       "task_reschedule_requested": "Technician requests rescheduling",
       "settlement_paid": "Invoice paid",
-      "stock_expiring": "Stock lot expiring"
+      "stock_expiring": "Stock lot expiring",
+      "partner_consumption_drop": "Partner consumption dropping"
     },
     "ops": {
       "eq": "=",
@@ -1434,7 +1437,8 @@
     "linkCopied": "Link copied!",
     "linkCopyFailed": "Copy failed — select it manually.",
     "copy": "Copy",
-    "operatorBar": "Operator session — X-systems support account. Every action is logged."
+    "operatorBar": "Operator session — X-systems support account. Every action is logged.",
+    "operatorActiveBar": "Operator session active: {name} (last seen {min} min ago)"
   },
   "login": {
     "title": "Sign in",
@@ -2402,7 +2406,9 @@
     "saferpayHint": "Worldline Saferpay account API credentials. The QR appears on the machines' screens — this is only the integration and administration. In test mode every call goes to test.saferpay.com.",
     "saferpayUser": "API user (JSON API basic auth)",
     "saferpayPassword": "API password",
-    "saferpayTestMode": "Test mode (test.saferpay.com)"
+    "saferpayTestMode": "Test mode (test.saferpay.com)",
+    "wsLaborCost": "Technician hour cost (net)",
+    "wsLaborCostHint": "Machine profitability multiplies worksheet hours by this as service cost — blank means not counted."
   },
   "kiosk": {
     "title": "Time clock terminal",
@@ -4046,7 +4052,10 @@
     "mhPartner": "Partner",
     "mhCounter": "Counter",
     "mhService": "{n} service event(s)",
-    "mhNoService": "No service history."
+    "mhNoService": "No service history.",
+    "profitLabor": "Labor cost",
+    "profitNoRate": "(hour cost not set: Settings → Worksheet)",
+    "profitWatch": "Loss-making with many service visits — consider replacing or recalling"
   },
   "svcHo": {
     "title": "Technician handover",

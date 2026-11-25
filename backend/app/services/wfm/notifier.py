@@ -117,7 +117,30 @@ async def build_daily_digest(db: AsyncSession) -> str:
         )
     ).scalars().all()
 
-    lines = [f"Iwfm napi összefoglaló — {datetime.now(UTC):%Y-%m-%d}", ""]
+    today = datetime.now(UTC).date()
+    lines = [f"☀️ X-admin reggeli brief — {today:%Y-%m-%d}", ""]
+    # 179. kör: mai feladatok dolgozónként
+    try:
+        from app.models import Task
+
+        todays = (
+            await db.execute(
+                select(Task, Employee)
+                .join(Employee, Employee.id == Task.employee_id, isouter=True)
+                .where(Task.due_date == today, Task.status != "done")
+                .order_by(Task.employee_id, Task.title)
+            )
+        ).all()
+    except Exception:  # noqa: BLE001
+        todays = []
+    if todays:
+        lines.append(f"🗂 MAI FELADATOK ({len(todays)}):")
+        for task, emp in todays[:10]:
+            who = f"{emp.last_name} {emp.first_name}" if emp is not None else "—"
+            lines.append(f"- {task.title} · {who}")
+        if len(todays) > 10:
+            lines.append(f"- … és még {len(todays) - 10}")
+        lines.append("")
     if runout:
         lines.append(f"⚠ HAMAROSAN KIFOGYNAK ({len(runout)}):")
         for d in runout[:10]:
@@ -153,9 +176,35 @@ async def build_daily_digest(db: AsyncSession) -> str:
             when = "LEJÁRT" if e["days_left"] < 0 else f"{e['days_left']} nap"
             lines.append(f"- {e['product_name']} {e['quantity']:g} {e['unit']} — {e['warehouse_name']}" + (f" {e['location_code']}" if e["location_code"] else "") + f": {e['expires_at']} ({when})")
         lines.append("")
+    # 179. kör: alacsony készlet raktáranként (küszöb alatt / hamarosan kifogy)
+    try:
+        from app.api.warehouse import _reorder_rows
+
+        low = await _reorder_rows(db, 30)
+    except Exception:  # noqa: BLE001
+        low = []
+    if low:
+        lines.append(f"📦 ALACSONY KÉSZLET ({len(low)}):")
+        for r in low[:8]:
+            lines.append(f"- {r.product_name} — {r.warehouse_name}: {r.quantity:g} {r.unit}" + (f" (min {r.min_quantity:g})" if r.min_quantity is not None else "") + (f", ~{r.days_of_cover} napra elég" if r.days_of_cover is not None else ""))
+        lines.append("")
+    # 178. kör: fogyás-csökkenés
+    try:
+        from app.services.wfm.consumption_watch import consumption_drops
+
+        drops = await consumption_drops(db)
+    except Exception:  # noqa: BLE001
+        drops = []
+    if drops:
+        lines.append(f"📉 FOGYÁS-CSÖKKENÉS ({len(drops)}):")
+        for d in drops[:8]:
+            lines.append(f"- {d['partner'].name}: −{d['pct']}% ({d['recent']:g} ← {d['base']:g} kg/nap)")
+        lines.append("")
     lines.append(f"Nyitott szervizjegy: {len(open_tickets)} db")
+    overdue = [s for s in outstanding if s.due_date is not None and s.due_date < today]
     lines.append(f"Kintlévő számla: {len(outstanding)} db "
-                 f"({sum(s.total_gross for s in outstanding):,.0f} Ft)".replace(",", " "))
+                 f"({sum(s.total_gross for s in outstanding):,.0f} Ft)".replace(",", " ")
+                 + (f" — ebből LEJÁRT: {len(overdue)} db ({sum(s.total_gross for s in overdue):,.0f} Ft)".replace(",", " ") if overdue else ""))
     anomalies = await _anomalies(db)
     if anomalies:
         lines.append("")
@@ -399,6 +448,16 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
 
         logging.getLogger(__name__).warning("invoice resend failed", exc_info=True)
 
+    # 178. kör: fogyás-csökkenés figyelése (partnerenként 30 naponta egyszer)
+    try:
+        from app.services.wfm.consumption_watch import run_consumption_watch
+
+        await run_consumption_watch(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("consumption watch failed", exc_info=True)
+
     # 177. kör: lejáró tételek jelzése naponta egyszer (Telegram-esemény + automatizálás)
     try:
         await notify_expiring_lots(db)
@@ -512,20 +571,33 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
             await db.commit()
             result["weekly"] = True
 
-    if not recipients:
-        return result
-    if smtp is None:
-        return result
-
-    if row.daily_enabled and now.hour >= row.send_hour and row.last_daily_sent != today:
+    # 179. kör: reggeli brief — e-mail a címzetteknek és/vagy a Telegram-csoportba
+    want_mail = bool(row.daily_enabled and recipients and smtp is not None)
+    want_tg = bool(getattr(row, "daily_telegram", False))
+    if (want_mail or want_tg) and now.hour >= row.send_hour and row.last_daily_sent != today:
         body = await build_daily_digest(db)
-        ok = True
-        for to in recipients:
-            ok = await send_email(smtp, to, f"Iwfm napi összefoglaló — {today}", body) and ok
+        ok = False
+        if want_mail:
+            mail_ok = True
+            for to in recipients:
+                mail_ok = await send_email(smtp, to, f"X-admin reggeli brief — {today}", body) and mail_ok
+            ok = mail_ok
+        if want_tg:
+            try:
+                from app.services.wfm.telegram import load_telegram_config, send_telegram
+
+                cfg = await load_telegram_config(db)
+                if cfg and cfg.get("chat_ids"):
+                    for chat in cfg["chat_ids"]:
+                        ok = await send_telegram(cfg, chat, body[:4000]) or ok
+            except Exception:  # noqa: BLE001
+                logger.warning("daily telegram failed", exc_info=True)
         if ok:
             row.last_daily_sent = today
             await db.commit()
             result["daily"] = True
+    if not recipients or smtp is None:
+        return result
 
     if (
         row.weekly_backup

@@ -66,6 +66,8 @@ class User(Base):
     # adminjának jóváhagyásával jön létre; mindig admin jogkörű, nem számít a
     # licenc fiók-limitjébe, és a felületen piros sáv jelzi a belépését.
     is_operator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 180. kör: utoljára mikor járt a rendszerben (csak üzemeltetői fiókon tartjuk karban, 5 percenként)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # A kiadott JWT-k érvényességi pecsétje: növelésekor minden korábbi token
     # érvénytelenné válik (jelszóváltás / kényszerített kijelentkeztetés).
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -853,6 +855,7 @@ class WorksheetSettings(Base):
     signer_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     signer_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
     show_materials: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    labor_cost_per_hour: Mapped[float | None] = mapped_column(Float, nullable=True)  # 178. kör: szerelői óra önköltsége (gép-jövedelmezőség)
     show_hours: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_client_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_comments: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -2125,6 +2128,7 @@ class Partner(Base):
         Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_partners_agent"),
         nullable=True,
     )
+    consumption_alert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # 178. kör: fogyás-riasztás utolsó küldése
     # Ha igaz: a minimum el nem érésekor NEM különbözetet számlázunk, hanem a
     # gép(ek) fix havi bérleti díja lép életbe; minimum felett bérleti díj sincs.
     contract_rent_if_below_min: Mapped[bool] = mapped_column(
@@ -2961,6 +2965,7 @@ class NotificationSettings(Base):
     weekly_day: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")  # 0 = hétfő
     last_weekly_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)
     last_expiry_notice: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 177. kör: lejáró tételek napi jelzése
+    daily_telegram: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")  # 179. kör: reggeli brief a Telegram-csoportba
     # 128. kör: számla-emlékeztető lépcső lejárt tételekre (napok vesszővel, pl. "3,7,14")
     reminders_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     reminder_days: Mapped[str | None] = mapped_column(String(64), nullable=True)

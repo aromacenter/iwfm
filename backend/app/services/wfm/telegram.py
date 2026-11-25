@@ -48,6 +48,7 @@ EVENT_TEMPLATES: dict[str, str] = {
     "settlement.created": "🧾 Elszámolás készült: {{partner_nev}} — {{vegosszeg_brutto}} Ft ({{elszamolo}})",
     "settlement.signed": "✍️ Elszámolás aláírva: {{partner_nev}} — {{vegosszeg_brutto}} Ft",
     "settlement.paid": "💰 Számla kiegyenlítve: {{partner_nev}} — {{szamla_szam}}, {{vegosszeg_brutto}} Ft ({{forras}})",
+    "partner.consumption_drop": "📉 Fogyás-csökkenés: {{partner_nev}} ({{varos}}) — {{csokkenes_pct}}% az utolsó két ciklusban ({{mostani_kg_nap}} ← {{korabbi_kg_nap}} kg/nap), képviselő: {{kepviselo}}",
     "stock.expiring": "⏳ Lejáró tétel: {{termek_nev}} {{mennyiseg}} {{egyseg}} — {{raktar}} {{tarhely}}, lejárat: {{lejarat}} ({{napok}} nap)",
     "ticket.created": "🔧 Új szervizjegy: {{cim}} — {{partner_nev}} ({{gep_nev}})",
     "ticket.done": "✅ Szervizjegy lezárva: {{cim}} — {{partner_nev}}, költség: {{koltseg_osszesen}} Ft",

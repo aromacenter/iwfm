@@ -494,13 +494,15 @@ class MachineProfitRow(BaseModel):
     revenue_net: float  # számlálós (adag) bevétel
     rent_net: float  # bérleti díj (a partner bérleti sorai a gépei közt arányosítva)
     maintenance_net: float  # karbantartási díj a munkalapokról
-    service_cost: float  # anyag-költség (cost_net) + beépített alkatrész (beszerzési ár)
+    service_cost: float  # anyag-költség (cost_net) + beépített alkatrész (beszerzési ár) + munkaóra-önköltség
     parts_cost: float
+    labor_cost: float = 0.0  # 178. kör: óra × önköltség (Beállítások → Munkalap)
     hours: float
     visits: int  # elszámolások száma a géppel
     tickets: int  # szervizjegyek száma
     net_result: float
     margin_pct: float | None
+    watch: bool = False  # 178. kör: veszteséges ÉS sok szerviz — cserére/visszahozásra érdemes ránézni
 
 
 class MachineProfitOut(BaseModel):
@@ -652,16 +654,24 @@ async def machine_profitability(
         if a is not None:
             _row(a.barcode)["tickets"] += int(cnt or 0)
 
+    # 178. kör: munkaóra-önköltség (Beállítások → Munkalap → szerelői óra önköltsége)
+    from app.models import WorksheetSettings
+
+    ws_row = (await db.execute(select(WorksheetSettings).where(WorksheetSettings.id == 1))).scalar_one_or_none()
+    hour_rate = float(getattr(ws_row, "labor_cost_per_hour", None) or 0)
     out: list[MachineProfitRow] = []
     for r in rows.values():
         income = r["revenue_net"] + r["rent_net"] + r["maintenance_net"]
-        net = income - r["service_cost"]
+        labor = r["hours"] * hour_rate
+        cost = r["service_cost"] + labor
+        net = income - cost
         out.append(MachineProfitRow(
             asset_id=r["asset_id"], barcode=r["barcode"], name=r["name"], partner_name=r["partner_name"],
             revenue_net=_money(r["revenue_net"]), rent_net=_money(r["rent_net"]), maintenance_net=_money(r["maintenance_net"]),
-            service_cost=_money(r["service_cost"]), parts_cost=_money(r["parts_cost"]), hours=round(r["hours"], 1),
+            service_cost=_money(cost), parts_cost=_money(r["parts_cost"]), labor_cost=_money(labor), hours=round(r["hours"], 1),
             visits=r["visits"], tickets=r["tickets"], net_result=_money(net),
             margin_pct=round(net / income * 100, 1) if income > 0 else None,
+            watch=net < 0 and (r["tickets"] >= 3 or r["hours"] >= 6),
         ))
     out.sort(key=lambda x: -x.net_result)
     totals = {
@@ -669,9 +679,12 @@ async def machine_profitability(
         "rent_net": _money(sum(x.rent_net for x in out)),
         "maintenance_net": _money(sum(x.maintenance_net for x in out)),
         "service_cost": _money(sum(x.service_cost for x in out)),
+        "labor_cost": _money(sum(x.labor_cost for x in out)),
+        "hour_rate": hour_rate,
         "net_result": _money(sum(x.net_result for x in out)),
         "machines": len(out),
         "loss_making": sum(1 for x in out if x.net_result < 0),
+        "watch": sum(1 for x in out if x.watch),
     }
     return MachineProfitOut(months=months, since=since, rows=out, totals=totals)
 

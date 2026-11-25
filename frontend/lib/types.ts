@@ -11,6 +11,7 @@ export interface AuthUser {
   user_code?: string | null; // saját szám (törzsszám vagy fiók-szám) — Telegram-összekapcsoláshoz
   telegram_linked?: boolean;
   is_operator?: boolean; // 170. kör: üzemeltetői (X-systems) fiók — piros sáv a felületen
+  operator_active?: { name: string; minutes_ago: number; last_seen: string } | null; // 180. kör
 }
 
 export interface EmployeeOut {

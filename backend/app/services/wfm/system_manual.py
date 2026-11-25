@@ -369,6 +369,12 @@ Térkép (minden aktív partner, gép nélkül szürke), fogyás-trendek, anomá
 ## Napi összefoglaló
 E-mailben (Beállítások → Értesítések): esedékes elszámolások, kifogyó készletek, nyitott rendelések/jegyek, kintlévőség; az AI-asszisztens is elmondja („mi a napi helyzet?”).
 
+**Reggeli brief.** A napi összefoglaló (Beállítások → Értesítések) a beállított órában e-mailben és — a „Reggeli brief a Telegram-csoportba” pipával — a Telegram-csoportba is megy, e-mail-beállítás nélkül is. Tartalma: mai feladatok dolgozónként, kifogyó partnerek, esedékes elszámolások, nyitott rendelések, lejáró raktári tételek, alacsony készlet raktáranként, fogyás-csökkenés, nyitott szervizjegyek, kintlévő és lejárt számlák, anomáliák.
+
+**Fogyás-csökkenés figyelése.** Minden elszámolás egy ciklus; ha egy partnernél az utolsó két ciklus napi fogyása legalább 30%-kal alacsonyabb a megelőző ciklusok átlagánál, a rendszer jelez: a felelős képviselő személyes Telegram-üzenetet kap, a csoport is (ha a „Partner fogyása csökken” esemény be van pipálva), automatizálási szabály is köthető rá; partnerenként 30 naponta legfeljebb egyszer. A reggeli briefben is szerepel.
+
+**Gép-jövedelmezőség.** Statisztika → gépenként bevétel (számlálós elszámolás, arányosított bérleti díj, karbantartási díj) és szerviz-költség (anyag, beépített alkatrész beszerzési ára, és a munkalapok órái × a Beállítások → Munkalap alatt megadott szerelői óra-önköltség). A 🚩 jelölt gép veszteséges és sok szervizt visz — cserére vagy visszahozásra érdemes ránézni.
+
 **Fizetés-szinkron a Billingóból.** A kintlévő (kiszámlázott, rendezetlen) számlák fizetési státuszát a rendszer óránként magától lekérdezi a Billingóból: ami ott fizetve, az az elszámolásnál is „fizetve” lesz a Billingó szerinti dátummal, bekerül a naplóba, feladódik a CashBooknak, és ha a Beállítások → Értesítések → Telegram alatt be van pipálva a „Számla kiegyenlítve” esemény, üzenet megy a csoportba (automatizálási szabály is köthető rá). Számlázz.hu-nál ez a lekérdezés nem elérhető, ott marad a kézi „Fizetve” gomb. A lejárt számlákra a fizetési emlékeztetők (3/7/14 nap, Beállítások → Értesítések) külön mennek.""",
     },
     {

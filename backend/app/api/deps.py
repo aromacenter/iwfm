@@ -315,6 +315,21 @@ async def get_current_user(
     if int(payload.get("tv", 0)) != user.token_version:
         raise HTTPException(status_code=401, detail={"code": "auth.invalid"})
     await get_role_levels(db)  # a szint-gyorsítótár (is_manager / require_role) feltöltése
+    # 180. kör: üzemeltetői fiók jelenléte — 5 percenként egy időbélyeg, hogy az
+    # ügyfél adminja lássa, amíg bent vagyunk (best effort, a kérést sosem akasztja meg)
+    if getattr(user, "is_operator", False):
+        from datetime import UTC, datetime, timedelta
+
+        now = datetime.now(UTC)
+        seen = getattr(user, "last_seen_at", None)
+        if seen is not None and seen.tzinfo is None:
+            seen = seen.replace(tzinfo=UTC)
+        if seen is None or now - seen > timedelta(minutes=5):
+            try:
+                user.last_seen_at = now
+                await db.commit()
+            except Exception:  # noqa: BLE001
+                await db.rollback()
     return user
 
 
