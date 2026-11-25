@@ -94,6 +94,17 @@ async def fetch_payment_status(
     return await billingo_service.fetch_payment_status(db, document_id, company)
 
 
+async def fetch_payment_info(
+    db: AsyncSession, document_id: str, company: str | None = None
+) -> dict | None:
+    """{status, paid_date, cancelled} a számlázóból; Számlázz.hu-nál None
+    (nincs olcsó lekérdezés, a kintlévőség kézi). ValueError, ha a Billingó
+    nincs beállítva."""
+    if await _provider(db) == "szamlazz":
+        return None
+    return await billingo_service.fetch_document_payment(db, document_id, company)
+
+
 async def test_connection(db: AsyncSession, company: str | None = None) -> dict:
     if await _provider(db) == "szamlazz":
         return await szamlazz_service.test_connection(db, company)

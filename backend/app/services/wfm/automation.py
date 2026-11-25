@@ -29,6 +29,10 @@ TRIGGERS: dict[str, list[str]] = {
     "settlement.signed": [
         "partner_nev", "partner_kod", "partner_email", "vegosszeg_brutto", "elszamolo",
     ],
+    # 175. kör: a számla kiegyenlítve (Billingó-szinkron vagy kézi „fizetve”)
+    "settlement.paid": [
+        "partner_nev", "partner_kod", "szamla_szam", "vegosszeg_brutto", "fizetes_datum", "forras",
+    ],
     "ticket.created": [
         "cim", "prioritas", "fajta", "gep_vonalkod", "gep_nev", "partner_nev", "bejelento",
     ],

@@ -359,6 +359,16 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
 
         logging.getLogger(__name__).warning("invoice resend failed", exc_info=True)
 
+    # 175. kör: fizetés-szinkron a Billingóból (óránként, a kintlévő számlákra)
+    from app.services.wfm.payment_sync import sync_payments
+
+    try:
+        await sync_payments(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("payment sync failed", exc_info=True)
+
     # Naptár- és Mt.-figyelés (AI, havi őrökkel, best-effort).
     from app.services.wfm.calendar_watch import ensure_next_year_calendar, monthly_mt_check
 

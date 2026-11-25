@@ -47,6 +47,7 @@ async def load_telegram_config(db: AsyncSession) -> dict | None:
 EVENT_TEMPLATES: dict[str, str] = {
     "settlement.created": "🧾 Elszámolás készült: {{partner_nev}} — {{vegosszeg_brutto}} Ft ({{elszamolo}})",
     "settlement.signed": "✍️ Elszámolás aláírva: {{partner_nev}} — {{vegosszeg_brutto}} Ft",
+    "settlement.paid": "💰 Számla kiegyenlítve: {{partner_nev}} — {{szamla_szam}}, {{vegosszeg_brutto}} Ft ({{forras}})",
     "ticket.created": "🔧 Új szervizjegy: {{cim}} — {{partner_nev}} ({{gep_nev}})",
     "ticket.done": "✅ Szervizjegy lezárva: {{cim}} — {{partner_nev}}, költség: {{koltseg_osszesen}} Ft",
     "order.created": "📦 Új rendelés (QR): {{rendeles_szam}} — {{partner_nev}}: {{tetel_lista}}",

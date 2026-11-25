@@ -1105,7 +1105,8 @@
       "vending_error": "Kávégép hiba (vending)",
       "parts_low": "Alkatrész min. készlet alatt",
       "parts_request": "Alkatrész-kérés érkezett",
-      "task_reschedule_requested": "Szerelő átütemezést kér"
+      "task_reschedule_requested": "Szerelő átütemezést kér",
+      "settlement_paid": "Számla kiegyenlítve"
     },
     "ops": {
       "eq": "=",

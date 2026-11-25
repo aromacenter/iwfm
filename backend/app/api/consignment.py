@@ -3554,6 +3554,9 @@ async def mark_settlement_paid(
     )
     await db.commit()
     await _cashbook_autopush(db, s)  # kiegyenlítés feladása (best-effort)
+    from app.services.wfm.payment_sync import fire_paid_event
+
+    await fire_paid_event(db, s, (await db.get(Partner, s.partner_id)) if s.partner_id else None, "kézi")
     return _settlement_out(s, partner_name)
 
 
@@ -3586,10 +3589,13 @@ async def sync_settlement_payment(
     if changed:
         await record_audit(
             db, actor=actor, action="settlement.payment_synced", entity_type="settlement",
-            entity_id=str(s.id), detail={"billingo_status": status}, request=request,
+            entity_id=str(s.id), detail={"billingo_status": status, "number": s.billingo_document_number}, request=request,
         )
         await db.commit()
         await _cashbook_autopush(db, s)  # kiegyenlítés feladása (best-effort)
+        from app.services.wfm.payment_sync import fire_paid_event
+
+        await fire_paid_event(db, s, (await db.get(Partner, s.partner_id)) if s.partner_id else None, "Billingó")
     return {"billingo_payment_status": status, "payment_status": s.payment_status}
 
 

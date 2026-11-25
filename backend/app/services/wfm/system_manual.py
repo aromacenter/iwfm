@@ -363,7 +363,9 @@ Csak admin és manager (vezetői szint) rögzíthet; a képviselőnél a gombok 
 Térkép (minden aktív partner, gép nélkül szürke), fogyás-trendek, anomáliák; havi zárás riport cégenként (X-Presso / Premium Caffe) PDF-ben.
 
 ## Napi összefoglaló
-E-mailben (Beállítások → Értesítések): esedékes elszámolások, kifogyó készletek, nyitott rendelések/jegyek, kintlévőség; az AI-asszisztens is elmondja („mi a napi helyzet?”).""",
+E-mailben (Beállítások → Értesítések): esedékes elszámolások, kifogyó készletek, nyitott rendelések/jegyek, kintlévőség; az AI-asszisztens is elmondja („mi a napi helyzet?”).
+
+**Fizetés-szinkron a Billingóból.** A kintlévő (kiszámlázott, rendezetlen) számlák fizetési státuszát a rendszer óránként magától lekérdezi a Billingóból: ami ott fizetve, az az elszámolásnál is „fizetve” lesz a Billingó szerinti dátummal, bekerül a naplóba, feladódik a CashBooknak, és ha a Beállítások → Értesítések → Telegram alatt be van pipálva a „Számla kiegyenlítve” esemény, üzenet megy a csoportba (automatizálási szabály is köthető rá). Számlázz.hu-nál ez a lekérdezés nem elérhető, ott marad a kézi „Fizetve” gomb. A lejárt számlákra a fizetési emlékeztetők (3/7/14 nap, Beállítások → Értesítések) külön mennek.""",
     },
     {
         "key": "munkaido",

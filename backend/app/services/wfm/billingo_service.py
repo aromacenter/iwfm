@@ -735,6 +735,24 @@ async def fetch_payment_status(
     return str(status) if status else None
 
 
+async def fetch_document_payment(
+    db: AsyncSession, document_id: str, company: str | None = None
+) -> dict:
+    """Fizetési státusz + a Billingó szerinti fizetési dátum (175. kör):
+    {status, paid_date, cancelled}. ValueError, ha nincs beállítva a Billingó."""
+    settings = await get_or_create_settings(db)
+    api_key, _block, _test = _account(settings, company)
+    if not settings.enabled or not api_key:
+        raise ValueError("billingo_not_configured")
+    data = await _api(api_key, "GET", f"/documents/{document_id}")
+    status = data.get("payment_status")
+    return {
+        "status": str(status) if status else None,
+        "paid_date": data.get("paid_date"),
+        "cancelled": bool(data.get("cancelled")),
+    }
+
+
 async def test_connection(db: AsyncSession, company: str | None = None) -> dict:
     """Kapcsolat-teszt: a számlatömbök lekérése (nem hoz létre semmit)."""
     settings = await get_or_create_settings(db)

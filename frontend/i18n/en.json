@@ -1105,7 +1105,8 @@
       "vending_error": "Coffee machine error (vending)",
       "parts_low": "Part below min. stock",
       "parts_request": "Parts request received",
-      "task_reschedule_requested": "Technician requests rescheduling"
+      "task_reschedule_requested": "Technician requests rescheduling",
+      "settlement_paid": "Invoice paid"
     },
     "ops": {
       "eq": "=",
