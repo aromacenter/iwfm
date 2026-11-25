@@ -3816,7 +3816,13 @@
     "counterN": "{n}. számláló",
     "counterPh": "pl. 12345",
     "counterHint": "Kötelező, nem lehet nulla. Az elismervényre kerül; átadáskor ebből számolja a rendszer a nálunk lefőzött adagot.",
-    "counterRequired": "Add meg a számláló-állást (nem lehet nulla, több számlálós gépnél mindegyiket)."
+    "counterRequired": "Add meg a számláló-állást (nem lehet nulla, több számlálós gépnél mindegyiket).",
+    "offlineQueued": "Nincs hálózat — az átvétel elmentve ({label}); feltöltjük, amint lesz net.",
+    "offlineUploaded": "Offline átvétel feltöltve: {serial} ({label})",
+    "offlinePending": "Feltöltésre váró átvétel: {count}",
+    "offlinePendingHint": "Net nélkül rögzítve — automatikusan feltöltjük, amint van kapcsolat. Az elismervény utána nyomtatható a listából.",
+    "offlineRetry": "Feltöltés most",
+    "offlineDropConfirm": "Törlöd a sorból: {label}? Az adatok elvesznek."
   },
   "handover": {
     "title": "Átadás",

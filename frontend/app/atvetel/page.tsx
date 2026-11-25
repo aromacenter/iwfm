@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import ScanAssetButton from "@/components/ScanAssetButton";
 import CameraScanner, { cameraScanSupported } from "@/components/CameraScanner";
+import { FLUSH_EVENT, idbDel, idbGet, idbPut, isNetworkError, readQueue, writeQueue } from "@/lib/offline";
 import SearchSelect from "@/components/SearchSelect";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, downloadFile, errorMessage, printFile } from "@/lib/api";
@@ -77,6 +78,21 @@ const EMPTY_FORM = {
   loaner_barcode: "",
   note: "",
 };
+
+// 181. kör: offline sorba tett átvétel — a kis adatok a localStorage-ban, a fotók IndexedDB-ben
+const INTAKE_QUEUE = "iwfm-intake-queue";
+interface QueuedIntake {
+  id: string;
+  created_at: string;
+  label: string;
+  new_asset: { name: string; manufacturer: string | null; serial_number: string | null } | null;
+  asset_id: string | null;
+  new_partner: Record<string, string | null> | null;
+  partner_id: string | null;
+  body: Record<string, unknown>; // az /api/intakes törzse a fotók, asset_id és partner_id nélkül
+  photo_count: number;
+  error: string | null;
+}
 
 const EMPTY_PARTNER = {
   name: "",
@@ -233,7 +249,7 @@ export default function AtvetelPage() {
     api.get<Intake[]>("/api/intakes").then(setIntakes).catch(() => {});
     api.get<AssetOption[]>("/api/assets").then(setAssets).catch(() => {});
     api.get<PartnerOption[]>("/api/partners").then(setPartners).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Meglévő partner kiválasztásakor minden ügyfél-mezőt automatikusan
@@ -262,10 +278,95 @@ export default function AtvetelPage() {
   }
   useEffect(load, [load]);
 
+  // ── 181. kör: offline várólista ──
+  const [queued, setQueued] = useState<QueuedIntake[]>(() => readQueue<QueuedIntake>(INTAKE_QUEUE));
+  const [flushing, setFlushing] = useState(false);
+  const refreshQueue = useCallback(() => setQueued(readQueue<QueuedIntake>(INTAKE_QUEUE)), []);
+
+  const flushQueue = useCallback(async () => {
+    if (flushing || typeof navigator !== "undefined" && !navigator.onLine) return;
+    const items = readQueue<QueuedIntake>(INTAKE_QUEUE);
+    if (items.length === 0) return;
+    setFlushing(true);
+    let done = 0;
+    for (const item of items) {
+      try {
+        if (item.new_asset && !item.asset_id) {
+          const { barcode } = await api.get<{ barcode: string }>("/api/assets/generate-barcode");
+          const a = await api.post<{ id: string }>("/api/assets", { barcode, ...item.new_asset, customer_owned: true });
+          item.asset_id = a.id;
+          writeQueue(INTAKE_QUEUE, readQueue<QueuedIntake>(INTAKE_QUEUE).map((x) => (x.id === item.id ? { ...x, asset_id: a.id } : x)));
+        }
+        if (item.new_partner && !item.partner_id) {
+          const p = await api.post<{ id: string }>("/api/partners", item.new_partner);
+          item.partner_id = p.id;
+          writeQueue(INTAKE_QUEUE, readQueue<QueuedIntake>(INTAKE_QUEUE).map((x) => (x.id === item.id ? { ...x, partner_id: p.id } : x)));
+        }
+        let photos: string[] = [];
+        try { photos = (await idbGet<string[]>(`intake:${item.id}`)) ?? []; } catch { photos = []; }
+        const created = await api.post<Intake>("/api/intakes", { ...item.body, asset_id: item.asset_id, partner_id: item.partner_id, photos });
+        writeQueue(INTAKE_QUEUE, readQueue<QueuedIntake>(INTAKE_QUEUE).filter((x) => x.id !== item.id));
+        try { await idbDel(`intake:${item.id}`); } catch { /* már nincs */ }
+        done += 1;
+        toast(t("intake.offlineUploaded", { serial: created.serial, label: item.label }), "success");
+      } catch (err) {
+        if (isNetworkError(err)) break; // még mindig nincs net — a többi marad
+        const msg = errorMessage(err);
+        writeQueue(INTAKE_QUEUE, readQueue<QueuedIntake>(INTAKE_QUEUE).map((x) => (x.id === item.id ? { ...x, error: msg } : x)));
+      }
+    }
+    setFlushing(false);
+    refreshQueue();
+    if (done) load();
+  }, [flushing, refreshQueue, load, t, toast]);
+
+  useEffect(() => {
+    const onFlush = () => { void flushQueue(); };
+    window.addEventListener(FLUSH_EVENT, onFlush);
+    window.addEventListener("online", onFlush);
+    const id = window.setTimeout(onFlush, 1500);
+    return () => { window.removeEventListener(FLUSH_EVENT, onFlush); window.removeEventListener("online", onFlush); window.clearTimeout(id); };
+  }, [flushQueue]);
+
+  async function dropQueued(item: QueuedIntake) {
+    if (!(await confirm(t("intake.offlineDropConfirm", { label: item.label })))) return;
+    writeQueue(INTAKE_QUEUE, readQueue<QueuedIntake>(INTAKE_QUEUE).filter((x) => x.id !== item.id));
+    try { await idbDel(`intake:${item.id}`); } catch { /* nincs */ }
+    refreshQueue();
+  }
+
+  async function enqueueIntake(assetId: string | null, partnerId: string | null, client: Record<string, string | null>, body: Record<string, unknown>) {
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const label = `${newAssetMode ? newAsset.name.trim() : (selectedAsset?.name ?? selectedAsset?.barcode ?? "?")} · ${client.client_name ?? "—"}`;
+    let photoCount = photos.length;
+    try { await idbPut(`intake:${id}`, photos); } catch { photoCount = 0; }
+    const item: QueuedIntake = {
+      id, created_at: new Date().toISOString(), label,
+      new_asset: newAssetMode ? { name: newAsset.name.trim(), manufacturer: newAsset.manufacturer.trim() || null, serial_number: newAsset.serial_number.trim() || null } : null,
+      asset_id: newAssetMode ? null : assetId,
+      new_partner: newPartnerMode ? {
+        name: newPartner.name.trim(), company_name: newPartner.company_name.trim() || null, tax_number: newPartner.tax_number.trim() || null,
+        contact_phone: newPartner.contact_phone.trim() || null, contact_email: newPartner.contact_email.trim() || null,
+        address_zip: newPartner.address_zip.trim() || null, address_city: newPartner.address_city.trim() || null, address_street: newPartner.address_street.trim() || null,
+      } : null,
+      partner_id: newPartnerMode ? null : partnerId,
+      body, photo_count: photoCount, error: null,
+    };
+    writeQueue(INTAKE_QUEUE, [...readQueue<QueuedIntake>(INTAKE_QUEUE), item]);
+    refreshQueue();
+    setShowForm(false); setForm(EMPTY_FORM); setPhotos([]); resetOnSite();
+    setNewAssetMode(false); setNewAsset({ name: "", manufacturer: "", serial_number: "" });
+    setNewPartnerMode(false); setNewPartner(EMPTY_PARTNER);
+    toast(t("intake.offlineQueued", { label }), "success");
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    // 181. kör: a sorba tételhez a törzs már a hálózati hívások ELŐTT összeáll
+    let queueBody: Record<string, unknown> | null = null;
+    let queueClient: Record<string, string | null> = {};
     try {
       let assetId = form.asset_id;
       let createdAsset: { id: string; barcode: string } | null = null;
@@ -347,9 +448,8 @@ export default function AtvetelPage() {
         setBusy(false);
         return;
       }
-      const created = await api.post<Intake>("/api/intakes", {
-        asset_id: assetId,
-        partner_id: partnerId,
+      queueClient = client;
+      queueBody = {
         ...client,
         accessories: form.accessories || null,
         faults: form.faults || null,
@@ -357,13 +457,13 @@ export default function AtvetelPage() {
         counters: counterCount > 1 ? form.counters.map((v) => Number(v)) : null,
         loaner_barcode: form.loaner_barcode || null,
         note: form.note || null,
-        photos,
         on_site: onSite,
         client_signature: onSite ? clientSig : null,
         client_signer_name: onSite ? signerName.trim() : null,
         employee_signature: onSite ? (useSample && sigSample ? sigSample : empSig) : null,
         send_email: onSite ? sendEmail : false,
-      });
+      };
+      const created = await api.post<Intake>("/api/intakes", { ...queueBody, asset_id: assetId, partner_id: partnerId, photos });
       const emailedTo = onSite && sendEmail && (client.client_email ?? "").trim();
       setShowForm(false);
       setForm(EMPTY_FORM);
@@ -409,6 +509,11 @@ export default function AtvetelPage() {
         toast(errorMessage(err), "error");
       }
     } catch (err) {
+      // 181. kör: nincs net → sorba tesszük, és feltöltjük, amint lesz
+      if (isNetworkError(err) && queueBody) {
+        await enqueueIntake(form.asset_id || null, form.partner_id || null, queueClient, queueBody);
+        return;
+      }
       setError(errorMessage(err));
     } finally {
       setBusy(false);
@@ -439,6 +544,25 @@ export default function AtvetelPage() {
 
   return (
     <AppShell>
+      {queued.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-amber-900">📴 {t("intake.offlinePending", { count: queued.length })}</span>
+            <span className="text-xs text-amber-800">{t("intake.offlinePendingHint")}</span>
+            <button type="button" onClick={() => void flushQueue()} disabled={flushing} className="ml-auto rounded-lg border border-amber-400 bg-white px-3 py-1 text-xs font-medium hover:bg-amber-100 disabled:opacity-50">{flushing ? "…" : t("intake.offlineRetry")}</button>
+          </div>
+          <ul className="mt-2 space-y-1">
+            {queued.map((q) => (
+              <li key={q.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-2 py-1">
+                <span className="font-medium">{q.label}</span>
+                <span className="text-xs text-slate-500">{new Date(q.created_at).toLocaleString("hu-HU")}{q.photo_count ? ` · 📷 ${q.photo_count}` : ""}</span>
+                {q.error && <span className="text-xs text-rose-700">⚠ {q.error}</span>}
+                <button type="button" onClick={() => void dropQueued(q)} className="ml-auto rounded border border-rose-300 px-2 py-0.5 text-xs text-rose-700 hover:bg-rose-50">🗑</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold">📥 {t("intake.title")}</h1>

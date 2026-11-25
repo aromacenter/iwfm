@@ -369,6 +369,8 @@ Térkép (minden aktív partner, gép nélkül szürke), fogyás-trendek, anomá
 ## Napi összefoglaló
 E-mailben (Beállítások → Értesítések): esedékes elszámolások, kifogyó készletek, nyitott rendelések/jegyek, kintlévőség; az AI-asszisztens is elmondja („mi a napi helyzet?”).
 
+**Offline átvétel.** Ha a telefonon nincs hálózat (pince, garázs), az átvétel űrlapja ugyanúgy kitölthető és elküldhető: a rendszer sorba teszi (a fotókkal együtt, a készüléken), és amint van kapcsolat — vagy a „Feltöltés most” gombra — feltölti; az AT-sorszámot ekkor kapja, az elismervény a listából nyomtatható. A várakozó átvételek az Átvétel lap tetején látszanak (törölhetők); a keret sávja is mutatja a függő tételek számát.
+
 **Reggeli brief.** A napi összefoglaló (Beállítások → Értesítések) a beállított órában e-mailben és — a „Reggeli brief a Telegram-csoportba” pipával — a Telegram-csoportba is megy, e-mail-beállítás nélkül is. Tartalma: mai feladatok dolgozónként, kifogyó partnerek, esedékes elszámolások, nyitott rendelések, lejáró raktári tételek, alacsony készlet raktáranként, fogyás-csökkenés, nyitott szervizjegyek, kintlévő és lejárt számlák, anomáliák.
 
 **Fogyás-csökkenés figyelése.** Minden elszámolás egy ciklus; ha egy partnernél az utolsó két ciklus napi fogyása legalább 30%-kal alacsonyabb a megelőző ciklusok átlagánál, a rendszer jelez: a felelős képviselő személyes Telegram-üzenetet kap, a csoport is (ha a „Partner fogyása csökken” esemény be van pipálva), automatizálási szabály is köthető rá; partnerenként 30 naponta legfeljebb egyszer. A reggeli briefben is szerepel.

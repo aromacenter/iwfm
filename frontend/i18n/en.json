@@ -3816,7 +3816,13 @@
     "counterN": "Counter {n}",
     "counterPh": "e.g. 12345",
     "counterHint": "Required, cannot be zero. Printed on the receipt; at handover the portions brewed here are computed from it.",
-    "counterRequired": "Enter the counter reading (not zero; every counter on multi-counter machines)."
+    "counterRequired": "Enter the counter reading (not zero; every counter on multi-counter machines).",
+    "offlineQueued": "No network — intake saved ({label}); it will upload once online.",
+    "offlineUploaded": "Offline intake uploaded: {serial} ({label})",
+    "offlinePending": "Intakes waiting for upload: {count}",
+    "offlinePendingHint": "Recorded offline — uploaded automatically when a connection is available. The receipt can be printed from the list afterwards.",
+    "offlineRetry": "Upload now",
+    "offlineDropConfirm": "Remove from the queue: {label}? The data will be lost."
   },
   "handover": {
     "title": "Handover",

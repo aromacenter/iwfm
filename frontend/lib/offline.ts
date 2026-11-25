@@ -14,6 +14,7 @@ export const QUEUE_KEYS = [
   "iwfm-ws-queue", // Munkalap
   "iwfm-parts-queue", // Beépítés
   "iwfm-task-actions", // Feladat: státusz + megjegyzés
+  "iwfm-intake-queue", // Átvétel (181. kör) — a fotók IndexedDB-ben
 ] as const;
 
 export const QUEUE_CHANGED_EVENT = "iwfm-queue-changed";
@@ -52,6 +53,35 @@ export function notifyQueueChanged(): void {
 export function requestFlush(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(FLUSH_EVENT));
 }
+
+/** IndexedDB kulcs-érték tár a nagy tételeknek (fotók): a localStorage ~5 MB-ja
+ *  ehhez kevés. Hiba esetén a hívó dönt (pl. fotók nélkül sorba teszi). */
+const IDB_NAME = "iwfm-offline";
+const IDB_STORE = "blobs";
+
+function openIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") { reject(new Error("no-idb")); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error("idb"));
+  });
+}
+
+function idbTx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return openIdb().then((db) => new Promise<T>((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, mode);
+    const req = run(tx.objectStore(IDB_STORE));
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error("idb"));
+    tx.oncomplete = () => db.close();
+  }));
+}
+
+export const idbPut = (key: string, value: unknown) => idbTx("readwrite", (s) => s.put(value, key));
+export const idbGet = <T>(key: string) => idbTx<T | undefined>("readonly", (s) => s.get(key) as IDBRequest<T | undefined>);
+export const idbDel = (key: string) => idbTx("readwrite", (s) => s.delete(key));
 
 /** Hálózati (nem szerver-) hiba: a kérés el sem jutott a backendig → sorba tehető. */
 export function isNetworkError(err: unknown): boolean {
