@@ -817,6 +817,27 @@ class PasswordResetOut(BaseModel):
     generated_password: str
 
 
+@router.post("/{employee_id}/telegram-code")
+async def telegram_code_for_employee(
+    employee_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("manager")),
+):
+    """182. kör: a vezető kér egyszeri (10 perces) összekapcsoló kódot a
+    dolgozónak, és átadja neki — a dolgozó ezt küldi el a botnak."""
+    from app.services.wfm.telegram_link import issue_code
+
+    emp = await _get_or_404(db, employee_id)
+    out = await issue_code(db, emp)
+    await record_audit(
+        db, actor=actor, action="employee.telegram_code", entity_type="employee",
+        entity_id=str(emp.id), request=request,
+    )
+    await db.commit()
+    return out
+
+
 @router.post("/{employee_id}/telegram-unlink")
 async def telegram_unlink(
     employee_id: str,

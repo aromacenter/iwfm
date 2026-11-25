@@ -141,16 +141,16 @@ async def fetch_updates(config: dict, offset: int | None) -> list[dict]:
 
 
 async def process_updates(db: AsyncSession) -> int:
-    """Dolgozói összekapcsolás: a botnak PRIVÁTBAN elküldött 6 jegyű törzsszám
-    (vagy "/start <törzsszám>") a dolgozó telegram_chat_id-ját menti, és a bot
-    visszaigazol. A notifier 5 perces köre hívja. Vissza: hány összekapcsolás
-    történt."""
+    """Összekapcsolás egyszeri kóddal (182. kör): a botnak PRIVÁTBAN elküldött
+    6 jegyű kód (vagy "/start <kód>") — amit az appban kért a dolgozó, vagy a
+    vezető kért le neki — a karton / fiók telegram_chat_id-ját menti, és a bot
+    visszaigazol. A kód 10 percig él és egyszer használható; a törzsszámmal
+    már NEM lehet összekapcsolni. A notifier 5 perces köre hívja."""
     import re as _re
-
-    from sqlalchemy import select as _select
 
     from app.models import Employee
     from app.services.wfm.notifier import get_or_create_settings
+    from app.services.wfm.telegram_link import consume_code, find_by_code
 
     config = await load_telegram_config(db)
     if config is None:
@@ -176,84 +176,56 @@ async def process_updates(db: AsyncSession) -> int:
             if text.startswith("/start"):
                 await send_telegram(
                     config, chat_id,
-                    "Szia! 👋 Az összekapcsoláshoz küldd el a 6 jegyű törzsszámodat "
-                    "(ugyanaz, amivel a blokkoló-terminálon jelentkezel).",
+                    "Szia! 👋 Az összekapcsoláshoz az X-adminban kérj egy kódot (Beállítások → "
+                    "Kétlépcsős belépés kártya, vagy a vezetődtől), és küldd el ide a 6 számjegyet. "
+                    "A kód 10 percig érvényes.",
                 )
             continue
-        # Törzsszám-próbálgatás fékje: csevegésenként legfeljebb 5 rossz kód
-        # óránként (a 6 jegyű kód önmagában gyenge titok).
+        # Kód-próbálgatás fékje: csevegésenként legfeljebb 5 rossz kód óránként.
         now = _time.monotonic()
         fails = [t for t in _link_failures.get(chat_id, []) if now - t < 3600]
         _link_failures[chat_id] = fails
         if len(fails) >= 5:
             continue
-        emp = (
-            await db.execute(
-                _select(Employee).where(
-                    Employee.employee_code == m.group(1),
-                    Employee.status == "active",
-                )
-            )
-        ).scalar_one_or_none()
-        if emp is None:
-            # 148. kör: karton nélküli (admin/vezetői) fiók saját száma
-            from app.models import User as _User
-
-            usr = (
-                await db.execute(
-                    _select(_User).where(_User.user_code == m.group(1), _User.is_active.is_(True))
-                )
-            ).scalar_one_or_none()
-            if usr is None:
-                _link_failures[chat_id].append(now)
-                await send_telegram(
-                    config, chat_id,
-                    "❌ Ismeretlen törzsszám. Ellenőrizd, és küldd el újra a 6 számjegyet.",
-                )
-                continue
-            if usr.telegram_chat_id and usr.telegram_chat_id != chat_id:
-                _link_failures[chat_id].append(now)
-                await send_telegram(
-                    config, chat_id,
-                    "⚠️ Ez a szám már össze van kapcsolva egy másik Telegram-fiókkal. "
-                    "Ha te vagy az, bontsd a régi kapcsolatot a Beállítások → Jogosultságok "
-                    "→ Kétlépcsős belépés kártyán.",
-                )
-                await send_telegram(
-                    config, usr.telegram_chat_id,
-                    "⚠️ Valaki a te számoddal próbált Telegramot összekapcsolni. "
-                    "Ha nem te voltál, változtasd meg a jelszavad.",
-                )
-                continue
-            usr.telegram_chat_id = chat_id
-            linked += 1
-            await send_telegram(
-                config, chat_id,
-                f"✅ Összekapcsolva, {usr.display_name}! Mostantól ide kapod a belépési kódokat.",
-            )
-            continue
-        if emp.telegram_chat_id and emp.telegram_chat_id != chat_id:
-            # Már más csevegéshez van kötve: nem írjuk felül némán (eltérítés
-            # ellen). A régi kapcsolatot az appban / a vezető tudja bontani.
+        target = await find_by_code(db, m.group(1))
+        if target is None:
             _link_failures[chat_id].append(now)
             await send_telegram(
                 config, chat_id,
-                "⚠️ Ez a törzsszám már össze van kapcsolva egy másik Telegram-fiókkal. "
-                "Ha te vagy az, kérd a vezetődtől a régi kapcsolat bontását.",
-            )
-            await send_telegram(
-                config, emp.telegram_chat_id,
-                "⚠️ Valaki a te törzsszámoddal próbált Telegramot összekapcsolni. "
-                "Ha nem te voltál, szólj a vezetődnek.",
+                "❌ Ismeretlen vagy lejárt kód. Kérj újat az appban (Beállítások → Kétlépcsős "
+                "belépés) vagy a vezetődtől, és küldd el 10 percen belül.",
             )
             continue
-        emp.telegram_chat_id = chat_id
+        is_emp = isinstance(target, Employee)
+        if target.telegram_chat_id and target.telegram_chat_id != chat_id:
+            # Már más csevegéshez van kötve: nem írjuk felül némán (eltérítés ellen).
+            _link_failures[chat_id].append(now)
+            await send_telegram(
+                config, chat_id,
+                "⚠️ Ez a fiók már össze van kapcsolva egy másik Telegram-fiókkal. "
+                + ("Ha te vagy az, kérd a vezetődtől a régi kapcsolat bontását." if is_emp
+                   else "Ha te vagy az, bontsd a régi kapcsolatot a Beállítások → Jogosultságok → Kétlépcsős belépés kártyán."),
+            )
+            await send_telegram(
+                config, target.telegram_chat_id,
+                "⚠️ Valaki a te számoddal (összekapcsoló kódoddal) próbált Telegramot összekapcsolni. "
+                + ("Ha nem te voltál, szólj a vezetődnek." if is_emp else "Ha nem te voltál, változtasd meg a jelszavad."),
+            )
+            continue
+        target.telegram_chat_id = chat_id
+        consume_code(target)
         linked += 1
-        await send_telegram(
-            config, str(chat["id"]),
-            f"✅ Összekapcsolva, {emp.first_name}! Mostantól itt kapod a neked "
-            "kiosztott feladatokról az értesítést.",
-        )
+        if is_emp:
+            await send_telegram(
+                config, chat_id,
+                f"✅ Összekapcsolva, {target.first_name}! Mostantól itt kapod a neked "
+                "kiosztott feladatokról az értesítést és a belépési kódokat.",
+            )
+        else:
+            await send_telegram(
+                config, chat_id,
+                f"✅ Összekapcsolva, {target.display_name}! Mostantól ide kapod a belépési kódokat.",
+            )
     await db.commit()
     return linked
 

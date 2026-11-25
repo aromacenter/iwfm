@@ -75,6 +75,9 @@ class User(Base):
     # is — ezzel kapcsolják össze a Telegramot a bottal (kétlépcsős belépés kódjai)
     user_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
     telegram_chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 182. kör: egyszeri, 10 percig élő összekapcsoló kód (a törzsszám helyett)
+    tg_link_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
+    tg_link_code_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Elmentett aláírás-minta (PNG data URL) — munkalapon egy kattintással
     # beszúrható a dolgozói aláíráshoz.
     signature_sample: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -123,9 +126,11 @@ class Employee(Base):
     # 6 jegyű törzsszám — a blokkoló-terminál (kiosk) azonosítója.
     # Nullable a meglévő sorok migrációja miatt; induláskor backfill tölti.
     employee_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
-    # A dolgozó privát Telegram-csevegése (a botnak küldött törzsszámmal
-    # kapcsolódik) — a személyre szóló értesítések (pl. kiosztott feladat) ide.
+    # A dolgozó privát Telegram-csevegése (a botnak küldött egyszeri kóddal
+    # kapcsolódik, 182. kör) — a személyre szóló értesítések (pl. kiosztott feladat) ide.
     telegram_chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    tg_link_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
+    tg_link_code_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- személyes adatok ---
     last_name: Mapped[str] = mapped_column(String(128), nullable=False)

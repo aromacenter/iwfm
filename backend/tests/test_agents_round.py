@@ -65,7 +65,6 @@ async def test_no_minimum_contract_suppresses_machine_minimums(client, manager):
 async def test_partner_agent_and_substitute_resolution(client, manager):
     """Felelős képviselő a partneren; távolléte alatt a helyettes kapja az
     értesítést (resolve_agent_user)."""
-    import uuid as uuid_mod
     from datetime import date, timedelta
 
     from app import db as app_db
@@ -289,8 +288,10 @@ async def test_telegram_personal_link_and_task_notify(client, admin, manager, mo
     )
     assert res.status_code == 201, res.text
     emp = res.json()
-    code = emp["employee_code"]
-    assert code and len(code) == 6
+    assert emp["employee_code"] and len(emp["employee_code"]) == 6
+    # 182. kör: a törzsszám nem kapcsol össze — a vezető kér egyszeri kódot a dolgozónak
+    code = (await client.post(f"/api/employees/{emp['id']}/telegram-code", headers=mgr)).json()["code"]
+    assert len(code) == 6 and code != emp["employee_code"]
 
     sent: list[tuple[str, str]] = []
 
@@ -305,7 +306,7 @@ async def test_telegram_personal_link_and_task_notify(client, admin, manager, mo
     # bejövő üzenetek szimulálva: rossz kód, jó kód (privát), csoport-üzenet
     async def fake_fetch(config, offset):
         return [
-            {"update_id": 10, "message": {"chat": {"id": 777, "type": "private"}, "text": "000000"}},
+            {"update_id": 10, "message": {"chat": {"id": 777, "type": "private"}, "text": emp["employee_code"]}},  # törzsszám: már nem jó
             {"update_id": 11, "message": {"chat": {"id": 777, "type": "private"}, "text": f"/start {code}"}},
             {"update_id": 12, "message": {"chat": {"id": -100555, "type": "supergroup"}, "text": code}},
         ]

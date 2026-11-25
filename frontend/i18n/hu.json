@@ -972,12 +972,15 @@
     "noBot": "nincs beállított Telegram-bot",
     "noSmtp": "nincs beállított e-mail-küldés",
     "myCode": "A te számod",
-    "myCodeTitle": "Saját számod — ezt küldd el privátban a céges Telegram-botnak az összekapcsoláshoz",
-    "myCodeHint": "Összekapcsolás: nyisd meg a cég Telegram-botját, és küldd el neki privátban ezt a 6 számjegyet. A bot néhány percen belül visszaigazol; utána ide kapod a belépési kódokat. Minden fióknak van saját száma — a dolgozóknak a törzsszámuk, a karton nélküli (admin, vezető) fiókoknak a fiók-számuk.",
+    "myCodeTitle": "Saját számod (azonosító) — az összekapcsoláshoz a kártyán kérj egyszeri kódot",
+    "myCodeHint": "Összekapcsolás: kérj kódot a gombbal, nyisd meg a cég Telegram-botját, és küldd el neki privátban a 6 számjegyet 10 percen belül. A bot azonnal visszaigazol; utána ide kapod a belépési kódokat és a neked szóló értesítéseket. A törzsszámmal nem lehet összekapcsolni — a kód egyszer használatos.",
     "linkedYes": "összekapcsolva",
     "linkedNo": "nincs összekapcsolva",
     "unlink": "Kapcsolat bontása",
-    "unlinked": "A Telegram-kapcsolat bontva — a számoddal újra összekapcsolhatod."
+    "unlinked": "A Telegram-kapcsolat bontva — a számoddal újra összekapcsolhatod.",
+    "linkCodeBtn": "Összekapcsoló kód kérése",
+    "linkCodeShow": "Küldd el a botnak privátban",
+    "linkCodeExpires": "érvényes {time}-ig (10 perc)"
   },
   "tools": {
     "title": "Szerszám-nyilvántartás",
@@ -1654,7 +1657,10 @@
     "usernamePh": "pl. kiss.peter",
     "usernameHint": "3–64 karakter: kisbetű, szám, pont, kötőjel, aláhúzás",
     "loginIdHint": "Belépéshez elég az email VAGY a felhasználónév — legalább az egyiket add meg.",
-    "fixedHoursOvernight": "A befejezés nem későbbi a kezdésnél — a rendszer éjfélen átnyúló munkaidőként számolja (éjszakai pótlékkal). Ha 12:00-ig tart, ellenőrizd, hogy nem 00:00 lett."
+    "fixedHoursOvernight": "A befejezés nem későbbi a kezdésnél — a rendszer éjfélen átnyúló munkaidőként számolja (éjszakai pótlékkal). Ha 12:00-ig tart, ellenőrizd, hogy nem 00:00 lett.",
+    "telegramCode": "Egyszeri Telegram-összekapcsoló kód a dolgozónak (10 perc)",
+    "telegramCodeBtn": "kód",
+    "telegramCodeShow": "{name} Telegram-összekapcsoló kódja — add át neki, ezt küldje a botnak privátban {time}-ig:"
   },
   "sched": {
     "title": "Beosztás",

@@ -122,7 +122,7 @@ export default function DolgozokPage() {
   const [allSkills, setAllSkills] = useState<Skill[]>([]);
   const [skillIds, setSkillIds] = useState<number[]>([]);
   const { t } = useT();
-  const { toast, confirm } = useUI();
+  const { toast, confirm, prompt } = useUI();
 
   const load = useCallback(() => {
     api.get<EmployeeOut[]>("/api/employees").then(setEmployees).catch(() => {});
@@ -135,6 +135,7 @@ export default function DolgozokPage() {
   }, [load]);
 
   const isAdmin = me?.role === "admin";
+  const isManager = me?.role === "manager";
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -350,6 +351,16 @@ export default function DolgozokPage() {
     }
   }
 
+  // 182. kör: egyszeri összekapcsoló kód a dolgozónak (a vezető adja át)
+  async function telegramCode(emp: { id: string; first_name: string }) {
+    try {
+      const r = await api.post<{ code: string; expires_at: string }>(`/api/employees/${emp.id}/telegram-code`);
+      await prompt(t("emp.telegramCodeShow", { name: emp.first_name, time: new Date(r.expires_at).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" }) }), { initial: r.code });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function telegramUnlink(empId: string) {
     if (!(await confirm(t("emp.telegramUnlinkConfirm")))) return;
     try {
@@ -504,12 +515,17 @@ export default function DolgozokPage() {
                           )}
                         </span>
                       ) : (
+                        <>
                         <span
                           className="ml-2 cursor-default rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400"
                           title={t("emp.telegramNotLinkedHint")}
                         >
                           ✈️ —
                         </span>
+                        {(isAdmin || isManager) && (
+                          <button onClick={() => void telegramCode(emp)} title={t("emp.telegramCode")} className="ml-2 rounded border border-indigo-300 px-1.5 py-0.5 text-[10px] text-indigo-700 hover:bg-indigo-50">✈️ {t("emp.telegramCodeBtn")}</button>
+                        )}
+                        </>
                       )}
                     </div>
                     {(emp.skills ?? []).length > 0 && (

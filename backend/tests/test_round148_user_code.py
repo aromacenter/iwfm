@@ -48,8 +48,11 @@ async def test_admin_own_number_telegram_link_and_twofa(client, monkeypatch):
 
     monkeypatch.setattr(tg_mod, "send_telegram", fake_send)
 
+    # 182. kör: a törzsszám/fiók-szám már nem kapcsol össze — egyszeri kód kell
+    link_code = (await client.post("/api/auth/me/telegram-code", headers=adm)).json()["code"]
+
     async def fetch_link(config, offset):
-        return [{"update_id": 20, "message": {"chat": {"id": 888, "type": "private"}, "text": code}}]
+        return [{"update_id": 20, "message": {"chat": {"id": 888, "type": "private"}, "text": link_code}}]
 
     monkeypatch.setattr(tg_mod, "fetch_updates", fetch_link)
     factory = app_db.get_session_factory()
@@ -58,9 +61,11 @@ async def test_admin_own_number_telegram_link_and_twofa(client, monkeypatch):
     assert sent[-1][0] == "888" and "belépési kódokat" in sent[-1][1] and "Fő Admin" in sent[-1][1]
     assert (await client.get("/api/auth/me", headers=adm)).json()["telegram_linked"] is True
 
-    # eltérítés: másik csevegés ugyanazzal a számmal → nem írja felül, mindkettő értesül
+    # eltérítés: másik csevegés egy friss kóddal → nem írja felül, mindkettő értesül
+    link_code2 = (await client.post("/api/auth/me/telegram-code", headers=adm)).json()["code"]
+
     async def fetch_hijack(config, offset):
-        return [{"update_id": 21, "message": {"chat": {"id": 999, "type": "private"}, "text": code}}]
+        return [{"update_id": 21, "message": {"chat": {"id": 999, "type": "private"}, "text": link_code2}}]
 
     monkeypatch.setattr(tg_mod, "fetch_updates", fetch_hijack)
     async with factory() as session:

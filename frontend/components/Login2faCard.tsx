@@ -26,6 +26,17 @@ export default function Login2faCard() {
   const [me, setMe] = useState<AuthUser | null>(null);
   const loadMe = () => api.get<AuthUser>("/api/auth/me").then(setMe).catch(() => {});
 
+  const [linkCode, setLinkCode] = useState<{ code: string; expires_at: string } | null>(null);
+  async function requestCode() {
+    try {
+      const r = await api.post<{ code: string; expires_at: string }>("/api/auth/me/telegram-code");
+      setLinkCode(r);
+      setMsg(null);
+    } catch (err) {
+      setMsg(errorMessage(err));
+    }
+  }
+
   async function unlink() {
     try {
       await api.post("/api/auth/me/telegram-unlink");
@@ -91,7 +102,18 @@ export default function Login2faCard() {
                 {t("twofa.unlink")}
               </button>
             )}
+            {!me.telegram_linked && (
+              <button type="button" onClick={requestCode} className="ml-2 rounded border border-indigo-300 bg-indigo-50 px-2 py-0.5 text-xs text-indigo-800 hover:bg-indigo-100">
+                ✈️ {t("twofa.linkCodeBtn")}
+              </button>
+            )}
           </p>
+          {linkCode && (
+            <p className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-2">
+              {t("twofa.linkCodeShow")}: <span className="font-mono text-xl font-bold tracking-widest text-indigo-700">{linkCode.code}</span>
+              <span className="ml-2 text-xs text-slate-500">{t("twofa.linkCodeExpires", { time: new Date(linkCode.expires_at).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" }) })}</span>
+            </p>
+          )}
           <p className="mt-1 text-xs text-slate-500">{t("twofa.myCodeHint")}</p>
         </div>
       )}

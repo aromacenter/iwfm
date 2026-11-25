@@ -393,6 +393,22 @@ async def login_resend(body: TwofaResendBody, db: AsyncSession = Depends(get_db)
     return {"ok": True, "channel": ch.channel}
 
 
+@router.post("/me/telegram-code")
+async def my_telegram_code(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """182. kör: egyszeri, 10 perces összekapcsoló kód a SAJÁT Telegramhoz —
+    ezt kell privátban elküldeni a cég botjának."""
+    from app.services.wfm.telegram_link import issue_code_for_user
+
+    out = await issue_code_for_user(db, user)
+    await record_audit(db, actor=user, action="auth.telegram_code", entity_type="user", entity_id=str(user.id), request=request)
+    await db.commit()
+    return out
+
+
 @router.post("/me/telegram-unlink")
 async def my_telegram_unlink(
     request: Request,

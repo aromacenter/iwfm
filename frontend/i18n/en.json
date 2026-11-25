@@ -972,12 +972,15 @@
     "noBot": "no Telegram bot configured",
     "noSmtp": "no e-mail sending configured",
     "myCode": "Your number",
-    "myCodeTitle": "Your own number — send it privately to the company Telegram bot to link",
-    "myCodeHint": "Linking: open the company Telegram bot and send it these 6 digits in a private chat. The bot confirms within a few minutes; after that you receive sign-in codes there. Every account has its own number — employees their employee code, accounts without an employee card (admin, manager) their account number.",
+    "myCodeTitle": "Your own number (identifier) — request a one-time code on the card to link",
+    "myCodeHint": "Linking: request a code with the button, open the company's Telegram bot and send it the 6 digits in private within 10 minutes. The bot confirms immediately; from then on you receive login codes and personal notifications there. Linking by employee number is no longer possible — the code is single-use.",
     "linkedYes": "linked",
     "linkedNo": "not linked",
     "unlink": "Unlink",
-    "unlinked": "Telegram unlinked — you can link again with your number."
+    "unlinked": "Telegram unlinked — you can link again with your number.",
+    "linkCodeBtn": "Request link code",
+    "linkCodeShow": "Send this to the bot in private",
+    "linkCodeExpires": "valid until {time} (10 min)"
   },
   "tools": {
     "title": "Tool registry",
@@ -1654,7 +1657,10 @@
     "usernamePh": "e.g. kiss.peter",
     "usernameHint": "3–64 chars: lowercase, digits, dot, dash, underscore",
     "loginIdHint": "Email OR username is enough to log in — provide at least one.",
-    "fixedHoursOvernight": "The end is not later than the start — the system treats it as an overnight shift (with night bonus). If it should end at 12:00, check it is not 00:00."
+    "fixedHoursOvernight": "The end is not later than the start — the system treats it as an overnight shift (with night bonus). If it should end at 12:00, check it is not 00:00.",
+    "telegramCode": "One-time Telegram link code for the employee (10 min)",
+    "telegramCodeBtn": "code",
+    "telegramCodeShow": "{name}'s Telegram link code — hand it over, they send it to the bot in private until {time}:"
   },
   "sched": {
     "title": "Schedule",
