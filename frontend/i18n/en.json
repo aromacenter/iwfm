@@ -2777,7 +2777,9 @@
     "user.not_operator": "Not an active operator account.",
     "auth.login_link_invalid": "The login link expired or was already used — request a new one from the console.",
     "employee.operator_role_locked": "An operator account is always admin — its role cannot be changed.",
-    "settlement.storno_failed": "The invoicing service rejected the cancellation."
+    "settlement.storno_failed": "The invoicing service rejected the cancellation.",
+    "intake.counter_required": "The counter reading is required and cannot be zero (every counter on multi-counter machines).",
+    "handover.counter_required": "The counter reading at handover is required and cannot be zero."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -3152,7 +3154,14 @@
     "partsHistoryEmpty": "No parts installed in this machine yet.",
     "newLabelConfirm": "New machine saved ({barcode}). Queue the barcode label on the Godex printer?",
     "swapCounterUnreadable": "Counter cannot be read (short circuit / machine does not start)",
-    "swapCounterUnreadableHint": "The swap proceeds with the last settled counter; service records the real closing counter on the swap worksheet, and the settlement waits for it."
+    "swapCounterUnreadableHint": "The swap proceeds with the last settled counter; service records the real closing counter on the swap worksheet, and the settlement waits for it.",
+    "serviceHistory": "Service history",
+    "serviceHistoryEmpty": "No intake or worksheet for this machine yet.",
+    "svcStatus": {
+      "open": "open",
+      "done": "done",
+      "needs_more_work": "more work"
+    }
   },
   "wh": {
     "title": "Warehouse",
@@ -3716,7 +3725,12 @@
     "emailConfirm": "Send the receipt PDF to {email}?",
     "emailHint": "E-mail the receipt to the customer",
     "emailSent": "Receipt sent by e-mail.",
-    "emailFailed": "Sending the e-mail failed — check the SMTP settings."
+    "emailFailed": "Sending the e-mail failed — check the SMTP settings.",
+    "counter": "Counter reading at intake",
+    "counterN": "Counter {n}",
+    "counterPh": "e.g. 12345",
+    "counterHint": "Required, cannot be zero. Printed on the receipt; at handover the portions brewed here are computed from it.",
+    "counterRequired": "Enter the counter reading (not zero; every counter on multi-counter machines)."
   },
   "handover": {
     "title": "Handover",
@@ -3743,7 +3757,13 @@
     "openInvoice": "Open invoice",
     "invoiceSentTo": "Sent by Billingó to: {to}",
     "invoiceNotSent": "Not e-mailed (no e-mail at the partner / intake) — can be sent from Billingó.",
-    "printReceipt": "Handover receipt (PDF)"
+    "printReceipt": "Handover receipt (PDF)",
+    "counter": "Counter reading at handover",
+    "counterN": "Counter {n}",
+    "counterNow": "Current reading",
+    "counterIntake": "At intake",
+    "brewed": "Portions brewed here",
+    "counterRequired": "Enter the counter reading at handover (not zero)."
   },
   "gls": {
     "title": "GLS shipping",

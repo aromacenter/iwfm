@@ -83,7 +83,7 @@ async def test_handover_with_invoice(client, admin, manager, monkeypatch):
 
     res = await client.post(
         f"/api/tasks/{task_id}/handover",
-        json={"payment_method": "card", "discount": False}, headers=mgr,
+        json={"counter": 1500, "payment_method": "card", "discount": False}, headers=mgr,
     )
     assert res.status_code == 200, res.text
     assert res.json()["document_id"] == "DOC-H1"
@@ -102,7 +102,7 @@ async def test_handover_with_invoice(client, admin, manager, monkeypatch):
     # ismételt átadás tiltott
     res = await client.post(
         f"/api/tasks/{task_id}/handover",
-        json={"payment_method": "cash", "discount": False}, headers=mgr,
+        json={"counter": 1500, "payment_method": "cash", "discount": False}, headers=mgr,
     )
     assert res.status_code == 422
 
@@ -122,7 +122,7 @@ async def test_handover_discount_no_invoice(client, admin, manager, monkeypatch)
     monkeypatch.setattr(billingo_service, "create_handover_invoice", fake_invoice)
     res = await client.post(
         f"/api/tasks/{task_id}/handover",
-        json={"payment_method": "cash", "discount": True}, headers=mgr,
+        json={"counter": 1500, "payment_method": "cash", "discount": True}, headers=mgr,
     )
     assert res.status_code == 200, res.text
     assert res.json()["document_id"] is None

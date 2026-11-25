@@ -105,6 +105,12 @@ def build_handover_receipt_pdf(data: dict, settings: dict | None = None) -> byte
     section("Készülék")
     line("Gép:", data.get("machine") or data.get("title"))
     line("Munkalap:", data.get("serial"))
+    # 173. kör: számláló-állás átvételkor és átadáskor + a lefőzött adag
+    if data.get("intake_counter_text") or data.get("handover_counter_text"):
+        line("Számláló átvételkor:", data.get("intake_counter_text") or "—")
+        line("Számláló átadáskor:", data.get("handover_counter_text") or "—")
+        if data.get("brewed_portions") is not None:
+            line("Lefőzött adag:", f"{int(data['brewed_portions']):,}".replace(",", " "))
 
     section("Elvégzett munka és tételek")
     items = data.get("items") or []

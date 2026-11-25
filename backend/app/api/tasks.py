@@ -3386,7 +3386,10 @@ def _pickup_phone_lines(row) -> list[str]:
 
 
 async def _handover_row(db: AsyncSession, task: Task, ws: Worksheet) -> dict:
+    from app.services.wfm.counter_reading import reading_text
+
     machine = None
+    a = None
     if ws.asset_id is not None:
         a = (
             await db.execute(select(Asset).where(Asset.id == ws.asset_id))
@@ -3395,9 +3398,32 @@ async def _handover_row(db: AsyncSession, task: Task, ws: Worksheet) -> dict:
             machine = f"{a.name} — {a.manufacturer}" if a.manufacturer else a.name
     items = _handover_items(ws)
     total = round(sum(i["amount_net"] for i in items), 2)
+    # 173. kör: átvételkori számláló (az átvételi elismervényről) + átadáskori + lefőzött adag
+    intake_counter = None
+    intake_counters = None
+    if task.intake_id is not None:
+        from app.models import MachineIntake
+
+        it = (await db.execute(select(MachineIntake).where(MachineIntake.id == task.intake_id))).scalar_one_or_none()
+        if it is not None:
+            intake_counter, intake_counters = it.counter, it.counters
+    brewed = (
+        ws.handover_counter - intake_counter
+        if ws.handover_counter is not None and intake_counter is not None and ws.handover_counter >= intake_counter
+        else None
+    )
     return {
         "task_id": str(task.id),
         "serial": ws.serial,
+        "counter_count": int(getattr(a, "counter_count", 1) or 1) if a is not None else 1,
+        "counter_names": list(getattr(a, "counter_names", None) or []) if a is not None else [],
+        "intake_counter": intake_counter,
+        "intake_counters": intake_counters,
+        "intake_counter_text": reading_text(a, intake_counter, intake_counters),
+        "handover_counter": ws.handover_counter,
+        "handover_counters": ws.handover_counters,
+        "handover_counter_text": reading_text(a, ws.handover_counter, ws.handover_counters),
+        "brewed_portions": brewed,
         "title": task.title,
         "machine": machine,
         "client_name": ws.client_name,
@@ -3840,6 +3866,9 @@ class HandoverBody(BaseModel):
     discount: bool = False  # kedvezmény → NEM készül számla
     # Átutalásnál a fizetési határidő napokban (alapból 8, átírható) — 12a07799
     due_days: int | None = Field(default=None, ge=1, le=120)
+    # 173. kör (8fb91fca): számláló-állás átadáskor — KÖTELEZŐ, nem nulla
+    counter: int | None = Field(default=None, ge=0)
+    counters: list[int] | None = Field(default=None, max_length=99)
 
 
 @router.post("/{task_id}/handover", dependencies=[Depends(require_module("handover"))])
@@ -3858,6 +3887,15 @@ async def do_handover(
         raise HTTPException(status_code=404, detail={"code": "worksheet.not_found"})
     if ws.handed_over_at is not None:
         raise HTTPException(status_code=422, detail={"code": "handover.already_done"})
+    # 173. kör: számláló-állás kötelező az átadáskor (az elismervényre kerül)
+    from app.services.wfm.counter_reading import validate_reading
+
+    ho_asset = (
+        await db.execute(select(Asset).where(Asset.id == ws.asset_id))
+    ).scalar_one_or_none() if ws.asset_id is not None else None
+    ws.handover_counter, ws.handover_counters = validate_reading(
+        ho_asset, body.counter, body.counters, code="handover.counter_required"
+    )
     items = _handover_items(ws)
     total = round(sum(i["amount_net"] for i in items), 2)
 

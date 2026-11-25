@@ -53,6 +53,21 @@ interface Movement {
   created_at: string;
 }
 
+interface ServiceEntry {
+  kind: "intake" | "task";
+  at: string | null;
+  serial: string | null;
+  title: string;
+  who: string | null;
+  detail: string | null;
+  counter_text: string | null;
+  status: string | null;
+  task_id: string | null;
+  completed_at?: string | null;
+  handed_over_at?: string | null;
+  external_service?: boolean;
+}
+
 interface Asset {
   id: string;
   barcode: string;
@@ -84,6 +99,7 @@ interface Asset {
   deployed_at: string | null;
   notes: string | null;
   movements?: Movement[];
+  service_history?: ServiceEntry[]; // 173. kör: átvételek + munkalapok
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -1300,6 +1316,38 @@ export default function GepekPage() {
                 ))}
               </ul>
             )}
+            {/* 173. kör (5dfe9c67): szerviztörténet — ki, mikor, mit csinált a géppel */}
+            <div className="border-t border-slate-200 pt-3">
+              <p className="mb-1 text-sm font-semibold">🛠 {t("inv.serviceHistory")} ({(historyFor.service_history ?? []).length})</p>
+              {(historyFor.service_history ?? []).length === 0 ? (
+                <p className="text-xs text-slate-400">{t("inv.serviceHistoryEmpty")}</p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {historyFor.service_history!.map((e, i) => (
+                    <li key={`${e.kind}-${e.serial ?? i}`} className="flex items-start justify-between gap-3 border-b border-slate-100 pb-2">
+                      <div className="min-w-0">
+                        <span className="font-medium">{e.kind === "intake" ? "📥" : e.external_service ? "🏭" : "🔧"} {e.title}</span>
+                        {e.serial && <span className="ml-1 font-mono text-xs text-slate-500">{e.serial}</span>}
+                        {e.kind === "task" && e.status && (
+                          <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${e.status === "done" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                            {t(`inv.svcStatus.${e.status}`)}
+                          </span>
+                        )}
+                        {e.who && <span className="ml-1 text-xs text-indigo-600">· 👤 {e.who}</span>}
+                        {e.detail && <div className="line-clamp-3 text-xs text-slate-500">{e.detail}</div>}
+                        {(e.counter_text || e.handed_over_at) && (
+                          <div className="text-xs text-slate-400">
+                            {e.counter_text && <>🔢 {e.counter_text}</>}
+                            {e.handed_over_at && <> · 🤝 {fmt(e.handed_over_at)}</>}
+                          </div>
+                        )}
+                      </div>
+                      <span className="whitespace-nowrap text-xs text-slate-400">{e.at ? fmt(e.at) : ""}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             {protocolRows && protocolRows.length > 0 && (
               <div className="border-t border-slate-200 pt-3">
                 <p className="mb-1 text-sm font-semibold">📋 {t("inv.protoListTitle")}</p>

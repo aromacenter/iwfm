@@ -2777,7 +2777,9 @@
     "user.not_operator": "Ez nem aktív üzemeltetői fiók.",
     "auth.login_link_invalid": "A belépő link lejárt vagy már felhasználták — kérj újat a pultból.",
     "employee.operator_role_locked": "Az üzemeltetői fiók jogköre mindig admin — nem módosítható.",
-    "settlement.storno_failed": "A számlázó nem fogadta el a sztornót."
+    "settlement.storno_failed": "A számlázó nem fogadta el a sztornót.",
+    "intake.counter_required": "A számláló-állás kötelező, és nem lehet nulla (több számlálós gépnél mindegyik).",
+    "handover.counter_required": "Az átadáskori számláló-állás kötelező, és nem lehet nulla."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -3152,7 +3154,14 @@
     "partsHistoryEmpty": "Még nincs beépített alkatrész ebben a gépben.",
     "newLabelConfirm": "Új gép mentve ({barcode}). Mehet a vonalkód-címke a Godex nyomtatási sorba?",
     "swapCounterUnreadable": "A számláló nem olvasható le (zárlatos / nem indul a gép)",
-    "swapCounterUnreadableHint": "A csere az előző elszámolt állással megy; a tényleges záró állást a szerviz rögzíti a csere-munkalapon („Záró számláló rögzítése”), az elszámolás addig vár rá."
+    "swapCounterUnreadableHint": "A csere az előző elszámolt állással megy; a tényleges záró állást a szerviz rögzíti a csere-munkalapon („Záró számláló rögzítése”), az elszámolás addig vár rá.",
+    "serviceHistory": "Szerviztörténet",
+    "serviceHistoryEmpty": "Még nem volt átvétel vagy munkalap ehhez a géphez.",
+    "svcStatus": {
+      "open": "nyitott",
+      "done": "kész",
+      "needs_more_work": "további munka"
+    }
   },
   "wh": {
     "title": "Raktár",
@@ -3716,7 +3725,12 @@
     "emailConfirm": "Elküldjük az elismervény PDF-jét ide: {email}?",
     "emailHint": "Elismervény küldése e-mailben az ügyfélnek",
     "emailSent": "Elismervény elküldve e-mailben.",
-    "emailFailed": "Az e-mail küldése nem sikerült — ellenőrizd az SMTP-beállításokat."
+    "emailFailed": "Az e-mail küldése nem sikerült — ellenőrizd az SMTP-beállításokat.",
+    "counter": "Számláló-állás átvételkor",
+    "counterN": "{n}. számláló",
+    "counterPh": "pl. 12345",
+    "counterHint": "Kötelező, nem lehet nulla. Az elismervényre kerül; átadáskor ebből számolja a rendszer a nálunk lefőzött adagot.",
+    "counterRequired": "Add meg a számláló-állást (nem lehet nulla, több számlálós gépnél mindegyiket)."
   },
   "handover": {
     "title": "Átadás",
@@ -3743,7 +3757,13 @@
     "openInvoice": "Számla megnyitása",
     "invoiceSentTo": "A Billingó elküldte: {to}",
     "invoiceNotSent": "Nem ment ki e-mailben (nincs e-mail cím a partnernél / átvételnél) — a Billingóból küldhető.",
-    "printReceipt": "Átadás-átvételi elismervény (PDF)"
+    "printReceipt": "Átadás-átvételi elismervény (PDF)",
+    "counter": "Számláló-állás átadáskor",
+    "counterN": "{n}. számláló",
+    "counterNow": "Jelenlegi állás",
+    "counterIntake": "Átvételkor",
+    "brewed": "Lefőzött adag nálunk",
+    "counterRequired": "Add meg az átadáskori számláló-állást (nem lehet nulla)."
   },
   "gls": {
     "title": "GLS-csomagfeladás",

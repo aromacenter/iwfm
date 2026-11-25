@@ -135,6 +135,7 @@ async def test_intake_worksheet_without_tasks_permission(client, admin):
         barcode="R144-CUST", serial_number="SN-R144", name="btr878", customer_owned=True, tangible=False,
     ), headers=adm)).json()
     res = await client.post("/api/intakes", json={
+        "counter": 1000,
         "asset_id": cust["id"], "client_name": "Bejczi Bálint", "client_phone": "+36301234567", "client_email": "bejczi@example.com",
         "faults": "nem melegít",
     }, headers=uk)

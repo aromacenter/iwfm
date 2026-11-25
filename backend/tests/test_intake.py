@@ -22,7 +22,7 @@ async def test_intake_flow_and_clause(client, admin, manager):
     _, sz = await make_user(email="atvevo@example.com", role="szervizes")
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": asset["id"], "client_name": "Kovács Ügyfél",
+        json={"counter": 1000, "asset_id": asset["id"], "client_name": "Kovács Ügyfél",
               "client_company": "Kovács Kft.", "client_email": "kovacs@example.com",
               "client_phone": "+36301234567",
               "client_address": "1111 Budapest, Fő u. 1.",
@@ -48,7 +48,7 @@ async def test_intake_flow_and_clause(client, admin, manager):
     jpg = "data:image/jpeg;base64," + _b64.b64encode(b"\xff\xd8\xff fake-jpg").decode()
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": asset["id"], "client_name": "Fotós Ügyfél",
+        json={"counter": 1000, "asset_id": asset["id"], "client_name": "Fotós Ügyfél",
               "client_phone": "+3630111", "client_email": "fotos@example.com",
               "faults": "törött víztartály", "photos": [jpg, jpg]},
         headers=sz,
@@ -66,7 +66,7 @@ async def test_intake_flow_and_clause(client, admin, manager):
     # rossz formátum: érthető hiba
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": asset["id"], "client_phone": "+3630222",
+        json={"counter": 1000, "asset_id": asset["id"], "client_phone": "+3630222",
               "client_email": "rossz@example.com",
               "photos": ["data:text/html;base64,PGI+"]},
         headers=sz,
@@ -154,7 +154,7 @@ async def test_intake_task_link(client, manager):
     intake = (
         await client.post(
             "/api/intakes",
-            json={"asset_id": asset["id"], "client_name": "Linkes Lajos",
+            json={"counter": 1000, "asset_id": asset["id"], "client_name": "Linkes Lajos",
                   "client_phone": "+3630333", "client_email": "lajos@example.com",
                   "faults": "csopog"},
             headers=mgr,

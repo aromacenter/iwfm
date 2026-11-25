@@ -655,6 +655,8 @@ def build_intake_pdf(data: dict, settings: dict | None = None) -> bytes:
     line("Gyártó / márka:", data.get("asset_manufacturer") or "—")
     line("Gyári szám:", data.get("asset_serial") or "—")
     line("Vonalkód:", data.get("asset_barcode") or "—")
+    # 173. kör: a számláló-állás átvételkor (lefőzött adag) az elismervényen
+    line("Számláló-állás:", data.get("counter_text") or "—")
 
     section("Tartozékok")
     wrapped(data.get("accessories") or "—")

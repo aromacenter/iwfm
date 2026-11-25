@@ -33,6 +33,14 @@ interface Handover {
   items: HandoverItem[];
   total_net: number;
   total_gross: number;
+  // 173. kör: számláló-állások (átvételkor / átadáskor) és a lefőzött adag
+  counter_count?: number;
+  counter_names?: (string | null)[];
+  intake_counter?: number | null;
+  intake_counter_text?: string | null;
+  handover_counter?: number | null;
+  handover_counter_text?: string | null;
+  brewed_portions?: number | null;
 }
 
 const ft = (n: number) => `${Math.round(n).toLocaleString("hu-HU")} Ft`;
@@ -46,6 +54,7 @@ export default function AtadasPage() {
   const [payment, setPayment] = useState<"cash" | "card" | "transfer">("cash");
   const [dueDays, setDueDays] = useState("8"); // átutalásnál a fizetési határidő (nap)
   const [discount, setDiscount] = useState(false);
+  const [counters, setCounters] = useState<string[]>([]); // 173. kör: számláló-állás átadáskor
   const [busy, setBusy] = useState(false);
   const [doneInfo, setDoneInfo] = useState<{ serial: string; discount: boolean; document_id: string | null; task_id: string; sent_to: string[] } | null>(null);
 
@@ -72,6 +81,7 @@ export default function AtadasPage() {
     setSelected(h);
     setDiscount(false);
     setPayment("cash");
+    setCounters(Array.from({ length: Math.max(1, h.counter_count ?? 1) }, () => ""));
     setDoneInfo(null);
   }
 
@@ -94,12 +104,22 @@ export default function AtadasPage() {
           total: ft(selected.total_gross),
           method: payment === "card" ? t("handover.card") : payment === "transfer" ? t("handover.transfer") : t("handover.cash"),
         });
+    // 173. kör: számláló-állás kötelező, nem nulla
+    const cc = Math.max(1, selected.counter_count ?? 1);
+    if (counters.length !== cc || counters.some((v) => !/^\d+$/.test(v.trim()) || Number(v) < 1)) {
+      toast(t("handover.counterRequired"), "error");
+      return;
+    }
     if (!(await confirm(text))) return;
     setBusy(true);
     try {
       const res = await api.post<{ ok: boolean; document_id: string | null; invoice_sent_to?: string[] }>(
         `/api/tasks/${selected.task_id}/handover`,
-        { payment_method: payment, discount, due_days: payment === "transfer" ? Number(dueDays) || 8 : null }
+        {
+          payment_method: payment, discount, due_days: payment === "transfer" ? Number(dueDays) || 8 : null,
+          counter: cc > 1 ? null : Number(counters[0]),
+          counters: cc > 1 ? counters.map((v) => Number(v)) : null,
+        }
       );
       setDoneInfo({ serial: selected.serial, discount, document_id: res.document_id, task_id: selected.task_id, sent_to: res.invoice_sent_to ?? [] });
       setSelected(null);
@@ -264,6 +284,31 @@ export default function AtadasPage() {
                 <span className="text-xs text-slate-400">{t("handover.dueDaysUnit")}</span>
               </label>
             )}
+
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+              🔢 {t("handover.counter")} <span className="text-rose-600">*</span>
+              {selected.intake_counter_text && (
+                <p className="text-xs text-slate-600">{t("handover.counterIntake")}: <b>{selected.intake_counter_text}</b></p>
+              )}
+              <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                {counters.map((v, i) => (
+                  <label key={i} className="text-xs text-slate-600">
+                    {counters.length > 1 ? (selected.counter_names?.[i] || t("handover.counterN", { n: i + 1 })) : t("handover.counterNow")}
+                    <input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      value={v}
+                      onChange={(e) => setCounters((c) => c.map((x, j) => (j === i ? e.target.value : x)))}
+                      className="mt-0.5 w-full rounded-lg border border-amber-300 px-3 py-2 font-mono"
+                    />
+                  </label>
+                ))}
+              </div>
+              {selected.intake_counter != null && counters.length === 1 && /^\d+$/.test(counters[0]) && Number(counters[0]) >= selected.intake_counter && (
+                <p className="mt-1 text-xs text-amber-700">{t("handover.brewed")}: <b>{(Number(counters[0]) - selected.intake_counter).toLocaleString("hu-HU")}</b></p>
+              )}
+            </div>
 
             <button
               onClick={doHandover}

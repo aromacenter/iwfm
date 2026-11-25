@@ -205,6 +205,7 @@ A gépeknél beállítható karbantartási ciklus; az esedékesek a Szerviz olda
 1. Átvétel → „+ Új átvétel”. Gép: vonalkód beolvasása / kiválasztás, vagy új gép felvétele (ügyfél tulajdona).
 2. Ügyfél: meglévő partner (adatai automatikusan kitöltődnek), új partner teljes adattal, vagy szabad szöveg. Telefon és e-mail KÖTELEZŐ — kivéve saját tárgyi gépnél (nem az ügyfélé), ott nem kell.
 3. Tartozékok, hibaleírás, cseregép vonalkódja (ha adunk), állapot-fotók.
+3/b. **Számláló-állás** (kötelező, nem lehet nulla; több számlálós gépnél számlálónként): az elismervényre kerül, és az átadáskor ebből számolja a rendszer a nálunk lefőzött adagot.
 4. Mentés: AT-ÉÉÉÉ-NNNN sorszámú elismervény. Nyomtatás az irodai nyomtatóra (ügynökön át) vagy helyi nyomtatási ablak; saját tárgyi gépnél 1, ügyfél gépénél 2 példány (egy az ügyfélé). A lap alján a 60 napos tárolási záradék kötelezően szerepel (szövege a Beállítások → Munkalap kártyán).
 5. Ezután automatikusan a munkalap-űrlap nyílik előtöltve: szervizes és határidő választása, mentés (Mégse nincs).
 6. Új gépnél a rendszer felajánlja a kávérendelős QR-címkét.""",
@@ -215,7 +216,7 @@ A gépeknél beállítható karbantartási ciklus; az esedékesek a Szerviz olda
         "keywords": "átadás visszaadás fizetés készpénz kártya átutalás határidő számla billingó kedvezmény kassza saját tárgyi gép QR",
         "body": """## Folyamat
 1. A szerelőtől elhozott (KSZ) vagy lezárt munkalapos gépek az Átadás várólistán jelennek meg a MI árainkkal (munka + karbantartási díj).
-2. A sor megnyitása (QR-ről is: ?task=…): fizetési mód: készpénz / kártya / átutalás. Átutalásnál fizetési határidő, alapból 8 nap (átírható).
+2. A sor megnyitása (QR-ről is: ?task=…): fizetési mód: készpénz / kártya / átutalás. Átutalásnál fizetési határidő, alapból 8 nap (átírható). **Számláló-állás átadáskor** kötelező (nem nulla): az átadás-átvételi elismervényen az átvételkori állás, az átadáskori állás és a lefőzött adag is szerepel.
 3. Kedvezmény pipa: NEM készül számla (és semmilyen megjegyzés nem kerül mellé).
 4. Átadás gomb: számla készül a partner számlázó cégével (Billingó/Számlázz.hu), a gép „átadott” státuszba kerül, a feladat lezárul.
 5. Kassza: csak a KÉSZPÉNZES átadás bruttó összege kerül az átadó kasszájába; kártya/átutalás nem; saját tárgyi gépnél mindig 0 Ft.
@@ -259,7 +260,7 @@ A nyilvános űrlapról érkező ajánlatkérésből partner készíthető egy k
 3. Telepítés partnerhez: „Telepítés” → partner; innen a gép az elszámolásban számlálóval szerepel.
 
 ## Gép-történet
-A gép soránál: szervizjegyek, munkalapok, beépített alkatrészek sorozatszámmal és garanciával, számláló-állások. A QR-címke a kávérendeléshez és az átadáshoz is használható.""",
+A gép soránál (🕘): mozgások (kihelyezés, visszavétel, csere), **szerviztörténet** — minden átvétel (AT-sorszám, ki vette át, számláló) és minden munkalapos feladat (ML/KSZ-sorszám, szerelő, elvégzett munka, állapot, átadás dátuma, számláló) időrendben —, beépített alkatrészek sorozatszámmal és garanciával, jegyzőkönyvek. A QR-címke a kávérendeléshez és az átadáshoz is használható.""",
     },
     {
         "key": "elszamolas",

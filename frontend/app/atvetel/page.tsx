@@ -29,6 +29,8 @@ interface AssetOption {
   serial_number: string | null;
   tangible?: boolean;
   customer_owned?: boolean;
+  counter_count?: number; // 173. kör: több számlálós gépnél számlálónként kérjük az állást
+  counter_names?: (string | null)[] | null;
 }
 
 interface Intake {
@@ -48,6 +50,7 @@ interface Intake {
   faults: string | null;
   note: string | null;
   received_by_name: string | null;
+  counter_text?: string | null; // 173. kör
   received_at: string;
   photo_count: number;
   task_id: string | null;
@@ -69,6 +72,8 @@ const EMPTY_FORM = {
   client_address: "",
   accessories: "",
   faults: "",
+  counter: "", // 173. kör: számláló-állás (kötelező, nem nulla)
+  counters: [] as string[],
   loaner_barcode: "",
   note: "",
 };
@@ -219,6 +224,8 @@ export default function AtvetelPage() {
   const [newPartner, setNewPartner] = useState(EMPTY_PARTNER);
   // Saját tárgyi gép (nem az ügyfélé): nincs kinek szólni → az elérhetőség nem kötelező (dc134f9f)
   const selectedAsset = assets.find((a) => a.id === form.asset_id);
+  const counterCount = newAssetMode ? 1 : Math.max(1, selectedAsset?.counter_count ?? 1);
+  const counterNames = (newAssetMode ? [] : selectedAsset?.counter_names) ?? [];
   // 157. kör (1b978d56): saját gép = nem az ügyfélé (a tárgyi jelölés nem számít)
   const ownMachine = !newAssetMode && !!selectedAsset && !selectedAsset.customer_owned;
 
@@ -283,6 +290,13 @@ export default function AtvetelPage() {
         setBusy(false);
         return;
       }
+      // 173. kör: számláló-állás kötelező, nem nulla (több számlálósnál mindegyik)
+      const counterVals = counterCount > 1 ? form.counters : [form.counter];
+      if (counterVals.length !== counterCount || counterVals.some((v) => !/^\d+$/.test(String(v).trim()) || Number(v) < 1)) {
+        setError(t("intake.counterRequired"));
+        setBusy(false);
+        return;
+      }
       // Ügyfél: meglévő partner, teljes adatú új partner, vagy szabad szöveg
       let partnerId = form.partner_id || null;
       let client = {
@@ -339,6 +353,8 @@ export default function AtvetelPage() {
         ...client,
         accessories: form.accessories || null,
         faults: form.faults || null,
+        counter: counterCount > 1 ? null : Number(form.counter),
+        counters: counterCount > 1 ? form.counters.map((v) => Number(v)) : null,
         loaner_barcode: form.loaner_barcode || null,
         note: form.note || null,
         photos,
@@ -790,6 +806,40 @@ export default function AtvetelPage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
+
+            <div className="block rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+              🔢 {t("intake.counter")} <span className="text-rose-600">*</span>
+              {counterCount > 1 ? (
+                <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                  {Array.from({ length: counterCount }).map((_, i) => (
+                    <label key={i} className="text-xs text-slate-600">
+                      {counterNames[i] || t("intake.counterN", { n: i + 1 })}
+                      <input
+                        type="number"
+                        min={1}
+                        inputMode="numeric"
+                        required
+                        value={form.counters[i] ?? ""}
+                        onChange={(e) => setForm((f) => { const c = [...f.counters]; c[i] = e.target.value; return { ...f, counters: c }; })}
+                        className="mt-0.5 w-full rounded-lg border border-amber-300 px-3 py-2 font-mono"
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  required
+                  value={form.counter}
+                  onChange={(e) => setForm({ ...form, counter: e.target.value })}
+                  placeholder={t("intake.counterPh")}
+                  className="mt-1 w-full rounded-lg border border-amber-300 px-3 py-2 font-mono"
+                />
+              )}
+              <p className="mt-1 text-xs text-amber-700">{t("intake.counterHint")}</p>
+            </div>
 
             <label className="block text-sm">
               {t("intake.faults")}

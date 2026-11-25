@@ -839,6 +839,8 @@ class AssetOut(BaseModel):
     notes: str | None
     created_at: datetime
     movements: list[MovementOut] | None = None
+    # 173. kör (5dfe9c67): szerviztörténet — átvételek és munkalapok (ki, mikor, mit)
+    service_history: list[dict] | None = None
 
 
 def _derived_location(a: Asset) -> str:
@@ -1309,7 +1311,68 @@ async def get_asset(
         )
         for m in moves
     ]
+    out.service_history = await _service_history(db, a)
     return out
+
+
+async def _service_history(db: AsyncSession, asset: Asset) -> list[dict]:
+    """173. kör (x-presso 5dfe9c67): a gép szerviztörténete — átvételek (AT-…,
+    ki vette át, számláló) és munkalapos feladatok (ML-/KSZ-sorszám, szerelő,
+    elvégzett munka, állapot, átadás, számláló), időrendben visszafelé."""
+    from app.models import Employee, MachineIntake, Task, Worksheet
+    from app.services.wfm.counter_reading import reading_text
+
+    items: list[dict] = []
+    intakes = (
+        await db.execute(select(MachineIntake).where(MachineIntake.asset_id == asset.id))
+    ).scalars().all()
+    for it in intakes:
+        items.append({
+            "kind": "intake", "at": it.received_at, "serial": it.serial,
+            "title": "Átvétel az ügyféltől", "who": it.received_by_name,
+            "detail": it.faults, "counter_text": reading_text(asset, it.counter, it.counters),
+            "status": None, "task_id": None,
+        })
+    # a gép-kapcsolat a munkalapon van (Worksheet.asset_id)
+    rows = (
+        await db.execute(
+            select(Task, Worksheet, Employee)
+            .join(Worksheet, Worksheet.task_id == Task.id)
+            .outerjoin(Employee, Employee.id == Task.employee_id)
+            .where(Worksheet.asset_id == asset.id)
+            .order_by(Task.created_at.desc())
+            .limit(200)
+        )
+    ).all()
+    for task, ws, emp in rows:
+        who = (ws.technician_name if ws and ws.technician_name else None) or task.technician_name
+        if not who and emp is not None:
+            who = f"{emp.last_name} {emp.first_name}"
+        detail = None
+        if ws is not None:
+            detail = (ws.solution_text or ws.work_description or ws.problem_text or "").strip() or None
+            if ws.works:
+                try:
+                    names = [w.get("name") for w in ws.works if isinstance(w, dict) and w.get("name")]
+                    if names:
+                        detail = ((detail + " — ") if detail else "") + ", ".join(names)[:400]
+                except Exception:  # pragma: no cover
+                    pass
+        items.append({
+            "kind": "task", "at": task.created_at, "serial": ws.serial if ws else None,
+            "title": task.title, "who": who, "detail": (detail or task.description or None),
+            "counter_text": reading_text(asset, ws.handover_counter, ws.handover_counters) if ws else None,
+            "status": task.status, "task_id": str(task.id),
+            "completed_at": task.completed_at,
+            "handed_over_at": ws.handed_over_at if ws else None,
+            "external_service": bool(ws.external_service) if ws else False,
+        })
+    items.sort(key=lambda x: (x["at"] is None, x["at"]), reverse=True)
+    for x in items:
+        for k in ("at", "completed_at", "handed_over_at"):
+            if x.get(k) is not None:
+                x[k] = x[k].isoformat()
+    return items
 
 
 @assets_router.post("", response_model=AssetOut, status_code=201)

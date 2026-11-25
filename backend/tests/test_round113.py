@@ -231,19 +231,19 @@ async def _intake_asset(client, mgr, barcode="R113-INT"):
 async def test_on_site_intake_requires_signature_and_name(client, manager):
     _, mgr = manager
     asset = await _intake_asset(client, mgr)
-    base = {"asset_id": asset["id"], "client_name": "Helyszíni Ügyfél",
+    base = {"asset_id": asset["id"], "counter": 1000, "client_name": "Helyszíni Ügyfél",
             "client_phone": "+36301112222", "client_email": "helyszin@example.com",
             "faults": "nem tart nyomást", "on_site": True}
     res = await client.post("/api/intakes", json=base, headers=mgr)
     assert res.status_code == 422
     assert res.json()["detail"]["code"] == "intake.signature_required"
 
-    res = await client.post("/api/intakes", json={**base, "client_signature": PNG}, headers=mgr)
+    res = await client.post("/api/intakes", json={"counter": 1000, **base, "client_signature": PNG}, headers=mgr)
     assert res.status_code == 422
     assert res.json()["detail"]["code"] == "intake.signer_name_required"
 
     res = await client.post(
-        "/api/intakes", json={**base, "client_signature": "data:image/jpeg;base64,xx", "client_signer_name": "Kiss Pál"},
+        "/api/intakes", json={"counter": 1000, **base, "client_signature": "data:image/jpeg;base64,xx", "client_signer_name": "Kiss Pál"},
         headers=mgr,
     )
     assert res.status_code == 422
@@ -277,7 +277,7 @@ async def test_on_site_intake_signed_pdf_and_email(client, manager, monkeypatch)
 
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": asset["id"], "client_name": "Aláíró Ügyfél",
+        json={"counter": 1000, "asset_id": asset["id"], "client_name": "Aláíró Ügyfél",
               "client_phone": "+36301112223", "client_email": "alairo@example.com",
               "faults": "csöpög a csoportfej", "on_site": True,
               "client_signature": PNG, "client_signer_name": "Aláíró Ügyfél"},
@@ -334,7 +334,7 @@ async def test_intake_email_without_smtp_is_422(client, manager):
     asset = await _intake_asset(client, mgr, "R113-INT3")
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": asset["id"], "client_name": "Nem Helyszíni",
+        json={"counter": 1000, "asset_id": asset["id"], "client_name": "Nem Helyszíni",
               "client_phone": "+3630", "client_email": "nh@example.com"},
         headers=mgr,
     )

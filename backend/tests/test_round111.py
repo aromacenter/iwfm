@@ -8,7 +8,7 @@ from tests.test_handover import _prepare
 
 async def test_handover_single_invoice_item_sent_and_link(client, admin, manager, monkeypatch):
     _, mgr = manager
-    from app.services.wfm import billingo_service, invoicing
+    from app.services.wfm import billingo_service
 
     calls: list[dict] = []
     sent: list[tuple[str, list[str]]] = []
@@ -34,7 +34,7 @@ async def test_handover_single_invoice_item_sent_and_link(client, admin, manager
     res = await client.patch(f"/api/partners/{p['id']}", json={"name": p["name"], "contact_email": "vevo@example.com, konyveles@example.com"}, headers=mgr)
     assert res.status_code == 200, res.text
 
-    res = await client.post(f"/api/tasks/{task_id}/handover", json={"payment_method": "transfer", "due_days": 8}, headers=mgr)
+    res = await client.post(f"/api/tasks/{task_id}/handover", json={"payment_method": "transfer", "due_days": 8, "counter": 1500}, headers=mgr)
     assert res.status_code == 200, res.text
     # EGY tétel, a munkalap számával, a teljes nettóval (20000 = 14000 + 6000)
     items = calls[-1]["items"]

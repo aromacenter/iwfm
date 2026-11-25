@@ -18,7 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import record_audit, require_any_perm, require_perm
 from app.db import get_db
-from app.models import Asset, IntakePhoto, MachineIntake, Partner, User, WorksheetSettings
+from app.services.wfm.counter_reading import reading_text
+from app.models import Asset, IntakePhoto, MachineIntake, Partner, User
 from app.services.wfm.worksheet_pdf import DEFAULT_INTAKE_FOOTER, build_intake_pdf
 
 router = APIRouter()
@@ -37,6 +38,10 @@ class IntakeBody(BaseModel):
     note: str | None = Field(default=None, max_length=4000)
     # Átvételkor kiadott cseregép vonalkódja/QR-je (opcionális)
     loaner_barcode: str | None = Field(default=None, max_length=64)
+    # 173. kör (8fb91fca): számláló-állás — KÖTELEZŐ, nem nulla; több számlálós
+    # gépnél a számlálónkénti lista (counters), a counter az összeg
+    counter: int | None = Field(default=None, ge=0)
+    counters: list[int] | None = Field(default=None, max_length=99)
     # állapot-fotók a gépről (data-URL, a felület ~1600px-re kicsinyíti)
     photos: list[str] = Field(default_factory=list, max_length=8)
     # Helyszíni átvétel (113. kör, af7ae2eb): aláírások a képernyőn. Az ügyfél
@@ -107,6 +112,9 @@ class IntakeOut(BaseModel):
     faults: str | None
     note: str | None
     loaner_barcode: str | None = None
+    counter: int | None = None  # 173. kör: számláló-állás átvételkor
+    counters: list[int] | None = None
+    counter_text: str | None = None
     received_by_name: str | None
     received_at: datetime
     photo_count: int = 0
@@ -203,6 +211,9 @@ async def _out_rows(db: AsyncSession, rows: list[MachineIntake]) -> list[IntakeO
             faults=r.faults,
             note=r.note,
             loaner_barcode=r.loaner_barcode,
+            counter=r.counter,
+            counters=r.counters,
+            counter_text=reading_text(a, r.counter, r.counters),
             received_by_name=r.received_by_name,
             received_at=r.received_at,
             on_site=bool(r.on_site),
@@ -287,6 +298,10 @@ async def create_intake(
     # Helyszíni átvétel: ügyfél-aláírás + név kötelező, átvevő-aláírás opcionális
     client_sig = emp_sig = signer = None
     signed_at = None
+    # 173. kör: számláló-állás kötelező (nem nulla), több számlálósnál számlálónként
+    from app.services.wfm.counter_reading import validate_reading
+
+    counter_sum, counter_list = validate_reading(asset, body.counter, body.counters, code="intake.counter_required")
     if body.on_site:
         client_sig = _clean_signature(body.client_signature, required=True)
         signer = (body.client_signer_name or "").strip()
@@ -308,6 +323,8 @@ async def create_intake(
         faults=(body.faults or "").strip() or None,
         note=(body.note or "").strip() or None,
         loaner_barcode=(body.loaner_barcode or "").strip() or None,
+        counter=counter_sum,
+        counters=counter_list,
         received_by_name=actor.display_name,
         received_at=datetime.now(UTC),
         created_by=actor.id,
@@ -384,6 +401,7 @@ async def _build_intake_pdf(db: AsyncSession, row: MachineIntake) -> bytes:
             "asset_manufacturer": out.asset_manufacturer,
             "asset_serial": out.asset_serial,
             "asset_barcode": out.asset_barcode,
+            "counter_text": out.counter_text,
             "accessories": out.accessories,
             "faults": out.faults,
             "note": out.note,
@@ -567,8 +585,13 @@ async def intake_worksheet(
         raise HTTPException(status_code=422, detail={"code": "tasks.no_candidates"})
     asset = (await db.execute(select(Asset).where(Asset.id == row.asset_id))).scalar_one_or_none()
     title = f"Szerviz — {asset.name if asset else 'gép'}" + (f" ({asset.barcode})" if asset and asset.barcode else "")
+    desc = row.faults or row.note or ""
+    if row.counter is not None:  # 173. kör: a számláló-állás a munkalapon is látszik
+        from app.services.wfm.counter_reading import reading_text
+
+        desc = (desc + "\n\n" if desc else "") + f"Számláló-állás átvételkor: {reading_text(asset, row.counter, row.counters)}"
     body = TaskCreateBody(
-        title=title[:256], description=(row.faults or row.note or None), employee_id=str(emp.id),
+        title=title[:256], description=(desc or None), employee_id=str(emp.id),
         due_date=date.today(), client_name=(row.client_company or row.client_name or None),
         client_location=row.client_address, asset_id=str(row.asset_id) if row.asset_id else None, intake_id=str(row.id),
     )

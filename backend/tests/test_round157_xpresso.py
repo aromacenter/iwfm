@@ -63,13 +63,13 @@ async def test_intake_copies_follow_ownership(client, manager):
     await make_employee_record(u, last_name="Átvevő", first_name="Anna")
     # saját, de még NEM tárgyi (eladásra váró, nyers) gép → 1 példány
     own_raw = (await client.post("/api/assets", json={"barcode": "R157-RAW", "name": "Nyers gép", "tangible": False, "customer_owned": False}, headers=mgr)).json()
-    res = await client.post("/api/intakes", json={"asset_id": own_raw["id"], "faults": "ellenőrzés"}, headers=mgr)  # saját gép: elérhetőség nélkül is
+    res = await client.post("/api/intakes", json={"asset_id": own_raw["id"], "faults": "ellenőrzés", "counter": 1000}, headers=mgr)  # saját gép: elérhetőség nélkül is
     assert res.status_code == 201, res.text
     res = await client.post(f"/api/intakes/{res.json()['id']}/print", json={}, headers=mgr)
     assert res.status_code == 200 and res.json()["copies"] == 1
     # ügyfél gépe → 2 példány
     cust = (await client.post("/api/assets", json={"barcode": "R157-CUST", "name": "Ügyfél gépe", "customer_owned": True}, headers=mgr)).json()
-    res = await client.post("/api/intakes", json={"asset_id": cust["id"], "client_name": "Vevő Vera", "client_phone": "+3630999", "client_email": "vera@example.com", "faults": "folyik"}, headers=mgr)
+    res = await client.post("/api/intakes", json={"asset_id": cust["id"], "counter": 1000, "client_name": "Vevő Vera", "client_phone": "+3630999", "client_email": "vera@example.com", "faults": "folyik"}, headers=mgr)
     assert res.status_code == 201, res.text
     res = await client.post(f"/api/intakes/{res.json()['id']}/print", json={}, headers=mgr)
     assert res.json()["copies"] == 2

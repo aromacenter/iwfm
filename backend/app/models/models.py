@@ -736,6 +736,10 @@ class Worksheet(Base):
     handover_total_net: Mapped[float | None] = mapped_column(Float, nullable=True)
     handover_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     handover_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)  # átutalásnál (12a07799)
+    # 173. kör (8fb91fca): számláló-állás az átadáskor — kötelező; az átadási
+    # elismervényen az átvételkori állással és a lefőzött adaggal együtt
+    handover_counter: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    handover_counters: Mapped[list | None] = mapped_column(JSON, nullable=True)
     hours_spent: Mapped[float | None] = mapped_column(Float, nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     client_location: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -1037,6 +1041,11 @@ class MachineIntake(Base):
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # 173. kör (8fb91fca): számláló-állás átvételkor — kötelező, nem nulla; több
+    # számlálós gépnél a lista is (counters), a counter az összeg. Az elismervényre
+    # kerül, az átadásnál a lefőzött adag ebből számolódik.
+    counter: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    counters: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Helyszíni átvétel (113. kör): a képernyőn aláírt elismervény — ügyfél-
     # aláírás + begépelt név, átvevő aláírása, időbélyeg; e-mailben az ügyfélnek.
     on_site: Mapped[bool] = mapped_column(

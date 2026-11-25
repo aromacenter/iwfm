@@ -34,7 +34,7 @@ async def test_handover_transfer_due_days_and_cash_register(client, admin, manag
     task_id, _ = await _prepare(client, mgr, monkeypatch, "R107-T")
     res = await client.post(
         f"/api/tasks/{task_id}/handover",
-        json={"payment_method": "transfer", "discount": False, "due_days": 12}, headers=mgr,
+        json={"counter": 1500, "payment_method": "transfer", "discount": False, "due_days": 12}, headers=mgr,
     )
     assert res.status_code == 200, res.text
     assert calls[-1] == {"pm": "transfer", "due_days": 12}
@@ -44,7 +44,7 @@ async def test_handover_transfer_due_days_and_cash_register(client, admin, manag
     task_id, _ = await _prepare(client, mgr, monkeypatch, "R107-T8")
     res = await client.post(
         f"/api/tasks/{task_id}/handover",
-        json={"payment_method": "transfer", "discount": False}, headers=mgr,
+        json={"counter": 1500, "payment_method": "transfer", "discount": False}, headers=mgr,
     )
     assert res.status_code == 200, res.text
     assert calls[-1]["due_days"] == 8
@@ -53,7 +53,7 @@ async def test_handover_transfer_due_days_and_cash_register(client, admin, manag
     task_id, _ = await _prepare(client, mgr, monkeypatch, "R107-C")
     res = await client.post(
         f"/api/tasks/{task_id}/handover",
-        json={"payment_method": "cash", "discount": False}, headers=mgr,
+        json={"counter": 1500, "payment_method": "cash", "discount": False}, headers=mgr,
     )
     assert res.status_code == 200, res.text
     assert calls[-1]["due_days"] is None
@@ -65,15 +65,15 @@ async def test_handover_transfer_due_days_and_cash_register(client, admin, manag
     task_id, _ = await _prepare(client, mgr, monkeypatch, "R107-K")
     res = await client.post(
         f"/api/tasks/{task_id}/handover",
-        json={"payment_method": "card", "discount": False}, headers=mgr,
+        json={"counter": 1500, "payment_method": "card", "discount": False}, headers=mgr,
     )
     assert res.status_code == 200, res.text
     assert len(await _expenses(client, mgr)) == 1
 
     # rossz fizetési mód / határidő → 422
-    res = await client.post(f"/api/tasks/{task_id}/handover", json={"payment_method": "crypto"}, headers=mgr)
+    res = await client.post(f"/api/tasks/{task_id}/handover", json={"payment_method": "crypto", "counter": 1500}, headers=mgr)
     assert res.status_code == 422
-    res = await client.post(f"/api/tasks/{task_id}/handover", json={"payment_method": "transfer", "due_days": 0}, headers=mgr)
+    res = await client.post(f"/api/tasks/{task_id}/handover", json={"payment_method": "transfer", "due_days": 0, "counter": 1500}, headers=mgr)
     assert res.status_code == 422
 
 
@@ -194,7 +194,7 @@ async def test_intake_own_machine_print_copies_auto_worksheet(client, manager):
     cust = (await client.post("/api/assets", json={"barcode": "R107-CUST", "name": "Ügyfél Gépe", "customer_owned": True}, headers=mgr)).json()
 
     # saját tárgyi gép: elérhetőség nélkül is átvehető, 1 példány nyomtatás
-    res = await client.post("/api/intakes", json={"asset_id": own["id"], "faults": "nem fűt"}, headers=mgr)
+    res = await client.post("/api/intakes", json={"asset_id": own["id"], "faults": "nem fűt", "counter": 1000}, headers=mgr)
     assert res.status_code == 201, res.text
     own_intake = res.json()
     res = await client.post(f"/api/intakes/{own_intake['id']}/print", json={}, headers=mgr)
@@ -202,11 +202,11 @@ async def test_intake_own_machine_print_copies_auto_worksheet(client, manager):
     assert res.json()["copies"] == 1
 
     # ügyfél gépe: elérhetőség kötelező, 2 példány
-    res = await client.post("/api/intakes", json={"asset_id": cust["id"], "client_name": "Vevő"}, headers=mgr)
+    res = await client.post("/api/intakes", json={"asset_id": cust["id"], "client_name": "Vevő", "counter": 1000}, headers=mgr)
     assert res.status_code == 422 and res.json()["detail"]["code"] == "intake.contact_required"
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": cust["id"], "client_name": "Vevő Vera", "client_company": "Vevő Kft.",
+        json={"counter": 1000, "asset_id": cust["id"], "client_name": "Vevő Vera", "client_company": "Vevő Kft.",
               "client_phone": "+3630999", "client_email": "vera@example.com", "faults": "folyik"},
         headers=mgr,
     )
@@ -222,7 +222,7 @@ async def test_intake_own_machine_print_copies_auto_worksheet(client, manager):
     assert res.status_code in (200, 201), res.text
     task = res.json()
     assert task["title"].startswith("Szerviz — Ügyfél Gépe") and task["intake_id"] == cust_intake["id"]
-    assert task["description"] == "folyik" and task["client_name"] == "Vevő Kft."
+    assert task["description"].startswith("folyik") and task["client_name"] == "Vevő Kft."
     res = await client.post(f"/api/intakes/{cust_intake['id']}/worksheet", json={}, headers=mgr)
     assert res.status_code in (200, 201) and res.json()["id"] == task["id"]
 
