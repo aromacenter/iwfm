@@ -70,6 +70,7 @@ class ProductBody(BaseModel):
     is_consignment: bool = False
     low_stock_threshold: float | None = Field(default=None, ge=0)
     purchase_price: float | None = Field(default=None, ge=0)  # Ft/kg (nettó)
+    shelf_life_days: int | None = Field(default=None, ge=1, le=3650)  # 177. kör: eltarthatóság (nap)
     is_active: bool = True
     notes: str | None = None
 
@@ -86,6 +87,7 @@ class ProductOut(BaseModel):
     is_consignment: bool
     low_stock_threshold: float | None
     purchase_price: float | None
+    shelf_life_days: int | None = None
     is_active: bool
     notes: str | None
 
@@ -103,6 +105,7 @@ def _product_out(p: Product) -> ProductOut:
         is_consignment=p.is_consignment,
         low_stock_threshold=p.low_stock_threshold,
         purchase_price=p.purchase_price,
+        shelf_life_days=p.shelf_life_days,
         is_active=p.is_active,
         notes=p.notes,
     )

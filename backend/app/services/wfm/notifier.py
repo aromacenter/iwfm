@@ -140,6 +140,19 @@ async def build_daily_digest(db: AsyncSession) -> str:
             items = ", ".join(f"{i['name']} ×{i['quantity']}" for i in (o.items or [])[:4])
             lines.append(f"- {o.order_no} · {o.partner_label or '—'}: {items}")
         lines.append("")
+    # 177. kör: lejáró / lejárt raktári tételek (7 nap)
+    try:
+        from app.services.wfm.warehouse_lots import expiring as _expiring
+
+        exp = await _expiring(db, 7)
+    except Exception:  # noqa: BLE001
+        exp = []
+    if exp:
+        lines.append(f"⏳ LEJÁRÓ RAKTÁRI TÉTELEK ({len(exp)}):")
+        for e in exp[:10]:
+            when = "LEJÁRT" if e["days_left"] < 0 else f"{e['days_left']} nap"
+            lines.append(f"- {e['product_name']} {e['quantity']:g} {e['unit']} — {e['warehouse_name']}" + (f" {e['location_code']}" if e["location_code"] else "") + f": {e['expires_at']} ({when})")
+        lines.append("")
     lines.append(f"Nyitott szervizjegy: {len(open_tickets)} db")
     lines.append(f"Kintlévő számla: {len(outstanding)} db "
                  f"({sum(s.total_gross for s in outstanding):,.0f} Ft)".replace(",", " "))
@@ -316,6 +329,33 @@ async def run_payment_reminders(db: AsyncSession, smtp, today: date | None = Non
     return sent
 
 
+async def notify_expiring_lots(db: AsyncSession, today: date | None = None, *, force: bool = False) -> int:
+    """Naponta egyszer: a 7 napon belül lejáró / lejárt tételekről esemény
+    (Telegram, ha be van pipálva; automatizálás). Legfeljebb 10 tétel/nap."""
+    from app.services.wfm.automation import fire_event
+    from app.services.wfm.telegram import notify_event
+    from app.services.wfm.warehouse_lots import expiring as _expiring
+
+    row = await get_or_create_settings(db)
+    today = today or datetime.now(UTC).date()
+    key = today.isoformat()
+    if not force and row.last_expiry_notice == key:
+        return 0
+    row.last_expiry_notice = key
+    await db.commit()
+    sent = 0
+    for e in (await _expiring(db, 7))[:10]:
+        ctx = {
+            "raktar": e["warehouse_name"], "termek_nev": e["product_name"], "mennyiseg": e["quantity"],
+            "egyseg": e["unit"], "lejarat": e["expires_at"], "napok": e["days_left"], "tarhely": e["location_code"] or "",
+        }
+        fire_event("stock.expiring", ctx)
+        await notify_event(db, "stock.expiring", ctx)
+        sent += 1
+    await db.commit()
+    return sent
+
+
 async def run_pending_notifications(db: AsyncSession) -> dict:
     """Egy ellenőrzési kör: ha esedékes, kiküldi a napit és/vagy a heti
     mentést. Visszaadja, mi ment ki (teszthez is)."""
@@ -358,6 +398,14 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
         import logging
 
         logging.getLogger(__name__).warning("invoice resend failed", exc_info=True)
+
+    # 177. kör: lejáró tételek jelzése naponta egyszer (Telegram-esemény + automatizálás)
+    try:
+        await notify_expiring_lots(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("expiry notice failed", exc_info=True)
 
     # 175. kör: fizetés-szinkron a Billingóból (óránként, a kintlévő számlákra)
     from app.services.wfm.payment_sync import sync_payments

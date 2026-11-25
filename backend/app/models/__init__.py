@@ -104,6 +104,7 @@ from app.models.models import (  # noqa: F401
     User,
     Warehouse,
     WarehouseLabelTemplate,
+    WarehouseLot,
     WarehouseLocation,
     WarehouseMovement,
     WarehouseStock,

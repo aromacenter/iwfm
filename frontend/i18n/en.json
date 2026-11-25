@@ -605,7 +605,9 @@
     "stornoReasonPh": "e.g. wrong amount, wrong partner, issued twice…",
     "stornoReasonShort": "The reason must be at least 3 characters.",
     "stornoDone": "Invoice cancelled ({number}).",
-    "stornoBadge": "Cancelled"
+    "stornoBadge": "Cancelled",
+    "shelfLife": "Shelf life (days)",
+    "shelfLifeHint": "sets the default expiry on receipt"
   },
   "offline": {
     "queued": "No network — the settlement was saved offline and will be submitted automatically when you reconnect.",
@@ -1106,7 +1108,8 @@
       "parts_low": "Part below min. stock",
       "parts_request": "Parts request received",
       "task_reschedule_requested": "Technician requests rescheduling",
-      "settlement_paid": "Invoice paid"
+      "settlement_paid": "Invoice paid",
+      "stock_expiring": "Stock lot expiring"
     },
     "ops": {
       "eq": "=",
@@ -2784,7 +2787,8 @@
     "warehouse.label_too_big": "The label does not fit the sheet.",
     "warehouse.label_fields": "Pick at least one field for the label.",
     "warehouse.label_template_name": "Give the template a name.",
-    "warehouse.scan_unknown": "No such location or product code."
+    "warehouse.scan_unknown": "No such location or product code.",
+    "warehouse.lot_not_found": "No such lot."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -3368,7 +3372,14 @@
     "lblScan": "Scan code",
     "lblScanHint": "Scan the label (barcode scanner or QR) or type the code and press Enter.",
     "lblScanMiss": "No such location: {code}",
-    "lblPreview": "Preview — {code} (to scale)"
+    "lblPreview": "Preview — {code} (to scale)",
+    "expTitle": "Expiring stock lots ({count})",
+    "expHint": "Expiring within 30 days or already expired — pick the earliest-expiry lot first (FIFO).",
+    "expExpired": "expired {days} days ago",
+    "expIn": "expires in {days} days",
+    "expNext": "earliest expiry",
+    "expiresAt": "Expiry date",
+    "expiresHint": "blank: from the product's shelf life, or none"
   },
   "po": {
     "title": "Purchase orders",

@@ -51,6 +51,10 @@ TRIGGERS: dict[str, list[str]] = {
     "stock.low": [
         "partner_nev", "termek_nev", "keszlet_kg", "kuszob_kg",
     ],
+    # 177. kör: raktári tétel lejár (naponta egyszer, 7 napon belül lejáró / lejárt)
+    "stock.expiring": [
+        "raktar", "termek_nev", "mennyiseg", "egyseg", "lejarat", "napok", "tarhely",
+    ],
     "parts.low": [
         "nev", "cikkszam", "keszlet", "egyseg", "minimum",
     ],

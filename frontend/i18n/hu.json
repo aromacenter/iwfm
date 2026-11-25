@@ -605,7 +605,9 @@
     "stornoReasonPh": "pl. téves összeg, rossz partner, duplán kiállítva…",
     "stornoReasonShort": "Az indok legalább 3 karakter legyen.",
     "stornoDone": "Számla sztornózva ({number}).",
-    "stornoBadge": "Sztornózva"
+    "stornoBadge": "Sztornózva",
+    "shelfLife": "Eltarthatóság (nap)",
+    "shelfLifeHint": "bevételezéskor ebből jön a lejárat"
   },
   "offline": {
     "queued": "Nincs hálózat — az elszámolás offline mentve, újracsatlakozáskor automatikusan beküldjük.",
@@ -1106,7 +1108,8 @@
       "parts_low": "Alkatrész min. készlet alatt",
       "parts_request": "Alkatrész-kérés érkezett",
       "task_reschedule_requested": "Szerelő átütemezést kér",
-      "settlement_paid": "Számla kiegyenlítve"
+      "settlement_paid": "Számla kiegyenlítve",
+      "stock_expiring": "Raktári tétel lejár"
     },
     "ops": {
       "eq": "=",
@@ -2784,7 +2787,8 @@
     "warehouse.label_too_big": "A címke nem fér el a lapon.",
     "warehouse.label_fields": "Válassz legalább egy mezőt a címkére.",
     "warehouse.label_template_name": "Adj nevet a mintának.",
-    "warehouse.scan_unknown": "Nincs ilyen tárhely vagy termékkód."
+    "warehouse.scan_unknown": "Nincs ilyen tárhely vagy termékkód.",
+    "warehouse.lot_not_found": "Nincs ilyen tétel."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -3368,7 +3372,14 @@
     "lblScan": "Kód beolvasása",
     "lblScanHint": "Olvasd be a címkét (vonalkód-olvasó vagy QR), vagy írd be a kódot és üss Entert.",
     "lblScanMiss": "Nincs ilyen tárhely: {code}",
-    "lblPreview": "Előnézet — {code} (méretarányos)"
+    "lblPreview": "Előnézet — {code} (méretarányos)",
+    "expTitle": "Lejáró raktári tételek ({count})",
+    "expHint": "30 napon belül lejár vagy már lejárt — a legkorábbi lejáratú tételt vidd először (FIFO).",
+    "expExpired": "{days} napja lejárt",
+    "expIn": "{days} nap múlva lejár",
+    "expNext": "legkorábbi lejárat",
+    "expiresAt": "Lejárat",
+    "expiresHint": "üresen a termék eltarthatóságából, vagy nincs"
   },
   "po": {
     "title": "Beszerzési rendelések",

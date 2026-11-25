@@ -36,6 +36,22 @@ interface WhStock {
   unit: string;
   quantity: number;
   min_quantity: number | null;
+  next_expiry?: string | null;  // 177. kör
+  next_expiry_location?: string | null;
+}
+
+interface ExpiringLot {
+  id: string;
+  warehouse_id: string;
+  warehouse_name: string;
+  product_id: string;
+  product_name: string;
+  unit: string;
+  location_code: string | null;
+  expires_at: string;
+  quantity: number;
+  days_left: number;
+  status: "ok" | "soon" | "expired";
 }
 
 interface Product {
@@ -44,6 +60,7 @@ interface Product {
   category: string | null;
   unit: string;
   purchase_price: number | null;
+  shelf_life_days?: number | null;
   is_active: boolean;
 }
 
@@ -157,6 +174,7 @@ export default function RaktarPage() {
   const locOn = modules === undefined || modules === null || modules.includes("warehouse_locations");
   const [locs, setLocs] = useState<Loc[]>([]);
   const [locTick, setLocTick] = useState(0);
+  const [expiring, setExpiring] = useState<ExpiringLot[]>([]);  // 177. kör
   // 174. kör: QR-címkéről érkező mélylink (?wh=<raktár>&loc=<tárhely-kód>)
   const [deep] = useState<{ wh: string | null; loc: string | null }>(() => {
     if (typeof window === "undefined") return { wh: null, loc: null };
@@ -176,6 +194,7 @@ export default function RaktarPage() {
     api.get<PartnerLite[]>("/api/partners").then(setPartners).catch(() => {});
     api.get<PO[]>("/api/purchase-orders").then(setPos).catch(() => {});
     api.get<Suggestion[]>("/api/warehouses/reorder-suggestions").then(setSuggestions).catch(() => {});
+    api.get<ExpiringLot[]>("/api/warehouses/expiring?days=30").then(setExpiring).catch(() => {});
     api.get<AssignableUser[]>("/api/warehouses/assignable-users").then(setAssignUsers).catch(() => {});
     api.get<{ role?: string }>("/api/auth/me").then((m) => setMeRole(m.role ?? null)).catch(() => {});
     api.get<{ modules: string[] | null }>("/api/settings/license/status").then((l) => setModules(l.modules)).catch(() => setModules(null));
@@ -271,7 +290,13 @@ export default function RaktarPage() {
 
   // ── Készlet-műveletek ──
   type StockAction = "receive" | "transfer" | "adjust";
-  const [action, setAction] = useState<{ kind: StockAction; product_id: string; qty: string; unit_cost: string; to_id: string; min_qty: string; note: string; location_id: string } | null>(null);
+  const [action, setAction] = useState<{ kind: StockAction; product_id: string; qty: string; unit_cost: string; to_id: string; min_qty: string; note: string; location_id: string; expires_at: string } | null>(null);
+  const defaultExpiry = (productId: string) => {
+    const p = products.find((x) => x.id === productId);
+    if (!p?.shelf_life_days) return "";
+    const d = new Date(); d.setDate(d.getDate() + p.shelf_life_days);
+    return d.toISOString().slice(0, 10);
+  };
 
   function openAction(kind: StockAction, productId?: string) {
     const row = productId ? stock.find((s) => s.product_id === productId) : null;
@@ -281,6 +306,7 @@ export default function RaktarPage() {
       product_id: productId ?? activeProducts[0]?.id ?? "",
       qty: kind === "adjust" && row ? String(row.quantity) : "",
       unit_cost: "",
+      expires_at: kind === "receive" ? defaultExpiry(productId ?? activeProducts[0]?.id ?? "") : "",
       to_id: warehouses.find((w) => w.id !== selectedId)?.id ?? "",
       min_qty: row?.min_quantity?.toString() ?? "",
       note: "",
@@ -299,6 +325,7 @@ export default function RaktarPage() {
           product_id: action.product_id,
           quantity: Number(action.qty),
           unit_cost: action.unit_cost ? Number(action.unit_cost) : null,
+          expires_at: action.expires_at || null,
           note: action.note || null,
           location_id: isLocated && action.location_id ? action.location_id : null,
         });
@@ -524,6 +551,20 @@ export default function RaktarPage() {
         </div>
       )}
 
+      {expiring.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div className="mb-1 text-sm font-semibold text-amber-900">⏳ {t("wh.expTitle", { count: expiring.length })}</div>
+          <p className="mb-2 text-xs text-amber-800">{t("wh.expHint")}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {expiring.slice(0, 30).map((e) => (
+              <span key={e.id} className={`rounded-full px-2.5 py-0.5 text-xs ${e.status === "expired" ? "bg-rose-600 text-white" : "border border-amber-300 bg-white text-amber-900"}`} title={`${e.warehouse_name}${e.location_code ? ` · ${e.location_code}` : ""}`}>
+                {e.product_name} · {fmtQty(e.quantity)} {e.unit} · {e.warehouse_name}{e.location_code ? ` ${e.location_code}` : ""} · {e.status === "expired" ? t("wh.expExpired", { days: -e.days_left }) : t("wh.expIn", { days: e.days_left })} ({e.expires_at})
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {suggestions.length > 0 && (
         <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -649,7 +690,12 @@ export default function RaktarPage() {
               <tbody>
                 {stock.map((s) => (
                   <tr key={s.product_id} className="border-t border-slate-100">
-                    <td className="px-4 py-2 font-medium">{s.product_name}</td>
+                    <td className="px-4 py-2 font-medium">
+                      {s.product_name}
+                      {s.next_expiry && (() => { const d = Math.round((new Date(s.next_expiry).getTime() - Date.now()) / 86400000); return (
+                        <div className={`text-xs font-normal ${d < 0 ? "text-rose-700" : d <= 7 ? "text-amber-700" : "text-slate-400"}`}>⏳ {t("wh.expNext")}: {s.next_expiry}{s.next_expiry_location ? ` · ${s.next_expiry_location}` : ""}</div>
+                      ); })()}
+                    </td>
                     <td className={`px-4 py-2 ${s.min_quantity != null && s.quantity <= s.min_quantity ? "font-semibold text-rose-700" : ""}`}>
                       {fmtQty(s.quantity)} {s.unit}
                     </td>
@@ -974,7 +1020,7 @@ export default function RaktarPage() {
                   id: p.id, label: p.name, sublabel: p.category, badge: p.unit,
                 }))}
                 value={action.product_id}
-                onChange={(id) => setAction({ ...action, product_id: id })}
+                onChange={(id) => setAction({ ...action, product_id: id, expires_at: action.kind === "receive" ? defaultExpiry(id) : action.expires_at })}
                 className="mt-1"
               />
             </label>
@@ -1011,6 +1057,12 @@ export default function RaktarPage() {
                   placeholder={t("wh.locPickPlaceholder")}
                   className="mt-1"
                 />
+              </label>
+            )}
+            {action.kind === "receive" && (
+              <label className="block text-sm">
+                {t("wh.expiresAt")} <span className="text-xs text-slate-400">({t("wh.expiresHint")})</span>
+                <input type="date" value={action.expires_at} onChange={(e) => setAction({ ...action, expires_at: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
             )}
             {action.kind === "receive" && (

@@ -23,6 +23,7 @@ interface Product {
   is_consignment: boolean;
   low_stock_threshold: number | null;
   purchase_price: number | null;
+  shelf_life_days?: number | null;
   is_active: boolean;
   notes: string | null;
 }
@@ -47,6 +48,7 @@ const EMPTY = {
   is_consignment: false,
   low_stock_threshold: "",
   purchase_price: "",
+  shelf_life_days: "",
   is_active: true,
   notes: "",
 };
@@ -108,6 +110,7 @@ export default function TermekekPage() {
       is_consignment: p.is_consignment,
       low_stock_threshold: p.low_stock_threshold?.toString() ?? "",
       purchase_price: p.purchase_price?.toString() ?? "",
+      shelf_life_days: p.shelf_life_days?.toString() ?? "",
       is_active: p.is_active,
       notes: p.notes ?? "",
     });
@@ -172,6 +175,7 @@ export default function TermekekPage() {
         low_stock_threshold:
           form.low_stock_threshold === "" ? null : Number(form.low_stock_threshold),
         purchase_price: form.purchase_price === "" ? null : Number(form.purchase_price),
+        shelf_life_days: form.shelf_life_days === "" ? null : Number(form.shelf_life_days),
         is_active: form.is_active,
         notes: form.notes || null,
       };
@@ -434,6 +438,10 @@ export default function TermekekPage() {
               <label className="block text-sm">
                 {t("cons.lowStockThreshold")}
                 <input type="number" min={0} step="0.1" value={form.low_stock_threshold} onChange={(e) => setForm({ ...form, low_stock_threshold: e.target.value })} placeholder={t("cons.noAlert")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+              </label>
+              <label className="block text-sm">
+                {t("cons.shelfLife")} <span className="text-xs text-slate-400">({t("cons.shelfLifeHint")})</span>
+                <input type="number" min={1} max={3650} step="1" value={form.shelf_life_days} onChange={(e) => setForm({ ...form, shelf_life_days: e.target.value })} placeholder="—" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
               </label>
             </div>
             <label className="block text-sm">

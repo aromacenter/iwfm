@@ -2492,6 +2492,8 @@ class Product(Base):
     is_consignment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Riasztási küszöb (kg): ha egy partnernél ennyi vagy kevesebb van, jelzünk.
     low_stock_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 177. kör: eltarthatóság napban — bevételezéskor ebből jön az alapértelmezett lejárat
+    shelf_life_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Utolsó beszerzési ár (Ft/kg, nettó) — bevételezéskor frissül, az űrlapot előtölti.
     purchase_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -2958,6 +2960,7 @@ class NotificationSettings(Base):
     weekly_digest: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     weekly_day: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")  # 0 = hétfő
     last_weekly_sent: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    last_expiry_notice: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 177. kör: lejáró tételek napi jelzése
     # 128. kör: számla-emlékeztető lépcső lejárt tételekre (napok vesszővel, pl. "3,7,14")
     reminders_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     reminder_days: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -3263,6 +3266,29 @@ class WarehouseLocation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class WarehouseLot(Base):
+    """Tétel (sarzs) lejárattal (177. kör): bevételezéskor keletkezik; a
+    kiadások FIFO-ban (legkorábbi lejárat) fogyasztják a `trim_lots`
+    egyeztetéssel. Tanácsadó réteg — a készlet mestere a warehouse_stock."""
+
+    __tablename__ = "warehouse_lots"
+    __table_args__ = (
+        Index("ix_warehouse_lots_wh_product", "warehouse_id", "product_id"),
+        Index("ix_warehouse_lots_expires", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("warehouses.id", ondelete="CASCADE"), nullable=False)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    location_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("warehouse_locations.id", ondelete="SET NULL"), nullable=True
+    )
+    expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0")
+    note: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class WarehouseLabelTemplate(Base):

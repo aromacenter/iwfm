@@ -9,7 +9,7 @@ Minden mozgás append-only a warehouse_movements táblában.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
@@ -31,6 +31,7 @@ from app.models import (
 )
 from app.services.wfm.automation import fire_event
 from app.services.wfm.warehouse_locations import is_located, located_add, trim_located
+from app.services.wfm.warehouse_lots import add_lot, default_expiry, expiring as lots_expiring, lots_for_warehouse, next_expiry_map
 
 from app.services.wfm.license import require_module
 
@@ -419,6 +420,8 @@ class WarehouseStockOut(BaseModel):
     unit: str
     quantity: float
     min_quantity: float | None
+    next_expiry: date | None = None  # 177. kör: a legkorábbi lejárat a raktárban
+    next_expiry_location: str | None = None
 
 
 @router.get("/{warehouse_id}/stock", response_model=list[WarehouseStockOut])
@@ -431,6 +434,7 @@ async def warehouse_stock(
     /stock/add végponttal kerül be termék (a katalógus és a raktár-választék
     tudatosan eltérhet)."""
     wh = await _get_visible_warehouse(db, warehouse_id, actor)
+    nxt = await next_expiry_map(db, wh.id)
     rows = (
         await db.execute(
             select(WarehouseStock, Product)
@@ -441,6 +445,7 @@ async def warehouse_stock(
     ).all()
     return [
         WarehouseStockOut(
+            next_expiry=nxt.get(p.id, (None, None))[0], next_expiry_location=nxt.get(p.id, (None, None))[1],
             product_id=str(p.id), product_name=p.name, unit=p.unit,
             quantity=round(s.quantity, 2), min_quantity=s.min_quantity,
         )
@@ -637,6 +642,7 @@ class ReceiveBody(BaseModel):
     unit_cost: float | None = Field(default=None, ge=0)  # Ft/egység, nettó
     note: str | None = Field(default=None, max_length=512)
     location_id: str | None = None  # 161. kör: tárhelyezett raktárban hova kerül
+    expires_at: date | None = None  # 177. kör: lejárat (üresen a termék eltarthatóságából)
 
 
 @router.post("/{warehouse_id}/receive", response_model=WarehouseStockOut)
@@ -668,10 +674,13 @@ async def receive_stock(
     ))
     if body.unit_cost is not None:
         product.purchase_price = body.unit_cost
+    expires = body.expires_at or default_expiry(product)
+    await add_lot(db, wh.id, product.id, body.quantity, expires_at=expires, location_id=loc_id, note=body.note)
     await record_audit(
         db, actor=actor, action="warehouse.receive", entity_type="warehouse",
         entity_id=str(wh.id),
-        detail={"product": product.name, "qty": body.quantity, "unit_cost": body.unit_cost},
+        detail={"product": product.name, "qty": body.quantity, "unit_cost": body.unit_cost,
+                "expires_at": expires.isoformat() if expires else None},
         request=request,
     )
     await db.commit()
@@ -1075,6 +1084,90 @@ async def adjust_stock(
     )
 
 
+# ─── Tételek lejárattal (177. kör) ─────────────────────────────────────────
+
+
+class LotOut(BaseModel):
+    id: str
+    product_id: str
+    product_name: str
+    unit: str
+    location_id: str | None = None
+    location_code: str | None = None
+    expires_at: date | None = None
+    quantity: float
+    received_at: str | None = None
+    days_left: int | None = None
+    status: str  # ok | soon | expired
+
+
+class ExpiringOut(LotOut):
+    warehouse_id: str
+    warehouse_name: str
+
+
+@router.get("/expiring", response_model=list[ExpiringOut])
+async def expiring_lots(
+    days: int = Query(default=30, ge=0, le=365),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Lejárt és ``days`` napon belül lejáró tételek a látható raktárakban."""
+    whs = [w for w in (await db.execute(select(Warehouse))).scalars() if _can_see(w, actor)]
+    rows = await lots_expiring(db, days, [w.id for w in whs])
+    await db.commit()
+    return [ExpiringOut(**r) for r in rows]
+
+
+@router.get("/{warehouse_id}/lots", response_model=list[LotOut])
+async def warehouse_lots(
+    warehouse_id: str,
+    product_id: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """A raktár tételei FIFO-sorrendben (ezt vidd először) — termékre szűrhető."""
+    wh = await _get_visible_warehouse(db, warehouse_id, actor)
+    pid = _parse_uuid(product_id, "product.not_found") if product_id else None
+    rows = await lots_for_warehouse(db, wh.id, pid)
+    await db.commit()
+    return [LotOut(**r) for r in rows]
+
+
+class LotPatchBody(BaseModel):
+    expires_at: date | None = None
+
+
+@router.patch("/{warehouse_id}/lots/{lot_id}", response_model=LotOut)
+async def patch_lot(
+    warehouse_id: str,
+    lot_id: str,
+    body: LotPatchBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Tétel lejáratának javítása (pl. elírt dátum)."""
+    from app.models import WarehouseLot
+
+    wh = await _get_visible_warehouse(db, warehouse_id, actor)
+    lot = await db.get(WarehouseLot, _parse_uuid(lot_id, "warehouse.lot_not_found"))
+    if lot is None or lot.warehouse_id != wh.id:
+        raise HTTPException(status_code=404, detail={"code": "warehouse.lot_not_found"})
+    old = lot.expires_at
+    lot.expires_at = body.expires_at
+    product = await _get_product_or_404(db, str(lot.product_id))
+    await record_audit(
+        db, actor=actor, action="warehouse.lot_expiry", entity_type="warehouse", entity_id=str(wh.id),
+        detail={"product": product.name, "from": old.isoformat() if old else None, "to": body.expires_at.isoformat() if body.expires_at else None},
+        request=request,
+    )
+    await db.commit()
+    rows = await lots_for_warehouse(db, wh.id, lot.product_id)
+    await db.commit()
+    return LotOut(**next(r for r in rows if r["id"] == str(lot.id)))
+
+
 class ReorderSuggestionOut(BaseModel):
     warehouse_id: str
     warehouse_name: str
@@ -1369,6 +1462,7 @@ async def mark_ordered(
 class POReceiveLineIn(BaseModel):
     line_id: str
     quantity: float = Field(gt=0, le=100_000)
+    expires_at: date | None = None  # 177. kör
 
 
 class POReceiveBody(BaseModel):
@@ -1405,16 +1499,16 @@ async def receive_purchase_order(
             ln = by_id.get(_parse_uuid(item.line_id, "po.line_not_found"))
             if ln is None:
                 raise HTTPException(status_code=404, detail={"code": "po.line_not_found"})
-            to_receive.append((ln, item.quantity))
+            to_receive.append((ln, item.quantity, item.expires_at))
     else:
         to_receive = [
-            (ln, ln.quantity - ln.received_qty)
+            (ln, ln.quantity - ln.received_qty, None)
             for ln in all_lines
             if ln.quantity - ln.received_qty > 1e-9
         ]
 
     received_any = False
-    for ln, qty in to_receive:
+    for ln, qty, exp in to_receive:
         if qty <= 1e-9:
             continue
         product = (
@@ -1422,6 +1516,7 @@ async def receive_purchase_order(
         ).scalar_one()
         stock = await _stock_row(db, po.warehouse_id, product.id)
         stock.quantity += qty
+        await add_lot(db, po.warehouse_id, product.id, qty, expires_at=exp or default_expiry(product), note=po.order_no)
         ln.received_qty = round(ln.received_qty + qty, 3)
         db.add(WarehouseMovement(
             warehouse_id=po.warehouse_id, product_id=product.id, action="receive",
