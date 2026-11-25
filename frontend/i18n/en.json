@@ -4950,7 +4950,9 @@
     "none": "Nothing here right now.",
     "in_progress": "In progress",
     "planned": "Planned",
-    "done": "Done"
+    "done": "Done",
+    "showAllDone": "All {count} completed items ▾",
+    "collapseDone": "Collapse ▴"
   },
   "modules": {
     "calendar": "Calendar",

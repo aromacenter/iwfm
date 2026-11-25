@@ -4,6 +4,8 @@
  *  itt csak olvasható — három csoport: fejlesztés alatt, tervben, elkészült. */
 
 import { useEffect, useState } from "react";
+
+const DONE_SHOWN = 5; // ennyi elkészült tétel látszik alapból
 import AppShell from "@/components/AppShell";
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -26,6 +28,7 @@ export default function RoadmapPage() {
   const { t } = useT();
   const [items, setItems] = useState<Item[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [allDone, setAllDone] = useState(false);
 
   useEffect(() => {
     api.get<Item[]>("/api/roadmap")
@@ -53,6 +56,8 @@ export default function RoadmapPage() {
             );
           }
           if (group.length === 0) return null;
+          const collapsed = status === "done" && !allDone && group.length > DONE_SHOWN;
+          const shown = collapsed ? group.slice(0, DONE_SHOWN) : group;
           return (
             <section key={status}>
               <h2 className="mb-2 flex items-center gap-2 font-semibold">
@@ -60,7 +65,7 @@ export default function RoadmapPage() {
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{group.length}</span>
               </h2>
               <ol className="relative space-y-3 border-l border-slate-200 pl-5">
-                {group.map((i) => (
+                {shown.map((i) => (
                   <li key={i.id} className={`relative rounded-xl border px-4 py-3 ${cls}`}>
                     <span className={`absolute -left-[26px] top-4 h-3 w-3 rounded-full ${dot}`} aria-hidden="true" />
                     <div className="flex flex-wrap items-center gap-2">
@@ -75,6 +80,16 @@ export default function RoadmapPage() {
                   </li>
                 ))}
               </ol>
+              {status === "done" && group.length > DONE_SHOWN && (
+                <button
+                  type="button"
+                  onClick={() => setAllDone((v) => !v)}
+                  aria-expanded={!collapsed}
+                  className="mt-3 rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium hover:bg-slate-50"
+                >
+                  {collapsed ? t("road.showAllDone", { count: group.length }) : t("road.collapseDone")}
+                </button>
+              )}
             </section>
           );
         })}

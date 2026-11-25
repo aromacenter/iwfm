@@ -4950,7 +4950,9 @@
     "none": "Jelenleg nincs ilyen elem.",
     "in_progress": "Fejlesztés alatt",
     "planned": "Tervben",
-    "done": "Elkészült"
+    "done": "Elkészült",
+    "showAllDone": "Mind a {count} elkészült fejlesztés ▾",
+    "collapseDone": "Összecsukás ▴"
   },
   "modules": {
     "calendar": "Naptár",
