@@ -169,7 +169,7 @@ async def test_notification_settings_and_digest(client, admin, manager, monkeypa
 
     async with app_db.get_session_factory()() as session:
         text = await build_daily_digest(session)
-    assert "Iwfm napi összefoglaló" in text
+    assert "reggeli brief" in text  # 179. kör: új címsor
     assert "Esedékes elszámolás" in text
 
     # a run_pending: SMTP hiányában nem küld, nem is hasal el
