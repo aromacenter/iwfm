@@ -78,7 +78,26 @@ export async function downloadFilePost(path: string, body: unknown, filename: st
 export async function printFile(path: string) {
   const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
   if (!res.ok) throw new ApiError(res.status, `http.${res.status}`, null);
-  const blob = await res.blob();
+  printBlob(await res.blob());
+}
+
+/** POST-kéréssel előállított PDF a nyomtatási ablakban (tárhely-címkék). */
+export async function printFilePost(path: string, body: unknown) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let code = `http.${res.status}`;
+    try { code = (await res.json())?.detail?.code ?? code; } catch { /* nem JSON */ }
+    throw new ApiError(res.status, code, null);
+  }
+  printBlob(await res.blob());
+}
+
+function printBlob(blob: Blob) {
   const url = URL.createObjectURL(blob);
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";

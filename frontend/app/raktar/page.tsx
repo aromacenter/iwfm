@@ -157,6 +157,12 @@ export default function RaktarPage() {
   const locOn = modules === undefined || modules === null || modules.includes("warehouse_locations");
   const [locs, setLocs] = useState<Loc[]>([]);
   const [locTick, setLocTick] = useState(0);
+  // 174. kör: QR-címkéről érkező mélylink (?wh=<raktár>&loc=<tárhely-kód>)
+  const [deep] = useState<{ wh: string | null; loc: string | null }>(() => {
+    if (typeof window === "undefined") return { wh: null, loc: null };
+    const sp = new URLSearchParams(window.location.search);
+    return { wh: sp.get("wh"), loc: sp.get("loc") };
+  });
 
   const selected = warehouses.find((w) => w.id === selectedId) ?? null;
   const isLocated = !!selected && selected.layout === "located" && locOn;
@@ -164,7 +170,7 @@ export default function RaktarPage() {
   const load = useCallback(() => {
     api.get<Warehouse[]>("/api/warehouses").then((rows) => {
       setWarehouses(rows);
-      setSelectedId((cur) => cur ?? rows[0]?.id ?? null);
+      setSelectedId((cur) => cur ?? (deep.wh && rows.some((w) => w.id === deep.wh) ? deep.wh : null) ?? rows[0]?.id ?? null);
     }).catch(() => {});
     api.get<Product[]>("/api/products").then(setProducts).catch(() => {});
     api.get<PartnerLite[]>("/api/partners").then(setPartners).catch(() => {});
@@ -173,7 +179,7 @@ export default function RaktarPage() {
     api.get<AssignableUser[]>("/api/warehouses/assignable-users").then(setAssignUsers).catch(() => {});
     api.get<{ role?: string }>("/api/auth/me").then((m) => setMeRole(m.role ?? null)).catch(() => {});
     api.get<{ modules: string[] | null }>("/api/settings/license/status").then((l) => setModules(l.modules)).catch(() => setModules(null));
-  }, []);
+  }, [deep.wh]);
   useEffect(load, [load]);
   useEffect(() => {
     if (!isLocated || !selectedId) return;
@@ -687,6 +693,7 @@ export default function RaktarPage() {
               products={activeProducts}
               isMgr={isMgr}
               onChanged={() => { loadStock(); load(); }}
+              initialCode={selected.id === deep.wh ? deep.loc : null}
             />
           )}
           <div className="border-t border-slate-200">

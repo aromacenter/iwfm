@@ -3265,6 +3265,26 @@ class WarehouseLocation(Base):
     )
 
 
+class WarehouseLabelTemplate(Base):
+    """Mentett tárhely-címke minta (174. kör): papír, címkeméret, mezők,
+    csoport-felirat — a `warehouse_labels.LabelConfig` JSON-ja, névvel."""
+
+    __tablename__ = "warehouse_label_templates"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class WarehouseStockLocation(Base):
     """Készlet-bontás tárhelyenként (161. kör). A termék raktári ÖSSZESE a
     warehouse_stock sorban marad; itt az van, hogy abból mennyi melyik

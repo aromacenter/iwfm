@@ -32,12 +32,14 @@ from app.models import (
     Product,
     User,
     Warehouse,
+    WarehouseLabelTemplate,
     WarehouseLocation,
     WarehouseMovement,
     WarehouseStock,
     WarehouseStockLocation,
 )
 from app.services.wfm.license import require_module
+from app.services.wfm.warehouse_labels import LabelConfig, LabelItem, build_labels_pdf, grid as label_grid
 from app.services.wfm.warehouse_locations import (
     EPS,
     get_location_or_404,
@@ -689,6 +691,152 @@ async def location_labels_pdf(
         content=buf.getvalue(), media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="tarhely-cimkek-{wh.name[:20]}.pdf"'},
     )
+
+
+# ─── Konfigurálható címkék + mentett minták (174. kör) ──────────────────────
+
+
+class LabelPrintBody(LabelConfig):
+    """Nyomtatási kérés: a minta beállításai + melyik tárhelyek, hány példány."""
+
+    location_ids: list[str] | None = None  # None = a raktár (vagy a sor) minden aktív tárhelye
+    row: str | None = Field(default=None, max_length=4)
+    copies: int = Field(default=1, ge=1, le=20)
+
+
+def _label_link(wh: Warehouse, code: str) -> str:
+    from urllib.parse import quote
+
+    from app.core.config import get_settings
+
+    origin = get_settings().frontend_origin.rstrip("/")
+    return f"{origin}/raktar?wh={wh.id}&loc={quote(code)}"
+
+
+@router.post("/{warehouse_id}/locations/labels")
+async def location_labels_custom(
+    warehouse_id: str,
+    body: LabelPrintBody,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Címkék PDF-ben a megadott mintával: egy tárhely, kijelöltek, egy sor
+    vagy a teljes raktár; A4/A5/Letter ív vagy tekercs (címkénként egy oldal)."""
+    wh = await _require_located(db, warehouse_id, actor)
+    if not body.fields:
+        raise HTTPException(status_code=422, detail={"code": "warehouse.label_fields"})
+    q = select(WarehouseLocation).where(WarehouseLocation.warehouse_id == wh.id)
+    if body.location_ids:
+        ids: list[uuid.UUID] = []
+        for raw in body.location_ids[:MAX_LOCATIONS]:
+            try:
+                ids.append(uuid.UUID(str(raw)))
+            except ValueError:
+                continue
+        q = q.where(WarehouseLocation.id.in_(ids))
+    else:
+        q = q.where(WarehouseLocation.is_active.is_(True))
+        if body.row:
+            q = q.where(WarehouseLocation.row_code == normalize_row_code(body.row, wh.row_scheme))
+    locs = (
+        await db.execute(q.order_by(WarehouseLocation.row_code, WarehouseLocation.bay, WarehouseLocation.level, WarehouseLocation.slot))
+    ).scalars().all()
+    if not locs:
+        raise HTTPException(status_code=404, detail={"code": "warehouse.no_locations"})
+    cfg = LabelConfig(**body.model_dump(include=set(LabelConfig.model_fields)))
+    try:
+        label_grid(cfg)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "warehouse.label_too_big"}) from None
+    items = [
+        LabelItem(code=lc.code, row_code=lc.row_code, bay=lc.bay, level=lc.level, slot=lc.slot, note=lc.label, link=_label_link(wh, lc.code))
+        for lc in locs
+    ]
+    pdf = build_labels_pdf(items, cfg, wh.name, copies=body.copies)
+    import unicodedata
+
+    ascii_name = unicodedata.normalize("NFKD", wh.name).encode("ascii", "ignore").decode()
+    safe = "".join(ch if ch.isalnum() else "-" for ch in ascii_name[:24]).strip("-") or "raktar"
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="tarhely-cimkek-{safe}.pdf"'},
+    )
+
+
+class LabelTemplateOut(BaseModel):
+    id: str
+    name: str
+    config: dict
+    updated_at: str
+
+
+class LabelTemplateBody(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    config: LabelConfig
+
+
+def _template_out(tp: WarehouseLabelTemplate) -> LabelTemplateOut:
+    return LabelTemplateOut(id=str(tp.id), name=tp.name, config=tp.config or {}, updated_at=tp.updated_at.isoformat() if tp.updated_at else "")
+
+
+@router.get("/label-templates", response_model=list[LabelTemplateOut])
+async def list_label_templates(
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    rows = (await db.execute(select(WarehouseLabelTemplate).order_by(WarehouseLabelTemplate.name))).scalars().all()
+    return [_template_out(tp) for tp in rows]
+
+
+@router.post("/label-templates", response_model=LabelTemplateOut)
+async def save_label_template(
+    body: LabelTemplateBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Minta mentése névvel; azonos név → felülírás."""
+    _require_manager(actor)
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail={"code": "warehouse.label_template_name"})
+    tp = (await db.execute(select(WarehouseLabelTemplate).where(WarehouseLabelTemplate.name == name))).scalar_one_or_none()
+    created = tp is None
+    if tp is None:
+        tp = WarehouseLabelTemplate(name=name, created_by_user_id=actor.id)
+        db.add(tp)
+    tp.config = body.config.model_dump()
+    await record_audit(
+        db, actor=actor, action="warehouse.label_template_save", entity_type="warehouse",
+        entity_id=None, detail={"name": name, "created": created}, request=request,
+    )
+    await db.commit()
+    await db.refresh(tp)
+    return _template_out(tp)
+
+
+@router.delete("/label-templates/{template_id}")
+async def delete_label_template(
+    template_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    _require_manager(actor)
+    try:
+        tid = uuid.UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "not_found"}) from None
+    tp = await db.get(WarehouseLabelTemplate, tid)
+    if tp is None:
+        raise HTTPException(status_code=404, detail={"code": "not_found"})
+    await record_audit(
+        db, actor=actor, action="warehouse.label_template_delete", entity_type="warehouse",
+        entity_id=None, detail={"name": tp.name}, request=request,
+    )
+    await db.delete(tp)
+    await db.commit()
+    return {"ok": True}
 
 
 # ─── Raktár-beállítás: csak-készlet ↔ tárhelyezett ──────────────────────────

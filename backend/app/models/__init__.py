@@ -103,6 +103,7 @@ from app.models.models import (  # noqa: F401
     TimeOffRequest,
     User,
     Warehouse,
+    WarehouseLabelTemplate,
     WarehouseLocation,
     WarehouseMovement,
     WarehouseStock,

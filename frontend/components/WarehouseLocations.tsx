@@ -4,7 +4,8 @@
  *  szerkezet-generálás, átrendezés (a készlet a tárhellyel megy), berakás,
  *  tárhelyek közti áthelyezés, „hol van?” kereső, QR-címkék. */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import LabelPrintDialog, { type LabelSelection } from "@/components/LabelPrintDialog";
 import SearchSelect from "@/components/SearchSelect";
 import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -35,7 +36,7 @@ interface ProductLite { id: string; name: string; unit: string; category?: strin
 const fmt = (n: number) => n.toLocaleString("hu-HU", { maximumFractionDigits: 3 });
 
 export default function WarehouseLocations({
-  warehouseId, warehouseName, rowScheme, products, isMgr, onChanged,
+  warehouseId, warehouseName, rowScheme, products, isMgr, onChanged, initialCode,
 }: {
   warehouseId: string;
   warehouseName: string;
@@ -43,6 +44,8 @@ export default function WarehouseLocations({
   products: ProductLite[];
   isMgr: boolean;
   onChanged: () => void;
+  /** QR-címkéről érkező mélylink (?loc=KÓD): ezt a tárhelyet nyitjuk meg. */
+  initialCode?: string | null;
 }) {
   const { t } = useT();
   const { toast, confirm } = useUI();
@@ -116,6 +119,35 @@ export default function WarehouseLocations({
   }, [cell, warehouseId, data]);
 
   const [edit, setEdit] = useState<{ row_code: string; bay: string; level: string; slot: string; label: string; is_active: boolean } | null>(null);
+  // ── Címkenyomtatás (174. kör) + szkenner / mélylink ──
+  const [lbl, setLbl] = useState<LabelSelection | null>(null);
+  const [scan, setScan] = useState("");
+  const deepDone = useRef<string | null>(null);
+  const openByCode = useCallback((raw: string): boolean => {
+    let code = raw.trim();
+    if (!code) return false;
+    try {
+      if (/^https?:\/\//i.test(code)) code = new URL(code).searchParams.get("loc") ?? code;
+    } catch { /* nem URL */ }
+    code = code.toUpperCase();
+    const hit = (data?.locations ?? []).find((l) => l.code.toUpperCase() === code);
+    if (!hit) return false;
+    setRow(hit.row_code);
+    setCell(hit);
+    setEdit(null);
+    return true;
+  }, [data]);
+  useEffect(() => {
+    if (!initialCode || !data || deepDone.current === initialCode) return;
+    deepDone.current = initialCode;
+    if (!openByCode(initialCode)) toast(t("wh.lblScanMiss", { code: initialCode }), "error");
+  }, [initialCode, data, openByCode, toast, t]);
+  function onScanSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (openByCode(scan)) setScan("");
+    else toast(t("wh.lblScanMiss", { code: scan.trim() }), "error");
+  }
+
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!cell || !edit) return;
@@ -201,9 +233,9 @@ export default function WarehouseLocations({
             </button>
           )}
           {locs.length > 0 && (
-            <a href={`/api/warehouses/${warehouseId}/locations/labels.pdf${row ? `?row=${row}` : ""}`} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100">
+            <button onClick={() => setLbl(row ? { mode: "row", row, ids: [] } : { mode: "all", row: "", ids: [] })} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100">
               🏷 {t("wh.locLabels")}
-            </a>
+            </button>
           )}
         </div>
       </div>
@@ -226,6 +258,10 @@ export default function WarehouseLocations({
       <div className="mx-4 mb-3 flex flex-wrap items-center gap-2 text-xs">
         <span className="font-medium">🔎 {t("wh.locFind")}</span>
         <div className="min-w-[220px]"><SearchSelect items={prodItems} value={findId} onChange={(id) => { setFindId(id); if (!id) setFound(null); }} allowEmpty placeholder={t("wh.locFindPlaceholder")} /></div>
+        <form onSubmit={onScanSubmit} className="flex items-center gap-1" title={t("wh.lblScanHint")}>
+          <span className="font-medium">📷 {t("wh.lblScan")}</span>
+          <input value={scan} onChange={(e) => setScan(e.target.value)} placeholder={t("wh.locPickPlaceholder")} className="w-40 rounded border border-slate-300 px-2 py-1 font-mono uppercase" />
+        </form>
         {found && (
           <span className="text-slate-700">
             {found.length === 0 ? t("wh.locFindNone") : found.map((f) => `${f.warehouse_name} ${f.code ?? t("wh.locUnplacedShort")}: ${fmt(f.quantity)}`).join(" · ")}
@@ -320,6 +356,7 @@ export default function WarehouseLocations({
                   {contents.length > 0 && <button onClick={() => openOp("relocate", contents[0].product_id, cell.id)} className="rounded border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-50">🔁 {t("wh.locRelocate")}</button>}
                   {contents.length > 0 && <button onClick={() => openOp("unplace", contents[0].product_id, cell.id)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">📤 {t("wh.locUnplace")}</button>}
                   {isMgr && <button onClick={() => { setError(null); setEdit({ row_code: cell.row_code, bay: String(cell.bay), level: String(cell.level), slot: String(cell.slot), label: cell.label ?? "", is_active: cell.is_active }); }} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">✏️ {t("wh.locEdit")}</button>}
+                  <button onClick={() => setLbl({ mode: "picked", row: cell.row_code, ids: [cell.id] })} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100" title={t("wh.lblOne")}>🏷</button>
                   {isMgr && contents.length === 0 && <button onClick={deleteCell} className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50">🗑</button>}
                   <button onClick={() => setCell(null)} className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100">✕</button>
                 </div>
@@ -387,6 +424,17 @@ export default function WarehouseLocations({
       )}
 
       {/* ── Dialógusok ── */}
+      {lbl && data && (
+        <LabelPrintDialog
+          warehouseId={warehouseId}
+          warehouseName={warehouseName}
+          locs={data.locations}
+          rowCodes={data.rows.map((r) => r.row_code)}
+          initial={lbl}
+          isMgr={isMgr}
+          onClose={() => setLbl(null)}
+        />
+      )}
       {gen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
           <form onSubmit={runGen} className="relative my-8 w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl">
