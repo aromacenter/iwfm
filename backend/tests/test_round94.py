@@ -144,7 +144,7 @@ async def test_intake_list_filtered_for_szervizes(client, manager):
     asset = res.json()
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": asset["id"], "client_name": "Sajat Ugyfel",
+        json={"counter": 1000, "asset_id": asset["id"], "client_name": "Sajat Ugyfel",
               "client_phone": "+36301234567", "client_email": "sajat@ugyfel.hu"},
         headers=sz1,
     )

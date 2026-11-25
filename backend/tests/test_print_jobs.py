@@ -132,7 +132,7 @@ async def test_pdf_print_jobs_and_qr_lookup(client, admin, manager):
     intake = (
         await client.post(
             "/api/intakes",
-            json={"asset_id": asset["id"], "client_name": "Nyomtat Elek",
+            json={"counter": 1000, "asset_id": asset["id"], "client_name": "Nyomtat Elek",
                   "client_phone": "+3630444", "client_email": "elek@example.com",
                   "faults": "nem kapcsol be"},
             headers=mgr,

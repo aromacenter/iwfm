@@ -26,7 +26,7 @@ async def test_intake_photo_rejects_svg(client, admin, manager):
     _, sz = await make_user(email="sec-atvevo@example.com", role="szervizes")
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": asset["id"], "client_name": "X", "client_phone": "+3630",
+        json={"counter": 1000, "asset_id": asset["id"], "client_name": "X", "client_phone": "+3630",
               "client_email": "x@example.com", "photos": [SVG]},
         headers=sz,
     )

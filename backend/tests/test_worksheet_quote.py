@@ -301,7 +301,7 @@ async def test_suggested_email_prefill(client, admin, manager):
     # az átvételi elismervényen rögzített ügyfél-cím felülírja
     res = await client.post(
         "/api/intakes",
-        json={"asset_id": asset["id"], "client_name": "Vevő",
+        json={"counter": 1000, "asset_id": asset["id"], "client_name": "Vevő",
               "client_phone": "+3630555", "client_email": "vevo@example.com"},
         headers=mgr,
     )
