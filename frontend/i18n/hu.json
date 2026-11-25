@@ -2783,7 +2783,8 @@
     "handover.counter_required": "Az átadáskori számláló-állás kötelező, és nem lehet nulla.",
     "warehouse.label_too_big": "A címke nem fér el a lapon.",
     "warehouse.label_fields": "Válassz legalább egy mezőt a címkére.",
-    "warehouse.label_template_name": "Adj nevet a mintának."
+    "warehouse.label_template_name": "Adj nevet a mintának.",
+    "warehouse.scan_unknown": "Nincs ilyen tárhely vagy termékkód."
   },
   "onboard": {
     "title": "Üdv az X-adminban! 👋",
@@ -5028,5 +5029,38 @@
     "deleteBody": "Az X-systems megszüntette a pultjából létrehozott fiókot: {name} ({login}). A fiók letiltva, a belépései érvénytelenek.",
     "ack": "Rendben",
     "more": "+{n} további kérés vár"
+  },
+  "scan": {
+    "mode": "Szkenner-mód",
+    "title": "Raktár — szkenner-mód",
+    "hint": "Olvasd be a polccímkét (QR vagy vonalkód) vagy a termék kódját. A kézi olvasó ide gépel; telefonon a kamera gombot használd.",
+    "warehouse": "Raktár",
+    "scanBtn": "Beolvasás kamerával",
+    "manual": "Kód beírása…",
+    "notFound": "Nincs ilyen tárhely vagy termékkód: {code}",
+    "location": "Tárhely",
+    "empty": "Üres tárhely.",
+    "place": "Berakás ide",
+    "placeHint": "Válassz terméket (vagy olvasd be a kódját), add meg a mennyiséget.",
+    "product": "Termék",
+    "qty": "Mennyiség",
+    "placeDo": "Berak",
+    "placed": "Berakva: {product} {qty} {unit} → {code}",
+    "unplace": "Levétel",
+    "unplaced": "Levéve: {product} {qty} {unit} ({code})",
+    "relocate": "Áthelyezés",
+    "relocateHint": "Most olvasd be a CÉL tárhelyet: {product} {qty} {unit} innen: {code}",
+    "relocated": "Áthelyezve: {product} {qty} {unit} {from} → {to}",
+    "count": "Leltár itt",
+    "countHint": "Írd be, mennyi van ténylegesen a tárhelyen. Ami nincs a listán, azt add hozzá; a 0 levesz.",
+    "countAdd": "+ termék a listához",
+    "countDo": "Leltár rögzítése",
+    "counted": "Tárhelyi leltár rögzítve: {code} ({changes} változás)",
+    "cancel": "Mégsem",
+    "productHint": "Termék beolvasva. Add meg a mennyiséget, majd olvasd be a tárhelyet, ahová kerül.",
+    "productTarget": "Olvasd be a cél-tárhelyet",
+    "log": "Utolsó műveletek",
+    "noLocated": "Nincs tárhelyezett raktár — a Raktár oldalon állítsd a telephelyi raktárt „Tárhelyezett”-re.",
+    "back": "← Raktár"
   }
 }

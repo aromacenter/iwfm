@@ -2783,7 +2783,8 @@
     "handover.counter_required": "The counter reading at handover is required and cannot be zero.",
     "warehouse.label_too_big": "The label does not fit the sheet.",
     "warehouse.label_fields": "Pick at least one field for the label.",
-    "warehouse.label_template_name": "Give the template a name."
+    "warehouse.label_template_name": "Give the template a name.",
+    "warehouse.scan_unknown": "No such location or product code."
   },
   "onboard": {
     "title": "Welcome to X-admin! 👋",
@@ -5028,5 +5029,38 @@
     "deleteBody": "X-systems removed the account it created from its console: {name} ({login}). The account is disabled and its sessions are invalid.",
     "ack": "OK",
     "more": "+{n} more requests waiting"
+  },
+  "scan": {
+    "mode": "Scanner mode",
+    "title": "Warehouse — scanner mode",
+    "hint": "Scan the shelf label (QR or barcode) or a product code. A handheld scanner types here; on a phone use the camera button.",
+    "warehouse": "Warehouse",
+    "scanBtn": "Scan with camera",
+    "manual": "Type a code…",
+    "notFound": "No such location or product code: {code}",
+    "location": "Location",
+    "empty": "Empty location.",
+    "place": "Put away here",
+    "placeHint": "Pick a product (or scan its code) and enter the quantity.",
+    "product": "Product",
+    "qty": "Quantity",
+    "placeDo": "Put away",
+    "placed": "Put away: {product} {qty} {unit} → {code}",
+    "unplace": "Take off",
+    "unplaced": "Taken off: {product} {qty} {unit} ({code})",
+    "relocate": "Move",
+    "relocateHint": "Now scan the TARGET location: {product} {qty} {unit} from {code}",
+    "relocated": "Moved: {product} {qty} {unit} {from} → {to}",
+    "count": "Count here",
+    "countHint": "Enter what is physically on the location. Add anything missing from the list; 0 removes.",
+    "countAdd": "+ add product",
+    "countDo": "Save count",
+    "counted": "Location count saved: {code} ({changes} changes)",
+    "cancel": "Cancel",
+    "productHint": "Product scanned. Enter the quantity, then scan the location it goes to.",
+    "productTarget": "Scan the target location",
+    "log": "Recent actions",
+    "noLocated": "No located warehouse — set the site warehouse to “Located” on the Warehouse page.",
+    "back": "← Warehouse"
   }
 }

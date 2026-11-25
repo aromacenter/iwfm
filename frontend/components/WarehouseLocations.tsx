@@ -237,6 +237,11 @@ export default function WarehouseLocations({
               🏷 {t("wh.locLabels")}
             </button>
           )}
+          {locs.length > 0 && (
+            <a href={`/raktar/szkenner?wh=${warehouseId}`} className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-800 hover:bg-indigo-100">
+              📷 {t("scan.mode")}
+            </a>
+          )}
         </div>
       </div>
 

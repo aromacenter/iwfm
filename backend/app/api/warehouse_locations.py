@@ -839,6 +839,173 @@ async def delete_label_template(
     return {"ok": True}
 
 
+# ─── Szkenner-mód (176. kör): kód → tárhely vagy termék; tárhelyi leltár ────
+
+
+class ScanProductOut(BaseModel):
+    id: str
+    name: str
+    unit: str
+    code: str | None
+
+
+class ScanOut(BaseModel):
+    kind: str  # location | product
+    location: LocationOut | None = None
+    contents: list[ContentOut] = Field(default_factory=list)
+    product: ScanProductOut | None = None
+
+
+def scan_code(raw: str) -> str:
+    """A beolvasott érték normalizálása: QR-mélylinkből a `loc` paraméter,
+    egyébként a nyers kód (szóközök nélkül)."""
+    code = (raw or "").strip()
+    if code.lower().startswith(("http://", "https://")):
+        from urllib.parse import parse_qs, urlparse
+
+        qs = parse_qs(urlparse(code).query)
+        code = (qs.get("loc") or qs.get("code") or [code])[0]
+    return code.strip()
+
+
+async def _contents(db: AsyncSession, loc: WarehouseLocation) -> list[ContentOut]:
+    rows = (
+        await db.execute(
+            select(WarehouseStockLocation, Product)
+            .join(Product, Product.id == WarehouseStockLocation.product_id)
+            .where(WarehouseStockLocation.location_id == loc.id, WarehouseStockLocation.quantity > EPS)
+            .order_by(Product.name)
+        )
+    ).all()
+    return [ContentOut(product_id=str(p.id), product_name=p.name, unit=p.unit, quantity=round(r.quantity, 3)) for r, p in rows]
+
+
+@router.get("/{warehouse_id}/scan", response_model=ScanOut)
+async def scan_lookup(
+    warehouse_id: str,
+    code: str = Query(min_length=1, max_length=512),
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Beolvasott kód feloldása: tárhely-kód (vagy a címke QR-linkje) → a
+    tárhely és tartalma; termékkód → a termék. 404, ha egyik sem."""
+    wh = await _require_located(db, warehouse_id, actor)
+    code = scan_code(code)
+    if not code:
+        raise HTTPException(status_code=404, detail={"code": "warehouse.scan_unknown"})
+    loc = (
+        await db.execute(
+            select(WarehouseLocation).where(
+                WarehouseLocation.warehouse_id == wh.id, sa_func.upper(WarehouseLocation.code) == code.upper()
+            )
+        )
+    ).scalar_one_or_none()
+    if loc is not None:
+        contents = await _contents(db, loc)
+        out = _loc_out(loc, {loc.id: (sum(c.quantity for c in contents), len(contents))})
+        return ScanOut(kind="location", location=out, contents=contents)
+    product = (
+        await db.execute(
+            select(Product).where(sa_func.upper(Product.code) == code.upper(), Product.is_active.is_(True))
+        )
+    ).scalars().first()
+    if product is not None:
+        return ScanOut(kind="product", product=ScanProductOut(id=str(product.id), name=product.name, unit=product.unit, code=product.code))
+    raise HTTPException(status_code=404, detail={"code": "warehouse.scan_unknown"})
+
+
+class CountItem(BaseModel):
+    product_id: str
+    counted: float = Field(ge=0, le=100_000)
+
+
+class CountBody(BaseModel):
+    items: list[CountItem] = Field(max_length=200)
+    note: str | None = Field(default=None, max_length=512)
+
+
+@router.post("/{warehouse_id}/locations/{location_id}/count", response_model=list[ContentOut])
+async def count_location(
+    warehouse_id: str,
+    location_id: str,
+    body: CountBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("settlements")),
+):
+    """Tárhelyi leltár: a tárhelyen számolt mennyiségekre áll a tárhely.
+    Többlet: ha van nem tárhelyezett szabad mennyiség, azt rakjuk ide,
+    a maradék leltár-korrekcióval növeli a készletet. Hiány: lekerül a
+    tárhelyről ÉS a raktári összesből (leltár-korrekció). A nem küldött
+    termékek nem változnak."""
+    from app.api.warehouse import _stock_row
+
+    wh = await _require_located(db, warehouse_id, actor)
+    loc = await get_location_or_404(db, wh.id, location_id)
+    if not loc.is_active:
+        raise HTTPException(status_code=422, detail={"code": "warehouse.location_inactive"})
+    diffs: list[dict] = []
+    fired: list[tuple[Product, dict]] = []
+    seen: set[str] = set()
+    for item in body.items:
+        if item.product_id in seen:
+            continue
+        seen.add(item.product_id)
+        product = await _get_product_or_404(db, item.product_id)
+        row = (
+            await db.execute(
+                select(WarehouseStockLocation).where(
+                    WarehouseStockLocation.warehouse_id == wh.id,
+                    WarehouseStockLocation.product_id == product.id,
+                    WarehouseStockLocation.location_id == loc.id,
+                )
+            )
+        ).scalar_one_or_none()
+        have = float(row.quantity) if row is not None else 0.0
+        diff = round(item.counted - have, 3)
+        if abs(diff) <= EPS:
+            continue
+        note = (body.note or "")[:400] or None
+        if diff > 0:
+            unplaced = await trim_located(db, wh.id, product.id)
+            from_free = min(unplaced, diff)
+            extra = round(diff - from_free, 3)
+            if extra > EPS:
+                stock = await _stock_row(db, wh.id, product.id)
+                stock.quantity += extra
+                db.add(WarehouseMovement(
+                    warehouse_id=wh.id, product_id=product.id, action="adjust", quantity_delta=extra,
+                    location_id=loc.id, actor_user_id=actor.id, note=note or "tárhelyi leltár",
+                ))
+            await located_add(db, wh.id, product.id, loc.id, diff)
+            if from_free > EPS:
+                db.add(WarehouseMovement(
+                    warehouse_id=wh.id, product_id=product.id, action="place", quantity_delta=from_free,
+                    location_id=loc.id, actor_user_id=actor.id, note=note,
+                ))
+        else:
+            await located_take(db, wh.id, product.id, loc.id, -diff)
+            stock = await _stock_row(db, wh.id, product.id)
+            stock.quantity = max(0.0, stock.quantity + diff)
+            db.add(WarehouseMovement(
+                warehouse_id=wh.id, product_id=product.id, action="adjust", quantity_delta=diff,
+                location_id=loc.id, actor_user_id=actor.id, note=note or "tárhelyi leltár",
+            ))
+        diffs.append({"product": product.name, "from": round(have, 3), "to": item.counted})
+        fired.append((product, diffs[-1]))
+    await record_audit(
+        db, actor=actor, action="warehouse.location_count", entity_type="warehouse",
+        entity_id=str(wh.id), detail={"location": loc.code, "changes": len(diffs), "items": diffs[:20]}, request=request,
+    )
+    await db.commit()
+    for product, d in fired:
+        await _fire_movement(
+            db, muvelet="tárhelyi leltár", warehouse_id=wh.id, product=product, qty=d["to"], actor=actor,
+            reszlet=f"{loc.code}: {d['from']:g} → {d['to']:g}",
+        )
+    return await _contents(db, loc)
+
+
 # ─── Raktár-beállítás: csak-készlet ↔ tárhelyezett ──────────────────────────
 
 
