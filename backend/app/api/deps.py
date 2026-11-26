@@ -301,6 +301,9 @@ async def get_current_user(
 ) -> User:
     token = _extract_token(request)
     if not token:
+        api_key = request.headers.get("x-api-key")
+        if api_key:
+            return await _user_from_api_key(request, db, api_key)
         raise HTTPException(status_code=401, detail={"code": "auth.missing"})
     try:
         payload = decode_token(token)
@@ -330,6 +333,36 @@ async def get_current_user(
                 await db.commit()
             except Exception:  # noqa: BLE001
                 await db.rollback()
+    return user
+
+
+async def _user_from_api_key(request: Request, db: AsyncSession, raw: str) -> User:
+    """187. kör: olvasó API-kulcs — csak GET/HEAD, a kulcs tulajdonosának jogaival."""
+    import hashlib
+    from datetime import UTC, datetime, timedelta
+
+    from app.models import ApiKey
+
+    if request.method not in ("GET", "HEAD"):
+        raise HTTPException(status_code=403, detail={"code": "auth.api_key_read_only"})
+    digest = hashlib.sha256(raw.strip().encode("utf-8")).hexdigest()
+    key = (await db.execute(select(ApiKey).where(ApiKey.key_hash == digest))).scalar_one_or_none()
+    if key is None or key.revoked_at is not None:
+        raise HTTPException(status_code=401, detail={"code": "auth.invalid"})
+    user = (await db.execute(select(User).where(User.id == key.created_by))).scalar_one_or_none() if key.created_by else None
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail={"code": "auth.invalid"})
+    await get_role_levels(db)
+    now = datetime.now(UTC)
+    used = key.last_used_at
+    if used is not None and used.tzinfo is None:
+        used = used.replace(tzinfo=UTC)
+    if used is None or now - used > timedelta(minutes=5):
+        try:
+            key.last_used_at = now
+            await db.commit()
+        except Exception:  # noqa: BLE001
+            await db.rollback()
     return user
 
 

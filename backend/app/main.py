@@ -346,6 +346,9 @@ def create_app() -> FastAPI:
     from app.api import price_indexation as price_indexation_api
 
     app.include_router(price_indexation_api.router, prefix="/api/price-indexations", tags=["price-indexations"])
+    from app.api import integrations as integrations_api
+
+    app.include_router(integrations_api.router, prefix="/api/integrations", tags=["integrations"])
     app.include_router(automation_api.router, dependencies=[Depends(_mod("automation"))])
 
     @app.get("/api/health")

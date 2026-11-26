@@ -31,6 +31,7 @@ MODULES = (
     "learning",  # X-Learning: oktatóanyagok, teszt, oklevél — külön felület a dolgozónak (142. kör)
     "mailing",  # Levélküldés: egyedi e-mail egy címre vagy minden e-mailes partnernek (158. kör)
     "warehouse_locations",  # Tárhelyezett raktár: sor/állás/szint/fakk, berakás, áthelyezés, címkék (161. kör)
+    "integrations",  # Kimenő webhookok + olvasó API-kulcsok (187. kör)
     "price_indexation",  # Áremelés / indexálás: partner-kör, mérték, hatály, értesítő levél, visszavonás (184. kör)
     # 116. kör: MINDEN menüpont kapcsolható (többféle raktár-/szerviz-profil).
     # A vezérlőpult, a beállítások, a kézikönyv és a roadmap az alap — nem kapcsolható.

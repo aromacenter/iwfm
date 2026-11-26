@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import PermissionMatrix from "@/components/PermissionMatrix";
 import Login2faCard from "@/components/Login2faCard";
+import IntegrationsCard from "@/components/IntegrationsCard";
 import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
@@ -87,6 +88,7 @@ const SETTINGS_TABS = [
   ["workrules", "⚖️"],
   ["permissions", "🔐"],
   ["license", "🎫"],
+  ["integrations", "🔌"],
   ["data", "🗄️"],
 ] as const;
 
@@ -106,6 +108,7 @@ const TAB_MODULE: Record<string, string> = {
   skills: "employees",
   workrules: "attendance|payroll",
   worksheet: "tasks|intake|service",
+  integrations: "integrations",
 };
 
 // A fülek logikai csoportjai — a menü csoport-kártyákban jelenik meg;
@@ -117,7 +120,7 @@ const TAB_GROUPS: { labelKey: string; tabs: string[] }[] = [
   { labelKey: "comms", tabs: ["email", "notifications"] },
   { labelKey: "customer", tabs: ["support", "ai"] },
   { labelKey: "team", tabs: ["skills", "workrules", "permissions"] },
-  { labelKey: "system", tabs: ["license", "data"] },
+  { labelKey: "system", tabs: ["license", "integrations", "data"] },
 ];
 
 // futár-beállítás űrlapok: mező-lista futáronként (secret = write-only)
@@ -3069,6 +3072,11 @@ export default function BeallitasokPage() {
               ⚖️ {t("cal.runMt")}
             </button>
           </div>
+        </div>
+
+        {/* 187. kör: integrációk — webhook, API-kulcs (csak admin) */}
+        <div className={cardCls("integrations", "")}>
+          <IntegrationsCard />
         </div>
 
         {/* Adatbázis-mentés (csak admin) */}

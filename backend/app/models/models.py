@@ -3784,6 +3784,49 @@ class PriceIndexation(Base):
     )
 
 
+class WebhookEndpoint(Base):
+    """Kimenő webhook (187. kör): URL + titok (HMAC-SHA256), feliratkozott
+    események (üres = minden), számlálók; 20 egymás utáni hiba után kikapcsol."""
+
+    __tablename__ = "webhook_endpoints"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    url: Mapped[str] = mapped_column(String(512), nullable=False)
+    secret: Mapped[str] = mapped_column(String(128), nullable=False)
+    events: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    delivered: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    last_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ApiKey(Base):
+    """Olvasó API-kulcs (187. kör): X-Api-Key fejléc, csak GET; a kulcs SHA-256
+    lenyomata tárolódik, a nyers kulcs egyszer látszik létrehozáskor."""
+
+    __tablename__ = "api_keys"
+    __table_args__ = (Index("uq_api_keys_hash", "key_hash", unique=True),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(12), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_by_name: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AgentExpense(Base):
     """Képviselői költség — a helyszíni munkával járó kiadás (üzemanyag,
     parkolás, kellék), amely az üzletkötő-elszámolásban a kasszájából

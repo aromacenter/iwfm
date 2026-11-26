@@ -401,6 +401,13 @@ async def run_event(db: AsyncSession, event: str, ctx: dict) -> int:
         await db.commit()
     except Exception:
         logger.warning("Built-in telegram notify failed (%s)", event, exc_info=True)
+    # 187. kör: kimenő webhookok (háttérben, aláírva)
+    try:
+        from app.services.wfm.webhooks import deliver_all
+
+        await deliver_all(db, event, ctx)
+    except Exception:
+        logger.warning("Webhook dispatch failed (%s)", event, exc_info=True)
     return fired
 
 
