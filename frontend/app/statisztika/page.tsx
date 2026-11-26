@@ -92,6 +92,9 @@ export default function StatisztikaPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [stats, setStats] = useState<Stats | null>(null);
+  // 186. kör: ügyfél-értékelések az időszakban
+  interface RatingSummary { count: number; avg: number | null; dist: Record<string, number>; low: number; by_employee: { name: string; count: number; avg: number; low: number }[]; recent: { serial: string; task_id: string; rating: number; comment: string | null; client: string | null; employee: string; rated_at: string | null }[] }
+  const [ratings, setRatings] = useState<RatingSummary | null>(null);
   // Archívum (30ea42b2): a statisztika is a 2026-10-12-i újraindítástól
   // számol — a régi világ csak adminnak, külön nézetben.
   const [archiveMode, setArchiveMode] = useState(false);
@@ -124,6 +127,7 @@ export default function StatisztikaPage() {
       if (to) p.set("date_to", to);
     }
     api.get<Stats>(`/api/stats/business?${p}`).then(setStats).catch(() => {});
+    api.get<RatingSummary>(`/api/ratings/summary?${p}`).then(setRatings).catch(() => setRatings(null));
   }, [range, archiveMode]);
 
   const maxCat = stats
@@ -182,6 +186,59 @@ export default function StatisztikaPage() {
 
       {stats && (
         <div className="space-y-4">
+          {ratings && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold">⭐ {t("stats.ratingsTitle")}</h2>
+                <div className="flex flex-wrap gap-3 text-sm">
+                  <span className="rounded-lg bg-amber-50 px-3 py-1 font-semibold text-amber-700">{ratings.avg != null ? `${ratings.avg.toFixed(2)} ★ ${t("stats.ratingsAvg")}` : "–"}</span>
+                  <span className="rounded-lg bg-slate-100 px-3 py-1 text-slate-700">{t("stats.ratingsCount", { n: ratings.count })}</span>
+                  {ratings.low > 0 && <span className="rounded-lg bg-red-50 px-3 py-1 font-semibold text-red-700">{t("stats.ratingsLow", { n: ratings.low })}</span>}
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">{t("stats.ratingsHint")}</p>
+              {ratings.count === 0 ? (
+                <p className="mt-3 text-sm text-slate-400">{t("stats.ratingsEmpty")}</p>
+              ) : (
+                <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <div className="mb-1 text-xs uppercase text-slate-500">{t("stats.ratingsByEmployee")}</div>
+                    {[5, 4, 3, 2, 1].map((n) => (
+                      <div key={n} className="flex items-center gap-2 text-xs">
+                        <span className="w-8 text-amber-500">{n} ★</span>
+                        <div className="h-2 flex-1 rounded bg-slate-100"><div className="h-2 rounded bg-amber-400" style={{ width: `${(100 * (ratings.dist[String(n)] ?? 0)) / Math.max(1, ratings.count)}%` }} /></div>
+                        <span className="w-6 text-right text-slate-500">{ratings.dist[String(n)] ?? 0}</span>
+                      </div>
+                    ))}
+                    <table className="mt-3 w-full text-sm">
+                      <tbody>
+                        {ratings.by_employee.map((r) => (
+                          <tr key={r.name} className="border-t border-slate-100">
+                            <td className="py-1 font-medium">{r.name}</td>
+                            <td className={`py-1 text-right tabular-nums ${r.avg < 3.5 ? "text-red-700" : ""}`}>{r.avg.toFixed(2)} ★</td>
+                            <td className="py-1 text-right text-slate-400">{r.count}{r.low > 0 && <span className="ml-1 text-red-600">({r.low}↓)</span>}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs uppercase text-slate-500">{t("stats.ratingsRecent")}</div>
+                    <ul className="space-y-1 text-sm">
+                      {ratings.recent.filter((r) => r.comment).slice(0, 8).map((r) => (
+                        <li key={r.serial} className="rounded-lg bg-slate-50 px-2 py-1">
+                          <span className="text-amber-500">{"★".repeat(r.rating)}</span> <span className="font-mono text-xs text-slate-400">{r.serial}</span> {r.client && <span className="text-slate-500">· {r.client}</span>}
+                          <div className="text-slate-700">„{r.comment}”</div>
+                        </li>
+                      ))}
+                      {ratings.recent.every((r) => !r.comment) && <li className="text-slate-400">—</li>}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Kategória-bontás vizuális sávokkal */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

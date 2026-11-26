@@ -13,6 +13,7 @@ import re
 
 import base64
 import json
+import secrets
 import uuid
 from datetime import UTC, date, datetime, time
 
@@ -262,6 +263,11 @@ class WorksheetOut(BaseModel):
     has_employee_signature: bool
     has_client_signature: bool
     client_signer_name: str | None = None
+    # 186. kör: ügyfél-értékelés
+    rating: int | None = None
+    rating_comment: str | None = None
+    rated_at: datetime | None = None
+    rating_token: str | None = None
     # A mentett aláírás-képek (data URL) — újranyitáskor a felület megjeleníti
     # őket, hogy ne tűnjenek "elveszettnek".
     employee_signature: str | None
@@ -342,6 +348,7 @@ def _worksheet_out(
         has_employee_signature=ws.employee_signature is not None,
         has_client_signature=ws.client_signature is not None,
         client_signer_name=ws.client_signer_name,
+        rating=ws.rating, rating_comment=ws.rating_comment, rated_at=ws.rated_at, rating_token=ws.rating_token,
         employee_signature=ws.employee_signature,
         client_signature=ws.client_signature,
         # A karbantartási díj is a MI ügyfél-árunk — a külsős szerviz nem
@@ -704,6 +711,9 @@ async def _upsert_worksheet(
             ws.client_signer_name = signer
     elif (body.client_signer_name or "").strip():
         ws.client_signer_name = body.client_signer_name.strip()
+    # 186. kör: mindkét aláírás megvan → értékelő token (az ügyfél azonnal vagy linkről értékelhet)
+    if ws.client_signature is not None and ws.employee_signature is not None and not ws.rating_token:
+        ws.rating_token = secrets.token_urlsafe(24)
     await db.flush()
     await record_audit(
         db, actor=actor, action="worksheet.create" if created else "worksheet.update",
@@ -872,7 +882,8 @@ async def _maybe_autoinvoice_maintenance(
                             f"díjról ({ws.maintenance_fee:.0f} Ft + ÁFA) "
                             f"{'díjbekérőt' if mode == 'proforma' else 'számlát'} "
                             f"állítottunk ki, fizetési határidő: {due.isoformat()}.\n\n"
-                            "Üdvözlettel"
+                            + "".join(line + "\n" for line in _rating_lines(ws))
+                            + "Üdvözlettel"
                         ),
                         attachments=[(f"{serial}.pdf", pdf, "application", "pdf")],
                     )
@@ -1813,6 +1824,17 @@ def _pdf_response(pdf: bytes, serial: str) -> Response:
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{serial}.pdf"'},
     )
+
+
+def _rating_lines(ws: Worksheet) -> list[str]:
+    """186. kör: értékelő link az ügyfél-e-mailbe (token igény szerint; a hívó commitol)."""
+    if ws.rating is not None:
+        return []
+    if not ws.rating_token:
+        ws.rating_token = secrets.token_urlsafe(24)
+    from app.services.wfm.links import frontend_url
+
+    return ["Kérjük, egy kattintással értékelje a munkánkat: " + frontend_url(f"/ertekeles/{ws.rating_token}"), ""]
 
 
 async def _email_worksheet_pdf(db: AsyncSession, to: str, pdf: bytes, serial: str) -> None:
@@ -3308,7 +3330,7 @@ async def worksheet_picked_up(
         "",
         "A gép átvehető üzletünkben, nyitvatartási időben.",
         "",
-    ] + _pickup_phone_lines(row) + [
+    ] + _pickup_phone_lines(row) + _rating_lines(ws) + [
         "Üdvözlettel,",
         company,
     ]
@@ -3632,7 +3654,7 @@ async def service_handover_pickup(
                     f"A(z) {ws.serial} munkalapon szereplő készülék javítása"
                     " elkészült, a gép átvehető üzletünkben.",
                     "",
-                ] + _pickup_phone_lines(ws_row) + [
+                ] + _pickup_phone_lines(ws_row) + _rating_lines(ws) + [
                     "Üdvözlettel,",
                     (ws_row.company_name if ws_row else None) or "Szerviz",
                 ]

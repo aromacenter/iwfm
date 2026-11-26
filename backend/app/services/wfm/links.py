@@ -40,7 +40,7 @@ def event_link(event: str, ctx: dict) -> str | None:
         code = g("gep_vonalkod") or g("gep_kod")
         return frontend_url(f"/gepek?q={_q(code)}") if code else frontend_url("/gepek")
     if event in ("task.assigned", "task.reschedule_requested", "worksheet.signed", "worksheet.quote_ready",
-                 "worksheet.quote_accepted", "worksheet.picked_up", "worksheet.handed_over"):
+                 "worksheet.quote_accepted", "worksheet.picked_up", "worksheet.handed_over", "worksheet.rated"):
         if g("link"):
             return str(g("link"))
         return frontend_url(f"/feladatok?task={_q(g('_task_id'))}") if g("_task_id") else frontend_url("/feladatok")

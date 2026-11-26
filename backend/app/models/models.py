@@ -755,6 +755,13 @@ class Worksheet(Base):
     client_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Az ügyfél-aláíráshoz KÖTELEZŐEN begépelt név — az azonosítás biztos.
     client_signer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # 186. kör: ügyfél-értékelés (1–5 csillag + mondat), tokenes publikus linkről
+    # vagy a szerelő eszközén aláírás után; egyszer adható.
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rating_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rating_source: Mapped[str | None] = mapped_column(String(8), nullable=True)  # device | link
+    rating_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

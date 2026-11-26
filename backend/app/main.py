@@ -238,6 +238,10 @@ def create_app() -> FastAPI:
     app.include_router(
         tasks.quote_public_router, prefix="/api/public/worksheet-quote", tags=["public"]
     )
+    from app.api import ratings as ratings_api
+
+    app.include_router(ratings_api.public_router, prefix="/api/public/rating", tags=["public"])
+    app.include_router(ratings_api.router, prefix="/api/ratings", tags=["ratings"], dependencies=[Depends(_mod("tasks"))])
     app.include_router(inventory.router, prefix="/api/partners", tags=["partners"], dependencies=[Depends(_mod("partners"))])
     app.include_router(contracts_api.router, prefix="/api/partners", tags=["contracts"], dependencies=[Depends(_mod("contracts"))])
     app.include_router(contracts_api.overview_router, prefix="/api/contracts", tags=["contracts"], dependencies=[Depends(_mod("contracts"))])

@@ -481,6 +481,19 @@ export default function FeladataimPage() {
 
   // A már mentett aláírás-képek (megjelenítésre) + "új aláírás" kapcsolók.
   const [wsSaved, setWsSaved] = useState<{ emp: string | null; client: string | null }>({ emp: null, client: null });
+  // 186. kör: ügyfél-értékelés a mentés után (a telefon átadva az ügyfélnek)
+  const [rating, setRating] = useState<{ token: string; stars: number; comment: string; done: boolean } | null>(null);
+  async function sendRating() {
+    if (!rating || !rating.stars) return;
+    try {
+      await api.post(`/api/public/rating/${rating.token}`, { rating: rating.stars, comment: rating.comment.trim() || null, source: "device" });
+      setRating({ ...rating, done: true });
+      window.setTimeout(() => setRating(null), 1800);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+      setRating(null);
+    }
+  }
   const [redoSig, setRedoSig] = useState<{ emp: boolean; client: boolean }>({ emp: false, client: false });
 
   async function openWorksheet(task: TaskOut) {
@@ -713,9 +726,13 @@ export default function FeladataimPage() {
         total_loss: ws.total_loss,
     };
     try {
-      await api.put(`/api/me/tasks/${wsTask.id}/worksheet`, wsBody);
+      const saved = await api.put<{ rating_token?: string | null; rating?: number | null }>(`/api/me/tasks/${wsTask.id}/worksheet`, wsBody);
       closeWorksheet();
       load();
+      // most került fel az ügyfél aláírása, és még nincs értékelés → értékelő lépés
+      if (wsBody.client_signature && saved?.rating_token && saved.rating == null) {
+        setRating({ token: saved.rating_token, stars: 0, comment: "", done: false });
+      }
     } catch (err) {
       if (!(err instanceof ApiError)) {
         // Nincs hálózat (841171f6): a munkalap a helyi várólistára kerül,
@@ -1893,6 +1910,36 @@ export default function FeladataimPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+      {rating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl">
+            {rating.done ? (
+              <>
+                <div className="text-4xl">🎉</div>
+                <p className="mt-3 text-lg font-semibold">{t("myTasks.ratingThanks")}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs uppercase tracking-wide text-slate-400">{t("myTasks.ratingTitle")}</p>
+                <h3 className="mt-2 text-lg font-semibold">{t("myTasks.ratingSub")}</h3>
+                <div className="mt-4 flex justify-center gap-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} type="button" onClick={() => setRating({ ...rating, stars: n })} aria-label={t("myTasks.ratingLabels").split("|")[n - 1]}
+                      className={`text-4xl ${rating.stars >= n ? "text-amber-400" : "text-slate-300"}`}>★</button>
+                  ))}
+                </div>
+                <div className="mt-1 h-5 text-sm text-slate-500">{rating.stars ? t("myTasks.ratingLabels").split("|")[rating.stars - 1] : ""}</div>
+                <textarea rows={2} maxLength={1000} value={rating.comment} onChange={(e) => setRating({ ...rating, comment: e.target.value })}
+                  placeholder={t("myTasks.ratingComment")} className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                <div className="mt-4 flex gap-2">
+                  <button type="button" onClick={() => setRating(null)} className="flex-1 rounded-xl border border-slate-300 py-2.5 text-sm">{t("myTasks.ratingSkip")}</button>
+                  <button type="button" disabled={!rating.stars} onClick={sendRating} className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{t("myTasks.ratingSend")}</button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </AppShell>
