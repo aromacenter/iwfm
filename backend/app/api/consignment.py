@@ -2535,6 +2535,7 @@ async def create_settlement(
 
     fire_event("settlement.created", {
         "_partner_id": partner.id,
+        "_settlement_id": str(settlement.id),
         "partner_nev": partner.name,
         "partner_kod": partner.partner_code,
         "partner_email": partner.contact_email,
@@ -4028,6 +4029,7 @@ async def sign_settlement(
 
     fire_event("settlement.signed", {
         "_partner_id": partner.id if partner else None,
+        "_settlement_id": str(s.id),
         "partner_nev": partner.name if partner else "",
         "partner_kod": partner.partner_code if partner else "",
         "partner_email": partner_email,

@@ -494,6 +494,7 @@ async def portal_ticket(
 
     fire_event("ticket.created", {
         "_partner_id": partner.id,
+        "_ticket_id": str(ticket.id),
         "cim": ticket.title,
         "prioritas": ticket.priority,
         "fajta": ticket.kind,

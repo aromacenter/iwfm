@@ -105,6 +105,11 @@ TRIGGERS: dict[str, list[str]] = {
 }
 
 OPS = ("eq", "ne", "gte", "lte", "contains")
+# 183. kör: minden eseményben elérhető a {{link}} — a céloldal kattintható linkje
+for _k in TRIGGERS:
+    if "link" not in TRIGGERS[_k]:
+        TRIGGERS[_k].append("link")
+
 ACTION_TYPES = (
     "send_email", "add_partner_note", "create_task", "send_whatsapp", "send_telegram",
 )
@@ -343,6 +348,9 @@ async def run_event(db: AsyncSession, event: str, ctx: dict) -> int:
     """Az eseményhez tartozó engedélyezett szabályok futtatása. Vissza: hány
     szabály futott le. Akció-hiba a szabály last_error-jébe kerül."""
     from app.models import AutomationRule
+    from app.services.wfm.links import with_link
+
+    with_link(ctx, event)
 
     rules = (
         (
@@ -390,8 +398,13 @@ async def run_event(db: AsyncSession, event: str, ctx: dict) -> int:
 def fire_event(event: str, ctx: dict) -> None:
     """Tűz-és-felejt: háttérfeladat saját sessionnel (a hívó nem lassul).
     Tesztekben a WFM_DISABLE_SCHEDULER=1 kikapcsolja — ott a run_event
-    közvetlenül hívható."""
+    közvetlenül hívható. 183. kör: a ctx `link` kulcsot kap (az esemény
+    céloldala) — a sablonokban {{link}}."""
     import os
+
+    from app.services.wfm.links import with_link
+
+    with_link(ctx, event)
 
     if os.getenv("WFM_DISABLE_SCHEDULER"):
         return

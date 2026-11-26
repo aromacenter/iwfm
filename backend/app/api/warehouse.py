@@ -142,6 +142,7 @@ async def _fire_movement(
         if u is not None:
             aki = u.display_name or u.email
     fire_event("warehouse.movement", {
+        "_warehouse_id": str(warehouse_id),
         "muvelet": muvelet,
         "raktar": wh.name if wh else "?",
         "termek_nev": product.name,
@@ -755,6 +756,7 @@ async def transfer_stock(
         )
         await db.commit()
         fire_event("warehouse.transfer_pending", {
+            "_warehouse_id": str(dst.id),
             "termek_nev": product.name, "mennyiseg": body.quantity,
             "egyseg": product.unit, "honnan": src.name, "hova": dst.name,
             "inditotta": actor.display_name or actor.email,
@@ -925,6 +927,7 @@ async def _transfer_ctx(db: AsyncSession, t: WarehouseTransfer, actor: User) -> 
     dst = (await db.execute(select(Warehouse).where(Warehouse.id == t.to_warehouse_id))).scalar_one_or_none()
     p = (await db.execute(select(Product).where(Product.id == t.product_id))).scalar_one_or_none()
     return {
+        "_warehouse_id": str(t.to_warehouse_id),
         "termek_nev": p.name if p else "?", "mennyiseg": t.quantity,
         "egyseg": p.unit if p else "", "honnan": src.name if src else "?",
         "hova": dst.name if dst else "?",

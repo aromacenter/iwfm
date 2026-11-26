@@ -92,7 +92,13 @@ async def notify_event(db: AsyncSession, event: str, ctx: dict) -> bool:
     config = await load_telegram_config(db)
     if config is None or not config["chat_ids"]:
         return False
+    from app.services.wfm.links import with_link
+
+    with_link(ctx, event)
     text = render(template, ctx)
+    # 183. kör: minden üzenet végén kattintható link a céloldalra (ha a sablon még nem tartalmazza)
+    if ctx.get("link") and "{{link}}" not in template:
+        text = f"{text}\n🔗 {ctx['link']}"
     ok = False
     for chat in config["chat_ids"]:
         ok = await send_telegram(config, chat, text) or ok

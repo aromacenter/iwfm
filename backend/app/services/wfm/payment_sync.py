@@ -39,6 +39,8 @@ def _paid_datetime(raw: str | None, now: datetime) -> datetime:
 
 def paid_event_ctx(s: Settlement, partner: Partner | None, source: str) -> dict:
     return {
+        "_settlement_id": str(s.id),
+        "_partner_id": s.partner_id,
         "partner_nev": partner.name if partner else "?",
         "partner_kod": (partner.partner_code if partner else "") or "",
         "szamla_szam": s.billingo_document_number or "",

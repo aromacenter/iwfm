@@ -369,6 +369,8 @@ Térkép (minden aktív partner, gép nélkül szürke), fogyás-trendek, anomá
 ## Napi összefoglaló
 E-mailben (Beállítások → Értesítések): esedékes elszámolások, kifogyó készletek, nyitott rendelések/jegyek, kintlévőség; az AI-asszisztens is elmondja („mi a napi helyzet?”).
 
+**Linkek a Telegram-üzenetekben.** Minden beépített Telegram-üzenet végén kattintható link visz a program megfelelő oldalára (elszámolás, szervizjegy, feladat, átvétel, gép, raktár, alkatrész); az automatizálási sablonokban ugyanez a `{{link}}` mezővel helyezhető el. A link csak belépés után nyílik meg.
+
 **Telegram-összekapcsolás.** A céges bothoz egyszeri, 10 percig élő kóddal kapcsolódsz: Beállítások → Kétlépcsős belépés kártyán „Összekapcsoló kód kérése”, majd a 6 számjegyet privátban elküldöd a botnak. Aki nem lép be az appba (pl. karton nélküli dolgozó), annak a vezető kér kódot a Dolgozók oldalon (✈️ kód) és átadja. A törzsszámmal már nem lehet összekapcsolni; a kód egyszer használatos, a régi kapcsolatot a vezető vagy a Kétlépcsős belépés kártya bontja.
 
 **Offline átvétel.** Ha a telefonon nincs hálózat (pince, garázs), az átvétel űrlapja ugyanúgy kitölthető és elküldhető: a rendszer sorba teszi (a fotókkal együtt, a készüléken), és amint van kapcsolat — vagy a „Feltöltés most” gombra — feltölti; az AT-sorszámot ekkor kapja, az elismervény a listából nyomtatható. A várakozó átvételek az Átvétel lap tetején látszanak (törölhetők); a keret sávja is mutatja a függő tételek számát.

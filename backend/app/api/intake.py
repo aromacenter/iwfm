@@ -354,6 +354,7 @@ async def create_intake(
         from app.services.wfm.automation import fire_event
 
         fire_event("intake.created", {
+            "_intake_id": out.id,
             "sorszam": out.serial,
             "ugyfel": out.client_name or out.partner_name or "",
             "gep_nev": out.asset_name or "",

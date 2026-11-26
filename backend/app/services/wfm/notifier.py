@@ -364,10 +364,13 @@ async def run_payment_reminders(db: AsyncSession, smtp, today: date | None = Non
         if partner.agent_user_id:
             emp = (await db.execute(select(Employee).where(Employee.user_id == partner.agent_user_id))).scalar_one_or_none()
             if emp is not None:
+                from app.services.wfm.links import frontend_url
+
                 await send_personal(
                     db, emp,
                     f"⏰ {stage}. emlékeztető ment: {partner.name} — {number}, {days} napja lejárt, {rem_txt} Ft nyitott"
-                    + ("" if ok_any else " (e-mail cím nélkül, csak neked)"),
+                    + ("" if ok_any else " (e-mail cím nélkül, csak neked)")
+                    + "\n🔗 " + frontend_url(f"/elszamolas?settlement={s_.id}"),
                 )
         if ok_any or not emails:
             s_.reminder_stage = stage
@@ -395,6 +398,7 @@ async def notify_expiring_lots(db: AsyncSession, today: date | None = None, *, f
     sent = 0
     for e in (await _expiring(db, 7))[:10]:
         ctx = {
+            "_warehouse_id": e["warehouse_id"],
             "raktar": e["warehouse_name"], "termek_nev": e["product_name"], "mennyiseg": e["quantity"],
             "egyseg": e["unit"], "lejarat": e["expires_at"], "napok": e["days_left"], "tarhely": e["location_code"] or "",
         }

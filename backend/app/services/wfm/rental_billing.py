@@ -567,6 +567,8 @@ async def _bill_contract(
         from app.services.wfm.automation import fire_event
 
         fire_event("rental.billed", {
+            "_settlement_id": str(settlement.id),
+            "_partner_id": partner.id,
             "partner_nev": partner.name,
             "osszeg": settlement.total_gross,
             "gepek": len(assets),

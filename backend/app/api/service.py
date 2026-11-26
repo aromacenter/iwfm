@@ -441,6 +441,7 @@ async def create_ticket(
 
     fire_event("ticket.created", {
         "_partner_id": partner_id,
+        "_ticket_id": str(tk.id),
         "cim": tk.title,
         "prioritas": tk.priority,
         "fajta": tk.kind,
@@ -539,7 +540,9 @@ async def _notify_ticket_assignee(db: AsyncSession, tk: ServiceTicket) -> None:
             parts.append(tk.partner_label)
         if tk.priority == "high":
             parts.append("⚠️ SÜRGŐS")
-        await send_personal(db, emp, " · ".join(parts))
+        from app.services.wfm.links import frontend_url
+
+        await send_personal(db, emp, " · ".join(parts) + "\n🔗 " + frontend_url(f"/szerviz?ticket={tk.id}"))
     except Exception:
         import logging
 
@@ -612,6 +615,7 @@ async def update_ticket(
         )
         fire_event("ticket.done", {
             "_partner_id": tk.partner_id,
+            "_ticket_id": str(tk.id),
             "cim": tk.title,
             "gep_vonalkod": "",
             "gep_nev": tk.asset_label or "",

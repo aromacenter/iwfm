@@ -128,6 +128,13 @@ export default function SzervizPage() {
   const [showDue, setShowDue] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
+  // 183. kör: Telegram-linkről (?ticket=) kiemelés + odagörgetés
+  const [highlightId] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("ticket")));
+  useEffect(() => {
+    if (!highlightId) return;
+    const t = window.setTimeout(() => document.getElementById(`ticket-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 600);
+    return () => window.clearTimeout(t);
+  }, [highlightId]);
   const [form, setForm] = useState<FormState | null>(null);
   const [attachments, setAttachments] = useState<{ id: string; filename: string }[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -423,7 +430,7 @@ export default function SzervizPage() {
             </thead>
             <tbody>
               {tickets.map((tk) => (
-                <tr key={tk.id} className="border-b border-slate-100 last:border-0">
+                <tr key={tk.id} id={`ticket-${tk.id}`} className={`border-b border-slate-100 last:border-0 ${highlightId === tk.id ? "bg-amber-50 ring-2 ring-inset ring-amber-400" : ""}`}>
                   {canDelete && (
                     <td className="px-3 py-3">
                       <input

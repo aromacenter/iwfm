@@ -105,6 +105,7 @@ async def run_consumption_watch(db: AsyncSession, now: datetime | None = None, *
             if emp is not None:
                 agent_name = f"{emp.last_name} {emp.first_name}".strip()
         ctx = {
+            "_partner_id": p.id,
             "partner_nev": p.name, "partner_kod": p.partner_code or "", "varos": getattr(p, "city", "") or "",
             "csokkenes_pct": d["pct"], "mostani_kg_nap": d["recent"], "korabbi_kg_nap": d["base"], "kepviselo": agent_name,
         }
@@ -115,10 +116,13 @@ async def run_consumption_watch(db: AsyncSession, now: datetime | None = None, *
         try:
             await notify_event(db, "partner.consumption_drop", ctx)
             if emp is not None:
+                from app.services.wfm.links import frontend_url
+
                 await send_personal(
                     db, emp,
                     f"📉 Fogyás-csökkenés: {p.name} — az utolsó két ciklusban {d['pct']}%-kal kevesebb "
-                    f"({d['recent']:g} → korábban {d['base']:g} kg/nap). Érdemes ránézni: gép, konkurencia, zárva?",
+                    f"({d['recent']:g} → korábban {d['base']:g} kg/nap). Érdemes ránézni: gép, konkurencia, zárva?"
+                    + "\n🔗 " + frontend_url(f"/elszamolas?partner={p.id}"),
                 )
         except Exception:  # noqa: BLE001
             logger.warning("consumption_drop telegram failed", exc_info=True)

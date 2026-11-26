@@ -79,7 +79,8 @@ export default function AlkatreszekPage() {
   const [stNew, setStNew] = useState<{ warehouse_id: string; name: string; blind: boolean; scope: string; threshold_pct: string } | null>(null);
   const [moveReason, setMoveReason] = useState("count_error");
   const [inPacks, setInPacks] = useState(false);
-  const [q, setQ] = useState("");
+  // 183. kör: Telegram-linkről (?q=cikkszám) előszűrés
+  const [q, setQ] = useState(() => (typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("q") ?? ""));
   const [showInactive, setShowInactive] = useState(false);
   const [busy, setBusy] = useState(false);
 

@@ -127,6 +127,12 @@ export default function AtvetelPage() {
     address_number: string | null;
   }
   const [intakes, setIntakes] = useState<Intake[]>([]);
+  // 183. kör: Telegram-linkről (?intake=) kiemelés + odagörgetés
+  const [highlightId] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("intake")));
+  useEffect(() => {
+    if (!highlightId || intakes.length === 0) return;
+    document.getElementById(`intake-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightId, intakes]);
   const [assets, setAssets] = useState<AssetOption[]>([]);
   const [partners, setPartners] = useState<PartnerOption[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -583,7 +589,7 @@ export default function AtvetelPage() {
           </p>
         )}
         {intakes.map((row) => (
-          <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div key={row.id} id={`intake-${row.id}`} className={`rounded-2xl border bg-white p-4 shadow-sm ${highlightId === row.id ? "border-amber-400 ring-2 ring-amber-300" : "border-slate-200"}`}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <p className="font-semibold">

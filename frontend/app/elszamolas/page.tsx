@@ -362,9 +362,21 @@ export default function ElszamolasPage() {
     api.get<Partner[]>("/api/partners").then(setPartners).catch(() => {});
     api.get<Product[]>("/api/products").then(setProducts).catch(() => {});
     // Más oldalról (pl. Üzletkötő) érkező partner-előválasztás (?partner=)
-    const pid = new URLSearchParams(window.location.search).get("partner");
+    const sp = new URLSearchParams(window.location.search);
+    const pid = sp.get("partner");
     if (pid) setPartnerId(pid);
+    // 183. kör: Telegram-linkről egy konkrét elszámolás (?settlement=) — a partnere + kiemelés
+    const sid = sp.get("settlement");
+    if (sid) {
+      api.get<{ partner_id: string | null }>(`/api/settlements/${sid}`).then((s) => { if (s.partner_id) setPartnerId(s.partner_id); }).catch(() => {});
+    }
   }, []);
+  const [highlightId] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("settlement")));
+  useEffect(() => {
+    if (!highlightId || history.length === 0) return;
+    const el = document.getElementById(`settlement-${highlightId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightId, history]);
 
   const loadStock = useCallback(() => {
     if (!partnerId) { setStock([]); return; }
@@ -2873,7 +2885,7 @@ export default function ElszamolasPage() {
             </thead>
             <tbody>
               {history.map((s) => (
-                <tr key={s.id} className="border-b border-slate-100 last:border-0">
+                <tr key={s.id} id={`settlement-${s.id}`} className={`border-b border-slate-100 last:border-0 ${highlightId === s.id ? "bg-amber-50 ring-2 ring-inset ring-amber-400" : ""}`}>
                   {canDelete && (
                   <td className="px-3 py-3">
                     <input

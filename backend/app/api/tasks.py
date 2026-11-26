@@ -733,6 +733,7 @@ async def _upsert_worksheet(
                 ).scalar_one_or_none()
                 gep_nev = a.name if a else ""
             fire_event("worksheet.signed", {
+                "_task_id": str(ws.task_id),
                 "sorszam": ws.serial,
                 "cim": task.title,
                 "dolgozo": f"{emp.last_name} {emp.first_name}" if emp else "",
@@ -1348,6 +1349,7 @@ async def _notify_assignee(db: AsyncSession, task: Task, emp: Employee, serial: 
             if a is not None:
                 gep_nev, gep_vonalkod = a.name, a.barcode or ""
         fire_event("task.assigned", {
+            "_task_id": str(task.id),
             "cim": task.title,
             "dolgozo": f"{emp.last_name} {emp.first_name}",
             "hatarido": task.due_date.isoformat() if task.due_date else "",
@@ -2562,6 +2564,7 @@ async def my_reschedule_request(
         from app.services.wfm.automation import fire_event
 
         fire_event("task.reschedule_requested", {
+            "_task_id": str(task.id),
             "cim": task.title,
             "dolgozo": f"{emp.last_name} {emp.first_name}",
             "hatarido": task.due_date.isoformat() if task.due_date else "",
@@ -3156,6 +3159,7 @@ async def public_worksheet_quote_accept(
             from app.services.wfm.automation import fire_event
 
             fire_event("worksheet.quote_accepted", {
+                "_task_id": str(ws.task_id),
                 "sorszam": ws.serial,
                 "cim": task.title,
                 "ugyfel": ws.client_name or "",
@@ -3325,6 +3329,7 @@ async def worksheet_picked_up(
         from app.services.wfm.automation import fire_event
 
         fire_event("worksheet.picked_up", {
+            "_task_id": str(ws.task_id),
             "sorszam": ws.serial,
             "ugyfel": ws.client_name or "",
             "gep_nev": machine,
@@ -4025,6 +4030,7 @@ async def do_handover(
         from app.services.wfm.automation import fire_event
 
         fire_event("worksheet.handed_over", {
+            "_task_id": str(ws.task_id),
             "sorszam": ws.serial,
             "ugyfel": ws.client_name or "",
             "osszeg_netto": f"{total:.0f}" if not body.discount else "0",
