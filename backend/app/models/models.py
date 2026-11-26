@@ -78,6 +78,8 @@ class User(Base):
     # 182. kör: egyszeri, 10 percig élő összekapcsoló kód (a törzsszám helyett)
     tg_link_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
     tg_link_code_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 189. kör: privát iCal-előfizetési token (feladatok, műszakok, távollét a telefon naptárában)
+    ical_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     # Elmentett aláírás-minta (PNG data URL) — munkalapon egy kattintással
     # beszúrható a dolgozói aláíráshoz.
     signature_sample: Mapped[str | None] = mapped_column(Text, nullable=True)

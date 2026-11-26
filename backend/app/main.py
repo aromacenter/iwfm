@@ -228,6 +228,10 @@ def create_app() -> FastAPI:
     app.include_router(timeclock.router, prefix="/api/time-entries", tags=["time-entries"], dependencies=[Depends(_mod("attendance"))])
     app.include_router(payroll.router, prefix="/api/payroll", tags=["payroll"], dependencies=[Depends(_mod("payroll"))])
     app.include_router(me.router, prefix="/api/me", tags=["self-service"])
+    from app.api import ical as ical_api
+
+    app.include_router(ical_api.router, prefix="/api/me", tags=["self-service"])
+    app.include_router(ical_api.public_router, prefix="/api/public/ical", tags=["public"])
     app.include_router(kiosk.router, prefix="/api/kiosk", tags=["kiosk"], dependencies=[Depends(_mod("attendance"))])
     app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
     app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])

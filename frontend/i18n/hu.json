@@ -1436,6 +1436,17 @@
     "scan": "Vonalkód beolvasása a kamerával",
     "scanNotDeployed": "Nincs ilyen kihelyezett gép: {code}"
   },
+  "ical": {
+    "title": "Naptár-link",
+    "hint": "Iratkozz fel erre a linkre a telefonod naptárában: a feladataid (a határidő napján), a publikált műszakok és a jóváhagyott távollétek maguktól megjelennek, az app megnyitása nélkül, óránként frissülve.",
+    "copy": "Másolás",
+    "stepGoogle": "Google Naptár (gépen): Egyéb naptárak + → URL-ről → beillesztés. A telefonon ezután magától látszik.",
+    "stepApple": "iPhone: Beállítások → Naptár → Fiókok → Fiók hozzáadása → Egyéb → Előfizetett naptár → beillesztés.",
+    "stepOutlook": "Outlook: Naptár hozzáadása → Előfizetés az internetről → beillesztés.",
+    "privacy": "A link személyes: aki ismeri, látja a naptáradat. Ha kikerült, kérj újat — a régi azonnal érvénytelen.",
+    "rotate": "Új link",
+    "rotateConfirm": "Új linket kérsz — a régi azonnal érvénytelen, a telefonon újra fel kell iratkozni. Mehet?"
+  },
   "account": {
     "password": "Jelszó módosítása",
     "current": "Jelenlegi jelszó",

@@ -1436,6 +1436,17 @@
     "scan": "Scan barcode with the camera",
     "scanNotDeployed": "No deployed machine with this code: {code}"
   },
+  "ical": {
+    "title": "Calendar link",
+    "hint": "Subscribe to this link in your phone's calendar: your tasks (on the due date), published shifts and approved time off show up automatically, without opening the app, refreshed hourly.",
+    "copy": "Copy",
+    "stepGoogle": "Google Calendar (desktop): Other calendars + → From URL → paste. It then appears on the phone too.",
+    "stepApple": "iPhone: Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar → paste.",
+    "stepOutlook": "Outlook: Add calendar → Subscribe from web → paste.",
+    "privacy": "The link is personal: anyone who knows it can see your calendar. If it leaks, request a new one — the old stops working immediately.",
+    "rotate": "New link",
+    "rotateConfirm": "Request a new link — the old one stops working immediately and the phone must re-subscribe. Proceed?"
+  },
   "account": {
     "password": "Change password",
     "current": "Current password",

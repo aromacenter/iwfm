@@ -138,6 +138,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  // 189. kör: iCal naptár-előfizetés (saját link)
+  const [icalOpen, setIcalOpen] = useState(false);
+  const [icalUrl, setIcalUrl] = useState<string | null>(null);
+  function openIcal() {
+    setIcalOpen(true);
+    api.get<{ url: string }>("/api/me/ical").then((r) => setIcalUrl(r.url)).catch(() => setIcalUrl(null));
+  }
+  async function rotateIcal() {
+    if (!window.confirm(t("ical.rotateConfirm"))) return;
+    try { const r = await api.post<{ url: string }>("/api/me/ical/rotate"); setIcalUrl(r.url); } catch { /* marad a régi */ }
+  }
   const [sigOpen, setSigOpen] = useState(false);
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [pwBusy, setPwBusy] = useState(false);
@@ -439,6 +450,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ✍️ {t("mySignature.title")}
         </button>
         <button
+          onClick={openIcal}
+          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+        >
+          📆 {t("ical.title")}
+        </button>
+        <button
           onClick={logout}
           className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
         >
@@ -559,6 +576,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {user.role === "admin" && <OperatorRequests />}
 
       {sigOpen && <MySignatureDialog onClose={() => setSigOpen(false)} />}
+
+      {icalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setIcalOpen(false)}>
+          <div className="relative w-full max-w-md space-y-3 rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setIcalOpen(false)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">📆 {t("ical.title")}</h2>
+            <p className="text-sm text-slate-600">{t("ical.hint")}</p>
+            {icalUrl ? (
+              <div className="flex items-center gap-2">
+                <code className="flex-1 break-all rounded-lg bg-slate-100 px-2 py-1.5 font-mono text-xs">{icalUrl}</code>
+                <button type="button" onClick={() => { navigator.clipboard?.writeText(icalUrl).catch(() => {}); }} className="rounded-lg border border-slate-300 px-2 py-1 text-xs">{t("ical.copy")}</button>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">…</p>
+            )}
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-slate-600">
+              <li>{t("ical.stepGoogle")}</li>
+              <li>{t("ical.stepApple")}</li>
+              <li>{t("ical.stepOutlook")}</li>
+            </ol>
+            <p className="text-xs text-slate-400">{t("ical.privacy")}</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={rotateIcal} className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700">{t("ical.rotate")}</button>
+              <button type="button" onClick={() => setIcalOpen(false)} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white">OK</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pwOpen && (
         <div
