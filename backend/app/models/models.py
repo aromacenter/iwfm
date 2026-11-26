@@ -50,6 +50,7 @@ class User(Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
         UniqueConstraint("username", name="uq_users_username"),
+        Index("uq_users_ical_token", "ical_token", unique=True),
     )
     # A role bármely roles.key lehet (beépített + saját szerepkörök, RBAC v2)
 
@@ -79,7 +80,7 @@ class User(Base):
     tg_link_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
     tg_link_code_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # 189. kör: privát iCal-előfizetési token (feladatok, műszakok, távollét a telefon naptárában)
-    ical_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    ical_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Elmentett aláírás-minta (PNG data URL) — munkalapon egy kattintással
     # beszúrható a dolgozói aláíráshoz.
     signature_sample: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -653,6 +654,7 @@ class Worksheet(Base):
     __table_args__ = (
         UniqueConstraint("task_id", name="uq_worksheets_task"),
         UniqueConstraint("serial", name="uq_worksheets_serial"),
+        Index("uq_worksheets_rating_token", "rating_token", unique=True),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -763,7 +765,7 @@ class Worksheet(Base):
     rating_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     rated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rating_source: Mapped[str | None] = mapped_column(String(8), nullable=True)  # device | link
-    rating_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    rating_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
