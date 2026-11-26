@@ -480,6 +480,16 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
 
         logging.getLogger(__name__).warning("payment sync failed", exc_info=True)
 
+    # 184. kör: hatályba lépett áremelések alkalmazása
+    try:
+        from app.services.wfm.price_indexation import run_scheduled_indexations
+
+        await run_scheduled_indexations(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("price indexation failed", exc_info=True)
+
     # Naptár- és Mt.-figyelés (AI, havi őrökkel, best-effort).
     from app.services.wfm.calendar_watch import ensure_next_year_calendar, monthly_mt_check
 

@@ -3734,6 +3734,35 @@ class MailCampaign(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class PriceIndexation(Base):
+    """Áremelés / indexálás (184. kör): partner-kör + mérték + hatály; a sorok a
+    régi→új árak pillanatképe (alkalmazás és visszavonás ebből dolgozik)."""
+
+    __tablename__ = "price_indexations"
+    __table_args__ = (Index("ix_price_indexations_status", "status", "effective_from"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    round_to: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    targets: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    partner_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)  # None = minden aktív partner
+    # scheduled | applied | reverted | cancelled
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="scheduled")
+    rows: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    notice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notice_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reverted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_by_name: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class AgentExpense(Base):
     """Képviselői költség — a helyszíni munkával járó kiadás (üzemanyag,
     parkolás, kellék), amely az üzletkötő-elszámolásban a kasszájából

@@ -55,6 +55,10 @@ TRIGGERS: dict[str, list[str]] = {
     "partner.consumption_drop": [
         "partner_nev", "partner_kod", "varos", "csokkenes_pct", "mostani_kg_nap", "korabbi_kg_nap", "kepviselo",
     ],
+    # 184. kör: áremelés alkalmazva (ütemezett vagy azonnali)
+    "price.indexation_applied": [
+        "nev", "partnerek", "tetelek", "kihagyva", "szazalek", "osszeg", "hataly",
+    ],
     # 177. kör: raktári tétel lejár (naponta egyszer, 7 napon belül lejáró / lejárt)
     "stock.expiring": [
         "raktar", "termek_nev", "mennyiseg", "egyseg", "lejarat", "napok", "tarhely",
