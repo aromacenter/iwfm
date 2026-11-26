@@ -298,6 +298,9 @@ def create_app() -> FastAPI:
     from app.api import stats as stats_api
 
     app.include_router(stats_api.router, prefix="/api/stats", tags=["stats"])
+    from app.api import tech_stats as tech_stats_api
+
+    app.include_router(tech_stats_api.router, prefix="/api/stats", tags=["stats"])
     app.include_router(orders.router, prefix="/api/orders", tags=["orders"], dependencies=[Depends(_mod("orders"))])
     app.include_router(import_export.router, prefix="/api/import-export", tags=["import-export"], dependencies=[Depends(_mod("import_export"))])
     app.include_router(geo.router, prefix="/api/geo", tags=["geo"], dependencies=[Depends(_mod("map"))])

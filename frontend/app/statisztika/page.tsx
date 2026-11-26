@@ -95,6 +95,10 @@ export default function StatisztikaPage() {
   // 186. kör: ügyfél-értékelések az időszakban
   interface RatingSummary { count: number; avg: number | null; dist: Record<string, number>; low: number; by_employee: { name: string; count: number; avg: number; low: number }[]; recent: { serial: string; task_id: string; rating: number; comment: string | null; client: string | null; employee: string; rated_at: string | null }[] }
   const [ratings, setRatings] = useState<RatingSummary | null>(null);
+  // 188. kör: szerelői teljesítmény
+  interface TechRow { employee_id: string; name: string; tickets_closed: number; tickets_closed_prev: number; avg_resolve_hours: number | null; avg_resolve_hours_prev: number | null; repeat_count: number; repeat_pct: number | null; worksheets: number; worksheets_prev: number; hours: number; invoiced_net: number; rating_avg: number | null; rating_count: number; flags: string[] }
+  interface TechReport { team_avg_resolve_hours: number | null; team_repeat_pct: number | null; rows: TechRow[] }
+  const [tech, setTech] = useState<TechReport | null>(null);
   // Archívum (30ea42b2): a statisztika is a 2026-10-12-i újraindítástól
   // számol — a régi világ csak adminnak, külön nézetben.
   const [archiveMode, setArchiveMode] = useState(false);
@@ -128,6 +132,7 @@ export default function StatisztikaPage() {
     }
     api.get<Stats>(`/api/stats/business?${p}`).then(setStats).catch(() => {});
     api.get<RatingSummary>(`/api/ratings/summary?${p}`).then(setRatings).catch(() => setRatings(null));
+    api.get<TechReport>(`/api/stats/technicians?${p}`).then(setTech).catch(() => setTech(null));
   }, [range, archiveMode]);
 
   const maxCat = stats
@@ -234,6 +239,56 @@ export default function StatisztikaPage() {
                       {ratings.recent.every((r) => !r.comment) && <li className="text-slate-400">—</li>}
                     </ul>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tech && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold">🧑‍🔧 {t("stats.techTitle")}</h2>
+                <div className="flex flex-wrap gap-3 text-sm">
+                  <span className="rounded-lg bg-slate-100 px-3 py-1 text-slate-700">{t("stats.techTeamAvg", { h: tech.team_avg_resolve_hours ?? "–" })}</span>
+                  <span className="rounded-lg bg-slate-100 px-3 py-1 text-slate-700">{t("stats.techTeamRepeat", { p: tech.team_repeat_pct ?? "–" })}</span>
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">{t("stats.techHint")}</p>
+              {tech.rows.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-400">{t("stats.empty")}</p>
+              ) : (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase text-slate-500">
+                        <th className="py-1.5 pr-2">{t("cash.worker")}</th>
+                        <th className="py-1.5 pr-2 text-right">{t("stats.techClosed")}</th>
+                        <th className="py-1.5 pr-2 text-right">{t("stats.techResolve")}</th>
+                        <th className="py-1.5 pr-2 text-right">{t("stats.techRepeat")}</th>
+                        <th className="py-1.5 pr-2 text-right">{t("stats.techWorksheets")}</th>
+                        <th className="py-1.5 pr-2 text-right">{t("stats.techHours")}</th>
+                        <th className="py-1.5 pr-2 text-right">{t("stats.techValue")}</th>
+                        <th className="py-1.5 text-right">⭐</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tech.rows.map((r) => {
+                        const delta = (cur: number, prev: number) => (prev === 0 && cur === 0 ? "" : cur > prev ? " ▲" : cur < prev ? " ▼" : " =");
+                        return (
+                          <tr key={r.employee_id} className={`border-t border-slate-100 ${r.flags.length ? "bg-red-50/60" : ""}`}>
+                            <td className="py-1.5 pr-2 font-medium">{r.name}{r.flags.map((f) => <span key={f} className="ml-1 rounded bg-red-100 px-1 text-[10px] text-red-700" title={t(`stats.techFlag.${f}`)}>{t(`stats.techFlag.${f}`)}</span>)}</td>
+                            <td className="py-1.5 pr-2 text-right tabular-nums">{r.tickets_closed}<span className="text-xs text-slate-400">{delta(r.tickets_closed, r.tickets_closed_prev)}</span></td>
+                            <td className={`py-1.5 pr-2 text-right tabular-nums ${r.flags.includes("slow") ? "text-red-700" : ""}`}>{r.avg_resolve_hours ?? "–"}{r.avg_resolve_hours_prev != null && r.avg_resolve_hours != null && <span className="text-xs text-slate-400">{r.avg_resolve_hours < r.avg_resolve_hours_prev ? " ▼" : r.avg_resolve_hours > r.avg_resolve_hours_prev ? " ▲" : " ="}</span>}</td>
+                            <td className={`py-1.5 pr-2 text-right tabular-nums ${r.flags.includes("repeat") ? "text-red-700" : ""}`}>{r.repeat_pct != null ? `${r.repeat_pct}%` : "–"}</td>
+                            <td className="py-1.5 pr-2 text-right tabular-nums">{r.worksheets}<span className="text-xs text-slate-400">{delta(r.worksheets, r.worksheets_prev)}</span></td>
+                            <td className="py-1.5 pr-2 text-right tabular-nums">{r.hours}</td>
+                            <td className="py-1.5 pr-2 text-right tabular-nums">{ft(r.invoiced_net)}</td>
+                            <td className={`py-1.5 text-right tabular-nums ${r.flags.includes("rating") ? "text-red-700" : ""}`}>{r.rating_avg != null ? `${r.rating_avg.toFixed(2)} (${r.rating_count})` : "–"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
