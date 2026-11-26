@@ -55,6 +55,8 @@ async def apply_active_contract(db: AsyncSession, partner: Partner) -> None:
     partner.contract_payment_method = c.payment_method if c else None
     partner.contract_payment_terms_days = c.payment_terms_days if c else None
     partner.contract_no_minimum = bool(c.no_minimum) if c else False
+    partner.contract_sla_response_hours = c.sla_response_hours if c else None
+    partner.contract_sla_resolve_hours = c.sla_resolve_hours if c else None
     # A türelmi időszakot a szerződés-érvényesség váltja ki (nincs aktív
     # szerződés = nincs minimum) — a régi mező kiürül.
     partner.contract_no_min_until = None

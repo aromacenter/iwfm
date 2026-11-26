@@ -861,6 +861,9 @@ class WorksheetSettings(Base):
     signer_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
     show_materials: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     labor_cost_per_hour: Mapped[float | None] = mapped_column(Float, nullable=True)  # 178. kör: szerelői óra önköltsége (gép-jövedelmezőség)
+    # 185. kör: céges alap SLA (óra, munkanapokon) — szerződés nélküli partnerek jegyeire
+    sla_response_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sla_resolve_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     show_hours: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_client_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_comments: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -2126,6 +2129,9 @@ class Partner(Base):
     # Az aktív szerződés "nincs minimum" kapcsolójának tükre: igaz esetén a
     # partner pontosan a lefőzöttet fizeti (a gép-szintű minimumok sem élnek).
     contract_no_minimum: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 185. kör: az aktív szerződés SLA-tükre (reakció / megoldás óra)
+    contract_sla_response_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    contract_sla_resolve_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Felelős képviselő (üzletkötő) — az ő dolga a partner igényeinek kezelése;
     # az automatizálások "képviselő" címzettje hozzá (távollétekor a
     # helyetteséhez) irányít.
@@ -2786,6 +2792,11 @@ class ServiceTicket(Base):
     parts: Mapped[list | None] = mapped_column(JSON, nullable=True)
     labor_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    # 185. kör: SLA-határidők (létrehozáskor számolva), első reakció, kiküldött jelzések
+    sla_response_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sla_resolve_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_response_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sla_flags: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -3196,6 +3207,9 @@ class PartnerContract(Base):
     invoice_monthly_rent: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # 185. kör: vállalt reakció- és megoldási idő a szervizjegyekre (óra, munkanapokon)
+    sla_response_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sla_resolve_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Alapértelmezett kávéfajta, amivel a partnert ellátjuk — az elszámolás
     # átadott-kávé sora ezt ajánlja fel, de a képviselő mást is adhat.
     default_product_id: Mapped[uuid.UUID | None] = mapped_column(

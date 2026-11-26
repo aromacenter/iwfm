@@ -1117,7 +1117,9 @@
       "settlement_paid": "Invoice paid",
       "stock_expiring": "Stock lot expiring",
       "partner_consumption_drop": "Partner consumption dropping",
-      "price_indexation_applied": "Price increase applied"
+      "price_indexation_applied": "Price increase applied",
+      "ticket_sla_warning": "Service ticket SLA about to expire",
+      "ticket_sla_breached": "Service ticket SLA breached"
     },
     "ops": {
       "eq": "=",
@@ -1210,6 +1212,14 @@
     "editTitle": "Edit service ticket",
     "allStatuses": "All statuses",
     "search": "Search (ticket no, title, machine, partner)…",
+    "slaReport": "SLA report",
+    "slaHint": "Tickets opened in the month: how many had an SLA, share answered / resolved on time, average hours. Response = first move out of the “open” status.",
+    "slaSummary": "SLA on {n}/{all} tickets · answered on time: {resp}% · resolved on time: {res}%",
+    "slaPartner": "Partner", "slaTickets": "SLA/tickets", "slaRespPct": "Response on time", "slaResPct": "Resolution on time", "slaAvgResp": "Avg response (h)", "slaAvgRes": "Avg resolution (h)",
+    "slaLate": "Late tickets ({n})",
+    "slaNone": "No SLA tickets this month.",
+    "slaRespShort": "response", "slaResShort": "resolution",
+    "slaStates": { "met": "on time", "late": "late" },
     "titleCol": "Title",
     "kind": "Kind",
     "machine": "Machine",
@@ -2416,7 +2426,11 @@
     "saferpayPassword": "API password",
     "saferpayTestMode": "Test mode (test.saferpay.com)",
     "wsLaborCost": "Technician hour cost (net)",
-    "wsLaborCostHint": "Machine profitability multiplies worksheet hours by this as service cost — blank means not counted."
+    "wsLaborCostHint": "Machine profitability multiplies worksheet hours by this as service cost — blank means not counted.",
+    "wsSla": "Company default service SLA",
+    "wsSlaResp": "h response,",
+    "wsSlaRes": "h resolution",
+    "wsSlaHint": "For tickets of partners without a contract SLA. Counted on working days (weekends, holidays excluded); high priority halves it. Contracts can override per partner."
   },
   "kiosk": {
     "title": "Time clock terminal",
@@ -3492,6 +3506,10 @@
     "visitWeeks": "Visit cycle (e.g. maintenance)",
     "visitWeeksPh": "e.g. 12",
     "visitWeeksHint": "If set, the partner is scheduled every N weeks anyway (📞🔧 flag). Empty = never.",
+    "sla": "Service SLA (hours, on working days)",
+    "slaResp": "response",
+    "slaRes": "resolution",
+    "slaHint": "Blank = the company default from Settings → worksheet card. High priority halves the time. Weekends and holidays do not count.",
     "visitEveryWeeks": "visit every {n} weeks",
     "tiers": "Tiered portion pricing",
     "tiersHint": "The billed portion count's band sets the per-portion price. Empty upper bound = no cap. Manual price override still wins.",

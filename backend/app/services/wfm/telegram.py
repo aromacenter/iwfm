@@ -53,6 +53,8 @@ EVENT_TEMPLATES: dict[str, str] = {
     "stock.expiring": "⏳ Lejáró tétel: {{termek_nev}} {{mennyiseg}} {{egyseg}} — {{raktar}} {{tarhely}}, lejárat: {{lejarat}} ({{napok}} nap)",
     "ticket.created": "🔧 Új szervizjegy: {{cim}} — {{partner_nev}} ({{gep_nev}})",
     "ticket.done": "✅ Szervizjegy lezárva: {{cim}} — {{partner_nev}}, költség: {{koltseg_osszesen}} Ft",
+    "ticket.sla_warning": "⏰ SLA hamarosan lejár: {{jegy}} {{cim}} — {{partner_nev}}, {{fazis}} határidő {{hatarido}}, felelős: {{felelos}}",
+    "ticket.sla_breached": "🚨 SLA LEJÁRT: {{jegy}} {{cim}} — {{partner_nev}}, {{fazis}} határidő {{hatarido}}, felelős: {{felelos}}",
     "order.created": "📦 Új rendelés (QR): {{rendeles_szam}} — {{partner_nev}}: {{tetel_lista}}",
     "partner.created": "🤝 Új partner: {{partner_nev}} ({{varos}})",
     "counter.reported": "🔢 Számláló bejelentve: {{gep_nev}} — {{partner_nev}}: {{szamlalo}}",

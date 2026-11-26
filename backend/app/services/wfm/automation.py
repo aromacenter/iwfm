@@ -39,6 +39,9 @@ TRIGGERS: dict[str, list[str]] = {
     "ticket.done": [
         "cim", "gep_vonalkod", "gep_nev", "partner_nev", "koltseg_osszesen",
     ],
+    # 185. kör: SLA-figyelmeztetés / -lejárat (fazis: reakció | megoldás)
+    "ticket.sla_warning": ["jegy", "cim", "partner_nev", "gep_nev", "felelos", "fazis", "hatarido", "prioritas"],
+    "ticket.sla_breached": ["jegy", "cim", "partner_nev", "gep_nev", "felelos", "fazis", "hatarido", "prioritas"],
     "order.created": [
         "rendeles_szam", "partner_nev", "tetel_lista",
     ],

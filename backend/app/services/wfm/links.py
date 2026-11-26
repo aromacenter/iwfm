@@ -34,7 +34,7 @@ def event_link(event: str, ctx: dict) -> str | None:
         return frontend_url(f"/elszamolas?partner={_q(g('_partner_id'))}") if g("_partner_id") else frontend_url("/elszamolas")
     if event == "partner.created":
         return frontend_url(f"/partnerek?edit={_q(g('_partner_id'))}") if g("_partner_id") else frontend_url("/partnerek")
-    if event in ("ticket.created", "ticket.done"):
+    if event in ("ticket.created", "ticket.done", "ticket.sla_warning", "ticket.sla_breached"):
         return frontend_url(f"/szerviz?ticket={_q(g('_ticket_id'))}") if g("_ticket_id") else frontend_url("/szerviz")
     if event in ("counter.reported", "vending.error"):
         code = g("gep_vonalkod") or g("gep_kod")

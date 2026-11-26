@@ -331,6 +331,9 @@ class WorksheetSettingsBody(BaseModel):
     survey_fee: float | None = Field(default=None, ge=0, le=10_000_000)
     # 178. kör: szerelői munkaóra önköltsége (Ft/óra, nettó) — a gép-jövedelmezőséghez
     labor_cost_per_hour: float | None = Field(default=None, ge=0, le=1_000_000)
+    # 185. kör: céges alap SLA (óra, munkanapokon) szerződés nélküli partnerek jegyeire
+    sla_response_hours: int | None = Field(default=None, ge=1, le=720)
+    sla_resolve_hours: int | None = Field(default=None, ge=1, le=2000)
     # 155. kör: elkészült-gép értesítő telefonszáma; Godex-címke ügyeleti száma
     pickup_phone: str | None = Field(default=None, max_length=32)
     label_phone: str | None = Field(default=None, max_length=32)
@@ -374,6 +377,8 @@ class WorksheetSettingsOut(BaseModel):
     intake_footer_default: str
     survey_fee: float | None
     labor_cost_per_hour: float | None = None
+    sla_response_hours: int | None = None
+    sla_resolve_hours: int | None = None
     survey_fee_default: float
     pickup_phone: str | None
     label_phone: str | None
@@ -423,6 +428,8 @@ def _worksheet_out(row: WorksheetSettings) -> WorksheetSettingsOut:
         intake_footer_default=DEFAULT_INTAKE_FOOTER,
         survey_fee=row.survey_fee,
         labor_cost_per_hour=row.labor_cost_per_hour,
+        sla_response_hours=row.sla_response_hours,
+        sla_resolve_hours=row.sla_resolve_hours,
         survey_fee_default=DEFAULT_SURVEY_FEE,
         pickup_phone=row.pickup_phone,
         label_phone=row.label_phone,
@@ -593,6 +600,8 @@ async def update_worksheet_settings(
     row.intake_footer_text = (body.intake_footer_text or "").strip() or None
     row.survey_fee = body.survey_fee
     row.labor_cost_per_hour = body.labor_cost_per_hour
+    row.sla_response_hours = body.sla_response_hours
+    row.sla_resolve_hours = body.sla_resolve_hours
     row.pickup_phone = (body.pickup_phone or "").strip() or None
     row.label_phone = (body.label_phone or "").strip() or None
     row.invoice_payment_note = (body.invoice_payment_note or "").strip() or None

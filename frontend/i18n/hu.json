@@ -1117,7 +1117,9 @@
       "settlement_paid": "Számla kiegyenlítve",
       "stock_expiring": "Raktári tétel lejár",
       "partner_consumption_drop": "Partner fogyása csökken",
-      "price_indexation_applied": "Áremelés alkalmazva"
+      "price_indexation_applied": "Áremelés alkalmazva",
+      "ticket_sla_warning": "Szervizjegy SLA hamarosan lejár",
+      "ticket_sla_breached": "Szervizjegy SLA lejárt"
     },
     "ops": {
       "eq": "=",
@@ -1210,6 +1212,14 @@
     "editTitle": "Szervizjegy szerkesztése",
     "allStatuses": "Minden státusz",
     "search": "Keresés (jegyszám, cím, gép, partner)…",
+    "slaReport": "SLA riport",
+    "slaHint": "A hónapban nyitott jegyek: hányra volt vállalt határidő, hány százalék válaszolt / oldódott meg időben, átlagos órák. Reakció = az első elmozdulás a „nyitott” státuszból.",
+    "slaSummary": "{n}/{all} jegyen SLA · időben válaszolt: {resp}% · időben megoldva: {res}%",
+    "slaPartner": "Partner", "slaTickets": "SLA/jegy", "slaRespPct": "Reakció időben", "slaResPct": "Megoldás időben", "slaAvgResp": "Átl. reakció (h)", "slaAvgRes": "Átl. megoldás (h)",
+    "slaLate": "Csúszott jegyek ({n})",
+    "slaNone": "Ebben a hónapban nincs SLA-s jegy.",
+    "slaRespShort": "válasz", "slaResShort": "megoldás",
+    "slaStates": { "met": "időben", "late": "késett" },
     "titleCol": "Megnevezés",
     "kind": "Típus",
     "machine": "Gép",
@@ -2416,7 +2426,11 @@
     "saferpayPassword": "API jelszó",
     "saferpayTestMode": "Teszt-mód (test.saferpay.com)",
     "wsLaborCost": "Szerelői munkaóra önköltsége (nettó)",
-    "wsLaborCostHint": "A gép-jövedelmezőség a munkalapok óráit ezzel szorozza szerviz-költségként — üresen nem számol vele."
+    "wsLaborCostHint": "A gép-jövedelmezőség a munkalapok óráit ezzel szorozza szerviz-költségként — üresen nem számol vele.",
+    "wsSla": "Céges alap szerviz-SLA",
+    "wsSlaResp": "óra reakció,",
+    "wsSlaRes": "óra megoldás",
+    "wsSlaHint": "Szerződés nélküli partnerek jegyeire. Munkanapokon számolva (hétvége, ünnep nem fogy), sürgős jegynél a fele. A szerződésben partnerenként felülírható."
   },
   "kiosk": {
     "title": "Munkaidő-terminál",
@@ -3492,6 +3506,10 @@
     "visitWeeks": "Látogatási ciklus (pl. karbantartás)",
     "visitWeeksPh": "pl. 12",
     "visitWeeksHint": "Ha ki van töltve, ennyi hetente mégis bekerül a látogatási tervbe (📞🔧 jelzéssel). Üresen soha.",
+    "sla": "Vállalt szerviz-SLA (óra, munkanapokon)",
+    "slaResp": "reakció",
+    "slaRes": "megoldás",
+    "slaHint": "Üresen a Beállítások → munkalap kártya céges alapja él. Sürgős jegynél a fele idő. Hétvége és ünnepnap nem fogy.",
     "visitEveryWeeks": "{n} hetente látogatás",
     "tiers": "Sávos adagárazás",
     "tiersHint": "Az elszámolt adagszám sávja adja az adagárat (pl. 0–100 adag: 60 Ft, 101-től: 40 Ft). Üres felső határ = nincs plafon. A kézi ár-átírás ezt is felülírja.",

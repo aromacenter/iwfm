@@ -49,6 +49,8 @@ interface WorksheetSettings {
   survey_fee: number | null;
   survey_fee_default: number;
   labor_cost_per_hour?: number | null;
+  sla_response_hours?: number | null;
+  sla_resolve_hours?: number | null;
   pickup_phone: string | null;
   label_phone: string | null;
   accent_color: string;
@@ -670,6 +672,8 @@ export default function BeallitasokPage() {
     intake_footer_text: "",
     survey_fee: "",
     labor_cost_per_hour: "",
+    sla_response_hours: "",
+    sla_resolve_hours: "",
     pickup_phone: "",
     label_phone: "",
     invoice_payment_note: "",
@@ -805,6 +809,8 @@ export default function BeallitasokPage() {
           intake_footer_text: s.intake_footer_text ?? "",
           survey_fee: s.survey_fee != null ? String(s.survey_fee) : "",
           labor_cost_per_hour: s.labor_cost_per_hour != null ? String(s.labor_cost_per_hour) : "",
+          sla_response_hours: s.sla_response_hours != null ? String(s.sla_response_hours) : "",
+          sla_resolve_hours: s.sla_resolve_hours != null ? String(s.sla_resolve_hours) : "",
           pickup_phone: s.pickup_phone ?? "",
           label_phone: s.label_phone ?? "",
           invoice_payment_note: s.invoice_payment_note ?? "",
@@ -1353,6 +1359,8 @@ export default function BeallitasokPage() {
         intake_footer_text: ws.intake_footer_text || null,
         survey_fee: ws.survey_fee ? Number(ws.survey_fee) : null,
         labor_cost_per_hour: ws.labor_cost_per_hour ? Number(ws.labor_cost_per_hour) : null,
+        sla_response_hours: ws.sla_response_hours ? Number(ws.sla_response_hours) : null,
+        sla_resolve_hours: ws.sla_resolve_hours ? Number(ws.sla_resolve_hours) : null,
         pickup_phone: ws.pickup_phone || null,
         label_phone: ws.label_phone || null,
         invoice_payment_note: ws.invoice_payment_note || null,
@@ -1518,6 +1526,12 @@ export default function BeallitasokPage() {
               className="ml-2 w-32 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
             /> Ft/óra
             <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsLaborCostHint")}</span>
+          </label>
+          <label className="block text-sm">
+            {t("settings.wsSla")}
+            <input type="number" min={1} max={720} value={ws.sla_response_hours} onChange={(e) => setWs({ ...ws, sla_response_hours: e.target.value })} placeholder="24" className="ml-2 w-20 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm" /> {t("settings.wsSlaResp")}
+            <input type="number" min={1} max={2000} value={ws.sla_resolve_hours} onChange={(e) => setWs({ ...ws, sla_resolve_hours: e.target.value })} placeholder="72" className="ml-2 w-20 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm" /> {t("settings.wsSlaRes")}
+            <span className="mt-0.5 block text-xs text-slate-400">{t("settings.wsSlaHint")}</span>
           </label>
           <label className="block text-sm">
             {t("settings.wsPickupPhone")}
@@ -2963,7 +2977,7 @@ export default function BeallitasokPage() {
               <div className="mb-1.5 text-xs font-semibold text-sky-800">{t("notif.tgEventsTitle")}</div>
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {["settlement.created", "settlement.signed", "settlement.paid", "ticket.created", "ticket.done",
-                  "order.created", "partner.created", "partner.consumption_drop", "price.indexation_applied", "counter.reported", "stock.low", "stock.expiring", "vending.error",
+                  "ticket.sla_warning", "ticket.sla_breached", "order.created", "partner.created", "partner.consumption_drop", "price.indexation_applied", "counter.reported", "stock.low", "stock.expiring", "vending.error",
                   "parts.low", "parts.request", "worksheet.quote_ready"].map((ev) => (
                   <label key={ev} className="flex items-center gap-2 text-sm">
                     <input

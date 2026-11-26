@@ -35,6 +35,32 @@ interface Ticket {
   total_cost: number;
   resolved_at: string | null;
   created_at: string;
+  sla_response_due?: string | null;
+  sla_resolve_due?: string | null;
+  first_response_at?: string | null;
+  sla?: { response: SlaState; resolve: SlaState } | null;
+}
+
+type SlaState = "ok" | "warning" | "breached" | "met" | "late" | null;
+
+interface SlaReport {
+  month: string;
+  total: SlaRow;
+  partners: SlaRow[];
+  late: { id: string; ticket_no: string; title: string; partner: string; status: string; assigned_to_name: string; response: SlaState; resolve: SlaState }[];
+}
+interface SlaRow { partner_id: string | null; partner: string; tickets: number; with_sla: number; response_pct: number | null; resolve_pct: number | null; avg_response_hours: number | null; avg_resolve_hours: number | null }
+
+const SLA_CLS: Record<string, string> = {
+  ok: "bg-emerald-50 text-emerald-700", warning: "bg-amber-100 text-amber-800", breached: "bg-red-100 text-red-800",
+  met: "bg-emerald-100 text-emerald-800", late: "bg-red-50 text-red-700",
+};
+
+function slaRemaining(due: string, lang: string): string {
+  const h = (new Date(due).getTime() - Date.now()) / 36e5;
+  const abs = Math.abs(h);
+  const txt = abs >= 48 ? `${Math.round(abs / 24)} ${lang === "hu" ? "nap" : "d"}` : `${Math.round(abs)} h`;
+  return h < 0 ? `−${txt}` : txt;
 }
 
 interface Assignee {
@@ -128,6 +154,14 @@ export default function SzervizPage() {
   const [showDue, setShowDue] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
+  // 185. kör: SLA-riport panel
+  const [slaOpen, setSlaOpen] = useState(false);
+  const [slaMonth, setSlaMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [slaReport, setSlaReport] = useState<SlaReport | null>(null);
+  useEffect(() => {
+    if (!slaOpen) return;
+    api.get<SlaReport>(`/api/service/sla-report?month=${slaMonth}`).then(setSlaReport).catch(() => setSlaReport(null));
+  }, [slaOpen, slaMonth]);
   // 183. kör: Telegram-linkről (?ticket=) kiemelés + odagörgetés
   const [highlightId] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("ticket")));
   useEffect(() => {
@@ -324,6 +358,9 @@ export default function SzervizPage() {
           placeholder={t("service.search")}
           className="min-w-52 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
+        <button onClick={() => setSlaOpen((v) => !v)} className={`rounded-lg border px-3 py-2 text-sm ${slaOpen ? "border-sky-400 bg-sky-50 text-sky-800" : "border-slate-300 text-slate-700"}`}>
+          ⏱ {t("service.slaReport")}
+        </button>
         {canDelete && selected.size > 0 && (
           <button
             onClick={bulkDelete}
@@ -333,6 +370,49 @@ export default function SzervizPage() {
           </button>
         )}
       </div>
+
+      {slaOpen && (
+        <div className="mb-6 rounded-2xl border border-sky-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-semibold text-sky-900">⏱ {t("service.slaReport")}</span>
+            <input type="month" value={slaMonth} onChange={(e) => setSlaMonth(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-sm" />
+            {slaReport && (
+              <span className="text-sm text-slate-600">
+                {t("service.slaSummary", { n: slaReport.total.with_sla, all: slaReport.total.tickets, resp: slaReport.total.response_pct ?? "–", res: slaReport.total.resolve_pct ?? "–" })}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">{t("service.slaHint")}</p>
+          {slaReport && slaReport.partners.length > 0 && (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs uppercase text-slate-500"><tr><th className="py-1 pr-3">{t("service.slaPartner")}</th><th className="py-1 pr-3 text-right">{t("service.slaTickets")}</th><th className="py-1 pr-3 text-right">{t("service.slaRespPct")}</th><th className="py-1 pr-3 text-right">{t("service.slaResPct")}</th><th className="py-1 pr-3 text-right">{t("service.slaAvgResp")}</th><th className="py-1 text-right">{t("service.slaAvgRes")}</th></tr></thead>
+                <tbody>
+                  {slaReport.partners.map((r) => (
+                    <tr key={r.partner_id ?? "-"} className="border-t border-slate-100">
+                      <td className="py-1 pr-3">{r.partner}</td><td className="py-1 pr-3 text-right">{r.with_sla}/{r.tickets}</td>
+                      <td className={`py-1 pr-3 text-right ${r.response_pct != null && r.response_pct < 100 ? "text-red-700" : ""}`}>{r.response_pct ?? "–"}{r.response_pct != null && "%"}</td>
+                      <td className={`py-1 pr-3 text-right ${r.resolve_pct != null && r.resolve_pct < 100 ? "text-red-700" : ""}`}>{r.resolve_pct ?? "–"}{r.resolve_pct != null && "%"}</td>
+                      <td className="py-1 pr-3 text-right">{r.avg_response_hours ?? "–"}</td><td className="py-1 text-right">{r.avg_resolve_hours ?? "–"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {slaReport && slaReport.late.length > 0 && (
+            <div className="mt-3 text-sm">
+              <div className="font-medium text-red-800">{t("service.slaLate", { n: slaReport.late.length })}</div>
+              <ul className="mt-1 space-y-0.5">
+                {slaReport.late.map((l) => (
+                  <li key={l.id}><span className="font-mono text-xs">{l.ticket_no}</span> {l.title} · {l.partner} · {l.assigned_to_name || "—"} · {t(`service.statuses.${l.status}`)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {slaReport && slaReport.total.with_sla === 0 && <p className="mt-2 text-sm text-slate-500">{t("service.slaNone")}</p>}
+        </div>
+      )}
 
       {maintDue.length > 0 && (
         <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
@@ -454,6 +534,20 @@ export default function SzervizPage() {
                         </span>
                       )}
                     </div>
+                    {tk.sla && (tk.sla.response || tk.sla.resolve) && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {tk.sla.response && tk.sla_response_due && (
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${SLA_CLS[tk.sla.response]}`} title={new Date(tk.sla_response_due).toLocaleString()}>
+                            ⏱ {t("service.slaRespShort")} {tk.sla.response === "met" || tk.sla.response === "late" ? t(`service.slaStates.${tk.sla.response}`) : slaRemaining(tk.sla_response_due, lang)}
+                          </span>
+                        )}
+                        {tk.sla.resolve && tk.sla_resolve_due && (
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${SLA_CLS[tk.sla.resolve]}`} title={new Date(tk.sla_resolve_due).toLocaleString()}>
+                            🛠 {t("service.slaResShort")} {tk.sla.resolve === "met" || tk.sla.resolve === "late" ? t(`service.slaStates.${tk.sla.resolve}`) : slaRemaining(tk.sla_resolve_due, lang)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {tk.asset_label ?? "—"}

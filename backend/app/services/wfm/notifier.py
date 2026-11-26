@@ -480,6 +480,16 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
 
         logging.getLogger(__name__).warning("payment sync failed", exc_info=True)
 
+    # 185. kör: SLA-figyelés a nyitott szervizjegyeken
+    try:
+        from app.services.wfm.sla import run_sla_watch
+
+        await run_sla_watch(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("sla watch failed", exc_info=True)
+
     # 184. kör: hatályba lépett áremelések alkalmazása
     try:
         from app.services.wfm.price_indexation import run_scheduled_indexations

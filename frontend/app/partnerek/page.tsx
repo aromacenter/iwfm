@@ -398,6 +398,8 @@ export default function PartnerekPage() {
     auto_settlement?: boolean;
     phone_settlement: boolean;
     visit_weeks: number | null;
+    sla_response_hours?: number | null;
+    sla_resolve_hours?: number | null;
     price_tiers: { qty_from: number; qty_to: number | null; price: number }[] | null;
     invoice_norma: number | null;
     default_product_id: string | null;
@@ -442,7 +444,7 @@ export default function PartnerekPage() {
     below_min_price: string; min_kg: string; below_min_price_kg: string;
     rent_if_below_min: boolean; settlement_weeks: string;
     payment_method: string; payment_terms_days: string;
-    no_minimum: boolean; auto_billing: boolean; fixed_rental: boolean; billing_day: string; rental_merge_company: boolean; rent_fee: string; billing_cycle: string; billing_weekday: string; billing_time: string; auto_settlement: boolean; phone_settlement: boolean; visit_weeks: string; tiers: { from: string; to: string; price: string }[]; invoice_norma: string; default_product_id: string; note: string;
+    no_minimum: boolean; auto_billing: boolean; fixed_rental: boolean; billing_day: string; rental_merge_company: boolean; rent_fee: string; billing_cycle: string; billing_weekday: string; billing_time: string; auto_settlement: boolean; phone_settlement: boolean; visit_weeks: string; sla_response_hours: string; sla_resolve_hours: string; tiers: { from: string; to: string; price: string }[]; invoice_norma: string; default_product_id: string; note: string;
     invoice_reference: string; invoice_monthly_rent: boolean;
   } | null>(null);
   const [cError, setCError] = useState<string | null>(null);
@@ -512,7 +514,7 @@ export default function PartnerekPage() {
       min_portions: "", below_min_price: "", min_kg: "", below_min_price_kg: "",
       rent_if_below_min: false, settlement_weeks: "4",
       payment_method: "", payment_terms_days: "",
-      no_minimum: false, auto_billing: false, fixed_rental: false, billing_day: "", rental_merge_company: false, rent_fee: "", billing_cycle: "monthly", billing_weekday: "0", billing_time: "06:00", auto_settlement: true, phone_settlement: false, visit_weeks: "", tiers: [], invoice_norma: "", default_product_id: "", note: "",
+      no_minimum: false, auto_billing: false, fixed_rental: false, billing_day: "", rental_merge_company: false, rent_fee: "", billing_cycle: "monthly", billing_weekday: "0", billing_time: "06:00", auto_settlement: true, phone_settlement: false, visit_weeks: "", sla_response_hours: "", sla_resolve_hours: "", tiers: [], invoice_norma: "", default_product_id: "", note: "",
       invoice_reference: "", invoice_monthly_rent: false,
     });
   }
@@ -541,6 +543,8 @@ export default function PartnerekPage() {
       auto_settlement: c.auto_settlement ?? true,
       phone_settlement: c.phone_settlement,
       visit_weeks: c.visit_weeks != null ? String(c.visit_weeks) : "",
+      sla_response_hours: c.sla_response_hours != null ? String(c.sla_response_hours) : "",
+      sla_resolve_hours: c.sla_resolve_hours != null ? String(c.sla_resolve_hours) : "",
       tiers: (c.price_tiers || []).map((tr) => ({
         from: String(tr.qty_from), to: tr.qty_to != null ? String(tr.qty_to) : "", price: String(tr.price),
       })),
@@ -581,6 +585,8 @@ export default function PartnerekPage() {
         auto_settlement: cForm.auto_settlement,
         phone_settlement: cForm.phone_settlement,
         visit_weeks: cForm.phone_settlement && cForm.visit_weeks ? Number(cForm.visit_weeks) : null,
+        sla_response_hours: cForm.sla_response_hours ? Number(cForm.sla_response_hours) : null,
+        sla_resolve_hours: cForm.sla_resolve_hours ? Number(cForm.sla_resolve_hours) : null,
         price_tiers: cForm.tiers.filter((tr) => tr.price !== "").length
           ? cForm.tiers
               .filter((tr) => tr.price !== "")
@@ -1337,6 +1343,7 @@ export default function PartnerekPage() {
                           c.auto_billing ? `⚡ ${t("contracts.autoBilling")}` : null,
                           c.phone_settlement ? `📞 ${t("contracts.phoneSettlement")}${c.visit_weeks ? ` (${t("contracts.visitEveryWeeks", { n: c.visit_weeks })})` : ""}` : null,
                           c.price_tiers?.length ? `📊 ${t("contracts.tiersSummary", { n: c.price_tiers.length })}` : null,
+                          c.sla_response_hours || c.sla_resolve_hours ? `⏱ SLA ${c.sla_response_hours ?? "–"}h / ${c.sla_resolve_hours ?? "–"}h` : null,
                           c.invoice_norma != null ? t("contracts.sumInvoiceNorma", { n: c.invoice_norma }) : null,
                           c.note,
                         ].filter(Boolean).join(" · ") || t("contracts.noTerms")}
@@ -1538,6 +1545,14 @@ export default function PartnerekPage() {
                       <span className="block text-xs text-violet-700">{t("contracts.phoneSettlementHint")}</span>
                     </span>
                   </label>
+                  <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">
+                    <span className="font-semibold">⏱ {t("contracts.sla")}</span>
+                    <span className="ml-2">{t("contracts.slaResp")}</span>
+                    <input type="number" min={1} max={720} value={cForm.sla_response_hours} onChange={(e) => setCForm({ ...cForm, sla_response_hours: e.target.value })} placeholder="24" className="ml-1 w-16 rounded-lg border border-sky-300 px-2 py-1" />
+                    <span className="ml-2">{t("contracts.slaRes")}</span>
+                    <input type="number" min={1} max={2000} value={cForm.sla_resolve_hours} onChange={(e) => setCForm({ ...cForm, sla_resolve_hours: e.target.value })} placeholder="72" className="ml-1 w-16 rounded-lg border border-sky-300 px-2 py-1" />
+                    <span className="mt-1 block">{t("contracts.slaHint")}</span>
+                  </div>
                   {cForm.phone_settlement && (
                     <label className="mt-2 block text-xs text-violet-900">
                       🔧 {t("contracts.visitWeeks")}

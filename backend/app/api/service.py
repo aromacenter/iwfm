@@ -95,9 +95,16 @@ class TicketOut(BaseModel):
     total_cost: float = 0.0  # alkatrészek + munkadíj (nettó)
     resolved_at: datetime | None
     created_at: datetime
+    # 185. kör: SLA
+    sla_response_due: datetime | None = None
+    sla_resolve_due: datetime | None = None
+    first_response_at: datetime | None = None
+    sla: dict | None = None
 
 
 def _out(tk: ServiceTicket) -> TicketOut:
+    from app.services.wfm.sla import sla_state
+
     return TicketOut(
         id=str(tk.id),
         ticket_no=tk.ticket_no,
@@ -127,6 +134,8 @@ def _out(tk: ServiceTicket) -> TicketOut:
         ),
         resolved_at=tk.resolved_at,
         created_at=tk.created_at,
+        sla_response_due=tk.sla_response_due, sla_resolve_due=tk.sla_resolve_due,
+        first_response_at=tk.first_response_at, sla=sla_state(tk),
     )
 
 
@@ -430,6 +439,9 @@ async def create_ticket(
     )
     db.add(tk)
     await db.flush()
+    from app.services.wfm.sla import set_due_dates
+
+    await set_due_dates(db, tk)
     await _sync_assignee_task(db, tk, actor)
     await record_audit(
         db, actor=actor, action="service.create", entity_type="service_ticket",
@@ -597,6 +609,9 @@ async def update_ticket(
         if body.status not in STATUSES:
             raise HTTPException(status_code=422, detail={"code": "service.bad_status"})
         became_done = body.status == "done" and tk.status != "done"
+        # 185. kör: az első reakció = az első elmozdulás a "nyitott"-ból
+        if body.status != "open" and tk.first_response_at is None:
+            tk.first_response_at = datetime.now(UTC)
         tk.status = body.status
         tk.resolved_at = datetime.now(UTC) if body.status in ("done", "cancelled") else None
 
@@ -625,6 +640,21 @@ async def update_ticket(
     if reassigned:
         await _notify_ticket_assignee(db, tk)
     return _out(tk)
+
+
+@router.get("/sla-report")
+async def sla_report_endpoint(
+    month: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_perm("service")),
+):
+    """185. kör: havi SLA-riport (partnerenként és összesen, csúszott jegyek)."""
+    from app.services.wfm.sla import month_key, sla_report
+
+    key = (month or month_key()).strip()[:7]
+    if len(key) != 7 or key[4] != "-" or not key[:4].isdigit() or not key[5:].isdigit() or not 1 <= int(key[5:]) <= 12:
+        raise HTTPException(status_code=422, detail={"code": "service.bad_month"})
+    return await sla_report(db, key)
 
 
 @router.get("/attachments/{attachment_id}")

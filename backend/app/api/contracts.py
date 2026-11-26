@@ -106,6 +106,9 @@ class ContractBody(BaseModel):
     # 144. kör: egyedi számla-referencia (számla-megjegyzés) + havi bérleti díjas számlasor
     invoice_reference: str | None = Field(default=None, max_length=256)
     invoice_monthly_rent: bool = False
+    # 185. kör: vállalt SLA a szervizjegyekre (óra, munkanapokon) — üresen a céges alap él
+    sla_response_hours: int | None = Field(default=None, ge=1, le=720)
+    sla_resolve_hours: int | None = Field(default=None, ge=1, le=2000)
     note: str | None = None
 
     @field_validator("price_tiers")
@@ -179,6 +182,8 @@ class ContractOut(BaseModel):
     default_product_name: str | None = None
     invoice_reference: str | None = None
     invoice_monthly_rent: bool = False
+    sla_response_hours: int | None = None
+    sla_resolve_hours: int | None = None
     note: str | None
     status: str  # active | future | expired
     created_at: datetime
@@ -239,6 +244,7 @@ def _out(c: PartnerContract, product_name: str | None = None) -> ContractOut:
         default_product_name=product_name,
         invoice_reference=c.invoice_reference,
         invoice_monthly_rent=bool(c.invoice_monthly_rent),
+        sla_response_hours=c.sla_response_hours, sla_resolve_hours=c.sla_resolve_hours,
         note=c.note,
         status=_status(c, date.today()), created_at=c.created_at,
     )
