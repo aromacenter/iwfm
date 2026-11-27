@@ -483,6 +483,23 @@ export default function FeladatokPage() {
 
   // Cseregép-modal: kézi beírás MELLETT kamerás QR-beolvasás is (5d25ca92)
   const [loanerFor, setLoanerFor] = useState<TaskOut | null>(null);
+  // 190. kör: belső munkalap átadása külső szerviznek
+  const [handoffFor, setHandoffFor] = useState<TaskOut | null>(null);
+  const [handoffEmp, setHandoffEmp] = useState("");
+  const [handoffNote, setHandoffNote] = useState("");
+  const [handoffClose, setHandoffClose] = useState(true);
+  const contractors = employees.filter((e) => e.status === "active" && (e.is_contractor || e.is_company));
+  async function doHandoff() {
+    if (!handoffFor || !handoffEmp) return;
+    try {
+      const created = await api.post<TaskOut>(`/api/tasks/${handoffFor.id}/handoff-external`, { employee_id: handoffEmp, note: handoffNote.trim() || null, close_original: handoffClose });
+      toast(t("tasks.handoffDone", { serial: created.worksheet_serial ?? "KSZ" }), "success");
+      setHandoffFor(null); setHandoffNote(""); setHandoffEmp("");
+      load();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
   const [loanerCode, setLoanerCode] = useState("");
 
   function setLoaner(task: TaskOut) {
@@ -897,12 +914,23 @@ export default function FeladatokPage() {
                         </button>
                       </>
                     ) : (
-                      <button
-                        onClick={() => downloadWorksheet(task)}
-                        className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
-                      >
-                        {t("tasks.worksheetPdf")}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => downloadWorksheet(task)}
+                          className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                        >
+                          {t("tasks.worksheetPdf")}
+                        </button>
+                        {task.status !== "done" && (
+                          <button
+                            onClick={() => { setHandoffFor(task); setHandoffEmp(contractors[0]?.id ?? ""); }}
+                            title={t("tasks.handoffHint")}
+                            className="rounded-lg border border-orange-300 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
+                          >
+                            🔧 {t("tasks.handoffBtn")}
+                          </button>
+                        )}
+                      </>
                     )}
                     <button
                       onClick={() => printWorksheetOffice(task)}
@@ -1562,6 +1590,33 @@ export default function FeladatokPage() {
       )}
 
       <PartnerInfo partnerId={infoPartner} onClose={() => setInfoPartner(null)} />
+      {handoffFor && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="relative w-full max-w-md space-y-3 rounded-2xl bg-white p-4 shadow-xl">
+            <button type="button" onClick={() => setHandoffFor(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <p className="font-semibold">🔧 {t("tasks.handoffTitle", { serial: handoffFor.worksheet_serial ?? "" })}</p>
+            <p className="text-xs text-slate-500">{t("tasks.handoffPrompt")}</p>
+            {contractors.length === 0 ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{t("tasks.handoffNoContractor")}</p>
+            ) : (
+              <label className="block text-sm">{t("tasks.handoffWho")}
+                <select value={handoffEmp} onChange={(e) => setHandoffEmp(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  {contractors.map((e) => <option key={e.id} value={e.id}>{e.is_company && e.company_name ? `🏢 ${e.company_name}` : `${e.last_name} ${e.first_name}`}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="block text-sm">{t("tasks.handoffNote")}
+              <textarea rows={3} value={handoffNote} onChange={(e) => setHandoffNote(e.target.value)} placeholder={t("tasks.handoffNotePh")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            </label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={handoffClose} onChange={(e) => setHandoffClose(e.target.checked)} /> {t("tasks.handoffClose")}</label>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setHandoffFor(null)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">{t("common.cancel")}</button>
+              <button disabled={!handoffEmp} onClick={() => void doHandoff()} className="rounded-lg bg-orange-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">{t("tasks.handoffBtn")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {loanerFor && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"

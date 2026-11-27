@@ -1375,6 +1375,84 @@ async def _notify_assignee(db: AsyncSession, task: Task, emp: Employee, serial: 
         logging.getLogger(__name__).warning("task.assigned event failed", exc_info=True)
 
 
+class HandoffExternalBody(BaseModel):
+    employee_id: str  # külsős szervizes vagy alvállalkozó cég (is_contractor / is_company)
+    note: str | None = Field(default=None, max_length=1000)
+    due_date: date | None = None
+    close_original: bool = True
+
+
+@router.post("/{task_id}/handoff-external", response_model=TaskOut, status_code=201)
+async def handoff_external(
+    task_id: str,
+    body: HandoffExternalBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_perm("tasks")),
+):
+    """190. kör: nyitott BELSŐ munkalap átadása külső szerviznek egy gombbal —
+    új KSZ-feladat a kiválasztott szervizesnek ugyanazzal a géppel, hiba-
+    leírással és fotókkal; az eredeti feladat lezárul hivatkozással."""
+    from app.models import WorksheetPhoto
+
+    try:
+        tid = uuid.UUID(task_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
+    task = (await db.execute(select(Task).where(Task.id == tid))).scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=404, detail={"code": "tasks.not_found"})
+    ws = await _get_worksheet(db, task.id)
+    if ws is None or ws.external_service:
+        raise HTTPException(status_code=422, detail={"code": "tasks.handoff_not_internal"})
+    if task.status == "done":
+        raise HTTPException(status_code=422, detail={"code": "tasks.handoff_closed"})
+    try:
+        emp_id = uuid.UUID(body.employee_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "tasks.bad_employee"})
+    emp = (await db.execute(select(Employee).where(Employee.id == emp_id, Employee.status == "active"))).scalar_one_or_none()
+    if emp is None:
+        raise HTTPException(status_code=422, detail={"code": "tasks.bad_employee"})
+    if not (emp.is_contractor or getattr(emp, "is_company", False)):
+        raise HTTPException(status_code=422, detail={"code": "tasks.handoff_not_contractor"})
+
+    note = (body.note or "").strip()
+    desc_parts = [p for p in [task.description, ws.problem_text, note] if p and p.strip()]
+    desc_parts.append(f"Belső munkalapból átadva: {ws.serial}")
+    new_task = Task(
+        title=task.title, description="\n\n".join(desc_parts)[:4000], employee_id=emp.id,
+        due_date=body.due_date or max(task.due_date, date.today()), required_skill_id=task.required_skill_id,
+        intake_id=task.intake_id, created_by=actor.id,
+    )
+    db.add(new_task)
+    await db.flush()
+    new_ws = Worksheet(
+        task_id=new_task.id, serial=await _next_worksheet_serial(db, True), external_service=True, onsite=False,
+        asset_id=ws.asset_id, maintenance_fee=ws.maintenance_fee, work_description="", materials=[],
+        client_name=ws.client_name, client_location=ws.client_location, problem_text=ws.problem_text,
+        public_note=ws.public_note, created_by=actor.id,
+    )
+    db.add(new_ws)
+    await db.flush()
+    photos = (await db.execute(select(WorksheetPhoto).where(WorksheetPhoto.worksheet_id == ws.id))).scalars().all()
+    for ph in photos:
+        db.add(WorksheetPhoto(worksheet_id=new_ws.id, image=ph.image, mime=ph.mime))
+    if body.close_original:
+        task.status = "done"
+        task.completed_at = datetime.now(UTC)
+        task.completed_by_name = actor.display_name
+        ws.solution_text = ((ws.solution_text or "").rstrip() + f"\nÁtadva külső szerviznek: {new_ws.serial}").strip()
+    await record_audit(
+        db, actor=actor, action="task.handoff_external", entity_type="task", entity_id=str(task.id),
+        detail={"from": ws.serial, "to": new_ws.serial, "employee": f"{emp.last_name} {emp.first_name}".strip(),
+                "photos": len(photos), "closed": body.close_original}, request=request,
+    )
+    await db.commit()
+    await _notify_assignee(db, new_task, emp, new_ws.serial)
+    return (await _tasks_out(db, [new_task]))[0]
+
+
 @router.patch("/{task_id}", response_model=TaskOut)
 async def update_task(
     task_id: str,
