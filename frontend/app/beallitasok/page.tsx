@@ -3030,7 +3030,7 @@ export default function BeallitasokPage() {
               <div className="mb-1.5 text-xs font-semibold text-sky-800">{t("notif.tgEventsTitle")}</div>
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {["settlement.created", "settlement.signed", "settlement.paid", "ticket.created", "ticket.done",
-                  "ticket.sla_warning", "ticket.sla_breached", "worksheet.rated", "order.created", "partner.created", "partner.consumption_drop", "price.indexation_applied", "counter.reported", "stock.low", "stock.expiring", "vending.error", "timeclock.far",
+                  "ticket.sla_warning", "ticket.sla_breached", "worksheet.rated", "order.created", "partner.created", "partner.consumption_drop", "price.indexation_applied", "counter.reported", "stock.low", "stock.expiring", "vending.error", "timeclock.far", "timeclock.left_open",
                   "parts.low", "parts.request", "worksheet.quote_ready"].map((ev) => (
                   <label key={ev} className="flex items-center gap-2 text-sm">
                     <input

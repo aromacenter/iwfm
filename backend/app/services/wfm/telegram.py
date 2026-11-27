@@ -60,6 +60,7 @@ EVENT_TEMPLATES: dict[str, str] = {
     "partner.created": "🤝 Új partner: {{partner_nev}} ({{varos}})",
     "counter.reported": "🔢 Számláló bejelentve: {{gep_nev}} — {{partner_nev}}: {{szamlalo}}",
     "timeclock.far": "📍 Blokkolás a telephelytől távol: {{dolgozo}} — {{muvelet}} {{idopont}}, {{tavolsag_m}} m a legközelebbi ismert helytől ({{legkozelebbi}}), {{forras}}, pontosság ±{{pontossag_m}} m\n🗺️ {{terkep}}",
+    "timeclock.left_open": "⏰ Nyitva felejtett blokkolás: {{dolgozo}} — {{mikortol}} óta nincs kiblokkolva (munkaidő vége: {{munkaido_vege}}). A dolgozó emlékeztetőt kapott; ha már végzett, rögzítsd a tényleges távozást a Jelenlét oldalon.",
     "vending.error": "🚨 Kávégép hiba: {{gep_nev}} ({{gep_kod}}) — {{hiba}} ({{forras}}, {{darab}}×)",
     "stock.low": "⚠️ Alacsony készlet: {{partner_nev}} — {{termek_nev}}: {{keszlet_kg}} kg (küszöb: {{kuszob_kg}} kg)",
     "task.assigned": "📋 Feladat kiosztva: {{cim}} → {{dolgozo}} (határidő: {{hatarido}})",

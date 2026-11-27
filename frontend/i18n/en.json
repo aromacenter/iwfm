@@ -1121,7 +1121,8 @@
       "ticket_sla_warning": "Service ticket SLA about to expire",
       "ticket_sla_breached": "Service ticket SLA breached",
       "worksheet_rated": "Customer rating received",
-      "timeclock_far": "Clocked far from site"
+      "timeclock_far": "Clocked far from site",
+      "timeclock_left_open": "Clock-in left open (after end of working time)"
     },
     "ops": {
       "eq": "=",
@@ -1662,7 +1663,7 @@
     "payrollSource": "Payroll basis",
     "payrollAttendance": "By clock-in (attendance)",
     "payrollSchedule": "By schedule",
-    "payrollSourceHint": "Payable hours in the export come from this. With attendance: auto clock-in on the day's first app login, auto clock-out at end of working time (shift end → availability end → 20:00) if they forgot.",
+    "payrollSourceHint": "Payable hours in the export come from this. With attendance only real clock-ins/outs count (kiosk, phone, or the manager's audited manual entry); if a clock-in is still open after the end of working time, the employee gets a Telegram reminder and the manager a notification.",
     "telegramLinkedHint": "Linked to the Telegram bot — they get a private message about tasks assigned to them.",
     "telegramNotLinkedHint": "Not linked to the Telegram bot. To link: the employee sends their 6-digit staff code to the bot in a private chat.",
     "telegramUnlink": "Remove Telegram link",
@@ -1796,6 +1797,12 @@
     "empty": "No entries in this period.",
     "manualTitle": "Manual attendance entry",
     "manualHint": "Every manual entry is audited.",
+    "edit": "Edit",
+    "closeOpen": "Close",
+    "editTitle": "Edit attendance entry",
+    "editHint": "Every manual correction is audited (who, when, which fields). Close a forgotten clock-in here with the real departure time.",
+    "outDay": "Clock-out day",
+    "outEmptyHint": "Leave empty to keep the entry open.",
     "day": "Day",
     "in": "In",
     "out": "Out",

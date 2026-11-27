@@ -115,6 +115,8 @@ TRIGGERS: dict[str, list[str]] = {
     "timeclock.far": [
         "dolgozo", "muvelet", "idopont", "tavolsag_m", "legkozelebbi", "pontossag_m", "forras", "terkep",
     ],
+    # 192. kör: a munkaidő vége után is nyitva maradt blokkolás (emlékeztető ment)
+    "timeclock.left_open": ["dolgozo", "mikortol", "munkaido_vege"],
 }
 
 OPS = ("eq", "ne", "gte", "lte", "contains")

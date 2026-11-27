@@ -190,11 +190,8 @@ async def _finish_login(
     db: AsyncSession, user: User, request: Request, response: Response, *, twofa_channel: str | None = None
 ) -> UserOut:
     """A sikeres belépés közös lezárása (jelszó, vagy jelszó + kód után)."""
-    # Aznapi első belépéskor automatikus jelenlét-nyitás (látszik, mikor
-    # kezdett) — a kiléptetést a háttérhurok végzi a munkaidő végén.
-    from app.services.wfm.timeclock_auto import auto_clockin_on_login
-
-    await auto_clockin_on_login(db, user.id)
+    # 192. kör: a belépés NEM blokkolás — az automatikus jelenlét-nyitás megszűnt,
+    # a blokkolás csak tényleges be-/kiblokkolással történik (kioszk, telefon, kézi).
     await record_audit(
         db, actor=user, action="auth.login", entity_type="user",
         entity_id=str(user.id), detail=({"twofa": twofa_channel} if twofa_channel else None), request=request,

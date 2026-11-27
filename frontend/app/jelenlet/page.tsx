@@ -35,6 +35,16 @@ function addDays(d: Date, n: number): Date {
   return copy;
 }
 
+/** 192. kör: helyi (böngésző szerinti) dátum + óra:perc ↔ ISO (UTC) — a kézi
+ * rögzítés és a javítás a vezető helyi idejében történik. */
+function localParts(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  return { date: isoDate(d), time: `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` };
+}
+function toIso(date: string, time: string): string {
+  return new Date(`${date}T${time}:00`).toISOString();
+}
+
 export default function JelenletPage() {
   const [view, setView] = useState<"list" | "timecard" | "punches">("list");
   // Blokkolás-napló: melyik nap eseményeit mutatjuk (alapból ma)
@@ -44,6 +54,10 @@ export default function JelenletPage() {
   const [entries, setEntries] = useState<EntryOut[]>([]);
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
   const [showForm, setShowForm] = useState(false);
+  // 192. kör: meglévő bejegyzés javítása / nyitott lezárása (naplózott PATCH)
+  const [editEntry, setEditEntry] = useState<EntryOut | null>(null);
+  const [editForm, setEditForm] = useState({ date: "", in_time: "", out_date: "", out_time: "", break_minutes: 0, note: "" });
+  const [editError, setEditError] = useState<string | null>(null);
   // 2e9c7b96: távollét közvetlen rögzítése (azonnal jóváhagyott)
   const [leaveForm, setLeaveForm] = useState<{ employee_id: string; type: string; start_date: string; end_date: string; reason: string } | null>(null);
   const [leaveError, setLeaveError] = useState<string | null>(null);
@@ -140,8 +154,8 @@ export default function JelenletPage() {
     try {
       await api.post("/api/time-entries", {
         employee_id: form.employee_id,
-        clock_in: `${form.date}T${form.in_time}:00Z`,
-        clock_out: `${form.date}T${form.out_time}:00Z`,
+        clock_in: toIso(form.date, form.in_time),
+        clock_out: toIso(form.date, form.out_time),
         break_minutes: form.break_minutes,
         note: form.note || null,
       });
@@ -149,6 +163,42 @@ export default function JelenletPage() {
       load();
     } catch (err) {
       setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openEdit(entry: EntryOut) {
+    const i = localParts(entry.clock_in);
+    const o = entry.clock_out ? localParts(entry.clock_out) : { date: i.date, time: "" };
+    setEditForm({ date: i.date, in_time: i.time, out_date: o.date, out_time: o.time, break_minutes: entry.break_minutes, note: entry.note ?? "" });
+    setEditError(null);
+    setEditEntry(entry);
+  }
+
+  async function submitEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editEntry) return;
+    setBusy(true);
+    setEditError(null);
+    try {
+      // nem módosított mező → az eredeti (másodperc-pontos) időbélyeg megy vissza,
+      // különben a perc-kerekítés hamis átfedést okozna az azonos perces bejegyzéssel
+      const origIn = localParts(editEntry.clock_in);
+      const origOut = editEntry.clock_out ? localParts(editEntry.clock_out) : null;
+      const inUnchanged = editForm.date === origIn.date && editForm.in_time === origIn.time;
+      const outUnchanged = !!origOut && (editForm.out_date || editForm.date) === origOut.date && editForm.out_time === origOut.time;
+      await api.patch(`/api/time-entries/${editEntry.id}`, {
+        clock_in: inUnchanged ? editEntry.clock_in : toIso(editForm.date, editForm.in_time),
+        clock_out: !editForm.out_time ? null : outUnchanged ? editEntry.clock_out : toIso(editForm.out_date || editForm.date, editForm.out_time),
+        break_minutes: editForm.break_minutes,
+        note: editForm.note || null,
+      });
+      toast(t("common.saved"), "success");
+      setEditEntry(null);
+      load();
+    } catch (err) {
+      setEditError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -417,6 +467,7 @@ export default function JelenletPage() {
               <th className="px-4 py-3">{t("att.worked")}</th>
               <th className="px-4 py-3">{t("att.source")}</th>
               <th className="px-4 py-3">{t("att.note")}</th>
+              <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
@@ -437,11 +488,16 @@ export default function JelenletPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-slate-500">{entry.note ?? "—"}</td>
+                <td className="px-2 py-3 text-right">
+                  <button type="button" onClick={() => openEdit(entry)} title={t("att.edit")} className={`rounded-lg px-2 py-1 text-xs ${entry.clock_out ? "text-slate-500 hover:bg-slate-100" : "bg-amber-100 font-medium text-amber-800 hover:bg-amber-200"}`}>
+                    {entry.clock_out ? "✎" : `✎ ${t("att.closeOpen")}`}
+                  </button>
+                </td>
               </tr>
             ))}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">{t("att.empty")}</td>
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">{t("att.empty")}</td>
               </tr>
             )}
           </tbody>
@@ -538,6 +594,48 @@ export default function JelenletPage() {
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
+              <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{t("common.save")}</button>
+            </div>
+          </form>
+        </div>
+      )}
+      {editEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={submitEdit} className="relative max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <button type="button" onClick={() => setEditEntry(null)} aria-label="Bezárás" className="absolute right-2.5 top-2.5 z-10 rounded-lg px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            <h2 className="text-lg font-semibold">{t("att.editTitle")}</h2>
+            <p className="text-sm font-medium">{editEntry.employee_name ?? "—"}</p>
+            <p className="text-xs text-slate-500">{t("att.editHint")}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-sm">
+                {t("att.day")}
+                <input required type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
+              </label>
+              <label className="block text-sm">
+                {t("att.in")}
+                <input required type="time" value={editForm.in_time} onChange={(e) => setEditForm({ ...editForm, in_time: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
+              </label>
+              <label className="block text-sm">
+                {t("att.outDay")}
+                <input type="date" value={editForm.out_date} onChange={(e) => setEditForm({ ...editForm, out_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
+              </label>
+              <label className="block text-sm">
+                {t("att.out")}
+                <input type="time" value={editForm.out_time} onChange={(e) => setEditForm({ ...editForm, out_time: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
+                <span className="mt-0.5 block text-[11px] text-slate-500">{t("att.outEmptyHint")}</span>
+              </label>
+            </div>
+            <label className="block text-sm">
+              {t("att.breakMin")}
+              <input type="number" min={0} max={240} value={editForm.break_minutes} onChange={(e) => setEditForm({ ...editForm, break_minutes: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2" />
+            </label>
+            <label className="block text-sm">
+              {t("att.note")}
+              <input value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            {editError && <p className="text-sm text-red-600">{editError}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setEditEntry(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">{t("common.cancel")}</button>
               <button disabled={busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{t("common.save")}</button>
             </div>
           </form>

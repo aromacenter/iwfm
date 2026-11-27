@@ -412,11 +412,11 @@ async def notify_expiring_lots(db: AsyncSession, today: date | None = None, *, f
 async def run_pending_notifications(db: AsyncSession) -> dict:
     """Egy ellenőrzési kör: ha esedékes, kiküldi a napit és/vagy a heti
     mentést. Visszaadja, mi ment ki (teszthez is)."""
-    # Nyitva felejtett jelenlétek automatikus zárása a munkaidő végén —
-    # SMTP-beállítástól függetlenül fut minden körben.
-    from app.services.wfm.timeclock_auto import auto_clockout
+    # 192. kör: nyitva felejtett blokkolásról EGYSZERI emlékeztető a munkaidő
+    # vége után (a bejegyzést nem zárjuk — a blokkolás tényszerű marad).
+    from app.services.wfm.timeclock_auto import remind_open_entries
 
-    closed = await auto_clockout(db)
+    closed = await remind_open_entries(db)
     if closed:
         await db.commit()
 
@@ -530,7 +530,7 @@ async def run_pending_notifications(db: AsyncSession) -> dict:
         stale_closed = 0
 
     row = await get_or_create_settings(db)
-    result = {"daily": False, "backup": False, "auto_clockout": closed,
+    result = {"daily": False, "backup": False, "open_reminders": closed,
               "telegram_link": tg_linked, "calendar": cal_added, "mt_check": mt_ran,
               "stale_timers": stale_closed, "weekly": False, "reminders": 0, "learning": 0}
     recipients = _recipients(row)

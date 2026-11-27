@@ -1,98 +1,75 @@
-"""Automatikus be-/kiléptetés + kapcsolható bérszámfejtés-alap."""
+"""192. kör: tényszerű blokkolás — belépés NEM nyit jelenlétet; nyitva felejtett
+blokkolásról egyszeri emlékeztető (a bejegyzés nyitva marad); bérszámfejtés-alap kapcsoló."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from tests.conftest import make_employee_record, make_user
-from tests.conftest import gen_taj
+from tests.conftest import gen_taj, make_employee_record, make_user
 
 
-async def test_auto_clockin_on_first_login(client):
-    """Aznapi első app-belépéskor jelenlét nyílik; második belépés nem duplikál."""
+async def test_login_does_not_clock_in(client):
+    """App-belépés nem blokkolás: nem keletkezik jelenléti bejegyzés."""
     user, _ = await make_user(email="autoin@example.com", role="employee")
     await make_employee_record(user)
-
-    res = await client.post(
-        "/api/auth/login", json={"email": "autoin@example.com", "password": "Passw0rd-12345"}
-    )
-    assert res.status_code == 200, res.text
-
-    # a nyitott bejegyzés létrejött
+    for _ in range(2):
+        res = await client.post("/api/auth/login", json={"email": "autoin@example.com", "password": "Passw0rd-12345"})
+        assert res.status_code == 200, res.text
     from sqlalchemy import select
 
     from app.db import get_session_factory
     from app.models import TimeEntry
-    SessionLocal = get_session_factory()
 
-    async with SessionLocal() as db:
-        entries = (await db.execute(select(TimeEntry))).scalars().all()
-        assert len(entries) == 1
-        assert entries[0].clock_out is None
-        assert "Automatikus beléptetés" in (entries[0].note or "")
-
-    # második belépés aznap → nincs új bejegyzés
-    res = await client.post(
-        "/api/auth/login", json={"email": "autoin@example.com", "password": "Passw0rd-12345"}
-    )
-    assert res.status_code == 200
-    async with SessionLocal() as db:
-        entries = (await db.execute(select(TimeEntry))).scalars().all()
-        assert len(entries) == 1
+    async with get_session_factory()() as db:
+        assert (await db.execute(select(TimeEntry))).scalars().all() == []
 
 
-async def test_auto_clockout_closes_forgotten_entries(client, admin):
-    """A háttér-zárás a munkaidő végén (elérhetőség szerint) lezárja a nyitva
-    felejtett bejegyzést; a frisset békén hagyja."""
+async def test_open_entry_reminder_once_and_stays_open(client, admin, monkeypatch):
+    """A munkaidő vége után nyitva maradt bejegyzés: egyszer emlékeztető, nem záródik,
+    a friss bejegyzést békén hagyja; a második kör nem ismétel."""
     from sqlalchemy import select
 
     from app.db import get_session_factory
-    from app.models import Employee, TimeEntry
+    from app.models import TimeEntry
+    from app.services.wfm import timeclock_auto
     SessionLocal = get_session_factory()
-    from app.services.wfm.timeclock_auto import auto_clockout
 
     _, adm = admin
     user, _ = await make_user(email="autoout@example.com", role="employee")
     emp = await make_employee_record(user)
-
-    # elérhetőség: minden nap 08–16 (a teszt-emp patch admin-nal)
     res = await client.patch(
-        f"/api/employees/{emp.id}",
-        json={"availability": {str(i): ["08:00", "16:00"] for i in range(7)}},
-        headers=adm,
+        f"/api/employees/{emp.id}", json={"availability": {str(i): ["08:00", "16:00"] for i in range(7)}}, headers=adm,
     )
     assert res.status_code == 200, res.text
 
+    personal: list[str] = []
+
+    async def fake_personal(db, employee, text):
+        personal.append(text)
+        return True
+
+    monkeypatch.setattr("app.services.wfm.telegram.send_personal", fake_personal)
+
     async with SessionLocal() as db:
-        # tegnapelőtt reggel nyitott, sosem zárt bejegyzés
-        db.add(TimeEntry(
-            employee_id=emp.id,
-            clock_in=datetime.now(UTC) - timedelta(days=2, hours=10),
-            source="self",
-        ))
-        # friss (ma nyitott) bejegyzés — még nem járt le a munkaidő vége
-        db.add(TimeEntry(
-            employee_id=emp.id, clock_in=datetime.now(UTC), source="self",
-        ))
+        db.add(TimeEntry(employee_id=emp.id, clock_in=datetime.now(UTC) - timedelta(days=2, hours=10), source="self"))
+        db.add(TimeEntry(employee_id=emp.id, clock_in=datetime.now(UTC), source="self"))
         await db.commit()
 
     async with SessionLocal() as db:
-        closed = await auto_clockout(db)
+        assert await timeclock_auto.remind_open_entries(db) == 1
         await db.commit()
-    assert closed >= 1
+    async with SessionLocal() as db:
+        assert await timeclock_auto.remind_open_entries(db) == 0  # nem ismétel
+        await db.commit()
+    assert len(personal) == 1 and "Elfelejtettél kiblokkolni" in personal[0]
 
     async with SessionLocal() as db:
         entries = (
-            await db.execute(
-                select(TimeEntry).where(TimeEntry.employee_id == emp.id)
-                .order_by(TimeEntry.clock_in)
-            )
+            await db.execute(select(TimeEntry).where(TimeEntry.employee_id == emp.id).order_by(TimeEntry.clock_in))
         ).scalars().all()
         old, fresh = entries[0], entries[-1]
-        assert old.clock_out is not None
-        assert "Automatikus kiléptetés" in (old.note or "")
-        # a lezárás nem "most", hanem a munkaidő végén történt
-        assert old.clock_out < datetime.now(UTC).replace(tzinfo=None) if old.clock_out.tzinfo is None else True
+        assert old.clock_out is None and timeclock_auto.REMIND_NOTE in (old.note or "")
+        assert fresh.clock_out is None and not fresh.note
 
 
 async def test_payroll_source_switch(client, admin):
@@ -107,21 +84,9 @@ async def test_payroll_source_switch(client, admin):
     )
     assert res.status_code == 201, res.text
     assert res.json()["payroll_source"] == "schedule"
-
-    # rossz érték → 422
-    res = await client.patch(
-        f"/api/employees/{res.json()['id']}", json={"payroll_source": "rossz"},
-        headers=adm,
-    )
+    res = await client.patch(f"/api/employees/{res.json()['id']}", json={"payroll_source": "rossz"}, headers=adm)
     assert res.status_code == 422
-
-    # export lefut és tartalmazza az új oszlopokat
-    res = await client.get(
-        "/api/payroll/export?period_start=2026-08-01&period_end=2026-08-31&format=csv",
-        headers=adm,
-    )
+    res = await client.get("/api/payroll/export?period_start=2026-08-01&period_end=2026-08-31&format=csv", headers=adm)
     assert res.status_code == 200
     text = res.content.decode("utf-8-sig")
-    assert "Bérszámfejtés alapja" in text
-    assert "Fizetendő óra" in text
-    assert "Beosztás" in text
+    assert "Bérszámfejtés alapja" in text and "Fizetendő óra" in text and "Beosztás" in text

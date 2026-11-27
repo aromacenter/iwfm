@@ -1121,7 +1121,8 @@
       "ticket_sla_warning": "Szervizjegy SLA hamarosan lejár",
       "ticket_sla_breached": "Szervizjegy SLA lejárt",
       "worksheet_rated": "Ügyfél-értékelés érkezett",
-      "timeclock_far": "Blokkolás a telephelytől távol"
+      "timeclock_far": "Blokkolás a telephelytől távol",
+      "timeclock_left_open": "Nyitva felejtett blokkolás (munkaidő vége után)"
     },
     "ops": {
       "eq": "=",
@@ -1662,7 +1663,7 @@
     "payrollSource": "Bérszámfejtés alapja",
     "payrollAttendance": "Blokkolás (jelenlét) szerint",
     "payrollSchedule": "Beosztás szerint",
-    "payrollSourceHint": "A bérexportban a Fizetendő óra ebből számolódik. Blokkolásnál: aznapi első app-belépéskor automatikus beléptetés, a munkaidő végén (műszak vége → elérhetőség vége → 20:00) automatikus kiléptetés, ha elfelejtett kilépni.",
+    "payrollSourceHint": "A bérexportban a Fizetendő óra ebből számolódik. Blokkolásnál csak a tényleges be-/kiblokkolás számít (kioszk, telefon, vagy a vezető naplózott kézi rögzítése); a munkaidő vége után nyitva maradt blokkolásról a dolgozó Telegram-emlékeztetőt kap, a vezető értesítést.",
     "telegramLinkedHint": "Összekapcsolva a Telegram-bottal — a neki kiosztott feladatokról privát üzenetet kap.",
     "telegramNotLinkedHint": "Nincs összekapcsolva a Telegram-bottal. Összekapcsolás: a dolgozó a botnak privátban küldje el a 6 jegyű törzsszámát.",
     "telegramUnlink": "Telegram-kapcsolat törlése",
@@ -1795,6 +1796,12 @@
     "manual": "kézi",
     "empty": "Nincs bejegyzés az időszakban.",
     "manualTitle": "Kézi jelenléti bejegyzés",
+    "edit": "Javítás",
+    "closeOpen": "Lezárás",
+    "editTitle": "Jelenléti bejegyzés javítása",
+    "editHint": "Minden kézi javítás a naplóba kerül (ki, mikor, mely mezőket). A nyitva felejtett blokkolást itt zárod le a tényleges távozási idővel.",
+    "outDay": "Kijelentkezés napja",
+    "outEmptyHint": "Üresen hagyva a bejegyzés nyitva marad.",
     "manualHint": "Minden kézi bejegyzés auditálásra kerül.",
     "day": "Nap",
     "in": "Be",
