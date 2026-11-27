@@ -218,6 +218,11 @@ export default function BeallitasokPage() {
     default_work_start: "",
     default_work_end: "",
     kiosk_signature: false,
+    // 191. kör: helyadat a blokkolásnál
+    clock_location: "off" as "off" | "optional" | "required",
+    clock_radius_m: "300",
+    phone_clock: false,
+    clock_sites: [] as { name: string; address: string; lat: string; lng: string }[],
     absence_codes: {} as Record<string, AbsenceCfg>,
     paycodes: {} as Record<string, string>,
   });
@@ -230,6 +235,8 @@ export default function BeallitasokPage() {
         break_minutes: number | null; break_per_hours: number | null; break_paid: boolean;
         sunday_bonus_default: boolean; group_by_site: boolean; absence_codes: Record<string, AbsenceCfg>;
         default_work_start: string | null; default_work_end: string | null; kiosk_signature: boolean;
+        clock_location?: "off" | "optional" | "required"; clock_radius_m?: number; phone_clock?: boolean;
+        clock_sites?: { name: string; address: string; lat: number | null; lng: number | null }[];
         paycodes: Record<string, string>; paycodes_defs: { key: string; code: string; name: string; unit: string }[];
         law: Record<string, unknown>; law_versions: string[]; law_override_count: number;
       }>("/api/settings/work-rules")
@@ -243,6 +250,10 @@ export default function BeallitasokPage() {
           default_work_start: r.default_work_start ?? "",
           default_work_end: r.default_work_end ?? "",
           kiosk_signature: r.kiosk_signature ?? false,
+          clock_location: r.clock_location ?? "off",
+          clock_radius_m: String(r.clock_radius_m ?? 300),
+          phone_clock: r.phone_clock ?? false,
+          clock_sites: (r.clock_sites ?? []).map((s) => ({ name: s.name ?? "", address: s.address ?? "", lat: s.lat == null ? "" : String(s.lat), lng: s.lng == null ? "" : String(s.lng) })),
           absence_codes: r.absence_codes,
           paycodes: r.paycodes ?? {},
         });
@@ -265,6 +276,10 @@ export default function BeallitasokPage() {
         default_work_start: wr.default_work_start ? `${wr.default_work_start}:00` : null,
         default_work_end: wr.default_work_end ? `${wr.default_work_end}:00` : null,
         kiosk_signature: wr.kiosk_signature,
+        clock_location: wr.clock_location,
+        clock_radius_m: Number(wr.clock_radius_m) || 300,
+        phone_clock: wr.phone_clock,
+        clock_sites: wr.clock_sites.map((s) => ({ name: s.name, address: s.address, lat: s.lat.trim() ? Number(s.lat.replace(",", ".")) : null, lng: s.lng.trim() ? Number(s.lng.replace(",", ".")) : null })),
         absence_codes: wr.absence_codes,
         paycodes: wr.paycodes,
       });
@@ -2452,6 +2467,41 @@ export default function BeallitasokPage() {
                 {t("settings.wrKioskSignature")}
               </label>
               <span className="block text-xs text-slate-500">{t("settings.wrKioskSignatureHint")}</span>
+              {(!lic || lic.modules === null || lic.modules.includes("clock_location")) && (
+                <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 text-sm">
+                  <span className="block font-medium">📍 {t("settings.wrClockGeoTitle")}</span>
+                  <span className="block text-xs text-slate-500">{t("settings.wrClockGeoHint")}</span>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <select value={wr.clock_location} onChange={(e) => setWr({ ...wr, clock_location: e.target.value as "off" | "optional" | "required" })} className="rounded-lg border border-slate-300 px-2 py-1 text-sm">
+                      {(["off", "optional", "required"] as const).map((m) => <option key={m} value={m}>{t(`settings.wrClockGeoModes.${m}`)}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 text-sm">
+                      {t("settings.wrClockRadius")}
+                      <input type="number" min={50} max={5000} step={50} value={wr.clock_radius_m} onChange={(e) => setWr({ ...wr, clock_radius_m: e.target.value })} className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm" /> m
+                    </label>
+                  </div>
+                  <label className="mt-2 flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={wr.phone_clock} onChange={(e) => setWr({ ...wr, phone_clock: e.target.checked })} className="h-4 w-4" />
+                    {t("settings.wrPhoneClock")}
+                  </label>
+                  <span className="block text-xs text-slate-500">{t("settings.wrPhoneClockHint")}</span>
+                  <div className="mt-2">
+                    <span className="block text-xs font-medium">{t("settings.wrClockSites")}</span>
+                    {wr.clock_sites.map((s, i) => (
+                      <div key={i} className="mt-1 grid grid-cols-12 gap-1">
+                        <input value={s.name} placeholder={t("settings.wrClockSiteName")} onChange={(e) => setWr({ ...wr, clock_sites: wr.clock_sites.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} className="col-span-3 rounded-lg border border-slate-300 px-2 py-1 text-xs" />
+                        <input value={s.address} placeholder={t("settings.wrClockSiteAddress")} onChange={(e) => setWr({ ...wr, clock_sites: wr.clock_sites.map((x, j) => (j === i ? { ...x, address: e.target.value } : x)) })} className="col-span-5 rounded-lg border border-slate-300 px-2 py-1 text-xs" />
+                        <input value={s.lat} placeholder={t("settings.wrClockSiteLat")} onChange={(e) => setWr({ ...wr, clock_sites: wr.clock_sites.map((x, j) => (j === i ? { ...x, lat: e.target.value } : x)) })} className="col-span-2 rounded-lg border border-slate-300 px-2 py-1 font-mono text-xs" />
+                        <input value={s.lng} placeholder={t("settings.wrClockSiteLng")} onChange={(e) => setWr({ ...wr, clock_sites: wr.clock_sites.map((x, j) => (j === i ? { ...x, lng: e.target.value } : x)) })} className="col-span-1 rounded-lg border border-slate-300 px-2 py-1 font-mono text-xs" />
+                        <button type="button" aria-label="Törlés" onClick={() => setWr({ ...wr, clock_sites: wr.clock_sites.filter((_, j) => j !== i) })} className="col-span-1 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600">✕</button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setWr({ ...wr, clock_sites: [...wr.clock_sites, { name: "", address: "", lat: "", lng: "" }] })} className="mt-1 rounded-lg border border-dashed border-indigo-300 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-50">+ {t("settings.wrClockSiteAdd")}</button>
+                    <span className="mt-1 block text-xs text-slate-500">{t("settings.wrClockSitesHint")}</span>
+                  </div>
+                  <span className="mt-2 block text-xs text-amber-700">{t("settings.wrClockGeoLegal")}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2980,7 +3030,7 @@ export default function BeallitasokPage() {
               <div className="mb-1.5 text-xs font-semibold text-sky-800">{t("notif.tgEventsTitle")}</div>
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {["settlement.created", "settlement.signed", "settlement.paid", "ticket.created", "ticket.done",
-                  "ticket.sla_warning", "ticket.sla_breached", "worksheet.rated", "order.created", "partner.created", "partner.consumption_drop", "price.indexation_applied", "counter.reported", "stock.low", "stock.expiring", "vending.error",
+                  "ticket.sla_warning", "ticket.sla_breached", "worksheet.rated", "order.created", "partner.created", "partner.consumption_drop", "price.indexation_applied", "counter.reported", "stock.low", "stock.expiring", "vending.error", "timeclock.far",
                   "parts.low", "parts.request", "worksheet.quote_ready"].map((ev) => (
                   <label key={ev} className="flex items-center gap-2 text-sm">
                     <input

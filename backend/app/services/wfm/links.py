@@ -51,6 +51,8 @@ def event_link(event: str, ctx: dict) -> str | None:
         return frontend_url(f"/raktar?wh={_q(g('_warehouse_id'))}") if g("_warehouse_id") else frontend_url("/raktar")
     if event == "price.indexation_applied":
         return frontend_url("/aremeles")
+    if event == "timeclock.far":
+        return frontend_url("/jelenlet")
     if event in ("parts.low", "parts.request"):
         return frontend_url(f"/alkatreszek?q={_q(g('cikkszam'))}") if g("cikkszam") else frontend_url("/alkatreszek")
     return None

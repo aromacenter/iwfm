@@ -125,6 +125,20 @@ export interface EntryOut {
   worked_minutes: number | null;
   source: "self" | "manual";
   note: string | null;
+  // 191. kör: helyadat be-/kiblokkoláskor (ha a cég kéri)
+  in_geo?: ClockGeo | null;
+  out_geo?: ClockGeo | null;
+}
+
+export interface ClockGeo {
+  lat: number;
+  lng: number;
+  acc: number | null;
+  site: string | null;
+  dist_m: number | null;
+  far: boolean | null;
+  src: "kiosk" | "phone" | string;
+  at?: string;
 }
 
 // A távollét-típusok és státuszok feliratai a nyelvi fájlokban élnek:

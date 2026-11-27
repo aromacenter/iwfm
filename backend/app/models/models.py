@@ -325,6 +325,9 @@ class TimeEntry(Base):
     # a munkaügyi ellenőrzés napi aláírt jelenlétet kér
     sign_in_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     sign_out_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 191. kör: helyadat be-/kiblokkoláskor {lat, lng, acc, site, dist_m, far, src, at}
+    in_geo: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    out_geo: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -3915,6 +3918,13 @@ class WorkRulesSettings(Base):
     default_work_start: Mapped[time | None] = mapped_column(Time, nullable=True)
     default_work_end: Mapped[time | None] = mapped_column(Time, nullable=True)
     kiosk_signature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    # 191. kör: helyadat a blokkolásnál — off | optional | required; tűrés méterben;
+    # telefonos blokkolás (Beosztásom oldal, helyadattal); saját telephelyek
+    # [{name, address, lat, lng}] — a partnerek címét a térkép-modul már ismeri
+    clock_location: Mapped[str] = mapped_column(String(16), nullable=False, default="off", server_default="off")
+    clock_radius_m: Mapped[int] = mapped_column(Integer, nullable=False, default=300, server_default="300")
+    phone_clock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    clock_sites: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Távollét-kódok: {"annual": {"code": "SZ", "paid": true, "hours": true}, …}
     absence_codes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # 139. kör: jogcím-kódok a bérprogram CSV-hez {"worked_hours": "MUNKAORA", …}

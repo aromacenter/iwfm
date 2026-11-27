@@ -11,9 +11,11 @@ by construction).
 * GET  /me/profile     — név + törzsszám
 * GET  /me/data-export — saját adatok JSON-ban (GDPR 15./20. cikk), naplózva
 
-Be-/kiblokkolás telefonról szándékosan NEM lehetséges (visszaélés-veszély):
-a munkaidő rögzítése kizárólag a helyszíni blokkoló-terminálon történik
-(/api/kiosk/clock, törzsszámmal).
+Be-/kiblokkolás telefonról ALAPBÓL nem lehetséges (visszaélés-veszély): a
+munkaidő rögzítése a helyszíni blokkoló-terminálon történik (/api/kiosk/clock,
+törzsszámmal). 191. kör: a cég a Beállításokban engedélyezheti a telefonos
+blokkolást (POST /me/clock) — ilyenkor a telefon helyadata a bejegyzéshez
+kerül, és a telephelytől távoli blokkolásról riasztás megy.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from app.core.crypto import decrypt_pii
 from app.core.security import hash_password, mint_token, verify_password
 from app.db import get_db
 from app.models import AuditEvent, Employee, Shift, Task, TimeEntry, TimeOffRequest, User
+from app.services.wfm.clock_geo import GeoIn, alert_far, build_geo, clock_rules
 
 router = APIRouter()
 
@@ -280,9 +283,60 @@ async def clock_status(
     emp: Employee = Depends(get_own_employee),
 ):
     entry = await _open_entry(db, emp)
-    return {"open": entry_out(entry).model_dump(mode="json") if entry else None}
+    rules = await clock_rules(db)
+    return {
+        "open": entry_out(entry).model_dump(mode="json") if entry else None,
+        # 191. kör: engedélyezett-e a telefonos blokkolás, és kell-e hozzá helyadat
+        "phone_clock": rules.phone_clock,
+        "location_mode": rules.mode,
+        "radius_m": rules.radius_m,
+    }
 
 
-# A korábbi POST /me/clock-in és /me/clock-out végpontok szándékosan
-# megszűntek: a blokkolás kizárólag a helyszíni terminálon (kiosk) lehetséges,
-# mert a telefonos blokkolás visszaélésre adhat lehetőséget.
+# A korábbi POST /me/clock-in és /me/clock-out végpontok megszűntek: alapból a
+# blokkolás a helyszíni terminálon (kiosk) történik. 191. kör: a cég kapcsolóval
+# engedélyezheti a telefonos blokkolást — helyadattal, riasztással.
+
+
+class PhoneClockBody(BaseModel):
+    geo: GeoIn | None = None
+
+
+@router.post("/clock")
+async def phone_clock(
+    body: PhoneClockBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    emp: Employee = Depends(get_own_employee),
+    user: User = Depends(get_current_user),
+):
+    """191. kör: be-/kiblokkolás a dolgozó saját telefonjáról (vált), ha a cég
+    engedélyezte. A helyadat a bejegyzéshez kerül; kötelező módban nélküle 422."""
+    rules = await clock_rules(db)
+    if not rules.phone_clock:
+        raise HTTPException(status_code=403, detail={"code": "me.phone_clock_disabled"})
+    if rules.mode == "required" and body.geo is None:
+        raise HTTPException(status_code=422, detail={"code": "me.location_required"})
+    geo = await build_geo(db, body.geo, rules, "phone") if (body.geo is not None and rules.mode != "off") else None
+    detail = {"dist_m": geo["dist_m"], "site": geo["site"], "far": geo["far"]} if geo else None
+    now = datetime.now(UTC)
+    entry = await _open_entry(db, emp)
+    if entry is not None:
+        entry.clock_out = now
+        if geo:
+            entry.out_geo = geo
+        action = "out"
+    else:
+        entry = TimeEntry(employee_id=emp.id, clock_in=now, source="self", in_geo=geo)
+        db.add(entry)
+        await db.flush()
+        action = "in"
+    await record_audit(
+        db, actor=user, action=f"timeclock.phone_{action}", entity_type="time_entry",
+        entity_id=str(entry.id), detail=detail, request=request,
+    )
+    await db.commit()
+    if geo:
+        await alert_far(db, emp, action, geo, entry.id)
+    out = entry_out(entry).model_dump(mode="json")
+    return {"action": action, "at": now.isoformat(), "worked_minutes": out["worked_minutes"], "geo": geo, "entry": out}

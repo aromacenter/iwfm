@@ -7,7 +7,8 @@ import AppShell from "@/components/AppShell";
 import { api, downloadFile, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUI } from "@/lib/ui";
-import type { EmployeeOut, EntryOut } from "@/lib/types";
+import { osmLink } from "@/lib/geo";
+import type { ClockGeo, EmployeeOut, EntryOut } from "@/lib/types";
 
 function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -84,6 +85,19 @@ export default function JelenletPage() {
   useEffect(load, [load]);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  /** 191. kör: a blokkolás helyadata — legközelebbi ismert hely + távolság, térkép-link, tűrésen kívül piros. */
+  const geoCell = (g: ClockGeo | null | undefined) => {
+    if (!g) return <span className="text-slate-300">—</span>;
+    const label = g.site ?? t("att.placeUnknown");
+    const dist = g.dist_m != null ? ` · ${g.dist_m >= 1000 ? `${(g.dist_m / 1000).toFixed(1)} km` : `${g.dist_m} m`}` : "";
+    return (
+      <a href={osmLink(g.lat, g.lng)} target="_blank" rel="noreferrer" title={`${g.lat}, ${g.lng}${g.acc != null ? ` (±${g.acc} m)` : ""}`}
+        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs ${g.far ? "bg-red-100 font-semibold text-red-700" : "bg-indigo-50 text-indigo-800 hover:bg-indigo-100"}`}>
+        📍 {label}{dist}{g.far ? ` · ${t("att.farFromSite")}` : ""}{g.src === "phone" ? " · 📱" : ""}
+      </a>
+    );
+  };
 
   /** Timecard rács: dolgozó × nap → bejegyzések (helyi nap szerint). */
   const entriesByCell = new Map<string, EntryOut[]>();
@@ -269,6 +283,7 @@ export default function JelenletPage() {
                 <th className="px-4 py-2">{t("att.employee")}</th>
                 <th className="px-4 py-2">{t("att.punchEvent")}</th>
                 <th className="px-4 py-2">{t("att.punchSource")}</th>
+                <th className="px-4 py-2">{t("att.punchPlace")}</th>
                 <th className="px-4 py-2">{t("att.note")}</th>
               </tr>
             </thead>
@@ -301,11 +316,12 @@ export default function JelenletPage() {
                         {t(`att.sources.${ev.entry.source}`) !== `att.sources.${ev.entry.source}` ? t(`att.sources.${ev.entry.source}`) : ev.entry.source}
                       </span>
                     </td>
+                    <td className="px-4 py-2">{geoCell(ev.type === "in" ? ev.entry.in_geo : ev.entry.out_geo)}</td>
                     <td className="px-4 py-2 text-xs text-slate-500">{ev.entry.note ?? "—"}</td>
                   </tr>
                 ))}
               {entries.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400">{t("att.punchEmpty")}</td></tr>
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{t("att.punchEmpty")}</td></tr>
               )}
             </tbody>
           </table>
@@ -407,7 +423,7 @@ export default function JelenletPage() {
             {entries.map((entry) => (
               <tr key={entry.id} className="border-b border-slate-100 last:border-0">
                 <td className="px-4 py-3 font-medium">{entry.employee_name ?? "—"}</td>
-                <td className="px-4 py-3">{fmt(entry.clock_in)}</td>
+                <td className="px-4 py-3">{fmt(entry.clock_in)}{entry.in_geo && <span className="ml-1" title={entry.in_geo.site ?? ""}>{entry.in_geo.far ? "🔴" : "📍"}</span>}</td>
                 <td className="px-4 py-3">
                   {entry.clock_out ? fmt(entry.clock_out) : <span className="text-emerald-600">{t("att.open")}</span>}
                 </td>

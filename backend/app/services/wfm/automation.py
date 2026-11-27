@@ -111,6 +111,10 @@ TRIGGERS: dict[str, list[str]] = {
     "warehouse.transfer_rejected": [
         "termek_nev", "mennyiseg", "egyseg", "honnan", "hova", "dontott", "indok",
     ],
+    # 191. kör: blokkolás a tűrésen kívül (helyadat a blokkolásnál)
+    "timeclock.far": [
+        "dolgozo", "muvelet", "idopont", "tavolsag_m", "legkozelebbi", "pontossag_m", "forras", "terkep",
+    ],
 }
 
 OPS = ("eq", "ne", "gte", "lte", "contains")

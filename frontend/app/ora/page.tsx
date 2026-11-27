@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { api, errorMessage, ApiError } from "@/lib/api";
+import { getPosition, type GeoPoint } from "@/lib/geo";
 import { LanguageSwitcher, useT } from "@/lib/i18n";
 
 interface KioskResult {
@@ -14,12 +15,16 @@ interface KioskResult {
   employee_name: string;
   at: string;
   worked_minutes: number | null;
+  site?: string | null;
+  dist_m?: number | null;
+  far?: boolean | null;
 }
 
 interface KioskPreview {
   action: "in" | "out";
   employee_name: string;
   signature_required: boolean;
+  location_mode?: "off" | "optional" | "required";
 }
 
 export default function OraPage() {
@@ -28,25 +33,41 @@ export default function OraPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // 160. kör: aláírás-lépés (ha a cég kéri) — a kód után, a blokkolás előtt
-  const [pending, setPending] = useState<{ code: string; preview: KioskPreview } | null>(null);
+  const [pending, setPending] = useState<{ code: string; preview: KioskPreview; geo: GeoPoint | null } | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
+  // 191. kör: helymeghatározás folyamatban (a terminál böngészője kéri az engedélyt)
+  const [locating, setLocating] = useState(false);
   const { t, lang } = useT();
 
   const submit = useCallback(
-    async (fullCode: string, sig?: string | null) => {
+    async (fullCode: string, sig?: string | null, geoArg?: GeoPoint | null) => {
       setBusy(true);
       setError(null);
       try {
+        let geo: GeoPoint | null = geoArg ?? null;
         if (sig === undefined) {
           const preview = await api.post<KioskPreview>("/api/kiosk/preview", { code: fullCode });
+          // 191. kör: helyadat, ha a cég kéri — kötelező módban nélküle nincs blokkolás
+          const mode = preview.location_mode ?? "off";
+          if (mode !== "off") {
+            setLocating(true);
+            geo = await getPosition();
+            setLocating(false);
+            if (mode === "required" && !geo) {
+              setError(t("kiosk.locationRequired"));
+              setCode("");
+              setTimeout(() => setError(null), 6000);
+              return;
+            }
+          }
           if (preview.signature_required) {
-            setPending({ code: fullCode, preview });
+            setPending({ code: fullCode, preview, geo });
             setSignature(null);
             setCode("");
             return;
           }
         }
-        const res = await api.post<KioskResult>("/api/kiosk/clock", { code: fullCode, signature: sig ?? null });
+        const res = await api.post<KioskResult>("/api/kiosk/clock", { code: fullCode, signature: sig ?? null, geo });
         setPending(null);
         setSignature(null);
         setResult(res);
@@ -63,6 +84,7 @@ export default function OraPage() {
         setTimeout(() => setError(null), 4000);
       } finally {
         setBusy(false);
+        setLocating(false);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,7 +132,7 @@ export default function OraPage() {
             <button
               type="button"
               disabled={busy || !signature}
-              onClick={() => { if (!signature) { setError(t("kiosk.signMissing")); return; } void submit(pending.code, signature); }}
+              onClick={() => { if (!signature) { setError(t("kiosk.signMissing")); return; } void submit(pending.code, signature, pending.geo); }}
               className="flex-1 rounded-xl bg-emerald-600 py-3 font-semibold text-white disabled:opacity-50"
             >
               {t("kiosk.signSend")}
@@ -152,11 +174,16 @@ export default function OraPage() {
               {result.worked_minutes !== null &&
                 ` · ${t("kiosk.worked", { hours: (result.worked_minutes / 60).toFixed(1) })}`}
             </p>
+            {result.site && (
+              <p className="mt-0.5 text-xs opacity-90">
+                📍 {result.site}{result.dist_m != null ? ` · ${result.dist_m} m` : ""}{result.far ? ` · ${t("kiosk.farWarn")}` : ""}
+              </p>
+            )}
           </div>
         ) : error ? (
           <p className="w-full rounded-2xl bg-red-600 px-4 py-3 font-medium">{error}</p>
         ) : (
-          <p className="text-slate-500">{busy ? t("kiosk.processing") : " "}</p>
+          <p className="text-slate-500">{busy ? (locating ? t("kiosk.locating") : t("kiosk.processing")) : " "}</p>
         )}
       </div>
 

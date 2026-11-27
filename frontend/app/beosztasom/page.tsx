@@ -1,11 +1,13 @@
 "use client";
 
 /** Dolgozói önkiszolgálás (mobilra optimalizálva):
- * saját publikált beosztás, munkaidő-állapot (csak olvasás), távollét-kérelem. */
+ * saját publikált beosztás, munkaidő-állapot, távollét-kérelem.
+ * 191. kör: ha a cég engedélyezi, be-/kiblokkolás telefonról — a helyadat a bejegyzéshez kerül. */
 
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, errorMessage } from "@/lib/api";
+import { getPosition } from "@/lib/geo";
 import { useT } from "@/lib/i18n";
 import type { EntryOut, ShiftOut, TimeOffOut } from "@/lib/types";
 
@@ -19,6 +21,10 @@ function hhmm(t: string): string {
 export default function BeosztasomPage() {
   const [shifts, setShifts] = useState<ShiftOut[]>([]);
   const [openEntry, setOpenEntry] = useState<EntryOut | null>(null);
+  // 191. kör: telefonos blokkolás engedélye + helyadat-mód a céges beállításból
+  const [clockRules, setClockRules] = useState<{ phone_clock: boolean; location_mode: "off" | "optional" | "required"; radius_m: number } | null>(null);
+  const [clockBusy, setClockBusy] = useState<"locating" | "sending" | null>(null);
+  const [clockMsg, setClockMsg] = useState<{ kind: "ok" | "warn" | "err"; text: string } | null>(null);
   const [timeOff, setTimeOff] = useState<TimeOffOut[]>([]);
   const [profile, setProfile] = useState<{ name: string; employee_code: string | null } | null>(null);
   const [showRequest, setShowRequest] = useState(false);
@@ -41,7 +47,13 @@ export default function BeosztasomPage() {
       .catch((err) => {
         if (err?.code === "employee.none_for_user") setNoEmployee(true);
       });
-    api.get<{ open: EntryOut | null }>("/api/me/clock").then((r) => setOpenEntry(r.open)).catch(() => {});
+    api
+      .get<{ open: EntryOut | null; phone_clock?: boolean; location_mode?: "off" | "optional" | "required"; radius_m?: number }>("/api/me/clock")
+      .then((r) => {
+        setOpenEntry(r.open);
+        setClockRules({ phone_clock: !!r.phone_clock, location_mode: r.location_mode ?? "off", radius_m: r.radius_m ?? 300 });
+      })
+      .catch(() => {});
     api.get<TimeOffOut[]>("/api/me/time-off").then(setTimeOff).catch(() => {});
     api
       .get<{ name: string; employee_code: string | null }>("/api/me/profile")
@@ -50,6 +62,35 @@ export default function BeosztasomPage() {
   }, []);
 
   useEffect(load, [load]);
+
+  /** 191. kör: be-/kiblokkolás telefonról (vált) — helyadattal, ha a cég kéri. */
+  async function phoneClock() {
+    if (!clockRules?.phone_clock || clockBusy) return;
+    setClockMsg(null);
+    try {
+      let geo = null;
+      if (clockRules.location_mode !== "off") {
+        setClockBusy("locating");
+        geo = await getPosition();
+        if (clockRules.location_mode === "required" && !geo) {
+          setClockMsg({ kind: "err", text: t("mySched.locationRequired") });
+          return;
+        }
+      }
+      setClockBusy("sending");
+      const r = await api.post<{ action: "in" | "out"; worked_minutes: number | null; geo: { site: string | null; dist_m: number | null; far: boolean | null } | null }>("/api/me/clock", { geo });
+      const base = r.action === "in" ? t("mySched.clockedNowIn") : t("mySched.clockedNowOut");
+      const place = r.geo?.site
+        ? " · " + (r.geo.far ? t("mySched.farFromSite", { dist: r.geo.dist_m ?? "?" }) : t("mySched.nearSite", { site: r.geo.site, dist: r.geo.dist_m ?? "?" }))
+        : "";
+      setClockMsg({ kind: r.geo?.far ? "warn" : "ok", text: base + place });
+      load();
+    } catch (err) {
+      setClockMsg({ kind: "err", text: errorMessage(err) });
+    } finally {
+      setClockBusy(null);
+    }
+  }
 
   async function requestTimeOff(e: React.FormEvent) {
     e.preventDefault();
@@ -112,7 +153,25 @@ export default function BeosztasomPage() {
           ) : (
             <p className="text-sm text-slate-500">{t("mySched.notClockedIn")}</p>
           )}
-          <p className="mt-2 text-xs text-slate-400">{t("mySched.terminalHint")}</p>
+          {clockRules?.phone_clock ? (
+            <div className="mt-3 space-y-2">
+              <button
+                type="button"
+                onClick={() => void phoneClock()}
+                disabled={!!clockBusy}
+                className={`w-full rounded-xl py-3 text-base font-semibold text-white disabled:opacity-60 ${openEntry ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
+              >
+                {clockBusy === "locating" ? t("mySched.locating") : clockBusy === "sending" ? t("common.saving") : openEntry ? t("mySched.clockNowOut") : t("mySched.clockNowIn")}
+              </button>
+              {clockMsg && (
+                <p className={`rounded-lg px-3 py-2 text-sm ${clockMsg.kind === "ok" ? "bg-emerald-50 text-emerald-800" : clockMsg.kind === "warn" ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-700"}`}>{clockMsg.text}</p>
+              )}
+              <p className="text-xs text-slate-400">{t("mySched.phoneHint")}</p>
+              {clockRules.location_mode !== "off" && <p className="text-[11px] leading-snug text-slate-400">{t("mySched.geoNotice")}</p>}
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-slate-400">{t("mySched.terminalHint")}</p>
+          )}
         </section>
 
         {/* Beosztás */}

@@ -48,6 +48,9 @@ class EntryOut(BaseModel):
     worked_minutes: int | None
     source: str
     note: str | None
+    # 191. kör: helyadat be-/kiblokkoláskor (ha a cég kéri)
+    in_geo: dict | None = None
+    out_geo: dict | None = None
 
 
 def worked_minutes(entry: TimeEntry) -> int | None:
@@ -71,6 +74,8 @@ def to_out(entry: TimeEntry, employee_name: str | None = None) -> EntryOut:
         worked_minutes=worked_minutes(entry),
         source=entry.source,
         note=entry.note,
+        in_geo=entry.in_geo,
+        out_geo=entry.out_geo,
     )
 
 

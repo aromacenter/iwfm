@@ -21,6 +21,7 @@ from app.api.deps import record_audit
 from app.api.timeclock import worked_minutes
 from app.db import get_db
 from app.models import Employee, TimeEntry
+from app.services.wfm.clock_geo import GeoIn, alert_far, build_geo, clock_rules
 
 router = APIRouter()
 
@@ -45,6 +46,8 @@ class KioskClockBody(BaseModel):
     code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
     # 160. kör: a dolgozó aláírása (PNG data URL), ha a cég kéri a kioszkon
     signature: str | None = Field(default=None, max_length=120_000)
+    # 191. kör: a terminál böngészőjének helyadata (ha a cég kéri)
+    geo: GeoIn | None = None
 
 
 class KioskClockOut(BaseModel):
@@ -52,12 +55,16 @@ class KioskClockOut(BaseModel):
     employee_name: str
     at: datetime
     worked_minutes: int | None = None  # kiblokkolásnál: ledolgozott idő
+    site: str | None = None  # 191. kör: legközelebbi ismert hely + távolság
+    dist_m: int | None = None
+    far: bool | None = None
 
 
 class KioskPreviewOut(BaseModel):
     action: str  # 'in' | 'out' — mi következne
     employee_name: str
     signature_required: bool
+    location_mode: str = "off"  # 191. kör: off | optional | required
 
 
 async def _signature_required(db: AsyncSession) -> bool:
@@ -96,10 +103,12 @@ async def kiosk_preview(body: KioskClockBody, request: Request, db: AsyncSession
     """A kód beütése után: be- vagy kiblokkolás jönne, és kell-e hozzá aláírás
     (160. kör) — a terminál ez alapján mutatja az aláírás-mezőt."""
     emp, open_entry = await _lookup(db, request, body.code)
+    rules = await clock_rules(db)
     return KioskPreviewOut(
         action="out" if open_entry is not None else "in",
         employee_name=f"{emp.last_name} {emp.first_name}",
         signature_required=await _signature_required(db),
+        location_mode=rules.mode,
     )
 
 
@@ -115,6 +124,12 @@ async def kiosk_clock(
         raise HTTPException(status_code=422, detail={"code": "kiosk.bad_signature"})
     if await _signature_required(db) and not signature:
         raise HTTPException(status_code=422, detail={"code": "kiosk.signature_required"})
+    # 191. kör: helyadat — kötelező módban nélküle nincs blokkolás
+    rules = await clock_rules(db)
+    if rules.mode == "required" and body.geo is None:
+        raise HTTPException(status_code=422, detail={"code": "kiosk.location_required"})
+    geo = await build_geo(db, body.geo, rules, "kiosk") if (body.geo is not None and rules.mode != "off") else None
+    geo_detail = {"dist_m": geo["dist_m"], "site": geo["site"], "far": geo["far"]} if geo else None
     now = datetime.now(UTC)
 
     name = f"{emp.last_name} {emp.first_name}"
@@ -122,21 +137,31 @@ async def kiosk_clock(
         open_entry.clock_out = now
         if signature:
             open_entry.sign_out_data = signature
+        if geo:
+            open_entry.out_geo = geo
         await record_audit(
             db, actor=None, action="timeclock.kiosk_out", entity_type="time_entry",
-            entity_id=str(open_entry.id), request=request,
+            entity_id=str(open_entry.id), detail=geo_detail, request=request,
         )
         await db.commit()
+        if geo:
+            await alert_far(db, emp, "out", geo, open_entry.id)
         return KioskClockOut(
-            action="out", employee_name=name, at=now, worked_minutes=worked_minutes(open_entry)
+            action="out", employee_name=name, at=now, worked_minutes=worked_minutes(open_entry),
+            site=geo["site"] if geo else None, dist_m=geo["dist_m"] if geo else None, far=geo["far"] if geo else None,
         )
 
-    entry = TimeEntry(employee_id=emp.id, clock_in=now, source="self", sign_in_data=signature)
+    entry = TimeEntry(employee_id=emp.id, clock_in=now, source="self", sign_in_data=signature, in_geo=geo)
     db.add(entry)
     await db.flush()
     await record_audit(
         db, actor=None, action="timeclock.kiosk_in", entity_type="time_entry",
-        entity_id=str(entry.id), request=request,
+        entity_id=str(entry.id), detail=geo_detail, request=request,
     )
     await db.commit()
-    return KioskClockOut(action="in", employee_name=name, at=now)
+    if geo:
+        await alert_far(db, emp, "in", geo, entry.id)
+    return KioskClockOut(
+        action="in", employee_name=name, at=now,
+        site=geo["site"] if geo else None, dist_m=geo["dist_m"] if geo else None, far=geo["far"] if geo else None,
+    )

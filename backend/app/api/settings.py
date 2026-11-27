@@ -2171,6 +2171,11 @@ class WorkRulesBody(BaseModel):
     default_work_start: time | None = None
     default_work_end: time | None = None
     kiosk_signature: bool = False
+    # 191. kör: helyadat a blokkolásnál
+    clock_location: str = "off"
+    clock_radius_m: int = Field(default=300, ge=50, le=5000)
+    phone_clock: bool = False
+    clock_sites: list[dict] | None = None
     break_minutes: int | None = Field(default=None, ge=0, le=240)
     break_per_hours: int | None = Field(default=None, ge=1, le=12)
     break_paid: bool = False
@@ -2180,6 +2185,15 @@ class WorkRulesBody(BaseModel):
     absence_codes: dict[str, dict] | None = None
     # 139. kör: bérprogram jogcím-kódok {"worked_hours": "MUNKAORA", "abs_SZ": "SZAB", …}
     paycodes: dict[str, str] | None = None
+
+    @field_validator("clock_location")
+    @classmethod
+    def _clock_mode(cls, v: str) -> str:
+        from app.services.wfm.clock_geo import MODES
+
+        if v not in MODES:
+            raise ValueError("clock_location must be off|optional|required")
+        return v
 
     @field_validator("absence_codes")
     @classmethod
@@ -2230,6 +2244,10 @@ async def _work_rules_out(db: AsyncSession, row: WorkRulesSettings) -> dict:
         "default_work_start": row.default_work_start.strftime("%H:%M") if row.default_work_start else None,
         "default_work_end": row.default_work_end.strftime("%H:%M") if row.default_work_end else None,
         "kiosk_signature": bool(row.kiosk_signature),
+        "clock_location": row.clock_location or "off",
+        "clock_radius_m": int(row.clock_radius_m or 300),
+        "phone_clock": bool(row.phone_clock),
+        "clock_sites": list(row.clock_sites or []),
         "absence_codes": company_rules_from_row(row).absence_codes,
         "absence_codes_default": DEFAULT_ABSENCE_CODES,
         "paycodes": row.paycodes or {},
@@ -2283,6 +2301,13 @@ async def put_work_rules(
     row.default_work_start = body.default_work_start
     row.default_work_end = body.default_work_end
     row.kiosk_signature = body.kiosk_signature
+    # 191. kör: helyadat-szabályok + telephelyek (cím → koordináta best-effort)
+    from app.services.wfm.clock_geo import geocode_sites, normalize_sites
+
+    row.clock_location = body.clock_location
+    row.clock_radius_m = body.clock_radius_m
+    row.phone_clock = body.phone_clock
+    row.clock_sites = await geocode_sites(normalize_sites(body.clock_sites), row.clock_sites) or None
     row.absence_codes = body.absence_codes
     row.paycodes = {
         str(k)[:32]: str(v).strip()[:16] for k, v in (body.paycodes or {}).items() if str(v).strip()
