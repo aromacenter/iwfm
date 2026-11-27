@@ -277,6 +277,10 @@ async def run_fixed_rental_billing(db: AsyncSession, now: datetime | None = None
                 (PartnerContract.valid_to.is_(None))
                 | (PartnerContract.valid_to >= today),
             )
+            # Determinisztikus sorrend: az összevonásnál a legrégebbi szerződés az
+            # elsődleges (a címzett-lista és a számla partnere ettől függ) — azonos
+            # valid_from esetén a korábban létrehozott, végső soron az id dönt.
+            .order_by(PartnerContract.valid_from, PartnerContract.created_at, PartnerContract.id)
         )
     ).scalars().all()
     created = 0
